@@ -189,6 +189,12 @@ public final class PhoenixConfigurationUtil {
     // provide an absolute path to inject your multi input mapper logic
     public static final String MAPREDUCE_MULTI_INPUT_MAPPER_TRACKER_CLAZZ = "phoenix.mapreduce.multi.mapper.tracker.path";
 
+    // provide control to whether or not handle mapreduce snapshot restore and cleanup operations which
+    // is used by scanners on phoenix side internally or handled by caller externally
+    public static final String MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE = "phoenix.mapreduce.external.snapshot.restore";
+
+    // by default MR snapshot restore is handled internally by phoenix
+    public static final boolean DEFAULT_MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE = false;
 
     /**
      * Determines type of Phoenix Map Reduce job.
@@ -855,6 +861,19 @@ public final class PhoenixConfigurationUtil {
     public static void setTenantId(Configuration configuration, String tenantId){
         Preconditions.checkNotNull(configuration);
         configuration.set(MAPREDUCE_TENANT_ID, tenantId);
+    }
+
+    public static void setMRSnapshotManagedExternally(Configuration configuration, Boolean isSnapshotRestoreManagedExternally) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(isSnapshotRestoreManagedExternally);
+        configuration.setBoolean(MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE, isSnapshotRestoreManagedExternally);
+    }
+
+    public static boolean isMRSnapshotManagedExternally(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        boolean isSnapshotRestoreManagedExternally =
+            configuration.getBoolean(MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE, DEFAULT_MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE);
+        return isSnapshotRestoreManagedExternally;
     }
 
 }

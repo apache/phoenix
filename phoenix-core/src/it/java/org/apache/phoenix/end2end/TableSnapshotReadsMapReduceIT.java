@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -30,6 +31,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -38,12 +41,16 @@ import java.util.UUID;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.master.AssignmentManager;
 import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.snapshot.RestoreSnapshotHelper;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos;
@@ -61,16 +68,19 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PhoenixArray;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@RunWith(Parameterized.class)
 public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(TableSnapshotReadsMapReduceIT.class);
@@ -101,6 +111,16 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
   private Path tmpDir;
   private Configuration conf;
   private static final Random RANDOM = new Random();
+  private Boolean isSnapshotRestoreDoneExternally;
+
+  public TableSnapshotReadsMapReduceIT(Boolean isSnapshotRestoreDoneExternally) {
+    this.isSnapshotRestoreDoneExternally = isSnapshotRestoreDoneExternally;
+  }
+
+  @Parameterized.Parameters
+  public static synchronized Collection<Boolean> snapshotRestoreDoneExternallyParams() {
+    return Arrays.asList(true, false);
+  }
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
@@ -166,6 +186,8 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     Assert.assertEquals("Correct snapshot name not found in configuration", SNAPSHOT_NAME,
             config.get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY));
 
+    TestingMapReduceParallelScanGrouper.clearNumCallsToGetRegionBoundaries();
+
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       // create table
       tableName = generateUniqueName();
@@ -181,7 +203,6 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     config = job.getConfiguration();
     Assert.assertNull("Snapshot name is not null in Configuration",
             config.get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY));
-
   }
 
   private Job createAndTestJob(Connection conn)
@@ -239,7 +260,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
 
   private void configureJob(Job job, String tableName, String inputQuery, String condition, boolean shouldSplit) throws Exception {
     try {
-      upsertAndSnapshot(tableName, shouldSplit);
+      upsertAndSnapshot(tableName, shouldSplit, job.getConfiguration());
       result = new ArrayList<>();
 
       job.setMapperClass(TableSnapshotMapper.class);
@@ -275,6 +296,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
       }
 
       assertFalse("Should only have stored" + result.size() + "rows in the table for the timestamp!", rs.next());
+      assertRestoreDirCount(conf, tmpDir.toString(), 1);
     } finally {
       deleteSnapshotIfExists(SNAPSHOT_NAME);
     }
@@ -335,7 +357,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
     stmt.execute();
   }
 
-  private void upsertAndSnapshot(String tableName, boolean shouldSplit) throws Exception {
+  private void upsertAndSnapshot(String tableName, boolean shouldSplit, Configuration configuration) throws Exception {
     if (shouldSplit) {
       // having very few rows in table doesn't really help much with splitting case.
       // we should upsert large no of rows as a prerequisite to splitting
@@ -365,6 +387,14 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
       PreparedStatement stmt = conn.prepareStatement(String.format(UPSERT, tableName));
       upsertData(stmt, "DDDD", "SNFB", 45);
       conn.commit();
+      if (isSnapshotRestoreDoneExternally) {
+        //Performing snapshot restore which will be used during scans
+        Path rootDir = new Path(configuration.get(HConstants.HBASE_DIR));
+        FileSystem fs = rootDir.getFileSystem(configuration);
+        Path restoreDir = new Path(configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY));
+        RestoreSnapshotHelper.copySnapshotForScanner(configuration, fs, rootDir, restoreDir, SNAPSHOT_NAME);
+        PhoenixConfigurationUtil.setMRSnapshotManagedExternally(configuration, true);
+      }
     }
   }
 
@@ -456,6 +486,28 @@ public class TableSnapshotReadsMapReduceIT extends BaseUniqueNamesOwnClusterIT {
         LOGGER.info("Snapshot {} does not exist. Possibly corrupted due to region movements.",
           snapshotName);
       }
+    }
+  }
+
+  /**
+   * Making sure that restore temp directory is not having multiple sub directories
+   * for same snapshot restore.
+   * @param conf
+   * @param restoreDir
+   * @param expectedCount
+   * @throws IOException
+   */
+  private void assertRestoreDirCount(Configuration conf, String restoreDir, int expectedCount)
+          throws IOException {
+    FileSystem fs = FileSystem.get(conf);
+    FileStatus[] subDirectories = fs.listStatus(new Path(restoreDir));
+    assertNotNull(subDirectories);
+    if (isSnapshotRestoreDoneExternally) {
+      //Snapshot Restore to be deleted externally by the caller
+      assertEquals(expectedCount, subDirectories.length);
+    } else {
+      //Snapshot Restore already deleted internally
+      assertEquals(0, subDirectories.length);
     }
   }
 
