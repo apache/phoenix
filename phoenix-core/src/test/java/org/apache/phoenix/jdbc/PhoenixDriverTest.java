@@ -62,8 +62,8 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
     @Test
     public void testMaxMutationSizeSetCorrectly() throws SQLException {
         Properties connectionProperties = new Properties();
-        connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB,"100");
-        connectionProperties.setProperty(QueryServices.IMMUTABLE_ROWS_ATTRIB,"100");
+        connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "100");
+        connectionProperties.setProperty(QueryServices.IMMUTABLE_ROWS_ATTRIB, "100");
         Connection connection = DriverManager.getConnection(getUrl(), connectionProperties);
 
         PreparedStatement stmt = connection.prepareStatement("upsert into " + ATABLE + " (organization_id, entity_id, a_integer) values (?,?,?)");
@@ -83,7 +83,7 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
     @Test
     public void testMaxMutationSizeInBytesSetCorrectly() throws Exception {
         Properties connectionProperties = new Properties();
-        connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB,"100");
+        connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, "100");
         PhoenixConnection connection = (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
         assertEquals(100L, connection.getMutateBatchSizeBytes());
         assertEquals(100L, connection.getMutationState().getBatchSizeBytes());
@@ -134,11 +134,20 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testInvalidURL() throws Exception {
-      Class.forName(PhoenixDriver.class.getName());
-      try {
-      DriverManager.getConnection("any text whatever you want to put here");
-      fail("Should have failed due to invalid driver");
-      } catch(Exception e) {
-      }
+        Class.forName(PhoenixDriver.class.getName());
+        try {
+            DriverManager.getConnection("any text whatever you want to put here");
+            fail("Should have failed due to invalid driver");
+        } catch(Exception e) {
+        }
+    }
+
+    @Test
+    public void testSetPropertiesInvalid() throws SQLException {
+        Properties connectionProperties = new Properties();
+        connectionProperties.setProperty(QueryServices.THREAD_POOL_SIZE_ATTRIB, "300");
+        PhoenixDriver phoenixDriver = new PhoenixDriver();
+        QueryServices services = phoenixDriver.getQueryServices(connectionProperties);
+        assertEquals(300, services.getExecutor().getCorePoolSize());
     }
 }

@@ -32,8 +32,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesTestImpl;
 import org.apache.phoenix.util.ReadOnlyProps;
 
-
-
 /**
  * 
  * JDBC Driver implementation of Phoenix for testing.
@@ -44,7 +42,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
  */
 @ThreadSafe
 public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
-    
     @GuardedBy("this")
     private ConnectionQueryServices connectionQueryServices;
     private final ReadOnlyProps overrideProps;
@@ -66,7 +63,7 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     }
 
     @Override
-    public synchronized QueryServices getQueryServices() {
+    public synchronized QueryServices getQueryServices(Properties info) {
         checkClosed();
         return queryServices;
     }
@@ -86,7 +83,9 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     @Override // public for testing
     public synchronized ConnectionQueryServices getConnectionQueryServices(String url, Properties info) throws SQLException {
         checkClosed();
-        if (connectionQueryServices != null) { return connectionQueryServices; }
+        if (connectionQueryServices != null) {
+            return connectionQueryServices;
+        }
         ConnectionInfo connInfo = ConnectionInfo.create(url);
         if (connInfo.isConnectionless()) {
             connectionQueryServices = new ConnectionlessQueryServicesImpl(queryServices, connInfo, info);
@@ -110,13 +109,17 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         }
         closed = true;
         try {
-            if (connectionQueryServices != null) connectionQueryServices.close();
+            if (connectionQueryServices != null) {
+                connectionQueryServices.close();
+            }
         } finally {
             ThreadPoolExecutor executor = queryServices.getExecutor();
             try {
                 queryServices.close();
             } finally {
-                if (executor != null) executor.shutdownNow();
+                if (executor != null) {
+                    executor.shutdownNow();
+                }
                 connectionQueryServices = null;
             }
         }

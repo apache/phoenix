@@ -53,8 +53,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-
-
 /**
  * 
  * Abstract base class for JDBC Driver implementation of Phoenix
@@ -91,8 +89,15 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     protected ReadOnlyProps getDefaultProps() {
         return DEFAULT_PROPS;
     }
-    
-    abstract public QueryServices getQueryServices() throws SQLException;
+
+    /**
+     *  get query services
+     * @param info properties info
+     * @return query services
+     * @throws SQLException if failed to get query service.
+     */
+    public abstract QueryServices getQueryServices(Properties info)
+        throws SQLException;
      
     @Override
     public boolean acceptsURL(String url) throws SQLException {
@@ -139,11 +144,11 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     }
 
     protected final Connection createConnection(String url, Properties info) throws SQLException {
-      Properties augmentedInfo = PropertiesUtil.deepCopy(info);
-      augmentedInfo.putAll(getDefaultProps().asMap());
-      ConnectionQueryServices connectionServices = getConnectionQueryServices(url, augmentedInfo);
-      PhoenixConnection connection = connectionServices.connect(url, augmentedInfo);
-      return connection;
+        Properties augmentedInfo = PropertiesUtil.deepCopy(info);
+        augmentedInfo.putAll(getDefaultProps().asMap());
+        ConnectionQueryServices connectionServices = getConnectionQueryServices(url, augmentedInfo);
+        PhoenixConnection connection = connectionServices.connect(url, augmentedInfo);
+        return connection;
     }
 
     /**
@@ -199,14 +204,19 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         private static final Object KERBEROS_LOGIN_LOCK = new Object();
         private static final char WINDOWS_SEPARATOR_CHAR = '\\';
         private static final String REALM_EQUIVALENCY_WARNING_MSG = "Provided principal does not contan a realm and the default realm cannot be determined. Ignoring realm equivalency check.";
+
         private static SQLException getMalFormedUrlException(String url) {
             return new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
             .setMessage(url).build().buildException();
         }
-        
-		public String getZookeeperConnectionString() {
-			return getZookeeperQuorum() + ":" + getPort();
-		}
+
+        /**
+         * get zookeeper connection info
+         * @return
+         */
+        public String getZookeeperConnectionString() {
+            return getZookeeperQuorum() + ":" + getPort();
+        }
         
         /**
          * Detect url with quorum:1,quorum:2 as HBase does not handle different port numbers
@@ -240,8 +250,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             String[] tokens = new String[5];
             String token = null;
             while (tokenizer.hasMoreTokens() &&
-                    !(token=tokenizer.nextToken()).equals(TERMINATOR) &&
-                    tokenizer.hasMoreTokens() && nTokens < tokens.length) {
+                    !(token = tokenizer.nextToken()).equals(TERMINATOR)
+                && tokenizer.hasMoreTokens() && nTokens < tokens.length) {
                 token = tokenizer.nextToken();
                 // This would mean we have an empty string for a token which is illegal
                 if (DELIMITERS.contains(token)) {
@@ -253,11 +263,11 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             if (tokenizer.hasMoreTokens() && !TERMINATOR.equals(token)) {
                 String extraToken = tokenizer.nextToken();
                 if (WINDOWS_SEPARATOR_CHAR == extraToken.charAt(0)) {
-                  String prevToken = tokens[nTokens - 1];
-                  tokens[nTokens - 1] = prevToken + ":" + extraToken;
-                  if (tokenizer.hasMoreTokens() && !(token=tokenizer.nextToken()).equals(TERMINATOR)) {
-                      throw getMalFormedUrlException(url);
-                  }
+                    String prevToken = tokens[nTokens - 1];
+                    tokens[nTokens - 1] = prevToken + ":" + extraToken;
+                    if (tokenizer.hasMoreTokens() && !(token = tokenizer.nextToken()).equals(TERMINATOR)) {
+                        throw getMalFormedUrlException(url);
+                    }
                 } else {
                     throw getMalFormedUrlException(url);
                 }
@@ -304,7 +314,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                     }
                 }
             }
-            return new ConnectionInfo(quorum,port,rootNode, principal, keytabFile);
+            return new ConnectionInfo(quorum, port, rootNode, principal, keytabFile);
         }
         
         public ConnectionInfo normalize(ReadOnlyProps props, Properties info) throws SQLException {
@@ -347,15 +357,15 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
                 .setMessage("Root node may not be specified when using the connectionless url \"" + this.toString() + "\"").build().buildException();
             }
-            if(principal == null){
+            if (principal == null) {
                 if (!isConnectionless) {
-                   principal = props.get(QueryServices.HBASE_CLIENT_PRINCIPAL);
-                }
+                    principal = props.get(QueryServices.HBASE_CLIENT_PRINCIPAL);
             }
-            if(keytab == null){
-            	 if (!isConnectionless) {
-            		 keytab = props.get(QueryServices.HBASE_CLIENT_KEYTAB);
-            	 }
+            }
+            if (keytab == null) {
+                 if (!isConnectionless) {
+                     keytab = props.get(QueryServices.HBASE_CLIENT_KEYTAB);
+                 }
             }
             if (!isConnectionless()) {
                 boolean credsProvidedInUrl = null != principal && null != keytab;
@@ -463,7 +473,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         private Configuration getConfiguration(ReadOnlyProps props, Properties info, String principal, String keytab) {
             final Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
             // Add QueryServices properties
-            for (Entry<String,String> entry : props) {
+            for (Entry<String, String> entry : props) {
                 config.set(entry.getKey(), entry.getValue());
             }
             // Add any user-provided properties (via DriverManager)
@@ -508,7 +518,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         }
         
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
-        	this(zookeeperQuorum, port, rootNode, null, null);
+            this(zookeeperQuorum, port, rootNode, null, null);
         }
 
         /**
@@ -608,12 +618,12 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         }
         
         @Override
-		public String toString() {
-			return zookeeperQuorum + (port == null ? "" : ":" + port)
-					+ (rootNode == null ? "" : ":" + rootNode)
-					+ (principal == null ? "" : ":" + principal)
-					+ (keytab == null ? "" : ":" + keytab);
-		}
+        public String toString() {
+            return zookeeperQuorum + (port == null ? "" : ":" + port)
+                    + (rootNode == null ? "" : ":" + rootNode)
+                    + (principal == null ? "" : ":" + principal)
+                    + (keytab == null ? "" : ":" + keytab);
+        }
 
         public String toUrl() {
             return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
@@ -628,7 +638,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 throw getMalFormedUrlException(url);
             }
             String clientPort = config.get(HConstants.ZOOKEEPER_CLIENT_PORT);
-            Integer port = clientPort==null ? null : Integer.parseInt(clientPort);
+            Integer port = clientPort == null ? null
+                : Integer.parseInt(clientPort);
             if (port == null || port < 0) {
                 throw getMalFormedUrlException(url);
             }

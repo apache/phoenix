@@ -23,13 +23,19 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
-import java.util.concurrent.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import javax.annotation.concurrent.GuardedBy;
 
-import org.apache.phoenix.thirdparty.com.google.common.cache.*;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -40,6 +46,11 @@ import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesImpl;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
+import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
+import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalListener;
+import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalNotification;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -124,7 +135,8 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                 throw e;
             }
         } catch (SQLException e) {
-            throw new IllegalStateException("Unable to register " + PhoenixDriver.class.getName() + ": "+ e.getMessage());
+            throw new IllegalStateException("Unable to register "
+                + PhoenixDriver.class.getName() + ": " + e.getMessage());
         }
     }
 
@@ -148,7 +160,8 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     }
 
     private Cache<ConnectionInfo, ConnectionQueryServices> initializeConnectionCache() {
-        Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        Configuration config = HBaseFactoryProvider.getConfigurationFactory()
+            .getConfiguration();
         int maxCacheDuration = config.getInt(QueryServices.CLIENT_CONNECTION_CACHE_MAX_DURATION_MILLISECONDS,
             QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_CACHE_MAX_DURATION);
         RemovalListener<ConnectionInfo, ConnectionQueryServices> cacheRemovalListener =
@@ -156,13 +169,14 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                 @Override
                 public void onRemoval(RemovalNotification<ConnectionInfo, ConnectionQueryServices> notification) {
                     String connInfoIdentifier = notification.getKey().toString();
-                    LOGGER.debug("Expiring " + connInfoIdentifier + " because of "
-                        + notification.getCause().name());
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug("Expiring " + connInfoIdentifier + " because of "
+                            + notification.getCause().name());
+                    }
 
                     try {
                         notification.getValue().close();
-                    }
-                    catch (SQLException se) {
+                    } catch (SQLException se) {
                         LOGGER.error("Error while closing expired cache connection " + connInfoIdentifier, se);
                     }
                 }
@@ -182,7 +196,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     
 
     @Override
-    public QueryServices getQueryServices() throws SQLException {
+    public QueryServices getQueryServices(final Properties info) throws SQLException {
         try {
             lockInterruptibly(LockMode.READ);
             checkClosed();
@@ -193,8 +207,18 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             if (result == null) {
                 synchronized(this) {
                     result = services;
-                    if(result == null) {
-                        services = result = new QueryServicesImpl(getDefaultProps());
+                    if (result == null) {
+                        Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+                        if (info != null) {
+                            for (Object key : info.keySet()) {
+                                config.set((String) key, info.getProperty((String) key));
+                            }
+                        }
+                        ReadOnlyProps props = new ReadOnlyProps(config.iterator());
+                        QueryServicesOptions queryServicesOptions = QueryServicesOptions.withDefaults()
+                            .setAll(props);
+                        result = new QueryServicesImpl(getDefaultProps(), queryServicesOptions);
+                        services = result;
                     }
                 }
             }
@@ -213,7 +237,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     @Override
     public Connection connect(String url, Properties info) throws SQLException {
         if (!acceptsURL(url)) {
-          return null;
+            return null;
         }
         try {
             lockInterruptibly(LockMode.READ);
@@ -232,10 +256,10 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             ConnectionInfo connInfo = ConnectionInfo.create(url);
             SQLException sqlE = null;
             boolean success = false;
-            final QueryServices services = getQueryServices();
+            final QueryServices queryServices = getQueryServices(info);
             ConnectionQueryServices connectionQueryServices = null;
             // Also performs the Kerberos login if the URL/properties request this
-            final ConnectionInfo normalizedConnInfo = connInfo.normalize(services.getProps(), info);
+            final ConnectionInfo normalizedConnInfo = connInfo.normalize(queryServices.getProps(), info);
             try {
                 connectionQueryServices =
                     connectionQueryServicesCache.get(normalizedConnInfo, new Callable<ConnectionQueryServices>() {
@@ -243,9 +267,9 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                         public ConnectionQueryServices call() throws Exception {
                             ConnectionQueryServices connectionQueryServices;
                             if (normalizedConnInfo.isConnectionless()) {
-                                connectionQueryServices = new ConnectionlessQueryServicesImpl(services, normalizedConnInfo, info);
+                                connectionQueryServices = new ConnectionlessQueryServicesImpl(queryServices, normalizedConnInfo, info);
                             } else {
-                                connectionQueryServices = new ConnectionQueryServicesImpl(services, normalizedConnInfo, info);
+                                connectionQueryServices = new ConnectionQueryServicesImpl(queryServices, normalizedConnInfo, info);
                             }
 
                             return connectionQueryServices;
@@ -254,17 +278,15 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
 
                 connectionQueryServices.init(url, info);
                 success = true;
-            } catch (ExecutionException ee){
+            } catch (ExecutionException ee) {
                 if (ee.getCause() instanceof  SQLException) {
                     sqlE = (SQLException) ee.getCause();
                 } else {
                     throw new SQLException(ee);
                 }
-            }
-              catch (SQLException e) {
+            } catch (SQLException e) {
                 sqlE = e;
-            }
-            finally {
+            } finally {
                 if (!success) {
                     // Remove from map, as initialization failed
                     connectionQueryServicesCache.invalidate(normalizedConnInfo);
