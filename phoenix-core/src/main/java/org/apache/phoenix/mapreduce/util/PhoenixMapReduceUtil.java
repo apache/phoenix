@@ -29,7 +29,6 @@ import org.apache.phoenix.mapreduce.PhoenixTTLTool;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 
 import java.io.IOException;
-import java.util.UUID;
 
 /**
  * Utility class for setting Configuration parameters for the Map Reduce job
@@ -181,8 +180,7 @@ public final class PhoenixMapReduceUtil {
         PhoenixConfigurationUtil.setInputClass(configuration, inputClass);
         PhoenixConfigurationUtil.setSnapshotNameKey(configuration, snapshotName);
         PhoenixConfigurationUtil.setInputTableName(configuration, tableName);
-
-        PhoenixConfigurationUtil.setRestoreDirKey(configuration, new Path(restoreDir, UUID.randomUUID().toString()).toString());
+        PhoenixConfigurationUtil.setRestoreDirKey(configuration, restoreDir.toString());
         PhoenixConfigurationUtil.setSchemaType(configuration, schemaType);
         return configuration;
     }
