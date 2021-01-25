@@ -872,7 +872,7 @@ public final class PhoenixConfigurationUtil {
     public static boolean isMRSnapshotManagedExternally(final Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         boolean isSnapshotRestoreManagedExternally =
-                configuration.getBoolean(MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE, DEFAULT_MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE);
+            configuration.getBoolean(MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE, DEFAULT_MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE);
         return isSnapshotRestoreManagedExternally;
     }
 

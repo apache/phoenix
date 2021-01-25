@@ -97,9 +97,8 @@ public class TableSnapshotResultIterator implements ResultIterator {
 
   private void init() throws IOException {
     if (!PhoenixConfigurationUtil.isMRSnapshotManagedExternally(configuration)) {
-      RestoreSnapshotHelper.RestoreMetaChanges meta =
-              RestoreSnapshotHelper.copySnapshotForScanner(this.configuration, this.fs, this.rootDir,
-                      this.restoreDir, this.snapshotName);
+      RestoreSnapshotHelper.RestoreMetaChanges meta = RestoreSnapshotHelper.copySnapshotForScanner(this.configuration, this.fs, this.rootDir,
+          this.restoreDir, this.snapshotName);
       List<HRegionInfo> restoredRegions = meta.getRegionsToAdd();
       this.htd = meta.getTableDescriptor();
       this.regions = new ArrayList<>(restoredRegions.size());
@@ -111,9 +110,9 @@ public class TableSnapshotResultIterator implements ResultIterator {
     } else {
       Path snapshotDir = SnapshotDescriptionUtils.getCompletedSnapshotDir(snapshotName, rootDir);
       HBaseProtos.SnapshotDescription snapshotDesc =
-              SnapshotDescriptionUtils.readSnapshotInfo(fs, snapshotDir);
+          SnapshotDescriptionUtils.readSnapshotInfo(fs, snapshotDir);
       SnapshotManifest manifest =
-              SnapshotManifest.open(configuration, fs, snapshotDir, snapshotDesc);
+          SnapshotManifest.open(configuration, fs, snapshotDir, snapshotDesc);
       List<SnapshotProtos.SnapshotRegionManifest> regionManifests = manifest.getRegionManifests();
       this.regions = new ArrayList<>(regionManifests.size());
       this.htd = manifest.getTableDescriptor();
@@ -124,6 +123,8 @@ public class TableSnapshotResultIterator implements ResultIterator {
         }
       }
     }
+    Collections.sort(this.regions);
+    LOGGER.info("Initialization complete with " + regions.size() + " valid regions");
   }
 
   /**
