@@ -186,7 +186,9 @@ public class TableSnapshotResultIterator implements ResultIterator {
     closed = true; // ok to say closed even if the below code throws an exception
     try {
       scanIterator.close();
-      fs.delete(this.restoreDir, true);
+      if (!PhoenixConfigurationUtil.isMRSnapshotManagedExternally(configuration)) {
+        fs.delete(this.restoreDir, true);
+      }
     } catch (IOException e) {
       throw ServerUtil.parseServerException(e);
     } finally {
