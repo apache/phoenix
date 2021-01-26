@@ -114,12 +114,15 @@ public class RoundRobinResultIterator implements ResultIterator {
                 index = (index + 1) % size;
             }
         }
+        close();
         return null;
     }
 
     @Override
     public void close() throws SQLException {
-        if (closed) { return; }
+        if (closed) {
+            return;
+        }
         closed = true;
         SQLException toThrow = null;
         try {
@@ -176,13 +179,15 @@ public class RoundRobinResultIterator implements ResultIterator {
 
     private List<RoundRobinIterator> getIterators() throws SQLException {
         if (closed) { return Collections.emptyList(); }
-        if (openIterators.size() > 0 && openIterators.size() == numScannersCacheExhausted) {
+        if (openIterators.size() > 0 && openIterators.size() <= numScannersCacheExhausted) {
             /*
              * All the scanners have exhausted their cache. Submit the scanners back to the pool so that they can fetch
              * the next batch of records in parallel.
              */
             initOpenIterators(fetchNextBatch());
         } else if (openIterators.size() == 0 && resultIterators != null) {
+            //This branch re-initializes openIterators when called after all openIterators have been
+            //exhausted.
             List<PeekingResultIterator> iterators = resultIterators.getIterators();
             initOpenIterators(wrapToRoundRobinIterators(iterators));
         }
@@ -300,7 +305,11 @@ public class RoundRobinResultIterator implements ResultIterator {
         private RoundRobinIterator(PeekingResultIterator itr, Tuple tuple) {
             this.delegate = itr;
             this.tuple = tuple;
-            this.numRecordsRead = 0;
+            if (tuple != null) {
+                this.numRecordsRead = 1;
+            } else {
+                this.numRecordsRead = 0;
+            }
         }
 
         @Override
