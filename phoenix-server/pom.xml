@@ -443,7 +443,7 @@
       </dependencies>
     </profile>
     <profile>
-      <id>phoenix-hbase-compat-2.4.0-default</id>
+      <id>phoenix-hbase-compat-2.3.0-default</id>
       <!-- keep dependency plugin happy -->
       <activation>
         <property>
