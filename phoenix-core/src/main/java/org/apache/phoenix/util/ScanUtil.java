@@ -1304,21 +1304,20 @@ public class ScanUtil {
      * each HBase RegionScanner#next() time which is controlled by PagedFilter is set to 0.3 * SERVER_PAGE_SIZE_MS.
      *
      */
-    private static long getPageSizeMs(Scan scan) {
+    private static long getPageSizeMs(Scan scan, double factor) {
         long pageSizeMs = Long.MAX_VALUE;
         byte[] pageSizeMsBytes = scan.getAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS);
         if (pageSizeMsBytes != null) {
             pageSizeMs = Bytes.toLong(pageSizeMsBytes);
+            pageSizeMs = (long) (pageSizeMs * factor);
         }
         return pageSizeMs;
     }
 
-    public static long getPageSizeMsForRegionScanner(Scan scan) {
-        return (long) (getPageSizeMs(scan) * 0.6);
-    }
+    public static long getPageSizeMsForRegionScanner(Scan scan)  { return getPageSizeMs(scan, 0.6); }
 
     public static long getPageSizeMsForFilter(Scan scan) {
-        return (long) (getPageSizeMs(scan) * 0.3);
+        return getPageSizeMs(scan, 0.3);
     }
 
     /**

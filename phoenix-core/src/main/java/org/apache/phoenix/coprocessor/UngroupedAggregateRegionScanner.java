@@ -29,6 +29,7 @@ import static org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver.se
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SOURCE_OPERATION_ATTRIB;
@@ -625,8 +626,14 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
             Cell cell;
             if (hasAny) {
                 byte[] value = aggregators.toBytes(rowAggregators);
-                cell = CellUtil.createCell(CellUtil.cloneRow(lastCell), SINGLE_COLUMN_FAMILY, SINGLE_COLUMN,
-                        AGG_TIMESTAMP, KeyValue.Type.Put.getCode(), value);
+                if (pageSizeMs == Long.MAX_VALUE) {
+                    // Paging is not set. To be compatible with older clients, do not set the row key
+                    cell = CellUtil.createCell(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN,
+                            AGG_TIMESTAMP, KeyValue.Type.Put.getCode(), value);
+                } else {
+                    cell = CellUtil.createCell(CellUtil.cloneRow(lastCell), SINGLE_COLUMN_FAMILY, SINGLE_COLUMN,
+                            AGG_TIMESTAMP, KeyValue.Type.Put.getCode(), value);
+                }
                 resultsToReturn.add(cell);
             }
             return hasMore;
