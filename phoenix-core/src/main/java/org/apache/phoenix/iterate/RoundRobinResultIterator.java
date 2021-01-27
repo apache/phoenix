@@ -114,6 +114,7 @@ public class RoundRobinResultIterator implements ResultIterator {
                 index = (index + 1) % size;
             }
         }
+        close();
         return null;
     }
 
