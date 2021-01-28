@@ -719,6 +719,7 @@ function maven_deploy { #inputs: <snapshot|release> <log_file_path>
     echo "${MVN[@]}" -DskipTests -Dcheckstyle.skip=true "${PUBLISH_PROFILES[@]}" ${variant:+"$variant"} \
         "${mvn_goals[@]}"
     echo "Logging to ${mvn_log_file}.  This will take a while..."
+    git clean -d -f -x
     # Prepare for signing
     kick_gpg_agent
     # The tortuous redirect in the next command allows mvn's stdout and stderr to go to mvn_log_file,
