@@ -23,7 +23,7 @@
     <parent>
         <artifactId>phoenix</artifactId>
         <groupId>org.apache.phoenix</groupId>
-        <version>5.1.0-SNAPSHOT</version>
+        <version>5.1.0</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
