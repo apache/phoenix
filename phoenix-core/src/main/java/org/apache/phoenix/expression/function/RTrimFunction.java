@@ -42,8 +42,8 @@ import org.apache.phoenix.util.StringUtil;
 
 /**
  * 
- * Implementation of the RTrim(<string>) build-in function. It removes from the right end of
- * <string> space character and other function bytes in single byte utf8 characters set 
+ * Implementation of the {@code RTrim(<string>) } build-in function. It removes from the right end of
+ * {@code <string> } space character and other function bytes in single byte utf8 characters set 
  * 
  * 
  * @since 0.1

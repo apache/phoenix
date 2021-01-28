@@ -51,7 +51,7 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
     
    /**
     * 
-    * @param keyRange
+    * @param scans
     */
     public PhoenixInputSplit(final List<Scan> scans) {
         this(scans, 0, null);

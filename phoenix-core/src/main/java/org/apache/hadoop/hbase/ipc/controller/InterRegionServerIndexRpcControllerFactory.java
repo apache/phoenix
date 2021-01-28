@@ -26,7 +26,7 @@ import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 
 /**
- * {@link RpcControllerFactory} that should only be used when creating {@link Table} for
+ * RpcControllerFactory that should only be used when creating Table for
  * making remote RPCs to the region servers hosting global mutable index table regions.
  * This controller factory shouldn't be globally configured anywhere and is meant to be used
  * only internally by Phoenix indexing code.

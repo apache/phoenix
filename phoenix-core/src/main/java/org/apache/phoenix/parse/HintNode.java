@@ -58,7 +58,7 @@ public class HintNode {
         */
        NO_INDEX,
        /**
-       * Hint of the form INDEX(<table_name> <index_name>...)
+       * Hint of the form {@code INDEX(<table_name> <index_name>...) }
        * to suggest usage of the index if possible. The first
        * usable index in the list of indexes will be choosen.
        * Table and index names may be surrounded by double quotes

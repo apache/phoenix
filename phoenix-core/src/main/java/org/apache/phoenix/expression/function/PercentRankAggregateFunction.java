@@ -34,7 +34,7 @@ import org.apache.phoenix.schema.types.PDataType;
 
 /**
  * 
- * PERCENT_RANK(<expression>[,<expression>]) WITHIN GROUP (ORDER BY <expression>[,<expression>] ASC/DESC) aggregate function
+ * {@code PERCENT_RANK(<expression>[,<expression>]) WITHIN GROUP (ORDER BY <expression>[,<expression>] ASC/DESC) } aggregate function
  *
  * 
  * @since 1.2.1

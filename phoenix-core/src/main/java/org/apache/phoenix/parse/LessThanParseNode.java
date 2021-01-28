@@ -23,7 +23,7 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 
 /**
  * 
- * Node representing the less than operator (<) in SQL
+ * Node representing the less than operator {@code (<) } in SQL
  *
  * 
  * @since 0.1

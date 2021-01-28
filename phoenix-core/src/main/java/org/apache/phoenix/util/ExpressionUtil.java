@@ -104,7 +104,7 @@ public class ExpressionUtil {
 
     /**
      * check the whereExpression to see if the columnExpression is constant.
-     * eg. for "where a =3 and b > 9", a is constant,but b is not.
+     * eg. for {@code "where a = 3 and b > 9" }, a is constant,but b is not.
      * @param columnExpression
      * @param whereExpression
      * @return

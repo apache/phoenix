@@ -377,11 +377,8 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
 
     /**
      * Check config for whether to disable index on index write failures
-     * @param htd
-     * @param config
-     * @param connection
-     * @return The table config for {@link PhoenixIndexFailurePolicy.DISABLE_INDEX_ON_WRITE_FAILURE}
-     * @throws SQLException
+     * @param env
+     * @return
      */
     public static boolean getDisableIndexOnFailure(RegionCoprocessorEnvironment env) {
         TableDescriptor htd = env.getRegion().getTableDescriptor();
@@ -460,7 +457,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
      * @param iwe original IndexWriteException
      * @param connection connection to use
      * @param config config used to get retry settings
-     * @throws Exception
+     * @throws IOException
      */
     public static void doBatchWithRetries(MutateCommand mutateCommand,
             IndexWriteException iwe, PhoenixConnection connection, ReadOnlyProps config)

@@ -41,7 +41,7 @@ public interface KeyPart {
      * SUBSTR(foo,1,3) = 'bar', the key range would be ['bar','bas'),
      * and if foo was fixed length, the upper and lower key range
      * bytes would be filled out to the fixed length.
-     * @param op comparison operator (=, <=, <, >=, >, !=)
+     * @param op comparison operator {@code (=, <=, <, >=, >, !=) }
      * @param rhs the constant on the RHS of an expression.
      * @return the key range that encompasses the range for the
      *  expression for which this keyPart is associated

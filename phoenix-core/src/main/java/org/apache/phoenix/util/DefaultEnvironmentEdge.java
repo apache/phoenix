@@ -24,7 +24,6 @@ package org.apache.phoenix.util;
 public class DefaultEnvironmentEdge extends EnvironmentEdge {
   /**
    * {@inheritDoc}
-   * <p/>
    * This implementation returns {@link System#currentTimeMillis()}
    */
   @Override

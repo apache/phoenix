@@ -60,7 +60,7 @@ public class SingleIndexWriteFailureException extends IndexWriteException {
   /**
    * This constructor used to rematerialize this exception when receiving
    * an rpc exception from the server
-   * @param message detail message
+   * @param msg detail message
    */
   public SingleIndexWriteFailureException(String msg) {
       super(IndexWriteException.parseDisableIndexOnFailure(msg));

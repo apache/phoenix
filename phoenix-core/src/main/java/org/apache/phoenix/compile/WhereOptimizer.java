@@ -1809,7 +1809,7 @@ public class WhereOptimizer {
         /**
          * 
          * Implementation of KeySlots for AND and OR expressions. The
-         * List<KeySlot> will be in PK order.
+         * {@code List<KeySlot> } will be in PK order.
          *
          */
         public static class MultiKeySlot implements KeySlots {

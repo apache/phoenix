@@ -33,7 +33,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 
 /**
- * Built-in function for FIRST_VALUES(<expression>, <expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC) aggregate
+ * Built-in function for {@code FIRST_VALUES(<expression>, <expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC) aggregate }
  * function
  *
  */

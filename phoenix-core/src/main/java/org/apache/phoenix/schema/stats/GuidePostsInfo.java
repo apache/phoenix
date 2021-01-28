@@ -85,7 +85,7 @@ public class GuidePostsInfo {
      *            Maximum length of a guidePost collected
      * @param guidePostsCount
      *            Number of guidePosts
-     * @param gpTimestamps
+     * @param updateTimes
      *            Times at which guidePosts were updated/created
      */
     public GuidePostsInfo(List<Long> byteCounts, ImmutableBytesWritable guidePosts, List<Long> rowCounts, int maxLength,
