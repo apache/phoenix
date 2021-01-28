@@ -162,7 +162,6 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
      * @param context
      * @return
      * @throws IOException
-     * @throws SQLException
      */
     protected  QueryPlan getQueryPlan(final JobContext context, final Configuration configuration)
             throws IOException {

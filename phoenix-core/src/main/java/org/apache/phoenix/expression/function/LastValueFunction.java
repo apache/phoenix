@@ -30,7 +30,7 @@ import org.apache.phoenix.parse.LastValueAggregateParseNode;
 import org.apache.phoenix.schema.types.PBoolean;
 
 /**
- * Built-in function for LAST_VALUE(<expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC) aggregate
+ * Built-in function for {@code LAST_VALUE(<expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC) aggregate }
  * function
  *
  */

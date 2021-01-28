@@ -92,7 +92,7 @@ public class ViewUtil {
 
     /**
      * Find all the descendant views of a given table or view in a depth-first fashion.
-     * Note that apart from scanning the parent->child links, we also validate each view
+     * Note that apart from scanning the {@code parent->child } links, we also validate each view
      * by trying to resolve it.
      * Use {@link ViewUtil#findAllRelatives(Table, byte[], byte[], byte[], LinkType,
      * TableViewFinderResult)} if you want to find other links and don't care about orphan results.
@@ -295,7 +295,7 @@ public class ViewUtil {
     
     /**
      * Check metadata to find if a given table/view has any immediate child views. Note that this
-     * is not resilient to orphan parent->child links.
+     * is not resilient to orphan {@code parent->child } links.
      * @param sysCatOrsysChildLink For older (pre-4.15.0) clients, we look for child links inside
      *                             SYSTEM.CATALOG, otherwise we look for them inside
      *                             SYSTEM.CHILD_LINK
@@ -332,14 +332,15 @@ public class ViewUtil {
     }
 
     /**
-     * Attempt to drop an orphan child view i.e. a child view for which we see a parent->child entry
+     * Attempt to drop an orphan child view i.e. a child view for which we see a
+     * {@code parent->child } entry
      * in SYSTEM.CHILD_LINK/SYSTEM.CATALOG (as a child) but for whom the parent no longer exists.
      * @param env Region Coprocessor environment
      * @param tenantIdBytes tenantId of the parent
      * @param schemaName schema of the parent
      * @param tableOrViewName parent table/view name
      * @param sysCatOrSysChildLink SYSTEM.CATALOG or SYSTEM.CHILD_LINK which is used to find the
-     *                             parent->child linking rows
+     *                             {@code parent->child } linking rows
      * @throws IOException thrown if there is an error scanning SYSTEM.CHILD_LINK or SYSTEM.CATALOG
      * @throws SQLException thrown if there is an error getting a connection to the server or
      * an error retrieving the PTable for a child view
@@ -431,8 +432,8 @@ public class ViewUtil {
 
 
     /**
-     * Determines whether we should use SYSTEM.CATALOG or SYSTEM.CHILD_LINK to find parent->child
-     * links i.e. {@link LinkType#CHILD_TABLE}.
+     * Determines whether we should use SYSTEM.CATALOG or SYSTEM.CHILD_LINK to find
+     * {@code parent->child } links i.e. {@link LinkType#CHILD_TABLE}.
      * If the client is older than 4.15.0 and the SYSTEM.CHILD_LINK table does not exist, we use
      * the SYSTEM.CATALOG table. In all other cases, we use the SYSTEM.CHILD_LINK table.
      * This is required for backwards compatibility.

@@ -38,7 +38,7 @@ public class PerRegionIndexWriteCache {
 
   /**
    * Get the edits for the current region. Removes the edits from the cache. To add them back, call
-   * {@link #addEdits(HRegion, HTableInterfaceReference, Collection)}.
+   * #addEdits(HRegion, HTableInterfaceReference, Collection).
    * @param region
    * @return Get the edits for the given region. Returns <tt>null</tt> if there are no pending edits
    *         for the region

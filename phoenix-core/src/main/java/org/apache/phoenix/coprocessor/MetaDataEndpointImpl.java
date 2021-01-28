@@ -253,7 +253,7 @@ import com.google.protobuf.Service;
  * is stored in a single header row. Column information is stored in a separate
  * row per column. Linking information (indexes, views etc) are stored using a
  * separate row for each link that uses the {@link LinkType} column value. The
- * parent->child links are stored in a separate SYSTEM.CHILD_LINK table.
+ * {@code parent->child } links are stored in a separate SYSTEM.CHILD_LINK table.
  * Metadata for all tables/views/indexes in the same schema are stored in a
  * single region which is enforced using the {@link MetaDataSplitPolicy}.
  * <p>

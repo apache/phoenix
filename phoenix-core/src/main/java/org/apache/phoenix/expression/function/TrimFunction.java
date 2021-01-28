@@ -33,7 +33,7 @@ import org.apache.phoenix.util.StringUtil;
 
 
 /**
- * Implementation of the Trim(<string>) build-in function. It removes from both end of <string>
+ * Implementation of the {@code Trim(<string>) } build-in function. It removes from both end of {@code <string> }
  * space character and other function bytes in single byte utf8 characters set.
  * 
  * 

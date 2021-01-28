@@ -56,7 +56,7 @@ import com.google.common.collect.Lists;
 
 /**
  * 
- * Implementation for <,<=,>,>=,=,!= comparison expressions
+ * Implementation for {@code <,<=,>,>=,=,!= } comparison expressions
  * 
  * @since 0.1
  */

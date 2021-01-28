@@ -39,12 +39,12 @@ import org.apache.phoenix.schema.types.PVarchar;
 
 /**
  * 
- * Implementation of REGEXP_SUBSTR(<source>, <pattern>, <offset>) built-in function,
- * where <offset> is the offset from the start of <string>. Positive offset is treated as 1-based,
+ * Implementation of {@code REGEXP_SUBSTR(<source>, <pattern>, <offset>) } built-in function,
+ * where {@code <offset> } is the offset from the start of {@code <string> }. Positive offset is treated as 1-based,
  * a zero offset is treated as 0-based, and a negative offset starts from the end of the string 
- * working backwards. The <pattern> is the pattern we would like to search for in the <source> string.
- * The function returns the first occurrence of any substring in the <source> string that matches
- * the <pattern> input as a VARCHAR. 
+ * working backwards. The {@code <pattern> } is the pattern we would like to search for in the {@code <source> } string.
+ * The function returns the first occurrence of any substring in the {@code <source> } string that matches
+ * the {@code <pattern> } input as a VARCHAR. 
  * 
  * 
  * @since 0.1

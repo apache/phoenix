@@ -341,7 +341,7 @@ public class StringUtil {
      *            the values to be stored in all elements of the array
      * @param fillFromIdx
      *            the index of the first element (inclusive) to be used as fill values
-     * @param filToIdx
+     * @param fillToIdx
      *            the index of the last element (exclusive) to be used as fill value
      * @param invertFill
      *            if true inverts the bits in fill before filling the array

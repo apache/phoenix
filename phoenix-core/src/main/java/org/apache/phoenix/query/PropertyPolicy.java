@@ -27,12 +27,13 @@ import java.util.Properties;
  * with exception
  *
  * An example will be:
- *<code>
+ *<pre>
+ *{@code 
  *public class Customized PropertyPolicy implements PropertyPolicy {
  *  final static Set<String> propertiesKeyAllowed = Collections.unmodifiableSet(
  *      new HashSet<>(asList("DriverMajorVersion","DriverMinorVersion","DriverName","CurrentSCN")));
  *
- *      @Override public void evaluate(Properties properties) {
+ *      public void evaluate(Properties properties) {
  *      final Set<String> offendingProperties = new HashSet<>();
  *
  *      for(Object k:properties.keySet()){
@@ -44,7 +45,8 @@ import java.util.Properties;
  *      "properties not allowed. offending properties" + offendingProperties);
  *  }
  *}
- *</code>
+ *}
+ *</pre>
  */
 public interface PropertyPolicy {
     /**

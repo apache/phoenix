@@ -306,7 +306,6 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
      * 
      * @param results
      *            next batch of {@link KeyValue}s
-     * @throws IOException 
      */
     @Override
     public void collectStatistics(final List<Cell> results) {

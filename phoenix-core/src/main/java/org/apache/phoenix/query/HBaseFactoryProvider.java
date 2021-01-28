@@ -21,7 +21,7 @@ import org.apache.phoenix.util.InstanceResolver;
 
 /**
  * Manages factories that provide extension points for HBase.
- * <p/>
+ * 
  * Dependent modules may register their own implementations of the following using {@link java.util.ServiceLoader}:
  * <ul>
  *     <li>{@link ConfigurationFactory}</li>

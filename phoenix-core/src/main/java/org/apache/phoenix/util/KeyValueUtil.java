@@ -197,7 +197,7 @@ public class KeyValueUtil {
 
     /**
      * Estimates the size of rows stored in RowMutationState (in memory)
-     * @param mutations map from table to row to RowMutationState
+     * @param tableMutationMap map from table to row to RowMutationState
      * @return estimated row size
      */
     public static long

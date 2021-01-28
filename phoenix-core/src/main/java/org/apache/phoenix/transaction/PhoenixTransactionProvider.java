@@ -63,7 +63,6 @@ public interface PhoenixTransactionProvider {
      *  @param  timestamp - start timestamp
      *  @param  commitTimestamp - commit timestamp
      * @return put operation with metadata
-     * @throws IOException
      */
     public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp);
 }

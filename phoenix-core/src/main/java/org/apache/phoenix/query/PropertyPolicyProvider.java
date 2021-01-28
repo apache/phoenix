@@ -21,7 +21,7 @@ import org.apache.phoenix.util.InstanceResolver;
 
 /**
  * Manages providers that provide property policy for Phoenix.
- * <p/>
+ * 
  * Dependent modules may register their own implementations of the following using {@link java.util.ServiceLoader}:
  * <ul>
  *     <li>{@link PropertyPolicy}</li>

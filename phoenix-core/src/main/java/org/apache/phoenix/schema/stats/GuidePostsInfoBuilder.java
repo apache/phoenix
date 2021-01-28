@@ -93,7 +93,6 @@ public class GuidePostsInfoBuilder {
      * @param row number of rows in the guidepost
      * @param byteCount number of bytes in the guidepost
      * @param updateTimestamp time at which guidepost was created/updated.
-     * @throws IOException
      */
     public boolean trackGuidePost(ImmutableBytesWritable row, long byteCount, long rowCount,
             long updateTimestamp) {

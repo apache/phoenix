@@ -124,7 +124,7 @@ import com.google.common.collect.Sets;
  * 
  * Class that builds index row key from data row key and current state of
  * row and caches any covered columns. Client-side serializes into byte array using 
- * @link #serialize(PTable, ImmutableBytesWritable)}
+ * #serialize(PTable, ImmutableBytesWritable)
  * and transmits to server-side through either the 
  * {@link org.apache.phoenix.index.PhoenixIndexCodec#INDEX_PROTO_MD}
  * Mutation attribute or as a separate RPC call using 

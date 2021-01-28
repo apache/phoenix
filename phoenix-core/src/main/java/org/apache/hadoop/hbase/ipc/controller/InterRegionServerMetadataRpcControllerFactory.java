@@ -28,7 +28,7 @@ import org.apache.phoenix.compat.hbase.CompatHBaseRpcController;
 import org.apache.phoenix.compat.hbase.CompatRpcControllerFactory;
 
 /**
- * {@link RpcControllerFactory} that should only be used when creating {@link HTable} for
+ * {@link RpcControllerFactory} that should only be used when creating HTable for
  * making remote RPCs to the region servers hosting Phoenix SYSTEM tables.
  */
 public class InterRegionServerMetadataRpcControllerFactory extends CompatRpcControllerFactory {

@@ -23,7 +23,7 @@ import org.apache.hadoop.hbase.filter.FilterBase;
 
 /**
  * Server-side only class used in the indexer to filter out keyvalues newer than a given timestamp
- * (so allows anything <code><=</code> timestamp through).
+ * (so allows anything {@code <= } timestamp through).
  * <p>
  */
 public class NewerTimestampFilter extends FilterBase {

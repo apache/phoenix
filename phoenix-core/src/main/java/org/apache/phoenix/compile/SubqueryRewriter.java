@@ -135,6 +135,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
 
     /**
      * <pre>
+     * {@code
      * Rewrite the In Subquery to semi/anti/left join for both NonCorrelated and Correlated subquery.
      *
      * 1.If the {@link InParseNode} is the only node in where clause or is the ANDed part of the where clause,
@@ -177,6 +178,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
      *     SELECT ITEM_ID,NAME FROM item I  Left JOIN
      *     (SELECT DISTINCT 1 $28, MAX(ITEM_ID) $29,O.PRICE $27 FROM order O  GROUP BY O.PRICE,O.CUSTOMER_ID) $26
      *     ON ((I.ITEM_ID = $26.$29 AND $26.$27 = I.PRICE)) WHERE ($26.$28 IS NOT NULL  OR I.DISCOUNT1 > 10)
+     * }
      * </pre>
      */
     @Override

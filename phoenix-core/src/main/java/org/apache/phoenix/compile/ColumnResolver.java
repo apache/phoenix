@@ -56,8 +56,7 @@ public interface ColumnResolver {
      * @param schemaName the schema name
      * @param tableName the table name or table alias
      * @return the resolved TableRef
-     * @throws TableNotFoundException if the table could not be resolved
-     * @throws AmbiguousTableException if the table name is ambiguous
+     * @throws SQLException
      */
     public TableRef resolveTable(String schemaName, String tableName) throws SQLException;
     

@@ -80,7 +80,6 @@ public interface IndexCodec {
      *            mutation that should be indexed.
      * @return <tt>true</tt> if indexing is enabled for the given table. This should be on a per-table basis, as each
      *         codec is instantiated per-region.
-     * @throws IOException
      */
     public boolean isEnabled(Mutation m);
 

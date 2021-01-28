@@ -404,7 +404,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @param services base services from where we derive our default configuration
      * @param connectionInfo to provide connection information
      * @param info hbase configuration properties
-     * @throws SQLException
      */
     public ConnectionQueryServicesImpl(QueryServices services, ConnectionInfo connectionInfo, Properties info) {
         super(services);

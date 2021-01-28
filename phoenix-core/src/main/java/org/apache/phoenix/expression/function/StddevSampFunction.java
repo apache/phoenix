@@ -34,7 +34,7 @@ import org.apache.phoenix.schema.types.PDataType;
 
 /**
  * 
- * Built-in function for STDDEV_SAMP(<expression>) aggregate function
+ * Built-in function for {@code STDDEV_SAMP(<expression>) } aggregate function
  * 
  * 
  * @since 1.2.1

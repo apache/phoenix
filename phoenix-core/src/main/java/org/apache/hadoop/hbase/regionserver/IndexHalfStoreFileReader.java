@@ -47,8 +47,8 @@ import org.apache.phoenix.index.IndexMaintainer;
  * This type works in tandem with the {@link Reference} type. This class is used reading while
  * Reference is used writing.
  *
- * <p>
- * This file is not splitable. Calls to {@link #midkey()} return null.
+ * 
+ * This file is not splitable. Calls to #midkey() return null.
  */
 
 public class IndexHalfStoreFileReader extends StoreFile.Reader {

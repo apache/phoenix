@@ -55,7 +55,7 @@ public class MutationMetricQueue {
     
     /**
      * Publish the metrics to wherever you want them published. The internal state is cleared out after every publish.
-     * @return map of table name -> list of pair of (metric name, metric value)
+     * @return map of table {@code name -> list } of pair of (metric name, metric value)
      */
     public Map<String, Map<MetricType, Long>> aggregate() {
         Map<String, Map<MetricType, Long>> publishedMetrics = new HashMap<>();

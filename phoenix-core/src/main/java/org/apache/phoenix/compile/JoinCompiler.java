@@ -397,7 +397,7 @@ public class JoinCompiler {
 
         /**
          * Pruning columns for each {@link JoinCompiler.Table} if
-         * {@link @link JoinCompiler.Table#isSubselect()}.
+         * {@link JoinCompiler.Table#isSubselect()}.
          * @throws SQLException
          */
         public void pruneSubselectAliasedNodes() throws SQLException {
