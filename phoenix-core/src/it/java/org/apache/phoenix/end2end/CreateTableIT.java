@@ -52,6 +52,7 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
@@ -88,6 +89,136 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         PhoenixStatement pstatement = statement.unwrap(PhoenixStatement.class);
         List<KeyRange> splits = pstatement.getQueryPlan().getSplits();
         assertTrue(splits.size() > 0);
+    }
+
+    @Test
+    public void testCreateAlterTableWithDuplicateColumn() throws Exception {
+        Properties props = new Properties();
+        int failureCount = 0;
+        int expectedExecCount = 0;
+        String tableName = generateUniqueName();
+        String viewName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            try {
+                // Case 1 - Adding a column as "Default_CF.Column" in
+                // CREATE TABLE query where "Column" is same as single PK Column
+                conn.createStatement().execute(String.format("CREATE TABLE %s"
+                        + " (name VARCHAR NOT NULL PRIMARY KEY, city VARCHAR,"
+                        + " name1 VARCHAR, name VARCHAR)", tableName));
+                fail("Should have failed with ColumnAlreadyExistsException");
+            } catch (ColumnAlreadyExistsException e) {
+                // expected
+                failureCount++;
+            }
+            try {
+                // Case 2 - Adding a column as "Default_CF.Column" in CREATE
+                // TABLE query where "Default_CF.Column" already exists as non-Pk column
+                conn.createStatement().execute(String.format("CREATE TABLE %s"
+                        + " (name VARCHAR NOT NULL PRIMARY KEY, city VARCHAR,"
+                        + " name1 VARCHAR, name1 VARCHAR)", tableName));
+                fail("Should have failed with ColumnAlreadyExistsException");
+            } catch (ColumnAlreadyExistsException e) {
+                // expected
+                failureCount++;
+            }
+            try {
+                // Case 3 - Adding a column as "Default_CF.Column" in CREATE
+                // TABLE query where "Column" is same as single PK Column.
+                // The only diff from Case 1 is that both PK Column and
+                // "Default_CF.Column" are of different DataType
+                conn.createStatement().execute(String.format("CREATE TABLE %s"
+                        + " (key1 VARCHAR NOT NULL PRIMARY KEY, city VARCHAR,"
+                        + " name1 VARCHAR, key1 INTEGER)", tableName));
+                fail("Should have failed with ColumnAlreadyExistsException");
+            } catch (ColumnAlreadyExistsException e) {
+                // expected
+                failureCount++;
+            }
+            try {
+                // Case 4 - Adding a column as "Default_CF.Column" in
+                // CREATE TABLE query where "Column" is same as one of the
+                // PK Column from Composite PK Columns
+                conn.createStatement().execute(String.format("CREATE TABLE %s"
+                        + " (name VARCHAR NOT NULL, name1 VARCHAR NOT NULL,"
+                        + " name2 VARCHAR, name VARCHAR"
+                        + " CONSTRAINT PK PRIMARY KEY(name, name1))", tableName));
+                fail("Should have failed with ColumnAlreadyExistsException");
+            } catch (ColumnAlreadyExistsException e) {
+                // expected
+                failureCount++;
+            }
+            try {
+                // Case 5 - Adding a column as "Default_CF.Column" in
+                // CREATE VIEW query where "Column" is same as one of the
+                // PK Column from Composite PK Columns derived from parent table
+                conn.createStatement().execute(String.format("CREATE TABLE %s"
+                        + " (name VARCHAR NOT NULL, name1 VARCHAR NOT NULL,"
+                        + " name2 VARCHAR, name3 VARCHAR"
+                        + " CONSTRAINT PK PRIMARY KEY(name, name1))", tableName));
+                expectedExecCount++;
+                conn.createStatement().execute(String.format("CREATE VIEW %s"
+                        + " (name1 CHAR(5)) AS SELECT * FROM %s", viewName, tableName));
+                fail("Should have failed with ColumnAlreadyExistsException");
+            } catch (ColumnAlreadyExistsException e) {
+                // expected
+                failureCount++;
+            }
+            try {
+                // Case 6 - Adding a column as "Default_CF.Column" in
+                // ALTER TABLE query where "Column" is same as one of the
+                // PK Column from Composite PK Columns
+                conn.createStatement().execute(
+                        String.format("DROP TABLE %s", tableName));
+                conn.createStatement().execute(String.format("CREATE TABLE %s"
+                        + " (name VARCHAR NOT NULL, name1 VARCHAR NOT NULL,"
+                        + " name2 VARCHAR, name3 VARCHAR"
+                        + " CONSTRAINT PK PRIMARY KEY(name, name1))", tableName));
+                expectedExecCount++;
+                conn.createStatement().execute(
+                        String.format("ALTER TABLE %s ADD name1 INTEGER", tableName));
+                fail("Should have failed with ColumnAlreadyExistsException");
+            } catch (ColumnAlreadyExistsException e) {
+                // expected
+                failureCount++;
+            }
+            try {
+                // Case 7 - Adding a column as "Default_CF.Column" in
+                // ALTER TABLE query where "Column" is same as single PK Column
+                conn.createStatement().execute(
+                        String.format("DROP TABLE %s", tableName));
+                conn.createStatement().execute(String.format("CREATE TABLE %s"
+                        + " (name VARCHAR NOT NULL PRIMARY KEY, city VARCHAR,"
+                        + " name1 VARCHAR, name2 VARCHAR)", tableName));
+                expectedExecCount++;
+                conn.createStatement().execute(
+                        String.format("ALTER TABLE %s ADD name VARCHAR", tableName));
+                fail("Should have failed with ColumnAlreadyExistsException");
+            } catch (ColumnAlreadyExistsException e) {
+                // expected
+                failureCount++;
+            }
+            assertEquals(7, failureCount);
+            assertEquals(3, expectedExecCount);
+
+            conn.createStatement().execute(
+                    String.format("DROP TABLE %s", tableName));
+            // Case 8 - Adding a column as "Non_Default_CF.Column" in
+            // CREATE TABLE query where "Column" is same as single PK Column
+            // Hence, we allow creating such column
+            conn.createStatement().execute(String.format("CREATE TABLE %s"
+                    + " (name VARCHAR NOT NULL PRIMARY KEY, city VARCHAR,"
+                    + " name1 VARCHAR, a.name VARCHAR)", tableName));
+            conn.createStatement().execute(
+                    String.format("DROP TABLE %s", tableName));
+            // Case 9 - Adding a column as "Non_Default_CF.Column" in
+            // ALTER TABLE query where "Column" is same as single PK Column
+            // Hence, we allow creating such column
+            conn.createStatement().execute(String.format("CREATE TABLE %s"
+                    + " (name VARCHAR NOT NULL PRIMARY KEY, city VARCHAR,"
+                    + " name1 VARCHAR, name2 VARCHAR)", tableName));
+            conn.createStatement().execute(
+                    String.format("ALTER TABLE %s ADD a.name VARCHAR", tableName));
+        }
     }
 
     @Test
