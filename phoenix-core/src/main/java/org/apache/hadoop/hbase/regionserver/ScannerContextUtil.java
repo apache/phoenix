@@ -25,7 +25,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 
 /**
- * @ScannerContext has all methods package visible. To properly update the context progress for our scanners we
+ * ScannerContext has all methods package visible. To properly update the context progress for our scanners we
  * need this helper
  */
 public class ScannerContextUtil {

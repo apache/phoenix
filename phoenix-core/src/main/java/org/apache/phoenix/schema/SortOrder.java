@@ -22,27 +22,27 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
- * Specifies the sort order on disk of row key columns. The default is ASC.</p>
+ * Specifies the sort order on disk of row key columns. The default is ASC.
  * 
  * HBase always stores row keys in ascending order resulting in scans to also be
  * sorted by ascending row keys. This enum is used to associate a sort order
  * with each row key column to allow storing row key columns in descending
- * order.</p>
+ * order.
  * 
  * The often cited example of when you may want to do this is a row key that has
  * a date component. If all other parts of the row key are equal, a scan would
  * return the data from least recent to most recent; to get the scan to return
  * the most recent data first, the time component of the row key can be marked
- * as "desc".</p>
+ * as "desc".
  * 
  * Internally, the bits of values for columns marked as "desc" are inverted before handing
  * them to HBase to persist; they are inverted again when read back out.
- * </p>
  * 
- * Example DDL:</p>
+ * 
+ * Example DDL:
  * 
  * CREATE TABLE Events(event_type INTEGER NOT NULL, event_date DATE NOT NULL, event_name VARCHAR NOT NULL 
- * CONSTRAINT PK PRIMARY KEY (event_type, event_date DESC))</p>
+ * CONSTRAINT PK PRIMARY KEY (event_type, event_date DESC))
  * 
  * @since 1.2
  */

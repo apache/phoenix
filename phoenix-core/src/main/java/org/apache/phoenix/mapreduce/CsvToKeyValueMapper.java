@@ -36,7 +36,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 
 /**
  * MapReduce mapper that converts CSV input lines into KeyValues that can be written to HFiles.
- * <p/>
+ * 
  * KeyValues are produced by executing UPSERT statements on a Phoenix connection and then
  * extracting the created KeyValues and rolling back the statement execution before it is
  * committed to HBase.

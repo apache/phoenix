@@ -24,7 +24,7 @@ import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 
 /**
- * Factory for creating {@link HConnection}
+ * Factory for creating HConnection
  *
  * 
  */
@@ -33,7 +33,7 @@ public interface HConnectionFactory {
     /**
      * Creates HConnection to access HBase clusters.
      * 
-     * @param configuration object
+     * @param conf object
      * @return A HConnection instance
      */
     Connection createConnection(Configuration conf) throws IOException;

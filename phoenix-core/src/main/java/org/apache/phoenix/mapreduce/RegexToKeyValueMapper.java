@@ -39,7 +39,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * MapReduce mapper that converts input lines into KeyValues based on the Regex that can be written to HFiles.
- * <p/>
+ * 
  * KeyValues are produced by executing UPSERT statements on a Phoenix connection and then
  * extracting the created KeyValues and rolling back the statement execution before it is
  * committed to HBase.

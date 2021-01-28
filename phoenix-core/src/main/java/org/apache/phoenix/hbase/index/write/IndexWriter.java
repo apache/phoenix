@@ -133,7 +133,7 @@ public class IndexWriter implements Stoppable {
   }
 
   /**
-   * see {@link #writeAndHandleFailure(Collection)}.
+   * see #writeAndHandleFailure(Collection).
    * @param toWrite
    * @throws IOException
    */
@@ -194,7 +194,7 @@ public class IndexWriter implements Stoppable {
     }
     
     /**
-   * see {@link #write(Collection)}
+   * see #write(Collection)
    * @param toWrite
    * @throws IndexWriteException
    */

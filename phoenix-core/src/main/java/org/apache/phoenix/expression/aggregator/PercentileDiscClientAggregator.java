@@ -29,7 +29,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
  * 
- * Built-in function for PERCENTILE_DISC(<expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC) aggregate function
+ * Built-in function for {@code PERCENTILE_DISC(<expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC) } aggregate function
  *
  * 
  * @since 1.2.1

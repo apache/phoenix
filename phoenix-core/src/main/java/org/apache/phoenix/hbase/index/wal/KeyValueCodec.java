@@ -31,7 +31,7 @@ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 /**
- * Codec to encode/decode {@link KeyValue}s and {@link IndexedKeyValue}s within a {@link WALEdit}
+ * Codec to encode/decode KeyValue s and IndexedKeyValue s within a WALEdit
  */
 public class KeyValueCodec {
 

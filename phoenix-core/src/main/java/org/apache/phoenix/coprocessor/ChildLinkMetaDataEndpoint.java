@@ -48,7 +48,7 @@ import static org.apache.phoenix.coprocessor.MetaDataEndpointImpl.mutateRowsWith
 
 /**
  * Endpoint co-processor through which Phoenix metadata mutations for SYSTEM.CHILD_LINK flow.
- * The parent->child links ({@link org.apache.phoenix.schema.PTable.LinkType#CHILD_TABLE})
+ * The {@code parent->child } links ({@link org.apache.phoenix.schema.PTable.LinkType#CHILD_TABLE})
  * are stored in the SYSTEM.CHILD_LINK table.
  */
 public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implements RegionCoprocessor {

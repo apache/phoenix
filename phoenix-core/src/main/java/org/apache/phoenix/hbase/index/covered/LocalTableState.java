@@ -125,7 +125,7 @@ public class LocalTableState implements TableState {
      * state for any of the columns you are indexing.
      * <p>
      * <i>NOTE:</i> This method should <b>not</b> be used during
-     * {@link IndexCodec#getIndexDeletes(TableState, BatchState, byte[], byte[])} as the pending update will not yet have been
+     * IndexCodec#getIndexDeletes(TableState, BatchState, byte[], byte[]) as the pending update will not yet have been
      * applied - you are merely attempting to cleanup the current state and therefore do <i>not</i>
      * need to track the indexed columns.
      * <p>

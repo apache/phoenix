@@ -50,7 +50,6 @@ public interface StatisticsCollector extends Closeable {
     /**
      * Collect statistics for the given list of cells. This method can be called multiple times
      * during collection of statistics.
-     * @throws IOException 
      */
     void collectStatistics(List<Cell> results);
 

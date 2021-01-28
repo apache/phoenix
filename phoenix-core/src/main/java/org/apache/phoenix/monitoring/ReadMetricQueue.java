@@ -70,7 +70,7 @@ public class ReadMetricQueue {
     }
 
     /**
-     * @return map of table name -> list of pair of (metric name, metric value)
+     * @return map of table {@code name -> list } of pair of (metric name, metric value)
      */
     public Map<String, Map<MetricType, Long>> aggregate() {
         Map<String, Map<MetricType, Long>> publishedMetrics = new HashMap<>();

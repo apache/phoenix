@@ -37,7 +37,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * 
- * Class encapsulating ceil operation on {@link org.apache.phoenix.schema.types.PDataType#DATE}.
+ * Class encapsulating ceil operation on org.apache.phoenix.schema.types.PDataType#DATE.
  *
  * 
  * @since 3.0.0

@@ -24,7 +24,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Base visitor for rewrite {@link ParseNode},only further visit down for {@link AndParseNode}.
- * A example is {@link org.apache.phoenix.optimize.QueryOptimizer.WhereConditionRewriter}, which
+ * A example is org.apache.phoenix.optimize.QueryOptimizer.WhereConditionRewriter, which
  * rewrites columns in dataTable to columns in indexTable, and removes parseNodes which have
  * columns not in indexTable.
  */
