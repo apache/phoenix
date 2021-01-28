@@ -23,7 +23,7 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 
 /**
  * 
- * Node representing a not equal expression (!=,<>) in SQL
+ * Node representing a not equal expression {@code (!=,<>) } in SQL
  *
  * 
  * @since 0.1

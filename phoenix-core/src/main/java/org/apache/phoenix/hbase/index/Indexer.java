@@ -97,7 +97,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
  * If the WAL is enabled, these updates are then added to the WALEdit and attempted to be written to
  * the WAL after the WALEdit has been saved. If any of the index updates fail, this server is
  * immediately terminated and we rely on WAL replay to attempt the index updates again (see
- * {@link #preWALRestore(ObserverContext, HRegionInfo, HLogKey, WALEdit)}).
+ * #preWALRestore(ObserverContext, HRegionInfo, HLogKey, WALEdit)).
  * <p>
  * If the WAL is disabled, the updates are attempted immediately. No consistency guarantees are made
  * if the WAL is disabled - some or none of the index updates may be successful. All updates in a
@@ -731,8 +731,8 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
     /**
      * Validate that the version and configuration parameters are supported
      * @param hbaseVersion current version of HBase on which <tt>this</tt> coprocessor is installed
-     * @param conf configuration to check for allowed parameters (e.g. WAL Compression only if >=
-     *            0.94.9)
+     * @param conf configuration to check for allowed parameters (e.g. WAL Compression only {@code if >=
+     *            0.94.9) }
      * @return <tt>null</tt> if the version is supported, the error message to display otherwise
      */
     public static String validateVersion(String hbaseVersion, Configuration conf) {
@@ -757,11 +757,11 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
 
   /**
    * Enable indexing on the given table
-   * @param desc {@link TableDescriptor} for the table on which indexing should be enabled
- * @param builder class to use when building the index for this table
- * @param properties map of custom configuration options to make available to your
+   * @param descBuilder {@link TableDescriptor} for the table on which indexing should be enabled
+   * @param builder class to use when building the index for this table
+   * @param properties map of custom configuration options to make available to your
    *          {@link IndexBuilder} on the server-side
- * @param priority TODO
+   * @param priority TODO
    * @throws IOException the Indexer coprocessor cannot be added
    */
   public static void enableIndexing(TableDescriptorBuilder descBuilder, Class<? extends IndexBuilder> builder,

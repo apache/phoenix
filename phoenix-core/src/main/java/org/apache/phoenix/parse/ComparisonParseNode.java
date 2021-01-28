@@ -27,7 +27,7 @@ import org.apache.phoenix.util.QueryUtil;
 
 /**
  * 
- * Common base class for =, >, >=, <, <=, !=
+ * Common base class {@code =, >, >=, <, <=, != }
  *
  * 
  * @since 0.1

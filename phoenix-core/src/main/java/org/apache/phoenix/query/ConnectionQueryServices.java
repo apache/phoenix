@@ -165,7 +165,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     /**
      * Removes cache {@link GuidePostsInfo} for the table with the given name. If no cached guideposts are present, this does nothing.
      *
-     * @param tableName The table to remove stats for
+     * @param key
      */
     void invalidateStats(GuidePostsKey key);
     

@@ -71,7 +71,7 @@ public interface QueryServices extends SQLCloseable {
     /**
 	 * max size to spool the the result into
 	 * ${java.io.tmpdir}/ResultSpoolerXXX.bin if
-	 * {@link QueryServices#SPOOL_THRESHOLD_BYTES_ATTRIB } is reached.
+	 * QueryServices#SPOOL_THRESHOLD_BYTES_ATTRIB is reached.
 	 * <p>
 	 * default is unlimited(-1)
 	 * <p>

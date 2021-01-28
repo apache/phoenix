@@ -188,7 +188,7 @@ public class PhoenixKeyValueUtil {
 
     /**
      * Estimates the storage size of a row
-     * @param mutations map from table to row to RowMutationState
+     * @param tableMutationMap map from table to row to RowMutationState
      * @return estimated row size
      */
     public static long getEstimatedRowMutationSize(

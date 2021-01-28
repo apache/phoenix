@@ -58,9 +58,9 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
      * <pre>
      * Resolve the inner alias for the selectStament.
      * For following sql:
-     *   select aid,sum(age) agesum from merge where age >=11 and age<=33 group by aid order by agesum
+     *   {@code select aid,sum(age) agesum from merge where age >=11 and age <= 33 group by aid order by agesum }
      * "agesum" is an alias of "sum(age)", so for this method, the above sql is rewritten to:
-     *   select aid,sum(age) agesum from merge where age >=11 and age<=33 group by aid order by sum(age)
+     *   {@code  select aid,sum(age) agesum from merge where age >= 11 and <= 33 group by aid order by sum(age) }
      * </pre>
      * @param selectStament
      * @param phoenixConnection

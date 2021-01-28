@@ -161,7 +161,7 @@ public class RulesApplier {
      * Get data value based on the supplied rule
      *
      * @param column {@link org.apache.phoenix.pherf.configuration.Column} Column rule to get data for
-     * @return {@link org.apache.phoenix.pherf.rules.DataValue} Container Type --> Value mapping
+     * @return {@link org.apache.phoenix.pherf.rules.DataValue} {@code Container Type --> Value mapping }
      */
     public DataValue getDataValue(Column column) throws Exception{
         DataValue data = null;

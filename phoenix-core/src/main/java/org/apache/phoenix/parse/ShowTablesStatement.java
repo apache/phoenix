@@ -25,7 +25,7 @@ import javax.annotation.Nullable;
 import java.util.Objects;
 
 /**
- * ParseNode implementation for SHOW TABLES [IN <schema>].
+ * ParseNode implementation for SHOW TABLES {@code [IN <schema>] }.
  */
 public class ShowTablesStatement extends ShowStatement {
     // Schema for table listing. null implies the the db for this connection is used.

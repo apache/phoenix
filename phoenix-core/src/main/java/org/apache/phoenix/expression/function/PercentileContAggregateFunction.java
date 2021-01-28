@@ -34,7 +34,7 @@ import org.apache.phoenix.schema.types.PDataType;
 
 /**
  * 
- * Built-in function for PERCENTILE_CONT(<expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC) aggregate function
+ * Built-in function for {@code PERCENTILE_CONT(<expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC) aggregate function }
  *
  * 
  * @since 1.2.1

@@ -285,9 +285,9 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
     }
 
     /**
-     * Get the properties as a <code>Map<String,String></code>
+     * Get the properties as a {@code Map<String,String>}
      * 
-     * @return Map<String,String> 
+     * @return {@code Map<String,String>}
      */
     public Map<String,String> asMap() {
         return props;

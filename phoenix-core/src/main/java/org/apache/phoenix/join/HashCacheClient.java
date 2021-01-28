@@ -85,7 +85,16 @@ public class HashCacheClient  {
      * Send the results of scanning through the scanner to all
      * region servers for regions of the table that will use the cache
      * that intersect with the minMaxKeyRange.
-     * @param scanner scanner for the table or intermediate results being cached
+     * @param keyRanges
+     * @param cacheId
+     * @param iterator
+     * @param estimatedSize
+     * @param onExpressions
+     * @param singleValueOnly
+     * @param usePersistentCache
+     * @param cacheUsingTable
+     * @param keyRangeRhsExpression
+     * @param keyRangeRhsValues
      * @return client-side {@link ServerCache} representing the added hash cache
      * @throws SQLException 
      * @throws MaxServerCacheSizeExceededException if size of hash cache exceeds max allowed

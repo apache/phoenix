@@ -231,8 +231,8 @@ public class MetaDataUtil {
      * Encode HBase and Phoenix version along with some server-side config information such as whether WAL codec is
      * installed (necessary for non transactional, mutable secondar indexing), and whether systemNamespace mapping is enabled.
      * 
-     * @param env
-     *            RegionCoprocessorEnvironment to access HBase version and Configuration.
+     * @param hbaseVersionStr
+     * @param config
      * @return long value sent back during initialization of a cluster connection.
      */
     public static long encodeVersion(String hbaseVersionStr, Configuration config) {
@@ -801,10 +801,9 @@ public class MetaDataUtil {
     
     /**
      * This function checks if all regions of a table is online
+     * @param conf
      * @param table
      * @return true when all regions of a table are online
-     * @throws IOException
-     * @throws
      */
     public static boolean tableRegionsOnline(Configuration conf, PTable table) {
         try (ClusterConnection hcon =

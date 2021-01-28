@@ -191,7 +191,7 @@ public class IndexManagementUtil {
      * Propagate the given failure as a generic {@link IOException}, if it isn't already
      * 
      * @param e
-     *            reason indexing failed. If ,tt>null</tt>, throws a {@link NullPointerException}, which should unload
+     *            reason indexing failed. If ,<tt>null</tt>, throws a {@link NullPointerException}, which should unload
      *            the coprocessor.
      */
     public static void rethrowIndexingException(Throwable e) throws IOException {

@@ -52,7 +52,7 @@ import com.google.protobuf.ByteString;
  * an HBase table named SYSTEM.TABLE. Each table is represented by:
  * - one row for the table
  * - one row per column in the tabe
- * Upto {@link #DEFAULT_MAX_META_DATA_VERSIONS} versions are kept. The time
+ * Upto #DEFAULT_MAX_META_DATA_VERSIONS versions are kept. The time
  * stamp of the metadata must always be increasing. The timestamp of the key
  * values in the data row corresponds to the schema that it's using.
  *

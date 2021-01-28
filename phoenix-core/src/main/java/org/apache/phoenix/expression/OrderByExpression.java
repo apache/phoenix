@@ -51,9 +51,7 @@ public class OrderByExpression implements Writable {
 
     /**
      * If {@link Expression#getSortOrder()} is {@link SortOrder#DESC},the isAscending of returned new is reversed,but isNullsLast is untouched.
-     * @param expression
-     * @param isNullsLast
-     * @param isAscending
+     * @param orderByExpression
      * @return
      */
     public static OrderByExpression convertIfExpressionSortOrderDesc(OrderByExpression orderByExpression) {
@@ -65,7 +63,7 @@ public class OrderByExpression implements Writable {
 
     /**
      * If {@link Expression#getSortOrder()} is {@link SortOrder#DESC},reverse the isAscending,but isNullsLast is untouched.
-     * A typical case is in {@link OrderByCompiler#compile} to get the compiled {@link OrderByExpression} to used for {@link OrderedResultIterator}.
+     * A typical case is in OrderByCompiler#compile to get the compiled OrderByExpression to used for OrderedResultIterator.
      * @param expression
      * @param isNullsLast
      * @param isAscending
@@ -80,7 +78,7 @@ public class OrderByExpression implements Writable {
 
     /**
      * If orderByReverse is true, reverse the isNullsLast and isAscending.
-     * A typical case is in {@link AggregatePlan.OrderingResultIteratorFactory#newIterator}
+     * A typical case is in AggregatePlan.OrderingResultIteratorFactory#newIterator
      * @param expression
      * @param isNullsLast
      * @param isAscending

@@ -22,7 +22,7 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
- * A ColumnModifier implementation modifies how bytes are stored in a primary key column.</p>  
+ * A ColumnModifier implementation modifies how bytes are stored in a primary key column.
  * The {@link ColumnModifier#apply apply} method is called when the bytes for a specific column are first written to HBase and again
  * when they are read back.  Phoenix attemps to minimize calls to apply when bytes are read out of HBase.   
  * 
