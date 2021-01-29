@@ -20,7 +20,7 @@ package org.apache.phoenix.mapreduce;
 import java.util.Arrays;
 import java.util.Collection;
 
-import org.apache.commons.cli.CommandLine;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
