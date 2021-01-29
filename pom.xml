@@ -462,6 +462,13 @@
                   </restrictImports>
                   <restrictImports implementation="de.skuzzle.enforcer.restrictimports.rule.RestrictImports">
                     <includeTestCode>true</includeTestCode>
+                    <reason>Use shaded version in phoenix-thirdparty</reason>
+                    <bannedImports>
+                      <bannedImport>org.apache.commons.cli.**</bannedImport>
+                    </bannedImports>
+                  </restrictImports>
+                  <restrictImports implementation="de.skuzzle.enforcer.restrictimports.rule.RestrictImports">
+                    <includeTestCode>true</includeTestCode>
                     <reason>Use commons lang 3</reason>
                     <bannedImports>
                       <bannedImport>org.apache.commons.lang.**</bannedImport>
