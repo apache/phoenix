@@ -181,6 +181,28 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         return actualIndexMutationMap;
     }
 
+    private Map<byte[], List<Mutation>> populateActualIndexMutationMap() throws IOException {
+        Map<byte[], List<Mutation>> actualIndexMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+        Scan indexScan = new Scan();
+        indexScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
+        indexScan.setRaw(true);
+        indexScan.setMaxVersions();
+        indexScan.setCacheBlocks(false);
+        try (RegionScanner regionScanner = region.getScanner(indexScan)) {
+            do {
+                ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
+                List<Cell> row = new ArrayList<Cell>();
+                hasMore = regionScanner.nextRaw(row);
+                if (!row.isEmpty()) {
+                    populateIndexMutationFromIndexRow(row, actualIndexMutationMap);
+                }
+            } while (hasMore);
+        } catch (Throwable t) {
+            ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
+        }
+        return actualIndexMutationMap;
+    }
+
     private void repairAndOrVerifyIndexRows(Set<byte[]> dataRowKeys,
                                             Map<byte[], List<Mutation>> actualIndexMutationMap,
                                             IndexToolVerificationResult verificationResult) throws IOException {
@@ -191,7 +213,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
             return;
         }
         if (verifyType == IndexTool.IndexVerifyType.ONLY) {
-            verifyIndexRows(actualIndexMutationMap, expectedIndexMutationMap, Collections.EMPTY_SET, Collections.EMPTY_LIST, verificationResult.getBefore(), true);
+            verifyIndexRows(actualIndexMutationMap, expectedIndexMutationMap, Collections.EMPTY_SET, indexRowsToBeDeleted, verificationResult.getBefore(), true);
             return;
         }
         if (verifyType == IndexTool.IndexVerifyType.BEFORE) {
@@ -203,7 +225,8 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         }
         if (verifyType == IndexTool.IndexVerifyType.AFTER) {
             repairIndexRows(expectedIndexMutationMap, Collections.EMPTY_LIST, verificationResult);
-            verifyIndexRows(actualIndexMutationMap, expectedIndexMutationMap, Collections.EMPTY_SET, Collections.EMPTY_LIST, verificationResult.getAfter(), false);
+            actualIndexMutationMap = populateActualIndexMutationMap();
+            verifyIndexRows(actualIndexMutationMap, expectedIndexMutationMap, Collections.EMPTY_SET, indexRowsToBeDeleted, verificationResult.getAfter(), false);
             return;
         }
         if (verifyType == IndexTool.IndexVerifyType.BOTH) {
