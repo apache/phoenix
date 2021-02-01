@@ -140,9 +140,9 @@ if [[ "$1" == "tag" ]]; then
 
   # Create release version
   maven_set_version "$RELEASE_VERSION"
-  git add RELEASENOTES.md CHANGES.md
+  git add --ignore-errors RELEASENOTES.md CHANGES.md
 
-  git commit -a -m "Preparing ${PROJECT} release $RELEASE_TAG; tagging and updates to CHANGES.md and RELEASENOTES.md"
+  git commit --allow-empty -a -m "Preparing ${PROJECT} release $RELEASE_TAG; tagging and updates to CHANGES.md and RELEASENOTES.md"
   echo "Creating tag $RELEASE_TAG at the head of $GIT_BRANCH"
   git tag "$RELEASE_TAG"
 

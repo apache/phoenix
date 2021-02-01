@@ -522,18 +522,19 @@ function update_releasenotes {
   # The releasedocmaker call above generates RELEASENOTES.X.X.X.md and CHANGELOG.X.X.X.md.
   if [ -f "${project_dir}/CHANGES.md" ]; then
     # To insert into project's CHANGES.md...need to cut the top off the
-    # CHANGELOG.X.X.X.md file removing license and first line and then
-    # insert it after the license comment closing where we have a
-    # DO NOT REMOVE marker text!
-    sed -i -e '/## Release/,$!d' "CHANGELOG.${jira_fix_version}.md"
-    sed -i -e "/DO NOT REMOVE/r CHANGELOG.${jira_fix_version}.md" "${project_dir}/CHANGES.md"
+    # CHANGELOG.X.X.X.md file removing license and then
+    # insert it after the license comment closing
+    sed -i -e '/^# .* Changelog$/,$!d' "CHANGELOG.${jira_fix_version}.md"
+    sed -i -e '1d' "CHANGELOG.${jira_fix_version}.md"
+    sed -i -e "/^# .* Changelog$/r CHANGELOG.${jira_fix_version}.md" "${project_dir}/CHANGES.md"
   else
     mv "CHANGELOG.${jira_fix_version}.md" "${project_dir}/CHANGES.md"
   fi
   if [ -f "${project_dir}/RELEASENOTES.md" ]; then
     # Similar for RELEASENOTES but slightly different.
-    sed -i -e '/Release Notes/,$!d' "RELEASENOTES.${jira_fix_version}.md"
-    sed -i -e "/DO NOT REMOVE/r RELEASENOTES.${jira_fix_version}.md" \
+    sed -i -e '/-->/,$!d' "RELEASENOTES.${jira_fix_version}.md"
+    sed -i -e '1d' "RELEASENOTES.${jira_fix_version}.md"
+    sed -i -e "/^-->$/r RELEASENOTES.${jira_fix_version}.md" \
         "${project_dir}/RELEASENOTES.md"
   else
     mv "RELEASENOTES.${jira_fix_version}.md" "${project_dir}/RELEASENOTES.md"
@@ -544,7 +545,7 @@ function update_releasenotes {
 # Make src release.
 # Takes as arguments first the project name -- e.g. hbase or hbase-operator-tools
 # -- and then the version string. Expects to find checkout adjacent to this script
-# named for 'project', the first arg passed.
+# named for 'project', the first arg passed.q
 # Expects the following three defines in the environment:
 # - GPG needs to be defined, with the path to GPG: defaults 'gpg'.
 # - GIT_REF which is the tag to create the tgz from: defaults to 'master'.
@@ -697,9 +698,11 @@ function maven_deploy { #inputs: <snapshot|release> <log_file_path>
   # Coerce the requested version
   maven_set_version "$RELEASE_VERSION"
 
-  declare -a mvn_goals=(clean install)
-  if ! is_dry_run; then
-    mvn_goals=("${mvn_goals[@]}" deploy)
+  declare -a mvn_goals=( clean deploy )
+  if is_dry_run; then
+    echo "Dry run: Deployed artifacts are available as ${PROJECT}.deploy in the output directory."
+    DRY_DEPLOY_DIR="${BASE_DIR}/${PROJECT}.deploy"
+    dry_deploy="-DaltDeploymentRepository=dryrun::default::file://${DRY_DEPLOY_DIR}"
   fi
   # Omid needs to be deployed twice for HBase 1 and 2
   if [[ "$PROJECT" == "phoenix-omid" ]]; then
@@ -716,7 +719,7 @@ function maven_deploy { #inputs: <snapshot|release> <log_file_path>
   fi
   rm -f "$mvn_log_file"
   for variant in "${variants[@]}"; do
-    echo "${MVN[@]}" -DskipTests -Dcheckstyle.skip=true "${PUBLISH_PROFILES[@]}" ${variant:+"$variant"} \
+    echo "${MVN[@]}" -DskipTests -Dcheckstyle.skip=true ${dry_deploy:+"$dry_deploy"} "${PUBLISH_PROFILES[@]}" ${variant:+"$variant"} \
         "${mvn_goals[@]}"
     echo "Logging to ${mvn_log_file}.  This will take a while..."
     git clean -d -f -x
@@ -725,7 +728,7 @@ function maven_deploy { #inputs: <snapshot|release> <log_file_path>
     # The tortuous redirect in the next command allows mvn's stdout and stderr to go to mvn_log_file,
     # while also sending stderr back to the caller.
     # shellcheck disable=SC2094
-    if ! "${MVN[@]}" -DskipTests -Dcheckstyle.skip=true "${PUBLISH_PROFILES[@]}" ${variant:+"$variant"} \
+    if ! "${MVN[@]}" -DskipTests -Dcheckstyle.skip=true ${dry_deploy:+"$dry_deploy"} "${PUBLISH_PROFILES[@]}" ${variant:+"$variant"} \
         "${mvn_goals[@]}" 1>> "$mvn_log_file" 2> >( tee -a "$mvn_log_file" >&2 ); then
       error "Deploy build failed, for details see log at '$mvn_log_file'."
     fi
