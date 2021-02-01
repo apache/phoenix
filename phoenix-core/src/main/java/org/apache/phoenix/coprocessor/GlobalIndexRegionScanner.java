@@ -122,7 +122,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     public static final String PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS =
             "phoenix.index.mr.log.beyond.max.lookback.errors";
     public static final boolean DEFAULT_PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS = false;
-    private static boolean ignoreIndexRebuildForTesting  = false;
+
     protected final UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver;
 
     protected IndexTool.IndexDisableLoggingType disableLoggingVerifyType = IndexTool.IndexDisableLoggingType.NONE;

@@ -935,7 +935,7 @@ public class TestUtil {
         Scan s = new Scan();
         s.setRaw(isRaw);
         ;
-        s.setMaxVersions();
+        s.readAllVersions();
         int rows = 0;
         try (ResultScanner scanner = table.getScanner(s)) {
             Result result = null;
@@ -955,7 +955,7 @@ public class TestUtil {
         Scan s = new Scan();
         s.setRaw(isRaw);
         ;
-        s.setMaxVersions();
+        s.readAllVersions();
 
         CellCount cellCount = new CellCount();
         try (ResultScanner scanner = table.getScanner(s)) {
@@ -998,7 +998,7 @@ public class TestUtil {
             System.out.println("************ dumping index status for " + indexName + " **************");
             Scan s = new Scan();
             s.setRaw(true);
-            s.setMaxVersions();
+            s.readAllVersions();
             byte[] startRow = SchemaUtil.getTableKeyFromFullName(indexName);
             s.setStartRow(startRow);
             s.setStopRow(ByteUtil.nextKey(ByteUtil.concat(startRow, QueryConstants.SEPARATOR_BYTE_ARRAY)));

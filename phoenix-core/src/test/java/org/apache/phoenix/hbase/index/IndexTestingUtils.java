@@ -69,7 +69,7 @@ public class IndexTestingUtils {
         + "].");
     Scan s = new Scan(startKey, endKey);
     // s.setRaw(true);
-    s.setMaxVersions();
+    s.readAllVersions();
     s.setTimeRange(start, end);
     List<Cell> received = new ArrayList<Cell>();
     ResultScanner scanner = index1.getScanner(s);

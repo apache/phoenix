@@ -748,6 +748,14 @@ public class IndexTool extends Configured implements Tool {
             return configureSubmittableJobUsingDirectApi(job);
         }
 
+        /**
+         * Uses the HBase Front Door Api to write to index table. Submits the job and either returns or
+         * waits for the job completion based on runForeground parameter.
+         * 
+         * @param job
+         * @return
+         * @throws Exception
+         */
         private Job configureSubmittableJobUsingDirectApi(Job job) throws Exception {
             job.setReducerClass(PhoenixIndexImportDirectReducer.class);
             Configuration conf = job.getConfiguration();
@@ -790,9 +798,11 @@ public class IndexTool extends Configured implements Tool {
         }
         configuration = HBaseConfiguration.addHbaseResources(getConf());
         populateIndexToolAttributes(cmdLine);
+
         if (tenantId != null) {
             configuration.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
+
         try (Connection conn = getConnection(configuration)) {
             createIndexToolTables(conn);
             if (dataTable != null && indexTable != null) {
@@ -801,9 +811,11 @@ public class IndexTool extends Configured implements Tool {
                 if (shouldDeleteBeforeRebuild) {
                     deleteBeforeRebuild(conn);
                 }
+                preSplitIndexTable(cmdLine, conn);
             }
-            preSplitIndexTable(cmdLine, conn);
+
             boolean result = submitIndexToolJob(conn, configuration);
+
             if (result) {
                 return 0;
             } else {

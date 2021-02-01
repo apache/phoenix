@@ -668,8 +668,6 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             long t0 = EnvironmentEdgeManager.currentTimeMillis();
-            customEdge.setValue(t0);
-            EnvironmentEdgeManager.injectEdge(customEdge);
 
             conn.createStatement().execute("CREATE TABLE " + dataTableFullName
                 + " (ID INTEGER NOT NULL PRIMARY KEY, VAL1 INTEGER, VAL2 INTEGER) " + tableDDLOptions);
@@ -686,6 +684,8 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(String.format(
                 "CREATE INDEX %s ON %s (VAL1) INCLUDE (VAL2)", indexTableName, dataTableFullName));
 
+            customEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(customEdge);
             customEdge.incrementValue(delta);
             long t1 = customEdge.currentTime();
 

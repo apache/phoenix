@@ -80,12 +80,12 @@ public class PhoenixIndexImportDirectReducer extends
                         setValue(verificationResult.getBeforeRebuildMissingIndexRowCount());
                 context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).
                         setValue(verificationResult.getBeforeRebuildInvalidIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRebuildBeyondMaxLookBackMissingIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getBeforeRebuildBeyondMaxLookBackInvalidIndexRowCount());
                 context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS).
                         setValue(verificationResult.getBeforeIndexHasExtraCellsCount());
-                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).
-                    setValue(verificationResult.getBeforeRebuildBeyondMaxLookBackMissingIndexRowCount());
-                context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).
-                    setValue(verificationResult.getBeforeRebuildBeyondMaxLookBackInvalidIndexRowCount());
                 context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS).
                         setValue(verificationResult.getBeforeIndexHasMissingCellsCount());
                 context.getCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).
@@ -108,6 +108,10 @@ public class PhoenixIndexImportDirectReducer extends
                         setValue(verificationResult.getAfterRebuildMissingIndexRowCount());
                 context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT).
                         setValue(verificationResult.getAfterRebuildInvalidIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getAfterRebuildBeyondMaxLookBackMissingIndexRowCount());
+                context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).
+                        setValue(verificationResult.getAfterRebuildBeyondMaxLookBackInvalidIndexRowCount());
                 context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS).
                         setValue(verificationResult.getAfterIndexHasExtraCellsCount());
                 context.getCounter(PhoenixIndexToolJobCounters.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS).

@@ -96,6 +96,7 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -335,6 +336,8 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(
                     BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(
@@ -506,7 +509,6 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
 
             runIndexTool(true, false, "", viewTenantName, indexNameTenant,
                     tenantId, 0, new String[0]);
-
             Table htable= queryServices.getTable(Bytes.toBytes(viewIndexTableName));
             int count = getUtility().countRows(htable);
             // Confirm index has rows
@@ -642,7 +644,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute(indexDDL);
 
             // run with 50% sampling rate, split if data table more than 3 regions
-            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,"-sp", "50", "-spa", "3");
+            runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, "-sp", "50", "-spa", "3");
 
             assertEquals(targetNumRegions, admin.getTableRegions(indexTN).size());
             List<Cell> values = new ArrayList<>();
@@ -726,6 +728,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
                     String.format(
                         "SELECT ID FROM %s WHERE LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz' = 'xxUNAME2_xyz'",
                         qDataTableName);
+
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
             String actualExplainPlan = QueryUtil.getExplainPlan(rs);
 
@@ -855,7 +858,7 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     public static String[] getArgValues(boolean directApi, boolean useSnapshot, String schemaName,
-                                        String dataTable, String indexTable, String tenantId, IndexTool.IndexVerifyType verifyType) {
+            String dataTable, String indexTable, String tenantId, IndexTool.IndexVerifyType verifyType) {
         List<String> args = getArgList(directApi, useSnapshot, schemaName, dataTable, indexTable,
                 tenantId, verifyType, null, null, null);
         return args.toArray(new String[0]);
@@ -965,11 +968,10 @@ public class IndexToolIT extends BaseUniqueNamesOwnClusterIT {
         conf.set(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         indexingTool.setConf(conf);
         final String[] cmdArgs = getArgValues(directApi, useSnapshot, schemaName, dataTableName,
-                indexTableName, tenantId, verifyType, disableLoggingType);
+            indexTableName, tenantId, verifyType, disableLoggingType);
         List<String> cmdArgList = new ArrayList<>(Arrays.asList(cmdArgs));
         cmdArgList.addAll(Arrays.asList(additionalArgs));
-        LOGGER.info("Running IndexTool with {}", Arrays.toString(cmdArgList.toArray()),
-            new Exception("Informational exception to show the caller stack trace"));
+        LOGGER.info("Running IndexTool with {}", Arrays.toString(cmdArgList.toArray()), new Exception("Stack Trace"));
         int status = indexingTool.run(cmdArgList.toArray(new String[cmdArgList.size()]));
 
         if (expectedStatus == 0) {
