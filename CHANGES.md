@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 5.1.0 - Unreleased (as of 2021-01-28)
+## Release 5.1.0 - Unreleased (as of 2021-02-02)
 
 
 
@@ -59,6 +59,8 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-6182](https://issues.apache.org/jira/browse/PHOENIX-6182) | IndexTool to verify and repair every index row |  Major | . |
+| [PHOENIX-5543](https://issues.apache.org/jira/browse/PHOENIX-5543) | Implement show schemas / show tables SQL commands |  Minor | . |
 | [PHOENIX-6337](https://issues.apache.org/jira/browse/PHOENIX-6337) | Bump default HBase versions to 2.3.4 |  Minor | . |
 | [PHOENIX-6250](https://issues.apache.org/jira/browse/PHOENIX-6250) | Fix ViewMetadataIT test flapper |  Major | . |
 | [PHOENIX-6327](https://issues.apache.org/jira/browse/PHOENIX-6327) | Consolidate Junit test categories |  Minor | core |
@@ -241,6 +243,11 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-5874](https://issues.apache.org/jira/browse/PHOENIX-5874) | IndexTool does not set TTL on its log tables correctly |  Major | . |
+| [PHOENIX-6078](https://issues.apache.org/jira/browse/PHOENIX-6078) | Remove Internal Phoenix Connections from parent LinkedQueue when closed |  Major | . |
+| [PHOENIX-5872](https://issues.apache.org/jira/browse/PHOENIX-5872) | Close Internal Phoenix Connections that were running during cancel |  Major | . |
+| [PHOENIX-6347](https://issues.apache.org/jira/browse/PHOENIX-6347) | Remove maven-gpg-plugin invoication from release profile |  Major | core |
+| [PHOENIX-6346](https://issues.apache.org/jira/browse/PHOENIX-6346) | Javadoc generation fails with Java 8 |  Major | core |
 | [PHOENIX-6339](https://issues.apache.org/jira/browse/PHOENIX-6339) | Older client using aggregate queries shows incorrect results. |  Blocker | . |
 | [PHOENIX-6273](https://issues.apache.org/jira/browse/PHOENIX-6273) | Add support to handle MR Snapshot restore externally |  Major | core |
 | [PHOENIX-6338](https://issues.apache.org/jira/browse/PHOENIX-6338) | TxCheckpointIT frequently hangs on 4.x |  Major | core |
@@ -733,5 +740,6 @@
 | [PHOENIX-4874](https://issues.apache.org/jira/browse/PHOENIX-4874) | psql doesn't support date/time with values smaller than milliseconds |  Blocker | . |
 | [PHOENIX-4825](https://issues.apache.org/jira/browse/PHOENIX-4825) | Replace usage of HBase Base64 implementation with java.util.Base64 |  Blocker | . |
 | [PHOENIX-4826](https://issues.apache.org/jira/browse/PHOENIX-4826) | Changes to support HBase 2.0.1 |  Major | . |
+
 
 
