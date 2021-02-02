@@ -40,6 +40,7 @@ import static org.apache.phoenix.mapreduce.index.IndexTool.FEATURE_NOT_APPLICABL
 import static org.apache.phoenix.mapreduce.index.IndexTool.INVALID_TIME_RANGE_EXCEPTION_MESSAGE;
 import static org.apache.phoenix.mapreduce.index.IndexTool.RETRY_VERIFY_NOT_APPLICABLE;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assume.assumeTrue;
 import static org.mockito.Mockito.when;
 
 public class IndexToolTest extends BaseTest {
@@ -382,6 +383,7 @@ public class IndexToolTest extends BaseTest {
 
     @Test
     public void testIndexToolDefaultSource() throws Exception {
+        assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         Long startTime = 1L;
         Long endTime = 10L;
         String [] args =
@@ -395,6 +397,7 @@ public class IndexToolTest extends BaseTest {
 
     @Test
     public void testIndexToolFromIndexSource() throws Exception {
+        assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         verifyFromIndexOption(IndexTool.IndexVerifyType.ONLY);
         verifyFromIndexOption(IndexTool.IndexVerifyType.BEFORE);
     }
