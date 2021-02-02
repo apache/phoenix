@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.CounterGroup;
+import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.IndexRepairRegionScanner;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
@@ -89,6 +90,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
@@ -657,6 +659,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testFromIndexToolForIncrementalVerify() throws Exception {
+        assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         final int NROWS = 4;
         ManualEnvironmentEdge customEdge = new ManualEnvironmentEdge();
         String schemaName = generateUniqueName();

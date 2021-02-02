@@ -1462,6 +1462,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                     hasMoreIncr = scanner.nextRaw(row);
                     if (!row.isEmpty()) {
                         if (isDummy(row)) {
+                            row.clear();
                             continue;
                         }
                         keys.add(PVarbinary.INSTANCE.getKeyRange(CellUtil.cloneRow(row.get(0))));

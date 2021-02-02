@@ -147,8 +147,10 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         Scan dataScan = new Scan();
         dataScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
         scanRanges.initializeScan(dataScan);
-        SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
-        dataScan.setFilter(new SkipScanFilter(skipScanFilter, true));
+        if (isRawFilterSupported) {
+            SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
+            dataScan.setFilter(new SkipScanFilter(skipScanFilter, true));
+        }
         dataScan.setRaw(true);
         dataScan.setMaxVersions();
         dataScan.setCacheBlocks(false);
