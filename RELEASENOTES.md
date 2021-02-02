@@ -23,6 +23,14 @@ These release notes cover new developer and user-facing incompatibilities, impor
 
 ---
 
+* [PHOENIX-6349](https://issues.apache.org/jira/browse/PHOENIX-6349) | *Major* | **Add and use commons-cli to phoenix-thirdparty**
+
+Added phoenix-shaded-commons-cli to phoenix-thirdparty.
+This helps avoid classpath conflicts and includes a patch on top of commons-cli 1.4.0 that fixes CLI-254.
+
+
+---
+
 * [PHOENIX-6273](https://issues.apache.org/jira/browse/PHOENIX-6273) | *Major* | **Add support to handle MR Snapshot restore externally**
 
 Adds mapreduce configuration param "phoenix.mapreduce.external.snapshot.restore" which when set to true indicates that snapshot-based MapReduce jobs shouldn't try to restore the snapshot themselves, but assume an external application has already done so.

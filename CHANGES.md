@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 4.16.0 - Unreleased (as of 2021-01-28)
+## Release 4.16.0 - Unreleased (as of 2021-02-02)
 
 
 
@@ -45,7 +45,10 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-6182](https://issues.apache.org/jira/browse/PHOENIX-6182) | IndexTool to verify and repair every index row |  Major | . |
+| [PHOENIX-6349](https://issues.apache.org/jira/browse/PHOENIX-6349) | Add and use commons-cli to phoenix-thirdparty |  Major | . |
 | [PHOENIX-6250](https://issues.apache.org/jira/browse/PHOENIX-6250) | Fix ViewMetadataIT test flapper |  Major | . |
+| [PHOENIX-6327](https://issues.apache.org/jira/browse/PHOENIX-6327) | Consolidate Junit test categories |  Minor | core |
 | [PHOENIX-6276](https://issues.apache.org/jira/browse/PHOENIX-6276) | Log when hconnection is getting closed in ConnectionQueryServicesImpl |  Major | core |
 | [PHOENIX-5841](https://issues.apache.org/jira/browse/PHOENIX-5841) | When data columns get TTLed, we need inline index validation to publish a metric for this |  Major | . |
 | [PHOENIX-6307](https://issues.apache.org/jira/browse/PHOENIX-6307) | Build and release official binary distributions with each HBase profile |  Major | core |
@@ -77,13 +80,16 @@
 | [PHOENIX-6167](https://issues.apache.org/jira/browse/PHOENIX-6167) | Adding maxMutationCellSizeBytes config and exception |  Trivial | . |
 | [PHOENIX-6181](https://issues.apache.org/jira/browse/PHOENIX-6181) | IndexRepairRegionScanner to verify and repair every global index row |  Major | . |
 | [PHOENIX-6129](https://issues.apache.org/jira/browse/PHOENIX-6129) | Optimize tableExists() call while retrieving correct MUTEX table |  Major | . |
+| [PHOENIX-6202](https://issues.apache.org/jira/browse/PHOENIX-6202) | New column in index gets added as PK with CASCADE INDEX |  Major | . |
 | [PHOENIX-6172](https://issues.apache.org/jira/browse/PHOENIX-6172) | Updating VIEW\_INDEX\_ID column type and ts in Syscat with a 4.16 upgrade script |  Major | . |
 | [PHOENIX-6189](https://issues.apache.org/jira/browse/PHOENIX-6189) | DATA\_EXCEEDS\_MAX\_CAPACITY exception error string should contain column name instead of actual value |  Trivial | . |
 | [PHOENIX-6125](https://issues.apache.org/jira/browse/PHOENIX-6125) | Make sure SYSTEM.TASK does not split |  Major | . |
 | [PHOENIX-6151](https://issues.apache.org/jira/browse/PHOENIX-6151) | Switch phoenix-client to shade-by-default mode |  Major | core |
 | [PHOENIX-6185](https://issues.apache.org/jira/browse/PHOENIX-6185) | OPERATION\_TIMED\_OUT#newException method swallows the exception message and root cause exception. |  Major | core |
+| [PHOENIX-6160](https://issues.apache.org/jira/browse/PHOENIX-6160) | Simplifying concurrent mutation handling for global Indexes |  Major | . |
 | [PHOENIX-6173](https://issues.apache.org/jira/browse/PHOENIX-6173) | Archive test artifacts in Jenkins multibranch postcommit job |  Major | core |
 | [PHOENIX-6128](https://issues.apache.org/jira/browse/PHOENIX-6128) | Remove unused getAdmin() call inside CQSI.init() |  Minor | . |
+| [PHOENIX-6055](https://issues.apache.org/jira/browse/PHOENIX-6055) | Improve error reporting for index validation when there are "Not matching index rows" |  Major | . |
 | [PHOENIX-5909](https://issues.apache.org/jira/browse/PHOENIX-5909) | Table and index-level metrics for indexing coprocs |  Major | . |
 | [PHOENIX-6112](https://issues.apache.org/jira/browse/PHOENIX-6112) | Coupling of two classes only use logger |  Minor | core |
 | [PHOENIX-5957](https://issues.apache.org/jira/browse/PHOENIX-5957) | Index rebuild should remove old index rows with higher timestamp |  Major | . |
@@ -91,6 +97,7 @@
 | [PHOENIX-6093](https://issues.apache.org/jira/browse/PHOENIX-6093) | adding hashcode to phoenix pherf Column class |  Minor | . |
 | [PHOENIX-6102](https://issues.apache.org/jira/browse/PHOENIX-6102) | Better isolation for CI jobs an ASF Jenkins |  Major | . |
 | [PHOENIX-6034](https://issues.apache.org/jira/browse/PHOENIX-6034) | Optimize InListIT |  Major | core |
+| [PHOENIX-6059](https://issues.apache.org/jira/browse/PHOENIX-6059) | Adding more pagination tests |  Minor | . |
 | [PHOENIX-6063](https://issues.apache.org/jira/browse/PHOENIX-6063) | Remove bugus jline and sqlline dependency from phoenix-core |  Major | core |
 | [PHOENIX-5928](https://issues.apache.org/jira/browse/PHOENIX-5928) | Index rebuilds without replaying data table mutations |  Major | . |
 | [PHOENIX-6037](https://issues.apache.org/jira/browse/PHOENIX-6037) | Change default HBase profile to 1.3 in 4.x |  Major | core |
@@ -115,17 +122,21 @@
 | [PHOENIX-4521](https://issues.apache.org/jira/browse/PHOENIX-4521) | Allow Pherf scenario to define per query max allowed query execution duration after which thread is interrupted |  Major | . |
 | [PHOENIX-5748](https://issues.apache.org/jira/browse/PHOENIX-5748) | Simplify index update generation code for consistent global indexes |  Major | . |
 | [PHOENIX-5794](https://issues.apache.org/jira/browse/PHOENIX-5794) | Create a threshold for non async index creation, that can be modified in configs |  Major | . |
+| [PHOENIX-5814](https://issues.apache.org/jira/browse/PHOENIX-5814) | disable trimStackTrace |  Major | connectors, core, omid, queryserver, tephra |
 | [PHOENIX-5746](https://issues.apache.org/jira/browse/PHOENIX-5746) | Update release documentation to include versions information |  Major | . |
 | [PHOENIX-5734](https://issues.apache.org/jira/browse/PHOENIX-5734) | IndexScrutinyTool should not report rows beyond maxLookBack age |  Major | . |
 | [PHOENIX-5751](https://issues.apache.org/jira/browse/PHOENIX-5751) | Remove redundant IndexUtil#isGlobalIndexCheckEnabled() calls for immutable data tables |  Major | . |
 | [PHOENIX-5641](https://issues.apache.org/jira/browse/PHOENIX-5641) | Decouple phoenix-queryserver from phoenix-core |  Major | . |
 | [PHOENIX-5633](https://issues.apache.org/jira/browse/PHOENIX-5633) | Add table name info to scan logging |  Major | . |
+| [PHOENIX-5720](https://issues.apache.org/jira/browse/PHOENIX-5720) | Multiple scans on the same table region cause incorrect IndexTool counters |  Major | . |
 | [PHOENIX-5697](https://issues.apache.org/jira/browse/PHOENIX-5697) | Avoid resource leakage with try-with-resources |  Major | . |
 | [PHOENIX-5703](https://issues.apache.org/jira/browse/PHOENIX-5703) | Add MAVEN\_HOME toPATH in jenkins build |  Major | . |
+| [PHOENIX-5694](https://issues.apache.org/jira/browse/PHOENIX-5694) | Add MR job counters for IndexTool inline verification |  Major | . |
 | [PHOENIX-5634](https://issues.apache.org/jira/browse/PHOENIX-5634) | Use 'phoenix.default.update.cache.frequency' from connection properties at query time |  Minor | . |
 | [PHOENIX-5645](https://issues.apache.org/jira/browse/PHOENIX-5645) | BaseScannerRegionObserver should prevent compaction from purging very recently deleted cells |  Major | . |
 | [PHOENIX-5674](https://issues.apache.org/jira/browse/PHOENIX-5674) | IndexTool to not write already correct index rows |  Major | . |
 | [PHOENIX-5454](https://issues.apache.org/jira/browse/PHOENIX-5454) | Phoenix scripts start foreground java processes as child processes |  Minor | . |
+| [PHOENIX-5658](https://issues.apache.org/jira/browse/PHOENIX-5658) | IndexTool to verify index rows inline |  Major | . |
 | [PHOENIX-5630](https://issues.apache.org/jira/browse/PHOENIX-5630) | MAX\_MUTATION\_SIZE\_EXCEEDED and MAX\_MUTATION\_SIZE\_BYTES\_EXCEEDED SQLExceptions should print existing size |  Minor | . |
 | [PHOENIX-5646](https://issues.apache.org/jira/browse/PHOENIX-5646) | Correct and update the release documentation |  Major | . |
 | [PHOENIX-5614](https://issues.apache.org/jira/browse/PHOENIX-5614) | Remove unnecessary instances of ClassNotFoundException thrown stemming from various QueryUtil APIs |  Minor | . |
@@ -135,9 +146,15 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-5874](https://issues.apache.org/jira/browse/PHOENIX-5874) | IndexTool does not set TTL on its log tables correctly |  Major | . |
+| [PHOENIX-6078](https://issues.apache.org/jira/browse/PHOENIX-6078) | Remove Internal Phoenix Connections from parent LinkedQueue when closed |  Major | . |
+| [PHOENIX-5872](https://issues.apache.org/jira/browse/PHOENIX-5872) | Close Internal Phoenix Connections that were running during cancel |  Major | . |
 | [PHOENIX-6339](https://issues.apache.org/jira/browse/PHOENIX-6339) | Older client using aggregate queries shows incorrect results. |  Blocker | . |
 | [PHOENIX-6273](https://issues.apache.org/jira/browse/PHOENIX-6273) | Add support to handle MR Snapshot restore externally |  Major | core |
+| [PHOENIX-6288](https://issues.apache.org/jira/browse/PHOENIX-6288) | Minicluster startup problems on Jenkins |  Critical | . |
+| [PHOENIX-6330](https://issues.apache.org/jira/browse/PHOENIX-6330) | SystemCatalogRegionObserver isn't added when cluster is initialized with isNamespaceMappingEnabled=true |  Critical | core |
 | [PHOENIX-6319](https://issues.apache.org/jira/browse/PHOENIX-6319) | remove cp python logic from the release script |  Major | . |
+| [PHOENIX-3710](https://issues.apache.org/jira/browse/PHOENIX-3710) | Cannot use lowername data table name with indextool |  Minor | . |
 | [PHOENIX-6298](https://issues.apache.org/jira/browse/PHOENIX-6298) | Use timestamp of PENDING\_DISABLE\_COUNT to calculate elapse time for PENDING\_DISABLE state |  Major | . |
 | [PHOENIX-6148](https://issues.apache.org/jira/browse/PHOENIX-6148) | [SchemaExtractionTool]DDL parsing exception in Phoenix in view name |  Major | . |
 | [PHOENIX-6295](https://issues.apache.org/jira/browse/PHOENIX-6295) | Fix non-static inner classes for better memory management |  Major | . |
@@ -245,8 +262,11 @@
 | [PHOENIX-4753](https://issues.apache.org/jira/browse/PHOENIX-4753) | Remove the need for users to have Write access to the Phoenix SYSTEM STATS TABLE to drop tables |  Major | . |
 | [PHOENIX-5580](https://issues.apache.org/jira/browse/PHOENIX-5580) | Wrong values seen when updating a view for a table that has an index |  Major | . |
 | [PHOENIX-5864](https://issues.apache.org/jira/browse/PHOENIX-5864) | RuleGeneratorTest unit test seem to be failing |  Major | . |
+| [PHOENIX-5743](https://issues.apache.org/jira/browse/PHOENIX-5743) | Concurrent read repairs on the same index row should be idempotent |  Critical | . |
+| [PHOENIX-5807](https://issues.apache.org/jira/browse/PHOENIX-5807) | Index rows without empty column should be treated as unverified |  Major | . |
 | [PHOENIX-5799](https://issues.apache.org/jira/browse/PHOENIX-5799) | Inline Index Verification Output API |  Major | . |
 | [PHOENIX-5810](https://issues.apache.org/jira/browse/PHOENIX-5810) | PhoenixMRJobSubmitter is not working on a cluster with a single yarn RM |  Major | . |
+| [PHOENIX-5816](https://issues.apache.org/jira/browse/PHOENIX-5816) | IndexToolTimeRangeIT hangs forever |  Blocker | core |
 | [PHOENIX-5802](https://issues.apache.org/jira/browse/PHOENIX-5802) | Connection leaks in UPSERT SELECT/DELETE paths due to MutatingParallelIteratorFactory iterator not being closed |  Major | . |
 | [PHOENIX-5801](https://issues.apache.org/jira/browse/PHOENIX-5801) | Connection leak when creating a view with a where condition |  Major | . |
 | [PHOENIX-5776](https://issues.apache.org/jira/browse/PHOENIX-5776) | Phoenix pherf unit tests failing |  Major | . |
@@ -258,7 +278,9 @@
 | [PHOENIX-5673](https://issues.apache.org/jira/browse/PHOENIX-5673) | The mutation state is silently getting cleared on the execution of any DDL |  Critical | . |
 | [PHOENIX-5065](https://issues.apache.org/jira/browse/PHOENIX-5065) | Inconsistent treatment of NULL and empty string |  Major | . |
 | [PHOENIX-5753](https://issues.apache.org/jira/browse/PHOENIX-5753) | Fix erroneous query result when RVC is clipped with desc column |  Major | . |
+| [PHOENIX-5768](https://issues.apache.org/jira/browse/PHOENIX-5768) | Supporting partial overwrites for immutable tables with indexes |  Critical | . |
 | [PHOENIX-5731](https://issues.apache.org/jira/browse/PHOENIX-5731) | Loading bulkload hfiles should not be blocked if the upsert select happening for differet table. |  Major | . |
+| [PHOENIX-5766](https://issues.apache.org/jira/browse/PHOENIX-5766) | PhoenixMetricsIT failure in 4.x for HBase 1.3 |  Major | . |
 | [PHOENIX-5636](https://issues.apache.org/jira/browse/PHOENIX-5636) | Improve the error message when client connects to server with higher major version |  Minor | . |
 | [PHOENIX-5745](https://issues.apache.org/jira/browse/PHOENIX-5745) | Fix QA false negatives |  Major | . |
 | [PHOENIX-5737](https://issues.apache.org/jira/browse/PHOENIX-5737) | Hadoop QA run says no tests even though there are added IT tests |  Minor | . |
@@ -269,10 +291,13 @@
 | [PHOENIX-5691](https://issues.apache.org/jira/browse/PHOENIX-5691) | create index is failing when phoenix acls enabled and ranger is enabled |  Major | . |
 | [PHOENIX-5440](https://issues.apache.org/jira/browse/PHOENIX-5440) | multiple warnings when building phoenix |  Minor | . |
 | [PHOENIX-5704](https://issues.apache.org/jira/browse/PHOENIX-5704) | Covered column updates are not generated for previously deleted data table row |  Critical | . |
+| [PHOENIX-5708](https://issues.apache.org/jira/browse/PHOENIX-5708) | GlobalIndexChecker returns unverified index row cells |  Major | . |
+| [PHOENIX-5706](https://issues.apache.org/jira/browse/PHOENIX-5706) | IndexTool verification reports failure when data row has no covered column values |  Major | . |
 | [PHOENIX-5512](https://issues.apache.org/jira/browse/PHOENIX-5512) | IndexTool returns error after rebuilding a DISABLED index |  Major | . |
 | [PHOENIX-5677](https://issues.apache.org/jira/browse/PHOENIX-5677) | Replace System.currentTimeMillis with EnvironmentEdgeManager in non-test code |  Major | . |
 | [PHOENIX-5692](https://issues.apache.org/jira/browse/PHOENIX-5692) | SCN verification breaks with non-default column families |  Major | . |
 | [PHOENIX-5676](https://issues.apache.org/jira/browse/PHOENIX-5676) | Inline-verification from IndexTool does not handle TTL/row-expiry |  Major | . |
+| [PHOENIX-5666](https://issues.apache.org/jira/browse/PHOENIX-5666) | IndexRegionObserver incorrectly updates PostIndexUpdateFailure metric |  Major | . |
 | [PHOENIX-5654](https://issues.apache.org/jira/browse/PHOENIX-5654) | String values (ALWAYS and NEVER) don't work for connection level config phoenix.default.update.cache.frequency |  Major | . |
 | [PHOENIX-5650](https://issues.apache.org/jira/browse/PHOENIX-5650) | IndexUpgradeTool does not rebuild view indexes |  Major | . |
 | [PHOENIX-5655](https://issues.apache.org/jira/browse/PHOENIX-5655) | ServerCache using table map is not correctly removed |  Major | . |
@@ -286,6 +311,8 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-5719](https://issues.apache.org/jira/browse/PHOENIX-5719) | testIndexRebuildTask test is failing on pre-commit and master build |  Major | . |
+| [PHOENIX-5296](https://issues.apache.org/jira/browse/PHOENIX-5296) | Ensure store file reader refcount is zero at end of relevant unit tests |  Major | . |
 | [PHOENIX-6300](https://issues.apache.org/jira/browse/PHOENIX-6300) | Fix PartialIndexRebuilderIT.testIndexWriteFailureDisablingIndex test flapper |  Major | . |
 | [PHOENIX-6302](https://issues.apache.org/jira/browse/PHOENIX-6302) | Fix ConcurrentUpsertsWithoutIndexedColsIT flapper |  Major | . |
 | [PHOENIX-6297](https://issues.apache.org/jira/browse/PHOENIX-6297) | Fix IndexMetadataIT.testAsyncRebuildAll test flapper |  Major | . |
@@ -293,9 +320,11 @@
 | [PHOENIX-6289](https://issues.apache.org/jira/browse/PHOENIX-6289) | Flaky test UpsertSelectIT.testUpsertSelectWithNoIndex |  Major | . |
 | [PHOENIX-6284](https://issues.apache.org/jira/browse/PHOENIX-6284) | Flaky test UpgradeIT.testConcurrentUpgradeThrowsUpgradeInProgressException |  Major | . |
 | [PHOENIX-6183](https://issues.apache.org/jira/browse/PHOENIX-6183) | Page size tests are not propagating test override values to server |  Major | . |
+| [PHOENIX-5747](https://issues.apache.org/jira/browse/PHOENIX-5747) | Add upsert tests for immutable table indexes |  Minor | . |
 | [PHOENIX-6246](https://issues.apache.org/jira/browse/PHOENIX-6246) | Flaky test PointInTimeQueryIT |  Major | . |
 | [PHOENIX-5973](https://issues.apache.org/jira/browse/PHOENIX-5973) | IndexToolForNonTxGlobalIndexIT - Stabilize and speed up |  Major | . |
 | [PHOENIX-5607](https://issues.apache.org/jira/browse/PHOENIX-5607) | Client-server backward compatibility tests |  Blocker | . |
+| [PHOENIX-5671](https://issues.apache.org/jira/browse/PHOENIX-5671) | Add tests for ViewUtil |  Minor | . |
 | [PHOENIX-5616](https://issues.apache.org/jira/browse/PHOENIX-5616) | Speed up ParameterizedIndexUpgradeToolIT |  Minor | . |
 | [PHOENIX-5617](https://issues.apache.org/jira/browse/PHOENIX-5617) | Allow using the server side JDBC client in Phoenix Sandbox. |  Major | . |
 
@@ -304,6 +333,10 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-6342](https://issues.apache.org/jira/browse/PHOENIX-6342) | RoundRobinResultIterator doesn't close itself when result size = fetchsize-1 |  Blocker | core |
+| [PHOENIX-6329](https://issues.apache.org/jira/browse/PHOENIX-6329) | Eliminate or serialize minicluster restart operations in Integration tests |  Major | core |
+| [PHOENIX-6220](https://issues.apache.org/jira/browse/PHOENIX-6220) | CREATE INDEX shouldn't ignore IMMUTABLE\_STORAGE\_SCHEME and COLUMN\_ENDCODED\_BYTES |  Major | . |
+| [PHOENIX-6120](https://issues.apache.org/jira/browse/PHOENIX-6120) | Change IndexMaintainer for SINGLE\_CELL\_ARRAY\_WITH\_OFFSETS indexes. Currently it assumes data and index table having the same storage and encoding format. |  Major | . |
 | [PHOENIX-6219](https://issues.apache.org/jira/browse/PHOENIX-6219) | GlobalIndexChecker should work for index:SINGLE\_CELL\_ARRAY\_WITH\_OFFSETS and data:ONE\_CELL\_PER\_COLUMN |  Major | . |
 | [PHOENIX-6292](https://issues.apache.org/jira/browse/PHOENIX-6292) | Extend explain plan object based comparison to majority remaining tests |  Major | . |
 | [PHOENIX-5435](https://issues.apache.org/jira/browse/PHOENIX-5435) | Annotate HBase WALs with Phoenix Metadata |  Major | . |
@@ -335,6 +368,7 @@
 | [PHOENIX-6196](https://issues.apache.org/jira/browse/PHOENIX-6196) | Update phoenix.mutate.maxSizeBytes to accept long values |  Major | . |
 | [PHOENIX-6146](https://issues.apache.org/jira/browse/PHOENIX-6146) | Run precommit checks on github PRs |  Major | core |
 | [PHOENIX-5032](https://issues.apache.org/jira/browse/PHOENIX-5032) | add Apache Yetus to Phoenix |  Major | . |
+| [PHOENIX-6056](https://issues.apache.org/jira/browse/PHOENIX-6056) | Migrate from builds.apache.org by August 15 |  Critical | . |
 | [PHOENIX-5962](https://issues.apache.org/jira/browse/PHOENIX-5962) | Stabilize builds |  Major | . |
 | [PHOENIX-5818](https://issues.apache.org/jira/browse/PHOENIX-5818) | Add documentation for query timeoutDuration attribute in Pherf scenarios |  Minor | . |
 | [PHOENIX-5825](https://issues.apache.org/jira/browse/PHOENIX-5825) | Remove PhoenixCanaryTool and CanaryTestResult from phoenix repo |  Major | core, queryserver |
@@ -342,5 +376,6 @@
 | [PHOENIX-5762](https://issues.apache.org/jira/browse/PHOENIX-5762) | Update jackson |  Major | . |
 | [PHOENIX-5767](https://issues.apache.org/jira/browse/PHOENIX-5767) | Add 4.x branch to the precommit script configuration |  Blocker | . |
 | [PHOENIX-5721](https://issues.apache.org/jira/browse/PHOENIX-5721) | Unify 4.x branches |  Major | . |
+
 
 
