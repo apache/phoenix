@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 5.1.0 - Unreleased (as of 2021-02-02)
+## Release 5.1.0 - Unreleased (as of 2021-02-03)
 
 
 
@@ -61,6 +61,7 @@
 |:---- |:---- | :--- |:---- |
 | [PHOENIX-6182](https://issues.apache.org/jira/browse/PHOENIX-6182) | IndexTool to verify and repair every index row |  Major | . |
 | [PHOENIX-5543](https://issues.apache.org/jira/browse/PHOENIX-5543) | Implement show schemas / show tables SQL commands |  Minor | . |
+| [PHOENIX-6349](https://issues.apache.org/jira/browse/PHOENIX-6349) | Add and use commons-cli to phoenix-thirdparty |  Major | . |
 | [PHOENIX-6337](https://issues.apache.org/jira/browse/PHOENIX-6337) | Bump default HBase versions to 2.3.4 |  Minor | . |
 | [PHOENIX-6250](https://issues.apache.org/jira/browse/PHOENIX-6250) | Fix ViewMetadataIT test flapper |  Major | . |
 | [PHOENIX-6327](https://issues.apache.org/jira/browse/PHOENIX-6327) | Consolidate Junit test categories |  Minor | core |
@@ -243,6 +244,7 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-6360](https://issues.apache.org/jira/browse/PHOENIX-6360) | phoenix-core has compile dependency on phoenix-hbase-compat |  Blocker | core |
 | [PHOENIX-5874](https://issues.apache.org/jira/browse/PHOENIX-5874) | IndexTool does not set TTL on its log tables correctly |  Major | . |
 | [PHOENIX-6078](https://issues.apache.org/jira/browse/PHOENIX-6078) | Remove Internal Phoenix Connections from parent LinkedQueue when closed |  Major | . |
 | [PHOENIX-5872](https://issues.apache.org/jira/browse/PHOENIX-5872) | Close Internal Phoenix Connections that were running during cancel |  Major | . |
