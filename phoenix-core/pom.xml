@@ -230,6 +230,7 @@
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
+      <optional>true</optional>
     </dependency>
     <!-- Hadoop dependencies -->
     <dependency>

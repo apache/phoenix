@@ -288,6 +288,11 @@
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
+      <optional>false</optional>
+    </dependency>
     <!-- hbase's classpath will provide these, mark them as provided to prevent
          them, and their transitive dependencies, from being included in the
          shaded jar. -->
