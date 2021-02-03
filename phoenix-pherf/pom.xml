@@ -247,6 +247,11 @@
               org.apache.hbase:hbase-it
             </ignoredUnusedDeclaredDependency>
           </ignoredUnusedDeclaredDependencies>
+          <ignoredUsedUndeclaredDependencies>
+            <ignoredUsedUndeclaredDependency>
+              jakarta.xml.bind:jakarta.xml.bind-api
+            </ignoredUsedUndeclaredDependency>
+          </ignoredUsedUndeclaredDependencies>
         </configuration>
       </plugin>
 
