@@ -30,23 +30,8 @@
   </formats>
   <includeBaseDirectory>true</includeBaseDirectory>
 
-  <!-- Components that we don't want in jars that are used with other libraries, but we want for a standalone client -->
-  <dependencySets>
-    <dependencySet>
-      <!-- Unpack all the dependencies to class files, since java doesn't support
-        jar of jars for running -->
-      <unpack>false</unpack>
-      <!-- save these dependencies to the top-level -->
-      <outputDirectory>/lib</outputDirectory>
-      <includes>
-        <include>org.slf4j:slf4j-log4j12</include>
-      </includes>
-    </dependencySet>
-  </dependencySets>
-
   <componentDescriptors>
     <componentDescriptor>src/build/components/all-common-jars.xml</componentDescriptor>
     <componentDescriptor>src/build/components/all-common-files.xml</componentDescriptor>
-    <componentDescriptor>src/build/components/all-common-dependencies.xml</componentDescriptor>
   </componentDescriptors>
 </assembly>
