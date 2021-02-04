@@ -64,6 +64,12 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.apache.phoenix</groupId>
+            <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
+            <optional>false</optional>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.apache.hbase</groupId>
             <artifactId>hbase-it</artifactId>
             <type>test-jar</type>
