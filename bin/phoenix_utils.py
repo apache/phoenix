@@ -80,7 +80,7 @@ def setPath():
     PHOENIX_CLIENT_JAR_PATTERN = "phoenix-client-hbase-*[!s].jar"
     PHOENIX_TRACESERVER_JAR_PATTERN = "phoenix-tracing-webapp-*-runnable.jar"
     PHOENIX_TESTS_JAR_PATTERN = "phoenix-core-*-tests*.jar"
-    PHOENIX_PHERF_JAR_PATTERN = "phoenix-pherf-*-minimal*.jar"
+    PHOENIX_PHERF_JAR_PATTERN = "phoenix-pherf-*[!s].jar"
 
     # Backward support old env variable PHOENIX_LIB_DIR replaced by PHOENIX_CLASS_PATH
     global phoenix_class_path
