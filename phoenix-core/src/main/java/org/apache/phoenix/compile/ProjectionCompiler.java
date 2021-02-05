@@ -220,6 +220,7 @@ public class ProjectionCompiler {
             String indexColName = IndexUtil.getIndexColumnName(tableColumn);
             PColumn indexColumn = null;
             ColumnRef ref = null;
+            boolean localIndexDataColumnResolved = false;
             try {
                 indexColumn = index.getColumnForColumnName(indexColName);
                 ref = new ColumnRef(tableRef, indexColumn.getPosition());
@@ -228,6 +229,7 @@ public class ProjectionCompiler {
                     try {
                         ref = new LocalIndexDataColumnRef(context, tableRef, indexColName);
                         indexColumn = ref.getColumn();
+                        localIndexDataColumnResolved = true;
                     } catch (ColumnFamilyNotFoundException c) {
                         throw e;
                     }
@@ -249,6 +251,10 @@ public class ProjectionCompiler {
                     if (indexColumn.getFamilyName() != null) {
                         ref = resolver.resolveColumn(tableAlias != null ? tableAlias : index.getTableName().getString(), indexColumn.getFamilyName().getString(), indexColName);
                     } else {
+                        throw e;
+                    }
+                } catch (ColumnNotFoundException e) {
+                    if (!localIndexDataColumnResolved) {
                         throw e;
                     }
                 }
@@ -292,6 +298,7 @@ public class ProjectionCompiler {
             PColumn indexColumn = null;
             ColumnRef ref = null;
             String indexColumnFamily = null;
+            boolean localIndexDataColumnResolved = false;
             try {
                 indexColumn = index.getColumnForColumnName(indexColName);
                 ref = new ColumnRef(tableRef, indexColumn.getPosition());
@@ -301,12 +308,8 @@ public class ProjectionCompiler {
                     try {
                         ref = new LocalIndexDataColumnRef(context, tableRef, indexColName);
                         indexColumn = ref.getColumn();
-                        indexColumnFamily =
-                                indexColumn.getFamilyName() == null ? null
-                                        : (index.getIndexType() == IndexType.LOCAL ? IndexUtil
-                                                .getLocalIndexColumnFamily(indexColumn
-                                                        .getFamilyName().getString()) : indexColumn
-                                                .getFamilyName().getString());
+                        indexColumnFamily = indexColumn.getFamilyName().getString();
+                        localIndexDataColumnResolved = true;
                     } catch (ColumnFamilyNotFoundException c) {
                         throw e;
                     }
@@ -315,7 +318,13 @@ public class ProjectionCompiler {
                 }
             }
             if (resolveColumn) {
-                ref = context.getResolver().resolveColumn(index.getTableName().getString(), indexColumnFamily, indexColName);
+                try {
+                    ref = context.getResolver().resolveColumn(index.getTableName().getString(), indexColumnFamily, indexColName);
+                } catch (ColumnNotFoundException e) {
+                    if (!localIndexDataColumnResolved) {
+                        throw e;
+                    }
+                }
             }
             Expression expression = ref.newColumnExpression();
             projectedExpressions.add(expression);
@@ -325,7 +334,7 @@ public class ProjectionCompiler {
                     tableRef.getTableAlias() == null ? table.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive));
         }
     }
-    
+
     private static Expression coerceIfNecessary(int index, List<? extends PDatum> targetColumns, Expression expression) throws SQLException {
         if (index < targetColumns.size()) {
             PDatum targetColumn = targetColumns.get(index);
@@ -439,10 +448,19 @@ public class ProjectionCompiler {
                         ExpressionCompiler.throwNonAggExpressionInAggException(expression.toString());
                     }
                 }
-                String columnAlias = aliasedNode.getAlias() != null ? aliasedNode.getAlias() : SchemaUtil.normalizeIdentifier(aliasedNode.getNode().getAlias());
-                boolean isCaseSensitive = aliasedNode.getAlias() != null ? aliasedNode.isCaseSensitve() : (columnAlias != null ? SchemaUtil.isCaseSensitive(aliasedNode.getNode().getAlias()) : selectVisitor.isCaseSensitive);
+                String columnAlias = aliasedNode.getAlias() != null
+                        ? aliasedNode.getAlias()
+                        : SchemaUtil.normalizeIdentifier(aliasedNode.getNode().getAlias());
+                boolean isCaseSensitive = aliasedNode.getAlias() != null
+                        ? aliasedNode.isCaseSensitve()
+                        : (columnAlias != null
+                                ? SchemaUtil.isCaseSensitive(aliasedNode.getNode().getAlias())
+                                : selectVisitor.isCaseSensitive);
                 String name = columnAlias == null ? expression.toString() : columnAlias;
-                projectedColumns.add(new ExpressionProjector(name, tableRef.getTableAlias() == null ? (table.getName() == null ? "" : table.getName().getString()) : tableRef.getTableAlias(), expression, isCaseSensitive));
+                projectedColumns.add(new ExpressionProjector(name, tableRef.getTableAlias() == null
+                        ? (table.getName() == null
+                                ? "" : table.getName().getString())
+                        : tableRef.getTableAlias(), expression, isCaseSensitive));
             }
 
             selectVisitor.reset();

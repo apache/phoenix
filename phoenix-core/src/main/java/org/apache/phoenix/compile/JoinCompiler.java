@@ -86,6 +86,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ProjectedColumn;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
@@ -1394,6 +1395,9 @@ public class JoinCompiler {
             } catch (ColumnNotFoundException e) {
                 // This could be a LocalIndexDataColumnRef. If so, the table name must have
                 // been appended by the IndexStatementRewriter, and we can convert it into.
+                if (node.getTableName() == null) {
+                    throw e;
+                }
                 TableRef tableRef = resolver.resolveTable(node.getSchemaName(), node.getTableName());
                 if (tableRef.getTable().getIndexType() == IndexType.LOCAL) {
                     TableRef parentTableRef = FromCompiler.getResolver(

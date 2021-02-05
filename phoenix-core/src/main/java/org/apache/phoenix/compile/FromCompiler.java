@@ -65,6 +65,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.IndexNotFoundException;
+import org.apache.phoenix.schema.LocalIndexDataColumnRef;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
@@ -851,12 +852,17 @@ public class FromCompiler {
     private static class MultiTableColumnResolver extends BaseColumnResolver implements TableNodeVisitor<Void> {
         protected final ListMultimap<String, TableRef> tableMap;
         protected final List<TableRef> tables;
+        // We must handle the local index data tables separately
+        protected final ListMultimap<String, TableRef> localIndexDataTableMap;
+        protected final List<TableRef> localIndexDataTables;
         private String connectionSchemaName;
 
         private MultiTableColumnResolver(PhoenixConnection connection, int tsAddition) {
             super(connection, tsAddition, null);
             tableMap = ArrayListMultimap.<String, TableRef> create();
             tables = Lists.newArrayList();
+            localIndexDataTableMap = ArrayListMultimap.<String, TableRef> create();
+            localIndexDataTables = new ArrayList<>();
             try {
                 connectionSchemaName = connection.getSchema();
             } catch (SQLException e) {
@@ -868,6 +874,8 @@ public class FromCompiler {
             super(connection, tsAddition, false, udfParseNodes, mutatingTableName);
             tableMap = ArrayListMultimap.<String, TableRef> create();
             tables = Lists.newArrayList();
+            localIndexDataTableMap = ArrayListMultimap.<String, TableRef> create();
+            localIndexDataTables = new ArrayList<>();
         }
 
         @Override
@@ -891,18 +899,8 @@ public class FromCompiler {
         public Void visit(NamedTableNode tableNode) throws SQLException {
             String alias = tableNode.getAlias();
             TableRef tableRef = createTableRef(connectionSchemaName, tableNode, true, false);
-            PTable theTable = tableRef.getTable();
 
-            if (alias != null) {
-                tableMap.put(alias, tableRef);
-            }
-
-            String name = theTable.getName().getString();
-            //avoid having one name mapped to two identical TableRef.
-            if (alias == null || !alias.equals(name)) {
-            	tableMap.put(name, tableRef);
-            }
-            tables.add(tableRef);
+            rememberTable(tableRef, alias);
             return null;
         }
 
@@ -963,8 +961,7 @@ public class FromCompiler {
 
             String alias = subselectNode.getAlias();
             TableRef tableRef = new TableRef(alias, t, MetaDataProtocol.MIN_TABLE_TIMESTAMP, false);
-            tableMap.put(alias, tableRef);
-            tables.add(tableRef);
+            rememberTable(tableRef, alias);
             return null;
         }
 
@@ -985,7 +982,17 @@ public class FromCompiler {
               return this.resolveTable(null, tableAlias);
         }
 
-        private static class ColumnFamilyRef {
+        protected void rememberTable(TableRef tableRef, String alias) {
+            String name = tableRef.getTable().getName().getString();
+            if (alias != null) {
+                tableMap.put(alias, tableRef);
+            } else {
+                tableMap.put(name, tableRef);
+            }
+            tables.add(tableRef);
+        }
+
+        protected static class ColumnFamilyRef {
             private final TableRef tableRef;
             private final PColumnFamily family;
 
@@ -1080,7 +1087,7 @@ public class FromCompiler {
                             theColumn = theColumnFamily.getPColumnForColumnName(colName);
                         } catch (MetaDataEntityNotFoundException e2) {
                         }
-                    } 
+                    }
                     if (theColumn == null) {
                         // Try using the tableName as a columnFamily reference instead
                         // and resolve column in each column family.
@@ -1127,6 +1134,7 @@ public class FromCompiler {
         private final List<TableRef> theTableRefs;
         private final Map<ColumnRef, Integer> columnRefMap;
         private ProjectedTableColumnResolver(PTable projectedTable, PhoenixConnection conn, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
+
             super(conn, 0, udfParseNodes, null);
             Preconditions.checkArgument(projectedTable.getType() == PTableType.PROJECTED);
             this.isLocalIndex = projectedTable.getIndexType() == IndexType.LOCAL;
@@ -1134,33 +1142,37 @@ public class FromCompiler {
             long ts = Long.MAX_VALUE;
             for (int i = projectedTable.getBucketNum() == null ? 0 : 1; i < projectedTable.getColumns().size(); i++) {
                 PColumn column = projectedTable.getColumns().get(i);
-                ColumnRef colRef = ((ProjectedColumn) column).getSourceColumnRef();
-                TableRef tableRef = colRef.getTableRef();
-                if (!tables.contains(tableRef)) {
-                    String alias = tableRef.getTableAlias();
-                    if (alias != null) {
-                        this.tableMap.put(alias, tableRef);
-                    }
-                    String name = tableRef.getTable().getName().getString();
-                    if (alias == null || !alias.equals(name)) {
-                        tableMap.put(name, tableRef);
-                    }
-                    tables.add(tableRef);
+                ColumnRef sourceColRef = ((ProjectedColumn) column).getSourceColumnRef();
+                TableRef tableRef = sourceColRef.getTableRef();
+
+                if (sourceColRef instanceof LocalIndexDataColumnRef && !localIndexDataTables.contains(tableRef)) {
+                    rememberLocalIndexDataTable(tableRef, tableRef.getTableAlias());
+                } else if (!tables.contains(tableRef)) {
+                    rememberTable(tableRef, tableRef.getTableAlias());
                     if (tableRef.getLowerBoundTimeStamp() < ts) {
                         ts = tableRef.getLowerBoundTimeStamp();
                     }
                 }
-                this.columnRefMap.put(new ColumnRef(tableRef, colRef.getColumnPosition()), column.getPosition());
+                this.columnRefMap.put(new ColumnRef(tableRef, sourceColRef.getColumnPosition()), column.getPosition());
             }
             this.theTableRefs = ImmutableList.of(new TableRef(ParseNodeFactory.createTempAlias(), projectedTable, ts, false));
-            
         }
-        
+
+        protected void rememberLocalIndexDataTable(TableRef tableRef, String alias) {
+            String name = tableRef.getTable().getName().getString();
+            if (alias != null) {
+                localIndexDataTableMap.put(alias, tableRef);
+            } else {
+                localIndexDataTableMap.put(name, tableRef);
+            }
+            localIndexDataTables.add(tableRef);
+        }
+
         @Override
         public List<TableRef> getTables() {
             return theTableRefs;
         }
-        
+
         @Override
         public ColumnRef resolveColumn(String schemaName, String tableName, String colName) throws SQLException {
             ColumnRef colRef;
@@ -1171,14 +1183,69 @@ public class FromCompiler {
                 TableRef tableRef = isLocalIndex ? super.getTables().get(0) : super.resolveTable(schemaName, tableName);
                 if (tableRef.getTable().getIndexType() == IndexType.LOCAL) {
                     try {
-                        TableRef parentTableRef = super.resolveTable(
-                                tableRef.getTable().getSchemaName().getString(),
-                                tableRef.getTable().getParentTableName().getString());
+                        TableRef parentTableRef = null;
+                        if (tableName == null) {
+                          // No table specified
+                          Iterator<TableRef> iterator = localIndexDataTables.iterator();
+                          while (iterator.hasNext()) {
+                              TableRef searchTableRef = iterator.next();
+                              try {
+                                  searchTableRef.getTable().getColumnForColumnName(colName);
+                                  if (parentTableRef != null) {
+                                      throw new AmbiguousColumnException(colName);
+                                  }
+                                  parentTableRef = searchTableRef;
+                              } catch (ColumnNotFoundException e2) {
+                              }
+                          }
+                          if (parentTableRef == null) {
+                              throw new ColumnNotFoundException(schemaName, tableName, null, colName);
+                          }
+                      } else {
+                        // table specified
+                        parentTableRef = resolveLocalIndexDataTable( schemaName, tableName);
+                      }
                         colRef = new ColumnRef(parentTableRef,
                                 IndexUtil.getDataColumnFamilyName(colName),
                                 IndexUtil.getDataColumnName(colName));
                     } catch (TableNotFoundException te) {
-                        throw e;
+                        //columfamily format
+                        TableRef theTableRef = null;
+                        PColumnFamily theColumnFamily = null;
+                        PColumn theColumn = null;
+                        if (schemaName != null) {
+                            try {
+                                // Try schemaName as the tableName and use tableName as column family name
+                                theTableRef = resolveLocalIndexDataTable(null, schemaName);
+                                theColumnFamily = theTableRef.getTable().getColumnFamily(tableName);
+                                theColumn = theColumnFamily.getPColumnForColumnName(colName);
+                            } catch (MetaDataEntityNotFoundException e2) {
+                            }
+                        }
+                        if (theColumn == null) {
+                            // Try using the tableName as a columnFamily reference instead
+                            // and resolve column in each column family.
+                            Iterator<TableRef> iterator = localIndexDataTables.iterator();
+                            while (iterator.hasNext()) {
+                                TableRef searchTableRef = iterator.next();
+                                try {
+                                    PColumnFamily columnFamily = searchTableRef.getTable().getColumnFamily(tableName);
+                                    PColumn column = columnFamily.getPColumnForColumnName(colName);
+                                    if (theColumn != null) {
+                                        throw new AmbiguousColumnException(colName);
+                                    }
+                                    theTableRef = searchTableRef;
+                                    theColumnFamily = columnFamily;
+                                    theColumn = column;
+                                } catch (MetaDataEntityNotFoundException e1) {
+                                }
+                            }
+                            if (theColumn == null) {
+                                throw new ColumnNotFoundException(colName);
+                            }
+                        }
+                        ColumnFamilyRef cfRef = new ColumnFamilyRef(theTableRef, theColumnFamily);
+                        colRef = new ColumnRef(cfRef.getTableRef(), theColumn.getPosition());
                     }
                 } else {
                     throw e;
@@ -1189,6 +1256,18 @@ public class FromCompiler {
                 throw new ColumnNotFoundException(schemaName, tableName, null, colName);
             
             return new ColumnRef(theTableRefs.get(0), position);
+        }
+
+        public TableRef resolveLocalIndexDataTable(String schemaName, String tableName) throws SQLException {
+            String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+            List<TableRef> tableRefs = localIndexDataTableMap.get(fullTableName);
+            if (tableRefs.size() == 0) {
+                throw new TableNotFoundException(fullTableName);
+            } else if (tableRefs.size() > 1) {
+                throw new AmbiguousTableException(tableName);
+            } else {
+                return tableRefs.get(0);
+            }
         }
     }
 }
