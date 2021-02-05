@@ -24,6 +24,7 @@ import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.mt.OperationStats;
 import org.apache.phoenix.pherf.workload.mt.UserDefinedOperation;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 
 /**
@@ -40,6 +41,7 @@ class UserDefinedOperationSupplier extends BaseOperationSupplier {
         return new Function<TenantOperationInfo, OperationStats>() {
             @Override
             public OperationStats apply(final TenantOperationInfo input) {
+                Preconditions.checkNotNull(input);
                 // TODO : implement user defined operation invocation.
                 long startTime = EnvironmentEdgeManager.currentTimeMillis();
                 long duration = EnvironmentEdgeManager.currentTimeMillis() - startTime;

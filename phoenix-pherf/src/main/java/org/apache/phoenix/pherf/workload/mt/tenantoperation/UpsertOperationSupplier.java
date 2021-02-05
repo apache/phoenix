@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
+import org.apache.phoenix.pherf.configuration.TenantGroup;
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataModel;
@@ -26,6 +27,7 @@ import org.apache.phoenix.pherf.configuration.Upsert;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.mt.OperationStats;
 import org.apache.phoenix.pherf.workload.mt.UpsertOperation;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,22 +54,28 @@ class UpsertOperationSupplier extends BaseOperationSupplier {
 
             @Override
             public OperationStats apply(final TenantOperationInfo input) {
-
+                Preconditions.checkNotNull(input);
                 final int batchSize = loadProfile.getBatchSize();
                 final boolean useBatchApi = batchSize != 0;
                 final int rowCount = useBatchApi ? batchSize : 1;
 
                 final UpsertOperation operation = (UpsertOperation) input.getOperation();
+                final Upsert upsert = operation.getUpsert();
                 final String tenantGroup = input.getTenantGroupId();
                 final String opGroup = input.getOperationGroupId();
-                final String tenantId = input.getTenantId();
-                final Upsert upsert = operation.getUpsert();
                 final String tableName = input.getTableName();
                 final String scenarioName = input.getScenarioName();
                 final List<Column> columns = upsert.getColumn();
+                // TODO:
+                // Ideally the fact that the op needs to executed using global connection
+                // needs to be built into the framework and injected during event generation.
+                // For now a special tenant whose id = "TGLOBAL00000001" will be logged.
+
+                final boolean isTenantGroupGlobal = (tenantGroup.compareTo(TenantGroup.DEFAULT_GLOBAL_ID) == 0);
+                final String tenantId = isTenantGroupGlobal || upsert.isUseGlobalConnection() ? null : input.getTenantId();
 
                 final String opName = String.format("%s:%s:%s:%s:%s",
-                        scenarioName, tableName, opGroup, tenantGroup, tenantId);
+                        scenarioName, tableName, opGroup, tenantGroup, input.getTenantId());
 
                 long rowsCreated = 0;
                 long startTime = 0, duration, totalDuration;
