@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
+import org.apache.phoenix.pherf.configuration.TenantGroup;
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.Ddl;
@@ -25,6 +26,7 @@ import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.mt.OperationStats;
 import org.apache.phoenix.pherf.workload.mt.PreScenarioOperation;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,32 +50,37 @@ class PreScenarioOperationSupplier extends BaseOperationSupplier {
 
             @Override
             public OperationStats apply(final TenantOperationInfo input) {
+                Preconditions.checkNotNull(input);
                 final PreScenarioOperation operation = (PreScenarioOperation) input.getOperation();
-                final String tenantId = input.getTenantId();
                 final String tenantGroup = input.getTenantGroupId();
                 final String opGroup = input.getOperationGroupId();
                 final String tableName = input.getTableName();
                 final String scenarioName = input.getScenarioName();
-                final String opName = String.format("%s:%s:%s:%s:%s",
-                        scenarioName, tableName, opGroup, tenantGroup, tenantId);
+                final boolean isTenantGroupGlobal = (tenantGroup.compareTo(TenantGroup.DEFAULT_GLOBAL_ID) == 0);
 
                 long startTime = EnvironmentEdgeManager.currentTimeMillis();
                 int status = 0;
                 if (!operation.getPreScenarioDdls().isEmpty()) {
-                    try (Connection conn = phoenixUtil.getConnection(tenantId)) {
-                        for (Ddl ddl : operation.getPreScenarioDdls()) {
-                            LOGGER.info("\nExecuting DDL:" + ddl + " on tenantId:" + tenantId);
-                            phoenixUtil.executeStatement(ddl.toString(), conn);
+                    for (Ddl ddl : operation.getPreScenarioDdls()) {
+                        // TODO:
+                        // Ideally the fact that the op needs to executed using global connection
+                        // needs to be built into the framework and injected during event generation.
+                        // For now a special tenant whose id = "TGLOBAL00000001" will be logged.
+                        final String tenantId = isTenantGroupGlobal || ddl.isUseGlobalConnection() ? null : input.getTenantId();
+                        final String opName = String.format("%s:%s:%s:%s:%s",
+                                scenarioName, tableName, opGroup, tenantGroup, input.getTenantId());
+
+                        try (Connection conn = phoenixUtil.getConnection(tenantId)) {
+                            LOGGER.info("\nExecuting DDL:" + ddl + ", OPERATION:" + opName);
+                            String sql = ddl.toString();
+                            phoenixUtil.executeStatement(sql, conn);
                             if (ddl.getStatement().toUpperCase().contains(phoenixUtil.ASYNC_KEYWORD)) {
                                 phoenixUtil.waitForAsyncIndexToFinish(ddl.getTableName());
                             }
+                        } catch (Exception e) {
+                            LOGGER.error("Operation " + opName + " failed with exception ", e);
+                            status = -1;
                         }
-                    } catch (SQLException sqle) {
-                        LOGGER.error("Operation " + opName + " failed with exception ", sqle);
-                        status = -1;
-                    } catch (Exception e) {
-                        LOGGER.error("Operation " + opName + " failed with exception ", e);
-                        status = -1;
                     }
                 }
                 long totalDuration = EnvironmentEdgeManager.currentTimeMillis() - startTime;

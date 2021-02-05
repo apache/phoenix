@@ -43,6 +43,7 @@ import org.apache.phoenix.pherf.workload.mt.EventGenerator;
 import org.apache.phoenix.pherf.workload.mt.IdleTimeOperation;
 import org.apache.phoenix.pherf.workload.mt.Operation;
 import org.apache.phoenix.pherf.workload.mt.OperationStats;
+import org.apache.phoenix.pherf.workload.mt.PreScenarioOperation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -274,8 +275,8 @@ public class TenantOperationFactory {
             // Check if the scenario has a PRE_RUN operation.
             if (preRunOpSupplier != null) {
                 // Initialize the tenant using the pre scenario ddls.
-                final org.apache.phoenix.pherf.workload.mt.PreScenarioOperation
-                        operation = new org.apache.phoenix.pherf.workload.mt.PreScenarioOperation() {
+                final PreScenarioOperation
+                        operation = new PreScenarioOperation() {
                     @Override public List<Ddl> getPreScenarioDdls() {
                         List<Ddl> ddls = scenario.getPreScenarioDdls();
                         return ddls == null ? Lists.<Ddl>newArrayList() : ddls;

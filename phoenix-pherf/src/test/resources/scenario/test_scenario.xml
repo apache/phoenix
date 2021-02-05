@@ -59,13 +59,14 @@
         <column>
             <type>DATE</type>
             <!--SEQUENTIAL is unsupported for DATE -->
+            <userDefined>true</userDefined>
             <dataSequence>RANDOM</dataSequence>
             <!-- Number [0-100] that represents the probability of creating a null value -->
             <!-- The higher the number, the more like the value will returned will be null -->
             <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
             <nullChance>0</nullChance>
             <useCurrentDate>true</useCurrentDate>
-            <name>NOW_DATE</name>
+            <name>RND_DATE</name>
         </column>
         <column>
             <type>DECIMAL</type>
@@ -94,7 +95,20 @@
         </column>
         <column>
             <type>DATE</type>
+            <userDefined>true</userDefined>
+            <!--SEQUENTIAL is now supported for DATE -->
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <useCurrentDate>true</useCurrentDate>
             <name>CREATED_DATE</name>
+        </column>
+        <column>
+            <type>DATE</type>
+            <userDefined>true</userDefined>
+            <name>SOME_DATE</name>
             <minValue>1975</minValue>
             <maxValue>2025</maxValue>
             <valuelist>
@@ -115,6 +129,7 @@
         </column>
         <column>
             <type>DATE</type>
+            <userDefined>true</userDefined>
             <name>PRESENT_DATE</name>
             <minValue>1975</minValue>
             <maxValue>2025</maxValue>
@@ -331,7 +346,7 @@
         <scenario tableName="PHERF.TEST_VIEW" tenantId="xyzdefghijklmno"
                     rowCount="100" name="testMTWriteScenario">
            <preScenarioDdls>
-                <ddl statement="CREATE VIEW IF NOT EXISTS PHERF.TEST_VIEW (field1 VARCHAR, field2 VARCHAR) AS SELECT * FROM PHERF.TEST_MULTI_TENANT_TABLE" />
+                <ddl statement="CREATE VIEW IF NOT EXISTS PHERF.TEST_VIEW (field1 VARCHAR, field2 VARCHAR) AS SELECT * FROM PHERF.TEST_TABLE" />
             </preScenarioDdls>
         </scenario>
         <!--  Scenario level DDL that is dynamically executed before the Write Workload is run.
@@ -344,7 +359,7 @@
         <scenario tableName="PHERF.TEST_MT_VIEW" tenantId="abcdefghijklmno" 
                     rowCount="100" name="testMTDdlWriteScenario">
             <preScenarioDdls>
-                <ddl statement="CREATE VIEW IF NOT EXISTS PHERF.TEST_MT_VIEW (field1 VARCHAR) AS SELECT * FROM PHERF.TEST_MULTI_TENANT_TABLE" />
+                <ddl statement="CREATE VIEW IF NOT EXISTS PHERF.TEST_MT_VIEW (field1 VARCHAR) AS SELECT * FROM PHERF.TEST_TABLE" />
             </preScenarioDdls>
         </scenario>
         

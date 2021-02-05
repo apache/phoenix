@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.pherf.configuration.*;
 import org.apache.phoenix.pherf.rules.DataValue;
@@ -162,6 +163,30 @@ public class ConfigurationParserTest extends ResultBaseTest {
                 1, testScenarioWithLoadProfile.getQuerySet().size());
         assertEquals("#Queries within the first querySet is not as expected ",
                 2, testScenarioWithLoadProfile.getQuerySet().get(0).getQuery().size());
+
+        // Test configuration for global connection
+        Scenario testScenarioWithGlobalConn = scenarioList.get(2);
+        LoadProfile loadProfileWithGlobalConn = testScenarioWithGlobalConn.getLoadProfile();
+        assertEquals("batch size not as expected: ",
+                1, loadProfileWithGlobalConn.getBatchSize());
+        assertEquals("num operations not as expected: ",
+                1000, loadProfileWithGlobalConn.getNumOperations());
+        assertEquals("tenant group size is not as expected: ",
+                1, loadProfileWithGlobalConn.getTenantDistribution().size());
+        assertEquals("global tenant is not as expected: ",
+                1, loadProfileWithGlobalConn.getTenantDistribution().get(0).getNumTenants());
+        assertEquals("global tenant id is not as expected: ",
+                "GLOBAL", loadProfileWithGlobalConn.getTenantDistribution().get(0).getId());
+        assertEquals("global tenant weight is not as expected: ",
+                100, loadProfileWithGlobalConn.getTenantDistribution().get(0).getWeight());
+        assertEquals("operation group size is not as expected: ",
+                1,loadProfileWithGlobalConn.getOpDistribution().size());
+        assertEquals("UpsertSet size is not as expected ",
+                1, testScenarioWithGlobalConn.getUpserts().size());
+        assertEquals("#Column within the first upsert is not as expected ",
+                7, testScenarioWithGlobalConn.getUpserts().get(0).getColumn().size());
+        assertEquals("Upsert operation not using global connection as expected ",
+                true, testScenarioWithGlobalConn.getUpserts().get(0).isUseGlobalConnection());
     }
 
     private URL getResourceUrl(String resourceName) {
@@ -186,7 +211,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
     private void assertDateValue(List<Column> dataMappingColumns) {
         for (Column dataMapping : dataMappingColumns) {
             if ((dataMapping.getType() == DataTypeMapping.DATE) && (dataMapping.getName()
-                    .equals("CREATED_DATE"))) {
+                    .equals("SOME_DATE"))) {
                 // First rule should have min/max set
                 assertNotNull(dataMapping.getDataValues().get(0).getMinValue());
                 assertNotNull(dataMapping.getDataValues().get(0).getMaxValue());

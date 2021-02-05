@@ -35,14 +35,12 @@ import org.joda.time.format.DateTimeFormatter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class RulesApplier {
     private static final Logger LOGGER = LoggerFactory.getLogger(RulesApplier.class);
-    private static final AtomicLong COUNTER = new AtomicLong(0);
 
     // Used to bail out of random distribution if it takes too long
     // This should never happen when distributions add up to 100
@@ -59,7 +57,7 @@ public class RulesApplier {
     private String cachedScenarioOverrideName;
     private Map<DataTypeMapping, List> scenarioOverrideMap;
 
-    private Map<Column,RuleBasedDataGenerator> columnRuleBasedDataGeneratorMap = new HashMap<>();
+    private ConcurrentHashMap<String,RuleBasedDataGenerator> columnRuleBasedDataGeneratorMap = new ConcurrentHashMap<>();
 
     // Since rules are only relevant for a given data model,
     // added a constructor to support a single data model => RulesApplier(DataModel model)
@@ -165,7 +163,6 @@ public class RulesApplier {
             // Assume the first rule map
             Map<DataTypeMapping, List> ruleMap = modelList.get(0);
             List<Column> ruleList = ruleMap.get(phxMetaColumn.getType());
-            //LOGGER.info(String.format("Did not found a correct override column rule, %s, %s", phxMetaColumn.getName(), phxMetaColumn.getType()));
 
             // Make sure Column from Phoenix Metadata matches a rule column
             if (ruleList != null && ruleList.contains(phxMetaColumn)) {
@@ -175,9 +172,9 @@ public class RulesApplier {
 
                 value = getDataValue(columnRule);
             } else {
-                LOGGER.warn("Attempted to apply rule to data, but could not find a rule to match type:"
-                                + phxMetaColumn.getType()
-                );
+                LOGGER.warn(String.format("Attempted to apply rule to data, "
+                        + "but could not find a rule to match type %s on %s",
+                        phxMetaColumn.getType(), phxMetaColumn.getName()));
             }
 
         }
@@ -191,7 +188,7 @@ public class RulesApplier {
      * @param column {@link org.apache.phoenix.pherf.configuration.Column} Column rule to get data for
      * @return {@link org.apache.phoenix.pherf.rules.DataValue} {@code Container Type --> Value mapping }
      */
-    public DataValue getDataValue(Column column) throws Exception{
+    public DataValue getDataValue(Column column) throws Exception {
         DataValue data = null;
         String prefix = "";
         int length = column.getLength();
@@ -218,15 +215,14 @@ public class RulesApplier {
             case VARBINARY:
             case CHAR:
                 // Use the specified data values from configs if they exist
-                if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
+                if (DataSequence.SEQUENTIAL.equals(column.getDataSequence())) {
+                    RuleBasedDataGenerator generator = getRuleBasedDataGeneratorForColumn(column);
+                    data = generator.getDataValue();
+                } else if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
                     data = pickDataValueFromList(dataValues);
                 } else {
                     Preconditions.checkArgument(length > 0, "length needs to be > 0");
-                    if (column.getDataSequence() == DataSequence.SEQUENTIAL) {
-                        data = getSequentialVarcharDataValue(column);
-                    } else {
-                        data = getRandomDataValue(column);
-                    }
+                    data = getRandomDataValue(column);
                 }
                 break;
             case VARCHAR_ARRAY:
@@ -297,6 +293,9 @@ public class RulesApplier {
                     data = pickDataValueFromList(dataValues);
                     // Check if date has right format or not
                     data.setValue(checkDatePattern(data.getValue()));
+                } else if(DataSequence.SEQUENTIAL.equals(column.getDataSequence())) {
+                    RuleBasedDataGenerator generator = getRuleBasedDataGeneratorForColumn(column);
+                    data = generator.getDataValue();
                 } else if (column.getUseCurrentDate() != true){
                     int minYear = (int) column.getMinValue();
                     int maxYear = (int) column.getMaxValue();
@@ -537,28 +536,6 @@ public class RulesApplier {
        	return ruleAppliedColumn;
     }
 
-    /**
-     * Add a numerically increasing counter onto the and of a random string.
-     * Incremented counter should be thread safe.
-     *
-     * @param column {@link org.apache.phoenix.pherf.configuration.Column}
-     * @return {@link org.apache.phoenix.pherf.rules.DataValue}
-     */
-    private DataValue getSequentialVarcharDataValue(Column column) {
-        DataValue data = null;
-        long inc = COUNTER.getAndIncrement();
-        String strInc = String.valueOf(inc);
-        int paddedLength = column.getLengthExcludingPrefix();
-        String strInc1 = StringUtils.leftPad(strInc, paddedLength, "0");
-        String strInc2 = StringUtils.right(strInc1, column.getLengthExcludingPrefix());
-        String varchar = (column.getPrefix() != null) ? column.getPrefix() + strInc2:
-                strInc2;
-
-        // Truncate string back down if it exceeds length
-        varchar = StringUtils.left(varchar,column.getLength());
-        data = new DataValue(column.getType(), varchar);
-        return data;
-    }
 
     private DataValue getRandomDataValue(Column column) {
         String varchar = RandomStringUtils.randomAlphanumeric(column.getLength());
@@ -570,11 +547,39 @@ public class RulesApplier {
     }
 
     private RuleBasedDataGenerator getRuleBasedDataGeneratorForColumn(Column column) {
-        RuleBasedDataGenerator generator = columnRuleBasedDataGeneratorMap.get(column);
+        RuleBasedDataGenerator generator = columnRuleBasedDataGeneratorMap.get(column.getName());
         if(generator == null) {
-            //For now we only have one of these, likely this should replace all all the methods
-            generator = new SequentialIntegerDataGenerator(column);
-            columnRuleBasedDataGeneratorMap.put(column,generator);
+            //For now we only have couple of these, likely this should replace for all the methods
+            switch (column.getType()) {
+            case VARCHAR:
+            case VARBINARY:
+            case CHAR:
+                if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
+                    generator = new SequentialListDataGenerator(column);
+                } else {
+                    generator = new SequentialVarcharDataGenerator(column);
+                }
+                break;
+            case DATE:
+            case TIMESTAMP:
+                generator = new SequentialDateDataGenerator(column);
+                break;
+            case BIGINT:
+            case INTEGER:
+            case TINYINT:
+            case UNSIGNED_LONG:
+                generator = new SequentialIntegerDataGenerator(column);
+                    break;
+            default:
+                throw new IllegalArgumentException(
+                        String.format("No rule based generator supported for column type %s on %s",
+                                column.getType(), column.getName()));
+            }
+            RuleBasedDataGenerator oldGenerator = columnRuleBasedDataGeneratorMap.putIfAbsent(column.getName(),generator);
+            if (oldGenerator != null) {
+                // Another thread succeeded in registering their generator first, so let's use that.
+                generator = oldGenerator;
+            }
         }
         return generator;
     }
