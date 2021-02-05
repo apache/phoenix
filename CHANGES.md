@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 5.1.0 - Unreleased (as of 2021-02-03)
+## Release 5.1.0 - Unreleased (as of 2021-02-05)
 
 
 
@@ -59,6 +59,7 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-6114](https://issues.apache.org/jira/browse/PHOENIX-6114) | Create shaded phoenix-pherf and remove lib dir from assembly |  Major | core |
 | [PHOENIX-6182](https://issues.apache.org/jira/browse/PHOENIX-6182) | IndexTool to verify and repair every index row |  Major | . |
 | [PHOENIX-5543](https://issues.apache.org/jira/browse/PHOENIX-5543) | Implement show schemas / show tables SQL commands |  Minor | . |
 | [PHOENIX-6349](https://issues.apache.org/jira/browse/PHOENIX-6349) | Add and use commons-cli to phoenix-thirdparty |  Major | . |
