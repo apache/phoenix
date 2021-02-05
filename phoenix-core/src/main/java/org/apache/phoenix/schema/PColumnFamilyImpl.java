@@ -92,7 +92,11 @@ public class PColumnFamilyImpl implements PColumnFamily {
     public PColumn getPColumnForColumnName(String columnName) throws ColumnNotFoundException  {
         PColumn column = columnNamesByStrings.get(columnName);
         if (column == null) {
-            throw new ColumnNotFoundException(columnName);
+            if(columnName.startsWith(name.toString()+":")) {
+                return getPColumnForColumnName(columnName.substring((name.toString()+":").length()));
+            } else {
+                throw new ColumnNotFoundException(columnName);
+            }
         }
         return column;
     }

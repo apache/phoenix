@@ -208,11 +208,11 @@ public class ProjectionCompiler {
         int minTablePKOffset = getMinPKOffset(dataTable, tenantId);
         int minIndexPKOffset = getMinPKOffset(index, tenantId);
         if (index.getIndexType() != IndexType.LOCAL) {
-            if (index.getColumns().size()-minIndexPKOffset != dataTable.getColumns().size()-minTablePKOffset) {
+            if (index.getColumns().size() - minIndexPKOffset != dataTable.getColumns().size() - minTablePKOffset) {
                 // We'll end up not using this by the optimizer, so just throw
-                String schemaNameStr = dataTable.getSchemaName()==null?null:dataTable.getSchemaName().getString();
-                String tableNameStr = dataTable.getTableName()==null?null:dataTable.getTableName().getString();
-                throw new ColumnNotFoundException(schemaNameStr, tableNameStr,null, WildcardParseNode.INSTANCE.toString());
+                String schemaNameStr = dataTable.getSchemaName() == null ? null : dataTable.getSchemaName().getString();
+                String tableNameStr = dataTable.getTableName() == null ? null : dataTable.getTableName().getString();
+                throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, WildcardParseNode.INSTANCE.toString());
             }
         }
         for (int i = tableOffset, j = tableOffset; i < dataTable.getColumns().size(); i++) {
@@ -226,24 +226,20 @@ public class ProjectionCompiler {
             String indexColName = IndexUtil.getIndexColumnName(tableColumn);
             PColumn indexColumn = null;
             ColumnRef ref = null;
+            boolean resolveLocal = false;
             try {
                 indexColumn = index.getColumnForColumnName(indexColName);
                 ref = new ColumnRef(tableRef, indexColumn.getPosition());
             } catch (ColumnNotFoundException e) {
                 if (index.getIndexType() == IndexType.LOCAL) {
-                    try {
-                        ref = new LocalIndexDataColumnRef(context, tableRef, indexColName);
-                        indexColumn = ref.getColumn();
-                    } catch (ColumnFamilyNotFoundException c) {
-                        throw e;
-                    }
+                    resolveLocal = true;
                 } else {
                     throw e;
                 }
             }
             String colName = tableColumn.getName().getString();
             String tableAlias = tableRef.getTableAlias();
-            if (resolveColumn) {
+            if (resolveColumn || resolveLocal) {
                 try {
                     if (tableAlias != null) {
                         ref = resolver.resolveColumn(null, tableAlias, indexColName);
@@ -307,12 +303,7 @@ public class ProjectionCompiler {
                     try {
                         ref = new LocalIndexDataColumnRef(context, tableRef, indexColName);
                         indexColumn = ref.getColumn();
-                        indexColumnFamily =
-                                indexColumn.getFamilyName() == null ? null
-                                        : (index.getIndexType() == IndexType.LOCAL ? IndexUtil
-                                                .getLocalIndexColumnFamily(indexColumn
-                                                        .getFamilyName().getString()) : indexColumn
-                                                .getFamilyName().getString());
+                        indexColumnFamily = indexColumn.getFamilyName().getString();
                     } catch (ColumnFamilyNotFoundException c) {
                         throw e;
                     }
@@ -331,7 +322,7 @@ public class ProjectionCompiler {
                     tableRef.getTableAlias() == null ? table.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive));
         }
     }
-    
+
     private static Expression coerceIfNecessary(int index, List<? extends PDatum> targetColumns, Expression expression) throws SQLException {
         if (index < targetColumns.size()) {
             PDatum targetColumn = targetColumns.get(index);
@@ -445,10 +436,19 @@ public class ProjectionCompiler {
                         ExpressionCompiler.throwNonAggExpressionInAggException(expression.toString());
                     }
                 }
-                String columnAlias = aliasedNode.getAlias() != null ? aliasedNode.getAlias() : SchemaUtil.normalizeIdentifier(aliasedNode.getNode().getAlias());
-                boolean isCaseSensitive = aliasedNode.getAlias() != null ? aliasedNode.isCaseSensitve() : (columnAlias != null ? SchemaUtil.isCaseSensitive(aliasedNode.getNode().getAlias()) : selectVisitor.isCaseSensitive);
+                String columnAlias = aliasedNode.getAlias() != null
+                        ? aliasedNode.getAlias()
+                        : SchemaUtil.normalizeIdentifier(aliasedNode.getNode().getAlias());
+                boolean isCaseSensitive = aliasedNode.getAlias() != null
+                        ? aliasedNode.isCaseSensitve()
+                        : (columnAlias != null
+                                ? SchemaUtil.isCaseSensitive(aliasedNode.getNode().getAlias())
+                                : selectVisitor.isCaseSensitive);
                 String name = columnAlias == null ? expression.toString() : columnAlias;
-                projectedColumns.add(new ExpressionProjector(name, tableRef.getTableAlias() == null ? (table.getName() == null ? "" : table.getName().getString()) : tableRef.getTableAlias(), expression, isCaseSensitive));
+                projectedColumns.add(new ExpressionProjector(name, tableRef.getTableAlias() == null
+                        ? (table.getName() == null
+                                ? "" : table.getName().getString())
+                        : tableRef.getTableAlias(), expression, isCaseSensitive));
             }
 
             selectVisitor.reset();

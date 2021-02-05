@@ -86,6 +86,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ProjectedColumn;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
@@ -1118,7 +1119,23 @@ public class JoinCompiler {
             if (isWildCardSelect()) {
                 for (PColumn column : table.getColumns()) {
                     if (!retainPKColumns || !SchemaUtil.isPKColumn(column)) {
-                        sourceColumns.add(new ColumnRef(tableRef, column.getPosition()));
+                        ColumnRef sourceColumn = null;
+                        //Checking early if we need to use LocalIndexDataColumnRef
+                        try {
+                            if (tableRef.getTableAlias() != null) {
+                                context.getResolver().resolveColumn(null,
+                                        tableRef.getTableAlias(),
+                                        column.getName().getString());
+                            } else {
+                              context.getResolver().resolveColumn(table.getSchemaName().getString(),
+                                    table.getTableName().getString(),
+                                    column.getName().getString());
+                            }
+                            sourceColumn = new ColumnRef(tableRef, column.getPosition());
+                        } catch (ColumnNotFoundException e) {
+                            sourceColumn = new LocalIndexDataColumnRef(context, tableRef, IndexUtil.getIndexColumnName(column));
+                        }
+                        sourceColumns.add(sourceColumn);
                     }
                 }
             } else {
@@ -1394,6 +1411,9 @@ public class JoinCompiler {
             } catch (ColumnNotFoundException e) {
                 // This could be a LocalIndexDataColumnRef. If so, the table name must have
                 // been appended by the IndexStatementRewriter, and we can convert it into.
+                if (node.getTableName() == null) {
+                    throw e;
+                }
                 TableRef tableRef = resolver.resolveTable(node.getSchemaName(), node.getTableName());
                 if (tableRef.getTable().getIndexType() == IndexType.LOCAL) {
                     TableRef parentTableRef = FromCompiler.getResolver(

@@ -40,6 +40,7 @@ import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.end2end.LogicalTableNameBaseIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -162,16 +163,15 @@ public abstract class HashJoinIT extends BaseJoinIT {
     public void testInnerJoin() throws Exception {
        testInnerJoin(false);
     }
-            
+
     @Test
     public void testLeftJoin() throws Exception {
         Connection conn = getConnection();
         String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
         String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
-        String query[] = new String[3];
+        String query[] = new String[2];
         query[0] = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name, next value for " + seqName + " FROM " + tableName1 + " item LEFT JOIN " + tableName2 + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
         query[1] = "SELECT " + tableName1 + ".\"item_id\", " + tableName1 + ".name, " + tableName2 + ".\"supplier_id\", " + tableName2 + ".name, next value for " + seqName + " FROM " + tableName1 + " LEFT JOIN " + tableName2 + " ON " + tableName1 + ".\"supplier_id\" = " + tableName2 + ".\"supplier_id\" ORDER BY \"item_id\"";
-        query[2] = "SELECT item.\"item_id\", " + tableName1 + ".name, supp.\"supplier_id\", " + tableName2 + ".name, next value for " + seqName + " FROM " + tableName1 + " item LEFT JOIN " + tableName2 + " supp ON " + tableName1 + ".\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
         try {
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
@@ -220,7 +220,27 @@ public abstract class HashJoinIT extends BaseJoinIT {
             conn.close();
         }
     }
-    
+
+    @Test
+    public void testLeftJoinTableNameIsExposed() throws Exception {
+        Connection conn = getConnection();
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String query[] = new String[1];
+        query[0] = "SELECT item.\"item_id\", " + tableName1 + ".name, supp.\"supplier_id\", " + tableName2 + ".name, next value for " + seqName + " FROM " + tableName1 + " item LEFT JOIN " + tableName2 + " supp ON " + tableName1 + ".\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
+        try {
+            for (int i = 0; i < query.length; i++) {
+                PreparedStatement statement = conn.prepareStatement(query[i]);
+                ResultSet rs = statement.executeQuery();
+                fail("Should have thrown a TableNotFoundException");
+            }
+        } catch (TableNotFoundException e) {
+            //Should throw a TableNotFoundException
+        } finally {
+            conn.close();
+        }
+    }
+
     @Test
     public void testRightJoin() throws Exception {
         Connection conn = getConnection();
@@ -1094,7 +1114,7 @@ public abstract class HashJoinIT extends BaseJoinIT {
     @Test
     public void testJoinWithTableWildcard() throws Exception {
         Connection conn = getConnection();
-        String query = "SELECT s.*, "+ getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ".*, \"order_id\" FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o RIGHT JOIN " 
+        String query = "SELECT s.*, i.*, \"order_id\" FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o RIGHT JOIN "
                 + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
                 + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         try {
