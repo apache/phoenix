@@ -62,9 +62,9 @@ public interface ColumnResolver {
     
     /**
      * Resolves column using name and alias.
-     * @param schemaName TODO
-     * @param tableName TODO
-     * @param colName TODO
+     * @param schemaName the schema name, or the table name when specifying CF
+     * @param tableName the table name, or the column family name when specifying CF
+     * @param colName the column name
      * @return the resolved ColumnRef
      * @throws ColumnNotFoundException if the column could not be resolved
      * @throws AmbiguousColumnException if the column name is ambiguous

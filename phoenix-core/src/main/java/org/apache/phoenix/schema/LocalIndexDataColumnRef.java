@@ -37,7 +37,7 @@ public class LocalIndexDataColumnRef extends ColumnRef {
             throws MetaDataEntityNotFoundException, SQLException {
         super(FromCompiler.getResolver(
             FACTORY.namedTable(
-                null,
+                tRef.getTableAlias(),
                 TableName.create(tRef.getTable().getSchemaName().getString(), tRef.getTable()
                         .getParentTableName().getString())), context.getConnection(), false)
                 .resolveTable(tRef.getTable().getSchemaName().getString(),
