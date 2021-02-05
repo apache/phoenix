@@ -6887,4 +6887,100 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    @Test
+    public void testWildcardWithSelfJoinAndLocalIndex() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE customer "
+                    + "(customer_id integer primary key, postal_code varchar, country_code varchar)");
+
+            stmt.execute("CREATE LOCAL INDEX customer_local_index ON CUSTOMER (postal_code)");
+
+            String sql = "SELECT * from customer c1, customer c2"
+                    + " where c1.customer_id=c2.customer_id and c2.postal_code='560103'";
+            TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        }
+    }
+
+    @Test
+    public void testAllFieldsWithSelfJoinAndLocalIndex() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE customer "
+                    + "(customer_id integer primary key, postal_code varchar, country_code varchar)");
+
+            stmt.execute("CREATE LOCAL INDEX customer_local_index ON CUSTOMER (postal_code)");
+
+            String sql = "SELECT c1.customer_id, c2.customer_id, c1.postal_code, c2.postal_code,"
+                    + " c1.country_code, c2.country_code from customer c1, customer c2"
+                    + " where c1.customer_id=c2.customer_id and c2.postal_code='560103'";
+            TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        }
+    }
+
+    @Test
+    public void testComplexWithSelfJoinAndLocalIndex() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE customer "
+                    + "(customer_id integer primary key, postal_code varchar, country_code varchar)");
+
+            stmt.execute("CREATE LOCAL INDEX customer_local_index ON CUSTOMER (postal_code)");
+
+            String sql = "SELECT c1.customer_id, customer.customer_id, c1.postal_code, customer.postal_code,"
+                    + " customer.country_code, customer.country_code, customer.*, c1.customer_id*3 from customer c1, customer "
+                    + " where c1.customer_id=customer.customer_id and customer.postal_code='560103'";
+            TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        }
+    }
+
+    @Test
+    public void testcolumnFamilyWithLocalIndex() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE customer "
+                    + "(customer_id integer primary key, cf2.postal_code varchar, cf2.country_code varchar)");
+
+            stmt.execute("CREATE LOCAL INDEX customer_local_index ON CUSTOMER (postal_code)");
+
+            String sql = "SELECT cf2.postal_code, cf2.country_code from customer "
+                    + " where cf2.country_code='HU' and cf2.postal_code='560103'";
+            TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        }
+    }
+
+    @Test
+    public void testcolumnFamilyWildcardWithLocalIndex() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE customer "
+                    + "(customer_id integer primary key, cf2.postal_code varchar, cf2.country_code varchar)");
+
+            stmt.execute("CREATE LOCAL INDEX customer_local_index ON CUSTOMER (postal_code)");
+
+            String sql = "SELECT cf2.* from customer "
+                    + " where cf2.country_code='HU' and cf2.postal_code='560103'";
+            TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        }
+    }
+
+    @Test
+    @Ignore("It seems that we just don't support CF wildwards with multiple tables")
+    public void testcolumnFamilyWildcardWithLocalIndexAndJoin() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE customer "
+                    + "(customer_id integer primary key, cf2.postal_code varchar, cf2.country_code varchar)");
+
+            stmt.execute("CREATE TABLE extra "
+                    + "(extra_id integer primary key, customer_id_fk integer)");
+
+            stmt.execute("CREATE LOCAL INDEX customer_local_index ON CUSTOMER (postal_code)");
+
+            String sql = "SELECT cf2.* from customer, extra "
+                    + " where extra.customer_id_fk = customer.customer_id "
+                    + " and cf2.country_code='HU' and cf2.postal_code='560103'";
+            TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+        }
+    }
 }

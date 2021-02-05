@@ -190,6 +190,9 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
                         "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
                 rs = conn.createStatement().executeQuery(query);
                 assertTrue(rs.next());
+                assertEquals("varchar_b", rs.getString("VARCHAR_COL2"));
+                //FIXME this still doesn't work.
+                //assertEquals("varchar_b", rs.getString("B.VARCHAR_COL2"));
                 assertEquals("varchar_b", rs.getString(1));
                 assertEquals("charb", rs.getString(2));
                 assertEquals(5, rs.getInt(3));
