@@ -45,6 +45,7 @@ import org.apache.phoenix.pherf.workload.mt.IdleTimeOperation;
 import org.apache.phoenix.pherf.workload.mt.Operation;
 import org.apache.phoenix.pherf.workload.mt.OperationStats;
 import org.apache.phoenix.pherf.workload.mt.PreScenarioOperation;
+import org.apache.phoenix.pherf.workload.mt.UpsertOperation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -169,7 +170,7 @@ public class TenantOperationFactory {
     private List<Operation> getUpsertOperationsForScenario(Scenario scenario) {
         List<Operation> opList = Lists.newArrayList();
         for (final Upsert upsert : scenario.getUpserts()) {
-            Operation upsertOp = new org.apache.phoenix.pherf.workload.mt.UpsertOperation() {
+            final Operation upsertOp = new UpsertOperation() {
                 @Override public Upsert getUpsert() {
                     return upsert;
                 }
