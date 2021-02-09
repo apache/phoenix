@@ -28,25 +28,22 @@
         </column>
     </datamapping>
     <scenarios>
-        <scenario tableName="PHERF.EVT_GEN2" name="EVT_GEN2" generatorName="WEIGHTED">
+        <scenario tableName="PHERF.EVT_GEN4" name="EVT_GEN4" generatorName="SEQUENTIAL">
             <loadProfile>
                 <batchSize>1</batchSize>
                 <numOperations>1000</numOperations>
                 <!-- Case 1 : where some operations have zero weight -->
-                <tenantDistribution id="tg1" weight="10" numTenants="10"></tenantDistribution>
-                <tenantDistribution id="tg2" weight="10" numTenants="10"></tenantDistribution>
-                <tenantDistribution id="tg3" weight="80" numTenants="10"></tenantDistribution>
-                <opDistribution id="upsertOp" weight="40"></opDistribution>
-                <opDistribution id="queryOp1" weight="10"></opDistribution>
-                <opDistribution id="queryOp2" weight="10"></opDistribution>
+                <tenantDistribution id="tg1" numTenants="1"></tenantDistribution>
+                <opDistribution id="upsertOp"></opDistribution>
+                <opDistribution id="queryOp1"></opDistribution>
+                <opDistribution id="queryOp2"></opDistribution>
                 <opDistribution id="queryOp3"></opDistribution>
                 <opDistribution id="queryOp4"></opDistribution>
                 <opDistribution id="queryOp5"></opDistribution>
                 <opDistribution id="queryOp6"></opDistribution>
                 <opDistribution id="queryOp7"></opDistribution>
-                <opDistribution id="queryOp8"></opDistribution>
-                <opDistribution id="idleOp" weight="10"></opDistribution>
-                <opDistribution id="udfOp" weight="10"></opDistribution>
+                <opDistribution id="idleOp"></opDistribution>
+                <opDistribution id="udfOp"></opDistribution>
             </loadProfile>
             <upserts>
                 <upsert id="upsertOp">
@@ -58,14 +55,13 @@
             </upserts>
 
             <querySet>
-                <query id="queryOp1" statement="select count(*) from PHERF.EVT_GEN2"/>
-                <query id="queryOp2" statement="select sum(SOME_INT) from PHERF.EVT_GEN2"/>
-                <query id="queryOp3" statement="select sum(SOME_INT) +3 from PHERF.EVT_GEN2"/>
-                <query id="queryOp4" statement="select sum(SOME_INT) +4 from PHERF.EVT_GEN2"/>
-                <query id="queryOp5" statement="select sum(SOME_INT) +5 from PHERF.EVT_GEN2"/>
-                <query id="queryOp6" statement="select sum(SOME_INT) +6 from PHERF.EVT_GEN2"/>
-                <query id="queryOp7" statement="select sum(SOME_INT) +7 from PHERF.EVT_GEN2"/>
-                <query id="queryOp8" statement="select sum(SOME_INT) +8 from PHERF.EVT_GEN2"/>
+                <query id="queryOp1" statement="select count(*) from PHERF.EVT_GEN3"/>
+                <query id="queryOp2" statement="select sum(SOME_INT) from PHERF.EVT_GEN3"/>
+                <query id="queryOp3" statement="select sum(SOME_INT) +3 from PHERF.EVT_GEN3"/>
+                <query id="queryOp4" statement="select sum(SOME_INT) +4 from PHERF.EVT_GEN3"/>
+                <query id="queryOp5" statement="select sum(SOME_INT) +5 from PHERF.EVT_GEN3"/>
+                <query id="queryOp6" statement="select sum(SOME_INT) +6 from PHERF.EVT_GEN3"/>
+                <query id="queryOp7" statement="select sum(SOME_INT) +7 from PHERF.EVT_GEN3"/>
             </querySet>
             <idleTimes>
                 <idleTime id="idleOp" idleTime="50"></idleTime>
