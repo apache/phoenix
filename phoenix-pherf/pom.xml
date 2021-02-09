@@ -166,6 +166,10 @@
       <groupId>org.apache.hbase.thirdparty</groupId>
       <artifactId>hbase-shaded-miscellaneous</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
+    </dependency>
 
     <!-- Test Dependencies -->
     <dependency>
@@ -183,6 +187,12 @@
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-it</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
@@ -259,6 +269,9 @@
         <artifactId>maven-dependency-plugin</artifactId>
         <configuration>
           <ignoredUnusedDeclaredDependencies>
+            <ignoredUnusedDeclaredDependency>
+              org.apache.hbase.thirdparty:hbase-shaded-miscellaneous
+            </ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>
               javax.activation:activation
             </ignoredUnusedDeclaredDependency>

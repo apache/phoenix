@@ -19,6 +19,9 @@
 package org.apache.phoenix.pherf.util;
 
 import com.google.gson.Gson;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.phoenix.coprocessor.TaskRegionObserver;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.mapreduce.index.automation.PhoenixMRJobSubmitter;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.configuration.Column;
@@ -30,6 +33,7 @@ import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.result.DataLoadTimeSummary;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -255,6 +259,15 @@ public class PhoenixUtil {
             }
         } finally {
             conn.close();
+        }
+    }
+
+    public void dropChildView(RegionCoprocessorEnvironment taskRegionEnvironment, int depth) {
+        TaskRegionObserver.SelfHealingTask task =
+                new TaskRegionObserver.SelfHealingTask(
+                        taskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+        for (int i = 0; i < depth; i++) {
+            task.run();
         }
     }
 

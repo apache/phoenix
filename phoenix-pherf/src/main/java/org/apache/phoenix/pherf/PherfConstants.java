@@ -78,6 +78,12 @@ public class PherfConstants {
     public static final int MONITOR_FREQUENCY = 5000;
     public static final String MONITOR_FILE_NAME = "STATS_MONITOR";
 
+    public static final String NUM_SEQUENTIAL_ITERATIONS_PROP_KEY = "pherf.mt.sequential.iterations";
+    public static final String NUM_SEQUENTIAL_EXECUTION_TYPE_PROP_KEY = "pherf.mt.sequential.type";
+    public static final String HANDLERS_PER_SCENARIO_PROP_KEY = "pherf.mt.handlers_per_scenario";
+    public static final String MT_HANDLER_START_RENDEZVOUS_PROP_KEY = "pherf.mt.handlers_start_rendezvous";
+    public static final String MT_HANDLER_RESULTS_RENDEZVOUS_PROP_KEY = "pherf.mt.handlers_results_rendezvous";
+
     private PherfConstants() {
     }
 
