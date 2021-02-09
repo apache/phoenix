@@ -3788,8 +3788,13 @@ public class MetaDataClient {
         // if cascade keyword is passed and indexes are provided either implicitly or explicitly
         if (cascade && (indexes == null || !indexes.isEmpty())) {
             indexesPTable = getIndexesPTableForCascade(indexes, table);
-            for (PTable index : indexesPTable) {
-                indexToColumnSizeMap.put(index, index.getColumns().size());
+            if(indexesPTable.size() == 0) {
+                // go back to regular behavior of altering the table/view
+                cascade = false;
+            } else {
+                for (PTable index : indexesPTable) {
+                    indexToColumnSizeMap.put(index, index.getColumns().size());
+                }
             }
         }
         boolean wasAutoCommit = connection.getAutoCommit();
@@ -4252,7 +4257,8 @@ public class MetaDataClient {
                 // this if clause ensures we only get the indexes that
                 // are only created on the view itself.
                 if (index.getIndexType().equals(IndexType.LOCAL)
-                        || (isView && index.getTableName().toString().contains("#"))) {
+                        || (isView && index.getTableName().toString().contains(
+                        QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR))) {
                     indexesPTable.remove(index);
                 }
             }
