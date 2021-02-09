@@ -156,8 +156,8 @@
             <loadProfile>
                 <numOperations>1</numOperations>
                 <tenantDistribution useGlobalConnection="true"/>
-                <opDistribution id="queryOp1" weight="20"/>
-                <opDistribution id="queryOp2" weight="20"/>
+                <opDistribution id="queryOp1" weight="50"/>
+                <opDistribution id="queryOp2" weight="50"/>
             </loadProfile>
 
             <querySet>
