@@ -64,15 +64,15 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
     public ExpectedException exception = ExpectedException.none();
     private static Connection conn;
     private Properties prop;
-    private boolean isViewIndex, mutable;
+    private boolean isViewScenario, mutable;
     private String phoenixObjectName;
     private String indexNames;
     private final String tableDDLOptions;
     String fullIndexNameOne, fullIndexNameTwo, fullTableName;
 
 
-    public AlterAddCascadeIndexIT(boolean isViewIndex, boolean mutable) {
-        this.isViewIndex = isViewIndex;
+    public AlterAddCascadeIndexIT(boolean isViewScenario, boolean mutable) {
+        this.isViewScenario = isViewScenario;
         StringBuilder optionBuilder = new StringBuilder("COLUMN_ENCODED_BYTES=0");
         if (!mutable) {
 
@@ -110,7 +110,7 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
                 "      population BIGINT,\n" +
                 "      CONSTRAINT my_pk PRIMARY KEY (state, city)) " + tableDDLOptions);
 
-        if(isViewIndex) {
+        if(isViewScenario) {
             conn.createStatement().execute("CREATE VIEW IF NOT EXISTS " + fullViewName +
                     " (city_area INTEGER, avg_fam_size INTEGER) AS " +
                     "SELECT * FROM "+fullTableName+" WHERE state = 'CA'");
@@ -136,10 +136,10 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
     // Test with ALTER TABLE/VIEW CASCADE INDEX ALL with upserting into new column
     @Test
     public void testAlterDBOAddCascadeIndexAllUpsert() throws Exception {
-        String query = "ALTER " +(isViewIndex? "VIEW " : "TABLE ") + phoenixObjectName + " ADD new_column_3 VARCHAR(64) CASCADE INDEX ALL";
+        String query = "ALTER " +(isViewScenario ? "VIEW " : "TABLE ") + phoenixObjectName + " ADD new_column_3 VARCHAR(64) CASCADE INDEX ALL";
         conn.createStatement().execute(query);
         PreparedStatement ps;
-        if(isViewIndex) {
+        if(isViewScenario) {
             ps = conn.prepareStatement("UPSERT INTO " + phoenixObjectName +
                     "(state,city,population,city_area,avg_fam_size,new_column_3) " +
                     "VALUES('CA','Santa Barbara',912332,1300,4,'test_column')");
@@ -151,7 +151,7 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
         ps.executeUpdate();
         ColumnInfo [] columnArray =  {new ColumnInfo("new_column_3", PVarchar.INSTANCE.getSqlType(), 64)};
         ColumnInfo [] columnIndexArray =  {new ColumnInfo("0:new_column_3", PVarchar.INSTANCE.getSqlType(), 64)};
-        if(isViewIndex) {
+        if(isViewScenario) {
             assertDBODefinition(conn, phoenixObjectName, PTableType.VIEW, 6, columnArray, false);
             assertDBODefinition(conn, fullIndexNameOne, PTableType.INDEX, 5, columnIndexArray, false);
             assertDBODefinition(conn, fullIndexNameTwo, PTableType.INDEX, 5, columnIndexArray, false);
@@ -172,16 +172,51 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
 
     }
 
+    // Test with ALTER TABLE/VIEW CASCADE INDEX ALL with no indexes
+    @Test
+    public void testAlterDBOAddCascadeIndexAll_noIndexes() throws Exception {
+        String schemaName = "S_"+generateUniqueName();
+        String tableName = "T_"+generateUniqueName();
+        String viewName = "V_"+generateUniqueName();
+
+        String fullViewName = SchemaUtil.getQualifiedTableName(schemaName, viewName);
+        String fullTableName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+
+        conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + fullTableName + " (\n" +
+                "      state CHAR(2) NOT NULL,\n" +
+                "      city VARCHAR NOT NULL,\n" +
+                "      population BIGINT,\n" +
+                "      CONSTRAINT my_pk PRIMARY KEY (state, city)) " + tableDDLOptions);
+
+        if(isViewScenario) {
+            conn.createStatement().execute("CREATE VIEW IF NOT EXISTS " + fullViewName
+                    + " (city_area INTEGER, avg_fam_size INTEGER) AS " + "SELECT * FROM "
+                    + fullTableName + " WHERE state = 'CA'");
+        }
+
+        String query = "ALTER " +(isViewScenario ? "VIEW " : "TABLE ") + (isViewScenario ? fullViewName : fullTableName)
+                + " ADD new_column_3 VARCHAR(64) CASCADE INDEX ALL";
+        conn.createStatement().execute(query);
+
+        ColumnInfo [] columnArray =  {new ColumnInfo("new_column_3", PVarchar.INSTANCE.getSqlType(), 64)};
+        if(isViewScenario) {
+            assertDBODefinition(conn, fullViewName, PTableType.VIEW, 6, columnArray, false);
+        } else {
+            assertDBODefinition(conn, fullTableName, PTableType.TABLE, 4, columnArray, false);
+        }
+
+    }
+
     // Test with CASCADE INDEX <index_name>
     @Test
     public void testAlterDBOAddCascadeIndex() throws Exception {
         ColumnInfo [] columnArray =  {new ColumnInfo("new_column_1", PFloat.INSTANCE.getSqlType())};
         ColumnInfo [] columnIndexArray =  {new ColumnInfo("0:new_column_1", PDecimal.INSTANCE.getSqlType())};
 
-        String query = "ALTER " + (isViewIndex? "VIEW " : "TABLE ")
+        String query = "ALTER " + (isViewScenario ? "VIEW " : "TABLE ")
                 + phoenixObjectName + " ADD new_column_1 FLOAT CASCADE INDEX " + indexNames.split(",")[0];
         conn.createStatement().execute(query);
-        if(isViewIndex) {
+        if(isViewScenario) {
             assertDBODefinition(conn, phoenixObjectName, PTableType.VIEW, 6, columnArray, false);
             assertDBODefinition(conn, fullIndexNameOne, PTableType.INDEX, 5, columnIndexArray, false);
             assertDBODefinition(conn, fullIndexNameTwo, PTableType.INDEX, 4, columnIndexArray, true);
@@ -199,10 +234,10 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
                 new ColumnInfo("new_column_2", PDouble.INSTANCE.getSqlType())};
         ColumnInfo [] columnIndexArray =  {new ColumnInfo("0:new_column_1", PDecimal.INSTANCE.getSqlType()),
                 new ColumnInfo("0:new_column_2", PDecimal.INSTANCE.getSqlType())};
-        String query = "ALTER " + (isViewIndex ? "VIEW " : "TABLE ") + phoenixObjectName
+        String query = "ALTER " + (isViewScenario ? "VIEW " : "TABLE ") + phoenixObjectName
                 + " ADD new_column_1 FLOAT, new_column_2 DOUBLE CASCADE INDEX " + indexNames.split(",")[0];
         conn.createStatement().execute(query);
-        if(isViewIndex) {
+        if(isViewScenario) {
             assertDBODefinition(conn, phoenixObjectName, PTableType.VIEW, 7, columnArray, false);
             assertDBODefinition(conn, fullIndexNameOne, PTableType.INDEX, 6, columnIndexArray, false);
             assertDBODefinition(conn, fullIndexNameTwo, PTableType.INDEX, 4, columnIndexArray, true);
@@ -219,10 +254,10 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
     public void testAlterDBOAddCascadeIndexes() throws Exception {
         ColumnInfo [] columnArray = {new ColumnInfo("new_column_1", PDouble.INSTANCE.getSqlType())};
         ColumnInfo [] columnIndexArray = {new ColumnInfo("0:new_column_1", PDecimal.INSTANCE.getSqlType())};
-        String query = "ALTER " + (isViewIndex ? "VIEW " : "TABLE ")
+        String query = "ALTER " + (isViewScenario ? "VIEW " : "TABLE ")
                 + phoenixObjectName + " ADD new_column_1 DOUBLE CASCADE INDEX " + indexNames;
         conn.createStatement().execute(query);
-        if(isViewIndex) {
+        if(isViewScenario) {
             assertDBODefinition(conn, phoenixObjectName, PTableType.VIEW, 6, columnArray, false);
             assertDBODefinition(conn, fullIndexNameOne, PTableType.INDEX, 5, columnIndexArray, false);
             assertDBODefinition(conn, fullIndexNameTwo, PTableType.INDEX, 5, columnIndexArray, false);
@@ -241,10 +276,10 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
         ColumnInfo [] columIndexArray =  {new ColumnInfo("0:new_column_1", PDecimal.INSTANCE.getSqlType()),
                 new ColumnInfo("0:new_column_2", PDecimal.INSTANCE.getSqlType())};
 
-        String query = "ALTER " + (isViewIndex ? "VIEW " : "TABLE ")
+        String query = "ALTER " + (isViewScenario ? "VIEW " : "TABLE ")
                 + phoenixObjectName + " ADD new_column_1 FLOAT, new_column_2 DOUBLE CASCADE INDEX " + indexNames;
         conn.createStatement().execute(query);
-        if(isViewIndex) {
+        if(isViewScenario) {
             assertDBODefinition(conn, phoenixObjectName, PTableType.VIEW, 7, columnArray, false);
             assertDBODefinition(conn, fullIndexNameOne, PTableType.INDEX, 6, columIndexArray, false);
             assertDBODefinition(conn, fullIndexNameTwo, PTableType.INDEX, 6, columIndexArray, false);
@@ -260,14 +295,14 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
     @Test
     public void testAlterDBOException() throws SQLException {
 
-        String query = "ALTER " + (isViewIndex ? "VIEW " : "TABLE ") + phoenixObjectName + " ADD new_column VARCHAR ALL";
+        String query = "ALTER " + (isViewScenario ? "VIEW " : "TABLE ") + phoenixObjectName + " ADD new_column VARCHAR ALL";
         try {
             conn.createStatement().execute(query);
         } catch (Exception e) {
             assertTrue(e.getMessage().contains(SYNTAX_ERROR));
         }
 
-        query = "ALTER " + (isViewIndex ? "VIEW " : "TABLE ") + phoenixObjectName
+        query = "ALTER " + (isViewScenario ? "VIEW " : "TABLE ") + phoenixObjectName
                 + " ADD new_column VARCHAR CASCADE " + indexNames.split(",")[0];
         try {
             conn.createStatement().execute(query);
@@ -275,7 +310,7 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
             assertTrue(e.getMessage().contains(SYNTAX_ERROR));
         }
 
-        query = "ALTER " + (isViewIndex ? "VIEW " : "TABLE ") + phoenixObjectName
+        query = "ALTER " + (isViewScenario ? "VIEW " : "TABLE ") + phoenixObjectName
                 + " ADD new_column VARCHAR INDEX " + indexNames.split(",")[0];
         try {
             conn.createStatement().execute(query);
@@ -283,7 +318,7 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
             assertTrue(e.getMessage().contains(SYNTAX_ERROR));
         }
 
-        query = "ALTER " + (isViewIndex ? "VIEW " : "TABLE ")
+        query = "ALTER " + (isViewScenario ? "VIEW " : "TABLE ")
                 + phoenixObjectName + " ADD new_column_1 DOUBLE CASCADE INDEX INCORRECT_NAME";
         try {
             conn.createStatement().execute(query);
@@ -294,13 +329,13 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
         String localIndex = generateUniqueName();
         String createLocalIndex = "CREATE LOCAL INDEX " + localIndex + " ON "
                 + phoenixObjectName + "(avg_fam_size) INCLUDE (population)";
-        if(!isViewIndex) {
+        if(!isViewScenario) {
             createLocalIndex = "CREATE LOCAL INDEX " + localIndex + " ON "
                     + phoenixObjectName + "(state, population)";
 
         }
         conn.createStatement().execute(createLocalIndex);
-        query = "ALTER " + (isViewIndex ? "VIEW " : "TABLE ")
+        query = "ALTER " + (isViewScenario ? "VIEW " : "TABLE ")
                 + phoenixObjectName + " ADD new_column_1 DOUBLE CASCADE INDEX "+localIndex;
         try {
             conn.createStatement().execute(query);
@@ -309,7 +344,7 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
                     .NOT_SUPPORTED_CASCADE_FEATURE_LOCAL_INDEX.getMessage()));
         }
 
-        query = "ALTER " + (isViewIndex ? "VIEW " : "TABLE ")
+        query = "ALTER " + (isViewScenario ? "VIEW " : "TABLE ")
                 + phoenixObjectName + " ADD new_column_2 DOUBLE CASCADE INDEX "+localIndex + "," + indexNames;
         try {
             conn.createStatement().execute(query);
@@ -323,7 +358,7 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
     // Exception for incorrect index name
     @Test
     public void testAlterDBOIncorrectIndexNameCombination() throws Exception {
-        String query = "ALTER " + (isViewIndex ? "VIEW " : "TABLE ")
+        String query = "ALTER " + (isViewScenario ? "VIEW " : "TABLE ")
                 + phoenixObjectName + " ADD new_column_1 DOUBLE CASCADE INDEX INCORRECT_NAME, "+ indexNames;
         try {
             conn.createStatement().execute(query);
@@ -332,7 +367,7 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
         }
         ColumnInfo [] columnArray =  {new ColumnInfo("new_column_1", PFloat.INSTANCE.getSqlType())};
         ColumnInfo [] columnIndexArray =  {new ColumnInfo("0:new_column_1", PDecimal.INSTANCE.getSqlType())};
-        if(isViewIndex) {
+        if(isViewScenario) {
             assertDBODefinition(conn, phoenixObjectName, PTableType.VIEW, 5, columnArray, true);
             assertDBODefinition(conn, fullIndexNameOne, PTableType.INDEX, 4, columnIndexArray, true);
             assertDBODefinition(conn, fullIndexNameTwo, PTableType.INDEX, 4, columnIndexArray, true);
