@@ -64,4 +64,22 @@
     </plugins>
   </build>
 
+  <dependencies>
+    <!-- These must not be moved to phoenix-client-parent, see PHOENIX-6377 -->
+    <!-- Depend on all other internal projects -->
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
+      <optional>false</optional>
+    </dependency>
+    <dependency>
+      <groupId>sqlline</groupId>
+      <artifactId>sqlline</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+  </dependencies>
 </project>
