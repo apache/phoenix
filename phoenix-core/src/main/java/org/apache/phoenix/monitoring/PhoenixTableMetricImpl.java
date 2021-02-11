@@ -19,7 +19,7 @@ package org.apache.phoenix.monitoring;
 
 import java.util.concurrent.atomic.AtomicLong;
 
-public class PhoenixMetricImpl implements PhoenixMetric {
+public class PhoenixTableMetricImpl implements PhoenixTableMetric {
 
     private AtomicLong numberOfSamples = new AtomicLong(0);
     private Metric metric;
@@ -27,7 +27,7 @@ public class PhoenixMetricImpl implements PhoenixMetric {
     /**
      * Default implementation used when TableLevel Metrics are enabled
      */
-    public PhoenixMetricImpl(MetricType type) {
+    public PhoenixTableMetricImpl(MetricType type) {
         this.metric = new AtomicMetric(type);
     }
 

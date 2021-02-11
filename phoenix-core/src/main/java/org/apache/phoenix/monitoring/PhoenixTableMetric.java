@@ -23,7 +23,7 @@ package org.apache.phoenix.monitoring;
  * state exposed will always be in sync with each other. One should use
  * these metrics primarily for monitoring and debugging purposes.
  */
-public interface PhoenixMetric extends Metric {
+public interface PhoenixTableMetric extends Metric {
 
     /**
      * @return Number of samples collected since the last {@link #reset()} call.
