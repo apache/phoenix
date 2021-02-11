@@ -21,7 +21,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 
-public class PhoenixMetricImplTest {
+public class PhoenixTableMetricImplTest {
 
     /*
     Tests the functionality of the TableMetricImpl methods which are exposed
@@ -33,7 +33,7 @@ public class PhoenixMetricImplTest {
      */
     @Test public void testTableMetricImplAvailableMethods() {
 
-        PhoenixMetric metric = new PhoenixMetricImpl(MetricType.SELECT_SQL_COUNTER);
+        PhoenixTableMetric metric = new PhoenixTableMetricImpl(MetricType.SELECT_SQL_COUNTER);
 
         for (int i = 0; i < 10; i++) {
             metric.increment();
@@ -59,7 +59,7 @@ public class PhoenixMetricImplTest {
 
     @Test public void testPhoenixImplchange() {
 
-        PhoenixMetric metric = new PhoenixMetricImpl(MetricType.SELECT_SQL_COUNTER);
+        PhoenixTableMetric metric = new PhoenixTableMetricImpl(MetricType.SELECT_SQL_COUNTER);
         for (int i = 0; i < 5; i++) {
             metric.change(i);
         }
@@ -67,7 +67,7 @@ public class PhoenixMetricImplTest {
     }
 
     @Test public void testPhoenixImplIncrement() {
-        PhoenixMetric metric = new PhoenixMetricImpl(MetricType.SELECT_SQL_COUNTER);
+        PhoenixTableMetric metric = new PhoenixTableMetricImpl(MetricType.SELECT_SQL_COUNTER);
         for (int i = 0; i < 10; i++) {
             metric.increment();
         }
@@ -75,7 +75,7 @@ public class PhoenixMetricImplTest {
     }
 
     @Test public void testPhoenixImplDecrement() {
-        PhoenixMetric metric = new PhoenixMetricImpl(MetricType.SELECT_SQL_COUNTER);
+        PhoenixTableMetric metric = new PhoenixTableMetricImpl(MetricType.SELECT_SQL_COUNTER);
         metric.change(10);
         for (int i = 0; i < 5; i++) {
             metric.decrement();
@@ -84,14 +84,14 @@ public class PhoenixMetricImplTest {
     }
 
     @Test public void testPhoenixImplReset() {
-        PhoenixMetric metric = new PhoenixMetricImpl(MetricType.SELECT_SQL_COUNTER);
+        PhoenixTableMetric metric = new PhoenixTableMetricImpl(MetricType.SELECT_SQL_COUNTER);
         metric.change(10);
         metric.reset();
         assertEquals(0, metric.getValue());
     }
 
     @Test public void testPhoenixImplGetValue() {
-        PhoenixMetric metric = new PhoenixMetricImpl(MetricType.SELECT_SQL_COUNTER);
+        PhoenixTableMetric metric = new PhoenixTableMetricImpl(MetricType.SELECT_SQL_COUNTER);
         metric.change(10);
         assertEquals(10, metric.getValue());
     }
