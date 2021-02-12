@@ -26,8 +26,8 @@
   </parent>
 
   <artifactId>phoenix-client-${hbase.suffix}</artifactId>
-  <name>Phoenix Client for HBase ${hbase.profile}</name>
-  <description>Phoenix Client for HBase ${hbase.profile}</description>
+  <name>Phoenix Client</name>
+  <description>Phoenix Client</description>
   <packaging>jar</packaging>
 
   <build>

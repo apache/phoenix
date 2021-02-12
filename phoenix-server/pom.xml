@@ -27,8 +27,8 @@
     <version>5.1.1-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-server-${hbase.suffix}</artifactId>
-  <name>Phoenix Server JAR for HBase ${hbase.profile}</name>
-  <description>Phoenix HBase Server Side JAR for HBase ${hbase.profile}</description>
+  <name>Phoenix Server JAR</name>
+  <description>Phoenix HBase Server Side JAR</description>
   <packaging>jar</packaging>
   <properties>
     <!-- Don't make a test-jar -->
