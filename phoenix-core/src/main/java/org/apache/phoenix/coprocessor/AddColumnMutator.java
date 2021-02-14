@@ -27,6 +27,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
@@ -333,6 +334,11 @@ public class AddColumnMutator implements ColumnMutator {
                                 EnvironmentEdgeManager.currentTimeMillis(), null);
                     }
                     if (familyName!=null && familyName.length > 0) {
+                        MetaDataMutationResult result =
+                                compareWithPkColumns(colName, table, familyName);
+                        if (result != null) {
+                            return result;
+                        }
                         PColumnFamily family =
                                 table.getColumnFamily(familyName);
                         family.getPColumnForColumnNameBytes(colName);
@@ -430,6 +436,24 @@ public class AddColumnMutator implements ColumnMutator {
             // Pass in null as the parent PTable, since we always want to tag the cells
             // in this case, irrespective of the property values of the parent
             ViewUtil.addTagsToPutsForViewAlteredProperties(tableMetaData, null);
+        }
+        return null;
+    }
+
+    private MetaDataMutationResult compareWithPkColumns(byte[] colName,
+            PTable table, byte[] familyName) {
+        // check if column is matching with any of pk columns if given
+        // column belongs to default CF
+        if (Bytes.compareTo(familyName, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES) == 0
+                && colName != null && colName.length > 0) {
+            for (PColumn pColumn : table.getPKColumns()) {
+                if (Bytes.compareTo(
+                        pColumn.getName().getBytes(), colName) == 0) {
+                    return new MetaDataProtocol.MetaDataMutationResult(
+                            MetaDataProtocol.MutationCode.COLUMN_ALREADY_EXISTS,
+                            EnvironmentEdgeManager.currentTimeMillis(), table);
+                }
+            }
         }
         return null;
     }
