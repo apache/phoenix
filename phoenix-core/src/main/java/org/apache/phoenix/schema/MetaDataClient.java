@@ -2635,6 +2635,10 @@ public class MetaDataClient {
             // Keep track of all columns that are newly added to a view
             Set<Integer> viewNewColumnPositions =
                     Sets.newHashSetWithExpectedSize(colDefs.size());
+            Set<String> pkColumnNames = new HashSet<>();
+            for (PColumn pColumn : pkColumns) {
+                pkColumnNames.add(pColumn.getName().toString());
+            }
             for (ColumnDef colDef : colDefs) {
                 rowTimeStampColumnAlreadyFound = checkAndValidateRowTimestampCol(colDef, pkConstraint, rowTimeStampColumnAlreadyFound, tableType);
                 if (colDef.isPK()) { // i.e. the column is declared as CREATE TABLE COLNAME DATATYPE PRIMARY KEY...
@@ -2698,10 +2702,15 @@ public class MetaDataClient {
                         throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString());
                     }
                 }
-                if (columns.put(column, column) != null) {
-                    throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString());
+                // check for duplicate column
+                if (isDuplicateColumn(columns, pkColumnNames, column)) {
+                    throw new ColumnAlreadyExistsException(schemaName, tableName,
+                            column.getName().getString());
                 } else if (tableType == VIEW) {
                     viewNewColumnPositions.add(column.getPosition());
+                }
+                if (isPkColumn) {
+                    pkColumnNames.add(column.getName().toString());
                 }
                 if ((colDef.getDataType() == PVarbinary.INSTANCE || colDef.getDataType().isArrayType())
                         && SchemaUtil.isPKColumn(column)
@@ -3178,6 +3187,16 @@ public class MetaDataClient {
             deleteMutexCells(parentPhysicalSchemaName, parentPhysicalTableName,
                     acquiredColumnMutexSet);
         }
+    }
+
+    private boolean isDuplicateColumn(LinkedHashMap<PColumn, PColumn> columns,
+            Set<String> pkColumnNames, PColumn column) {
+        // either column name is same within same CF or column name within
+        // default CF is same as any of PK column
+        return columns.put(column, column) != null
+                || (column.getFamilyName() != null
+                && DEFAULT_COLUMN_FAMILY.equals(column.getFamilyName().toString())
+                && pkColumnNames.contains(column.getName().toString()));
     }
 
     private void verifyChangeDetectionTableType(PTableType tableType, Boolean isChangeDetectionEnabledProp) throws SQLException {

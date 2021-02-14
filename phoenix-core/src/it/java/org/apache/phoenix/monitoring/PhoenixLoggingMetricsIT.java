@@ -31,6 +31,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
 
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
@@ -74,28 +75,28 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
         String tableName3 = generateUniqueName();
 
         String create = "CREATE TABLE " + tableName3 + " (K INTEGER PRIMARY KEY)";
-        assertTrue(executeAndGetResultSet(create) == null);
+        assertNull(executeAndGetResultSet(create));
 
         String upsert = "UPSERT INTO " + tableName3 + " VALUES (42)";
-        assertTrue(executeAndGetResultSet(upsert) == null);
+        assertNull(executeAndGetResultSet(upsert));
 
         String select = "SELECT * FROM " + tableName3;
         assertTrue(executeAndGetResultSet(select) instanceof LoggingPhoenixResultSet);
 
-        String createView = "CREATE VIEW TEST_VIEW (K INTEGER) AS SELECT * FROM " + tableName3;
-        assertTrue(executeAndGetResultSet(createView) == null);
+        String createView = "CREATE VIEW TEST_VIEW (K1 INTEGER) AS SELECT * FROM " + tableName3;
+        assertNull(executeAndGetResultSet(createView));
 
         String createIndex = "CREATE INDEX TEST_INDEX ON " + tableName3 + " (K)";
-        assertTrue(executeAndGetResultSet(createIndex) == null);
+        assertNull(executeAndGetResultSet(createIndex));
 
         String dropIndex = "DROP INDEX TEST_INDEX ON " + tableName3;
-        assertTrue(executeAndGetResultSet(dropIndex) == null);
+        assertNull(executeAndGetResultSet(dropIndex));
 
         String dropView = "DROP VIEW TEST_VIEW";
-        assertTrue(executeAndGetResultSet(dropView) == null);
+        assertNull(executeAndGetResultSet(dropView));
 
         String dropTable = "DROP TABLE " + tableName3;
-        assertTrue(executeAndGetResultSet(dropTable) == null);
+        assertNull(executeAndGetResultSet(dropTable));
     }
 
     @Test
