@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.io.hfile.HFileContext;
 import org.apache.hadoop.hbase.io.hfile.HFileContextBuilder;
 import org.apache.hadoop.hbase.regionserver.HStore;
 import org.apache.hadoop.hbase.regionserver.StoreFileWriter;
+import org.apache.hadoop.hbase.regionserver.StoreUtils;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.PermissionStorage;
 import org.apache.hadoop.hbase.util.ChecksumType;
@@ -68,8 +69,8 @@ public class CompatUtil {
 
         return new HFileContextBuilder()
             .withCompression(compression)
-            .withChecksumType(HStore.getChecksumType(conf))
-            .withBytesPerCheckSum(HStore.getBytesPerChecksum(conf))
+            .withChecksumType(StoreUtils.getChecksumType(conf))
+            .withBytesPerCheckSum(StoreUtils.getBytesPerChecksum(conf))
             .withBlockSize(blockSize)
             .withDataBlockEncoding(encoding)
             .build();
@@ -133,11 +134,11 @@ public class CompatUtil {
     }
 
     public static ChecksumType getChecksumType(Configuration conf) {
-        return HStore.getChecksumType(conf);
+        return StoreUtils.getChecksumType(conf);
     }
 
     public static int getBytesPerChecksum(Configuration conf) {
-        return HStore.getBytesPerChecksum(conf);
+        return StoreUtils.getBytesPerChecksum(conf);
     }
 
 }
