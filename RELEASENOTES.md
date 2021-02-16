@@ -23,6 +23,13 @@ These release notes cover new developer and user-facing incompatibilities, impor
 
 ---
 
+* [PHOENIX-6343](https://issues.apache.org/jira/browse/PHOENIX-6343) | *Major* | **Phoenix allows duplicate column names when one of them is a primary key**
+
+Although user provided CF can have same column name as one of primary keys, default CF is no longer supported to have same column name as primary key columns.
+
+
+---
+
 * [PHOENIX-6273](https://issues.apache.org/jira/browse/PHOENIX-6273) | *Major* | **Add support to handle MR Snapshot restore externally**
 
 Adds mapreduce configuration param "phoenix.mapreduce.external.snapshot.restore" which when set to true indicates that snapshot-based MapReduce jobs shouldn't try to restore the snapshot themselves, but assume an external application has already done so.

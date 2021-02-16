@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 4.16.0 - Unreleased (as of 2021-02-06)
+## Release 4.16.0 - Unreleased (as of 2021-02-16)
 
 
 
@@ -45,6 +45,7 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-6380](https://issues.apache.org/jira/browse/PHOENIX-6380) | phoenix-client-embedded depends on logging classes |  Major | core |
 | [PHOENIX-6114](https://issues.apache.org/jira/browse/PHOENIX-6114) | Create shaded phoenix-pherf and remove lib dir from assembly |  Major | core |
 | [PHOENIX-6182](https://issues.apache.org/jira/browse/PHOENIX-6182) | IndexTool to verify and repair every index row |  Major | . |
 | [PHOENIX-6250](https://issues.apache.org/jira/browse/PHOENIX-6250) | Fix ViewMetadataIT test flapper |  Major | . |
@@ -146,6 +147,9 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-6343](https://issues.apache.org/jira/browse/PHOENIX-6343) | Phoenix allows duplicate column names when one of them is a primary key |  Major | core |
+| [PHOENIX-6382](https://issues.apache.org/jira/browse/PHOENIX-6382) | Shaded artifact names and descriptions have unresolved ${hbase.profile} strings |  Major | core |
+| [PHOENIX-6377](https://issues.apache.org/jira/browse/PHOENIX-6377) | phoenix-client has erronous maven dependecies |  Critical | core |
 | [PHOENIX-6360](https://issues.apache.org/jira/browse/PHOENIX-6360) | phoenix-core has compile dependency on phoenix-hbase-compat |  Blocker | core |
 | [PHOENIX-5874](https://issues.apache.org/jira/browse/PHOENIX-5874) | IndexTool does not set TTL on its log tables correctly |  Major | . |
 | [PHOENIX-6078](https://issues.apache.org/jira/browse/PHOENIX-6078) | Remove Internal Phoenix Connections from parent LinkedQueue when closed |  Major | . |
