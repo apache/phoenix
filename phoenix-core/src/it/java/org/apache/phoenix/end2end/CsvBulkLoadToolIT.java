@@ -21,13 +21,16 @@ import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
 
@@ -36,16 +39,25 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapred.FileAlreadyExistsException;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.CsvBulkLoadTool;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -318,6 +330,27 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
 
         rs.close();
         stmt.close();
+
+        checkIndexTableIsVerified("TABLE3_IDX");
+    }
+
+    private void checkIndexTableIsVerified(String indexTableName) throws SQLException, IOException {
+        ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        Table hTable = cqs.getTable(Bytes.toBytes(indexTableName));
+        PTable pTable = PhoenixRuntime.getTable(conn, indexTableName);
+
+        byte[] emptyKeyValueCF = SchemaUtil.getEmptyColumnFamily(pTable);
+        byte[] emptyKeyValueQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(pTable).getFirst();
+
+        Scan scan = new Scan();
+        scan.setFilter(new SingleColumnValueFilter(
+                emptyKeyValueCF,
+                emptyKeyValueQualifier,
+                CompareOp.NOT_EQUAL,
+                IndexRegionObserver.VERIFIED_BYTES));
+        try (ResultScanner scanner = hTable.getScanner(scan)) {
+            assertNull("There are non VERIFIED rows in index", scanner.next());
+        }
     }
 
     @Test
@@ -405,6 +438,10 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
 
         rs.close();
         stmt.close();
+
+        if (!localIndex) {
+            checkIndexTableIsVerified(indexTableName);
+        }
     }
     
     @Test
