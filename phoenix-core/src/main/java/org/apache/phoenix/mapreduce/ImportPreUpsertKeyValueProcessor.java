@@ -39,10 +39,10 @@ public interface ImportPreUpsertKeyValueProcessor {
      * Implementors can filter certain KeyValues from the list, augment the list, or return the
      * same list.
      *
-     * @param rowKey the row key for the key values that are being passed in
+     * @param tableName the table name for the key values that are being passed in
      * @param keyValues list of KeyValues that are to be written to an HFile
      * @return the list that will actually be written
      */
-    List<KeyValue> preUpsert(byte[] rowKey, List<KeyValue> keyValues);
+    List<KeyValue> preUpsert(byte[] tableName, List<KeyValue> keyValues);
 
 }

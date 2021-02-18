@@ -34,6 +34,7 @@ import javax.annotation.Nullable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -56,6 +57,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpsertExecutor;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -107,6 +109,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
     protected PhoenixConnection conn;
     protected UpsertExecutor<RECORD, ?> upsertExecutor;
     protected ImportPreUpsertKeyValueProcessor preUpdateProcessor;
+    protected IndexStatusUpdater[] indexStatusUpdaters;
     protected List<String> tableNames;
     protected List<String> logicalNames;
     protected MapperUpsertListener<RECORD> upsertListener;
@@ -179,18 +182,19 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
             while (uncommittedDataIterator.hasNext()) {
                 Pair<byte[], List<KeyValue>> kvPair = uncommittedDataIterator.next();
                 List<KeyValue> keyValueList = kvPair.getSecond();
-                keyValueList = preUpdateProcessor.preUpsert(kvPair.getFirst(), keyValueList);
-                byte[] first = kvPair.getFirst();
+                byte[] tableName = kvPair.getFirst();
+                keyValueList = preUpdateProcessor.preUpsert(tableName, keyValueList);
                 // Create a list of KV for each table
                 for (int i = 0; i < tableNames.size(); i++) {
-                    if (Bytes.compareTo(Bytes.toBytes(tableNames.get(i)), first) == 0) {
+                    if (Bytes.compareTo(Bytes.toBytes(tableNames.get(i)), tableName) == 0) {
                         if (!map.containsKey(i)) {
                             map.put(i, new ArrayList<KeyValue>());
                         }
-                        List<KeyValue> list = map.get(i);
-                        for (KeyValue kv : keyValueList) {
-                            list.add(kv);
+                        List<KeyValue> cellsForTable = map.get(i);
+                        if (indexStatusUpdaters[i] != null) {
+                            indexStatusUpdaters[i].setVerfied(keyValueList);
                         }
+                        cellsForTable.addAll(keyValueList);
                         break;
                     }
                 }
@@ -213,6 +217,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
      */
     private void initColumnIndexes() throws SQLException {
         columnIndexes = new TreeMap<>(Bytes.BYTES_COMPARATOR);
+        indexStatusUpdaters = new IndexStatusUpdater[logicalNames.size()];
         int columnIndex = 0;
         for (int index = 0; index < logicalNames.size(); index++) {
             PTable table = PhoenixRuntime.getTable(conn, logicalNames.get(index));
@@ -249,6 +254,10 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
             byte[] cfn = Bytes.add(emptyColumnFamily, QueryConstants.NAMESPACE_SEPARATOR_BYTES, emptyKeyValue);
             columnIndexes.put(cfn, new Integer(columnIndex));
             columnIndex++;
+            if (PTable.IndexType.GLOBAL == table.getIndexType()) {
+                indexStatusUpdaters[index] =
+                        new IndexStatusUpdater(emptyColumnFamily, emptyKeyValue);
+            }
         }
     }
 
@@ -414,8 +423,46 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
             ImportPreUpsertKeyValueProcessor {
 
         @Override
-        public List<KeyValue> preUpsert(byte[] rowKey, List<KeyValue> keyValues) {
+        public List<KeyValue> preUpsert(byte[] tableName, List<KeyValue> keyValues) {
             return keyValues;
+        }
+    }
+
+    /**
+     * Updates the EMPTY cell value to VERIFIED for global index table rows
+     */
+    private static class IndexStatusUpdater {
+
+        private final byte[] emptyKeyValueCF;
+        private final int emptyKeyValueCFLength;
+        private final byte[] emptyKeyValueQualifier;
+        private final int emptyKeyValueQualifierLength;
+
+        public IndexStatusUpdater(final byte[] emptyKeyValueCF, final byte[] emptyKeyValueQualifier) {
+            this.emptyKeyValueCF = emptyKeyValueCF;
+            this.emptyKeyValueQualifier = emptyKeyValueQualifier;
+            emptyKeyValueCFLength = emptyKeyValueCF.length;
+            emptyKeyValueQualifierLength = emptyKeyValueQualifier.length;
+        }
+
+        /**
+         * Update the Empty cell values to VERIFIED in the passed keyValues list
+         * 
+         * @param keyValues will be modified
+         */
+        public void setVerfied(List<KeyValue> keyValues) {
+            for (int i = 0; i < keyValues.size() ; i++) {
+                Cell kv = keyValues.get(i);
+                if (CellUtil.matchingFamily(kv, emptyKeyValueCF, 0, emptyKeyValueCFLength)
+                        && CellUtil.matchingQualifier(kv, emptyKeyValueQualifier, 0, emptyKeyValueQualifierLength)) {
+                    if (kv.getValueLength() != 1) {
+                        //This should never happen. Fail fast if it does.
+                       throw new IllegalArgumentException("Empty cell value length is not 1");
+                    }
+                    //We are directly overwriting the value for performance
+                    kv.getValueArray()[kv.getValueOffset()] = IndexRegionObserver.VERIFIED_BYTES[0];
+                }
+            }
         }
     }
 }
