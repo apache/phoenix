@@ -27,9 +27,11 @@ import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.io.hfile.HFileContextBuilder;
+import org.apache.hadoop.hbase.regionserver.HStore;
 import org.apache.hadoop.hbase.regionserver.StoreFileWriter;
 import org.apache.hadoop.hbase.security.access.AccessControlLists;
 import org.apache.hadoop.hbase.security.access.Permission;
+import org.apache.hadoop.hbase.util.ChecksumType;
 import org.apache.hbase.thirdparty.com.google.common.collect.ListMultimap;
 
 import java.io.IOException;
@@ -73,6 +75,14 @@ public class CompatUtil {
     public static boolean isAnyStoreRefCountLeaked(Admin admin)
             throws IOException {
         return false;
+    }
+
+    public static ChecksumType getChecksumType(Configuration conf) {
+        return HStore.getChecksumType(conf);
+    }
+
+    public static int getBytesPerChecksum(Configuration conf) {
+        return HStore.getBytesPerChecksum(conf);
     }
 
 }
