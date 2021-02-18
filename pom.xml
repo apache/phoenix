@@ -40,6 +40,7 @@
   </organization>
 
   <modules>
+    <module>phoenix-hbase-compat-2.4.1</module>
     <module>phoenix-hbase-compat-2.4.0</module>
     <module>phoenix-hbase-compat-2.3.0</module>
     <module>phoenix-hbase-compat-2.2.5</module>
@@ -86,12 +87,13 @@
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
 
     <!-- This is used by the release script only -->
-    <hbase.profile.list>2.1 2.2 2.3 2.4</hbase.profile.list>
+    <hbase.profile.list>2.1 2.2 2.3 2.4.0 2.4</hbase.profile.list>
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.1.runtime.version>2.1.10</hbase-2.1.runtime.version>
     <hbase-2.2.runtime.version>2.2.6</hbase-2.2.runtime.version>
     <hbase-2.3.runtime.version>2.3.4</hbase-2.3.runtime.version>
-    <hbase-2.4.runtime.version>2.4.0</hbase-2.4.runtime.version>
+    <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
+    <hbase-2.4.1.runtime.version>2.4.1</hbase-2.4.1.runtime.version>
 
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
@@ -629,6 +631,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-hbase-2.4.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-hbase-2.4</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -645,6 +652,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-server-hbase-2.3</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.4.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -690,6 +702,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-hbase-compat-2.4.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.4.1</artifactId>
         <version>${project.version}</version>
       </dependency>
       <!-- Intra-project test dependencies -->
@@ -1511,9 +1528,9 @@
     <!-- The dependencies should be defined only in phoenix-core
     ,but maven doesn't seem to support that -->
     <profile>
-      <!-- must be identical to phoenix-hbase-compat-2.4.0 profile -->
+      <!-- must be identical to phoenix-hbase-compat-2.4.1 profile -->
       <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
-      <id>phoenix-hbase-compat-2.4.0-default</id>
+      <id>phoenix-hbase-compat-2.4.1-default</id>
       <activation>
         <property>
           <name>!hbase.profile</name>
@@ -1521,8 +1538,8 @@
       </activation>
       <properties>
         <hbase.profile>2.4</hbase.profile>
-        <hbase.compat.version>2.4.0</hbase.compat.version>
-        <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
+        <hbase.compat.version>2.4.1</hbase.compat.version>
+        <hbase.version>${hbase-2.4.1.runtime.version}</hbase.version>
         <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
         <zookeeper.version>3.5.7</zookeeper.version>
       </properties>
@@ -1585,13 +1602,30 @@
       <activation>
         <property>
           <name>hbase.profile</name>
+          <value>2.4.0</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.4.0</hbase.profile>
+        <hbase.compat.version>2.4.0</hbase.compat.version>
+        <hbase.version>${hbase-2.4.0.runtime.version}</hbase.version>
+        <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
+        <zookeeper.version>3.5.7</zookeeper.version>
+      </properties>
+    </profile>
+    <profile>
+      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
+      <id>phoenix-hbase-compat-2.4.1</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
           <value>2.4</value>
         </property>
       </activation>
       <properties>
         <hbase.profile>2.4</hbase.profile>
-        <hbase.compat.version>2.4.0</hbase.compat.version>
-        <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
+        <hbase.compat.version>2.4.1</hbase.compat.version>
+        <hbase.version>${hbase-2.4.1.runtime.version}</hbase.version>
         <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
         <zookeeper.version>3.5.7</zookeeper.version>
       </properties>

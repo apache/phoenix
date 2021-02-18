@@ -37,6 +37,7 @@ import org.apache.hadoop.hbase.regionserver.HStore;
 import org.apache.hadoop.hbase.regionserver.StoreFileWriter;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.PermissionStorage;
+import org.apache.hadoop.hbase.util.ChecksumType;
 import org.apache.hbase.thirdparty.com.google.common.collect.ListMultimap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -128,6 +129,14 @@ public class CompatUtil {
             }
         }
         return false;
+    }
+
+    public static ChecksumType getChecksumType(Configuration conf) {
+        return HStore.getChecksumType(conf);
+    }
+
+    public static int getBytesPerChecksum(Configuration conf) {
+        return HStore.getBytesPerChecksum(conf);
     }
 
 }

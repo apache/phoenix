@@ -23,15 +23,15 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>5.1.1-SNAPSHOT</version>
+    <version>5.2.0-SNAPSHOT</version>
   </parent>
 
-  <artifactId>phoenix-hbase-compat-2.4.0</artifactId>
-  <name>Phoenix Hbase 2.4.0 compatibility</name>
-  <description>Compatibility module for HBase 2.4.0</description>
+  <artifactId>phoenix-hbase-compat-2.4.1</artifactId>
+  <name>Phoenix Hbase 2.4.1 compatibility</name>
+  <description>Compatibility module for HBase 2.4.1+</description>
 
   <properties>
-    <hbase24.compat.version>2.4.0</hbase24.compat.version>
+    <hbase24.compat.version>2.4.1</hbase24.compat.version>
   </properties>
 
   <dependencies>
