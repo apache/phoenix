@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Random;
 import java.util.Optional;
 
 import org.apache.hadoop.hbase.Cell;
@@ -96,6 +97,9 @@ import org.slf4j.LoggerFactory;
 public class GlobalIndexChecker extends BaseScannerRegionObserver implements RegionCoprocessor{
     private static final Logger LOG =
         LoggerFactory.getLogger(GlobalIndexChecker.class);
+    private static final String REPAIR_LOGGING_PERCENT_ATTRIB = "phoenix.index.repair.logging.percent";
+    private static final double DEFAULT_REPAIR_LOGGING_PERCENT = 1;
+
     private GlobalIndexCheckerSource metricsSource;
     private CoprocessorEnvironment env;
 
@@ -140,6 +144,8 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         private long pageSize = Long.MAX_VALUE;
         private boolean restartScanDueToPageFilterRemoval = false;
         private boolean hasMore;
+        private double loggingPercent;
+        private Random random;
         private String indexName;
         private long pageSizeMs;
 
@@ -171,6 +177,9 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
                         "repairIndexRows: IndexMaintainer is not included in scan attributes for " +
                                 region.getRegionInfo().getTable().getNameAsString());
             }
+            loggingPercent = env.getConfiguration().getDouble(REPAIR_LOGGING_PERCENT_ATTRIB,
+                    DEFAULT_REPAIR_LOGGING_PERCENT);
+            random = new Random(EnvironmentEdgeManager.currentTimeMillis());
             pageSizeMs = getPageSizeMsForRegionScanner(scan);
         }
 
@@ -586,18 +595,28 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
                 byte[] rowKey = CellUtil.cloneRow(cell);
                 long ts = cellList.get(0).getTimestamp();
                 cellList.clear();
-
+                long repairTime;
                 try {
                     repairIndexRows(rowKey, ts, cellList);
+                    repairTime = EnvironmentEdgeManager.currentTimeMillis() - repairStart;
                     metricsSource.incrementIndexRepairs(indexName);
                     metricsSource.updateUnverifiedIndexRowAge(indexName,
                         EnvironmentEdgeManager.currentTimeMillis() - ts);
                     metricsSource.updateIndexRepairTime(indexName,
                         EnvironmentEdgeManager.currentTimeMillis() - repairStart);
+                    if (shouldLog()) {
+                        LOG.info(String.format("Index row repair on region {} took {} ms.",
+                                env.getRegionInfo().getRegionNameAsString(), repairTime));
+                    }
                 } catch (IOException e) {
+                    repairTime = EnvironmentEdgeManager.currentTimeMillis() - repairStart;
                     metricsSource.incrementIndexRepairFailures(indexName);
                     metricsSource.updateIndexRepairFailureTime(indexName,
                         EnvironmentEdgeManager.currentTimeMillis() - repairStart);
+                    if (shouldLog()) {
+                        LOG.warn("Index row repair failure on region {} took {} ms.",
+                                env.getRegionInfo().getRegionNameAsString(), repairTime);
+                    }
                     throw e;
                 }
 
@@ -607,6 +626,13 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
                 }
                 return true;
             }
+        }
+
+        private boolean shouldLog() {
+            if (loggingPercent == 0) {
+                return false;
+            }
+            return (random.nextDouble() <= (loggingPercent / 100.0d));
         }
     }
 
