@@ -188,12 +188,10 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
                             map.put(i, new ArrayList<Cell>());
                         }
                         List<Cell> cellsForTable = map.get(i);
-                        if(indexStatusUpdaters[i] != null) {
-                            indexStatusUpdaters[i].setVerfied(keyValueList);
+                        if (indexStatusUpdaters[i] != null) {
+                            indexStatusUpdaters[i].setVerified(keyValueList);
                         }
-                        for (Cell kv : keyValueList) {
-                            cellsForTable.add(kv);
-                        }
+                        cellsForTable.addAll(keyValueList);
                         break;
                     }
                 }
@@ -253,8 +251,9 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
             byte[] cfn = Bytes.add(emptyColumnFamily, QueryConstants.NAMESPACE_SEPARATOR_BYTES, emptyKeyValue);
             columnIndexes.put(cfn, new Integer(columnIndex));
             columnIndex++;
-            if(PTable.IndexType.GLOBAL == table.getIndexType()) {
-                indexStatusUpdaters[index] = new IndexStatusUpdater(emptyColumnFamily, emptyKeyValue);
+            if (PTable.IndexType.GLOBAL == table.getIndexType()) {
+                indexStatusUpdaters[index] =
+                        new IndexStatusUpdater(emptyColumnFamily, emptyKeyValue);
             }
         }
     }
@@ -427,16 +426,16 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
     }
 
     /**
-     * Updates the Empty cell value to VERIFIED for global index table rows
+     * Updates the EMPTY cell value to VERIFIED for global index table rows.
      */
     private static class IndexStatusUpdater {
 
-        private byte[] emptyKeyValueCF;
-        private int emptyKeyValueCFLength;
-        private byte[] emptyKeyValueQualifier;
-        private int emptyKeyValueQualifierLength;
+        private final byte[] emptyKeyValueCF;
+        private final int emptyKeyValueCFLength;
+        private final byte[] emptyKeyValueQualifier;
+        private final int emptyKeyValueQualifierLength;
 
-        public IndexStatusUpdater(byte[] emptyKeyValueCF, byte[] emptyKeyValueQualifier) {
+        public IndexStatusUpdater(final byte[] emptyKeyValueCF, final byte[] emptyKeyValueQualifier) {
             this.emptyKeyValueCF = emptyKeyValueCF;
             this.emptyKeyValueQualifier = emptyKeyValueQualifier;
             emptyKeyValueCFLength = emptyKeyValueCF.length;
@@ -448,8 +447,8 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
          * 
          * @param keyValues will be modified
          */
-        public void setVerfied(List<Cell> keyValues) {
-            for(int i=0; i < keyValues.size() ; i++) {
+        public void setVerified(List<Cell> keyValues) {
+            for (int i = 0; i < keyValues.size(); i++) {
                 Cell kv = keyValues.get(i);
                 if (CellUtil.compareFamilies(kv, emptyKeyValueCF, 0, emptyKeyValueCFLength) == 0
                         && CellUtil.compareQualifiers(kv, emptyKeyValueQualifier, 0, emptyKeyValueQualifierLength) == 0) {

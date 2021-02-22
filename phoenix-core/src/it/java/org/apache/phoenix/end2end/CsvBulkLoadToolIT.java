@@ -34,22 +34,16 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hdfs.server.namenode.SaveNamespaceCancelledException;
 import org.apache.hadoop.mapred.FileAlreadyExistsException;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -58,6 +52,7 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -336,10 +331,10 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         rs.close();
         stmt.close();
 
-        checkIndexTableIsVerfied("TABLE3_IDX");
+        checkIndexTableIsVerified("TABLE3_IDX");
     }
 
-    private void checkIndexTableIsVerfied(String indexTableName) throws SQLException, IOException {
+    private void checkIndexTableIsVerified(String indexTableName) throws SQLException, IOException {
         ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
         Table hTable = cqs.getTable(Bytes.toBytes(indexTableName));
         PTable pTable = PhoenixRuntime.getTable(conn, indexTableName);
@@ -445,7 +440,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.close();
 
         if (!localIndex) {
-            checkIndexTableIsVerfied(indexTableName);
+            checkIndexTableIsVerified(indexTableName);
         }
     }
     
