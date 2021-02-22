@@ -30,7 +30,6 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.coprocessor.BaseMasterAndRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.MasterCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -56,6 +55,7 @@ import org.apache.hadoop.hbase.security.access.TableAuthManager;
 import org.apache.hadoop.hbase.security.access.UserPermission;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
+import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.phoenix.compat.hbase.CompatObserverContext;
 import org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost.PhoenixMetaDataControllerEnvironment;
 import org.apache.phoenix.query.QueryServices;
@@ -64,6 +64,7 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -277,7 +278,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
             @Override
             public Void run() throws Exception {
-                try (Connection conn = ConnectionFactory.createConnection(env.getConfiguration())) {
+                try (Connection conn = ServerUtil.ConnectionFactory.getConnection(ServerUtil.ConnectionType.DEFAULT_SERVER_CONNECTION,
+                        env.getConfiguration(), (HRegionServer)env.getRegionServerServices())) {
                     AccessControlClient.grant(conn, TableName.valueOf(table), toUser , null, null,
                             actions);
                 } catch (Throwable e) {
@@ -294,7 +296,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
             @Override
             public Void run() throws IOException {
-                try (Connection conn = ConnectionFactory.createConnection(env.getConfiguration())) {
+                try  {
                     List<UserPermission> userPermissions = getUserPermissions(fromTable);
                     List<UserPermission> permissionsOnTheTable = getUserPermissions(toTable);
                     if (userPermissions != null) {
@@ -339,6 +341,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                             }
                         }
                     }
+                } catch (Throwable e) {
+                    throw e;
                 }
                 return null;
             }
@@ -478,7 +482,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             public List<UserPermission> run() throws Exception {
                 final List<UserPermission> userPermissions = new ArrayList<UserPermission>();
                 final RpcServer.Call rpcContext = RpcUtil.getRpcContext();
-                try (Connection connection = ConnectionFactory.createConnection(env.getConfiguration())) {
+                try (Connection connection = ServerUtil.ConnectionFactory.getConnection(ServerUtil.ConnectionType.DEFAULT_SERVER_CONNECTION,
+                        env.getConfiguration(), (HRegionServer)env.getRegionServerServices())) {
                     // Setting RPC context as null so that user can be resetted
                     RpcUtil.setRpcContext(null);
                     // Merge permissions from all accessController coprocessors loaded in memory
@@ -512,8 +517,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             @Override
             public List<UserPermission> run() throws Exception {
                 final RpcServer.Call rpcContext = RpcUtil.getRpcContext();
-                try (Connection connection =
-                        ConnectionFactory.createConnection(env.getConfiguration())) {
+                try (Connection connection = ServerUtil.ConnectionFactory.getConnection(ServerUtil.ConnectionType.DEFAULT_SERVER_CONNECTION,
+                        env.getConfiguration(), (HRegionServer)env.getRegionServerServices())) {
                     // Setting RPC context as null so that user can be resetted
                     RpcUtil.setRpcContext(null);
                     for (BaseMasterAndRegionObserver service : getAccessControllers()) {
