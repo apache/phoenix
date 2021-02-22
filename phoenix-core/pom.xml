@@ -594,6 +594,9 @@
         <value>2.3</value>
       </property>
     </activation>
+    <properties>
+      <hbase.profile>2.3</hbase.profile>
+    </properties>
     <dependencies>
       <dependency>
         <groupId>org.apache.zookeeper</groupId>
@@ -610,6 +613,9 @@
         <value>2.4.0</value>
       </property>
     </activation>
+    <properties>
+      <hbase.profile>2.4.0</hbase.profile>
+    </properties>
     <dependencies>
       <dependency>
         <groupId>org.apache.zookeeper</groupId>
@@ -626,6 +632,9 @@
         <value>2.4</value>
       </property>
     </activation>
+    <properties>
+      <hbase.profile>2.4</hbase.profile>
+    </properties>
     <dependencies>
       <dependency>
         <groupId>org.apache.zookeeper</groupId>
@@ -641,6 +650,9 @@
         <name>!hbase.profile</name>
       </property>
     </activation>
+    <properties>
+      <hbase.profile>2.4</hbase.profile>
+    </properties>
     <dependencies>
       <dependency>
         <groupId>org.apache.zookeeper</groupId>
