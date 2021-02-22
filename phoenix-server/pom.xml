@@ -422,6 +422,9 @@
           <value>2.3</value>
         </property>
       </activation>
+      <properties>
+        <hbase.profile>2.3</hbase.profile>
+      </properties>
       <dependencies>
         <dependency>
           <groupId>org.apache.zookeeper</groupId>
@@ -439,6 +442,9 @@
           <value>2.4.0</value>
         </property>
       </activation>
+      <properties>
+        <hbase.profile>2.4.0</hbase.profile>
+      </properties>
       <dependencies>
         <dependency>
           <groupId>org.apache.zookeeper</groupId>
@@ -448,21 +454,24 @@
       </dependencies>
     </profile>
       <profile>
-          <id>phoenix-hbase-compat-2.4.1</id>
-          <!-- keep dependency plugin happy -->
-          <activation>
-              <property>
-                  <name>hbase.profile</name>
-                  <value>2.4</value>
-              </property>
-          </activation>
-          <dependencies>
-              <dependency>
-                  <groupId>org.apache.zookeeper</groupId>
-                  <artifactId>zookeeper-jute</artifactId>
-                  <scope>provided</scope>
-              </dependency>
-          </dependencies>
+        <id>phoenix-hbase-compat-2.4.1</id>
+        <!-- keep dependency plugin happy -->
+        <activation>
+          <property>
+            <name>hbase.profile</name>
+            <value>2.4</value>
+          </property>
+        </activation>
+        <properties>
+          <hbase.profile>2.4.0</hbase.profile>
+        </properties>
+        <dependencies>
+          <dependency>
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper-jute</artifactId>
+            <scope>provided</scope>
+          </dependency>
+        </dependencies>
       </profile>
     <profile>
       <id>phoenix-hbase-compat-2.4.1-default</id>

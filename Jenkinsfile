@@ -54,7 +54,7 @@ pipeline {
                             timeout(time: 30, unit: 'MINUTES')
                         }
                         environment {
-                            HBASE_VERSION = sh(returnStdout: true, script: "mvn help:evaluate -Dhbase.profile=${HBASE_PROFILE} -Dartifact=org.apache.phoenix:phoenix-core -Dexpression=hbase.version -q -DforceStdout").trim()
+                            HBASE_VERSION = sh(returnStdout: true, script: "mvn -U help:evaluate -Dexpression=hbase-{HBASE_PROFILE}.runtime.version -q -DforceStdout").trim()
                         }
                         steps {
                             sh "dev/rebuild_hbase.sh ${HBASE_VERSION}"
