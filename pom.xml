@@ -93,7 +93,7 @@
     <hbase-2.2.runtime.version>2.2.6</hbase-2.2.runtime.version>
     <hbase-2.3.runtime.version>2.3.4</hbase-2.3.runtime.version>
     <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
-    <hbase-2.4.1.runtime.version>2.4.1</hbase-2.4.1.runtime.version>
+    <hbase-2.4.runtime.version>2.4.1</hbase-2.4.runtime.version>
 
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
@@ -1539,7 +1539,7 @@
       <properties>
         <hbase.profile>2.4</hbase.profile>
         <hbase.compat.version>2.4.1</hbase.compat.version>
-        <hbase.version>${hbase-2.4.1.runtime.version}</hbase.version>
+        <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
         <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
         <zookeeper.version>3.5.7</zookeeper.version>
       </properties>
@@ -1625,7 +1625,7 @@
       <properties>
         <hbase.profile>2.4</hbase.profile>
         <hbase.compat.version>2.4.1</hbase.compat.version>
-        <hbase.version>${hbase-2.4.1.runtime.version}</hbase.version>
+        <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
         <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
         <zookeeper.version>3.5.7</zookeeper.version>
       </properties>
