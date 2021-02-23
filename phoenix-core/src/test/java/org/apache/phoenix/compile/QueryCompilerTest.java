@@ -631,6 +631,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testUpsertMultiByteIntoChar() throws Exception {
+        String value = "繰り返し曜日マスク";
         try {
             // Select non agg column in aggregate query
             String query = "upsert into ATABLE VALUES (?, ?, ?)";
@@ -639,7 +640,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
                 statement.setString(1, "00D300000000XHP");
-                statement.setString(2, "繰り返し曜日マスク");
+                statement.setString(2, value);
                 statement.setInt(3, 1);
                 statement.executeUpdate();
                 fail();
@@ -649,6 +650,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         } catch (SQLException e) {
             assertTrue(e.getMessage(), e.getMessage().contains("ERROR 201 (22000): Illegal data."));
             assertTrue(e.getMessage().contains("CHAR types may only contain single byte characters"));
+            assertFalse(e.getMessage().contains(value));
         }
     }
 

@@ -85,7 +85,7 @@ public class PChar extends PDataType<String> {
       }
       byte[] b = PVarchar.INSTANCE.toBytes(object);
       if (b.length != ((String) object).length()) {
-        throw newIllegalDataException("CHAR types may only contain single byte characters (" + object + ")");
+        throw newIllegalDataException("CHAR types may only contain single byte characters.");
       }
       return b;
     }
@@ -97,7 +97,7 @@ public class PChar extends PDataType<String> {
       }
       int len = PVarchar.INSTANCE.toBytes(object, bytes, offset);
       if (len != ((String) object).length()) {
-        throw newIllegalDataException("CHAR types may only contain single byte characters (" + object + ")");
+        throw newIllegalDataException("CHAR types may only contain single byte characters.");
       }
       return len;
     }
@@ -118,7 +118,7 @@ public class PChar extends PDataType<String> {
       // TODO: UTF-8 decoder that will invert as it decodes
       String s = Bytes.toString(bytes, offset, length);
       if (length != s.length()) {
-        throw newIllegalDataException("CHAR types may only contain single byte characters (" + s + ")");
+        throw newIllegalDataException("CHAR types may only contain single byte characters.");
       }
       return s;
     }
@@ -142,7 +142,7 @@ public class PChar extends PDataType<String> {
         Integer actualMaxLength, Integer actualScale, SortOrder actualModifier,
         Integer desiredMaxLength, Integer desiredScale, SortOrder expectedModifier) {
       if (o != null && actualType.equals(PVarchar.INSTANCE) && ((String)o).length() != ptr.getLength()) {
-        throw newIllegalDataException("CHAR types may only contain single byte characters (" + o + ")");
+        throw newIllegalDataException("CHAR types may only contain single byte characters.");
       }
       super.coerceBytes(ptr, o, actualType, actualMaxLength, actualScale, actualModifier, desiredMaxLength, desiredScale, expectedModifier);
       if (ptr.getLength() > 0 && desiredMaxLength != null &&
@@ -201,7 +201,7 @@ public class PChar extends PDataType<String> {
     @Override
     public Object toObject(String value) {
       if (StringUtil.hasMultiByteChars(value)) {
-        throw newIllegalDataException("CHAR types may only contain single byte characters (" + value + ")");
+        throw newIllegalDataException("CHAR types may only contain single byte characters.");
       }
       return value;
     }
