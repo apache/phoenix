@@ -15,14 +15,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end;
+package org.apache.phoenix.monitoring;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+/**
+ * Class that exposes the various phoenix metrics collected
+ * at the Table level. Because metrics are dynamic in nature, it is not guaranteed that the
+ * state exposed will always be in sync with each other. One should use
+ * these metrics primarily for monitoring and debugging purposes.
+ */
+public interface PhoenixTableMetric extends Metric {
 
-@Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.TYPE)
-public @interface SplitSystemCatalogTests {
+    /**
+     * @return Number of samples collected since the last {@link #reset()} call.
+     */
+    public long getNumberOfSamples();
+
+    /**
+     * @return Sum of the values of the metric sampled since the last {@link #reset()} call.
+     */
+    public long getTotalSum();
 }

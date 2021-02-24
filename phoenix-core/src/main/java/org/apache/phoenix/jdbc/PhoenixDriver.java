@@ -50,7 +50,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
  * 
  * JDBC Driver implementation of Phoenix for production.
  * To use this driver, specify the following URL:
- *     jdbc:phoenix:<zookeeper quorum server name>;
+ *     {@code jdbc:phoenix:<zookeeper quorum server name>; }
  * Only an embedded driver is currently supported (Phoenix client
  * runs in the same JVM as the driver). Connections are lightweight
  * and are not pooled. The last part of the URL, the hbase zookeeper

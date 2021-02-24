@@ -88,6 +88,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -96,25 +97,37 @@ import static org.junit.Assert.fail;
 public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
 
     private final String tableDDLOptions;
+    private final String indexDDLOptions;
     private boolean mutable;
     @Rule
     public ExpectedException exceptionRule = ExpectedException.none();
 
-    public IndexRepairRegionScannerIT(boolean mutable) {
+    public IndexRepairRegionScannerIT(boolean mutable, boolean singleCellIndex) {
         StringBuilder optionBuilder = new StringBuilder();
+        StringBuilder indexOptionBuilder = new StringBuilder();
         this.mutable = mutable;
         if (!mutable) {
             optionBuilder.append(" IMMUTABLE_ROWS=true ");
         }
+        if (singleCellIndex) {
+            if (!(optionBuilder.length() == 0)) {
+                optionBuilder.append(",");
+            }
+            optionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=0 ");
+            indexOptionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS,COLUMN_ENCODED_BYTES=2");
+        }
         optionBuilder.append(" SPLIT ON(1,2)");
+        this.indexDDLOptions = indexOptionBuilder.toString();
         this.tableDDLOptions = optionBuilder.toString();
     }
 
-    @Parameterized.Parameters(name = "mutable={0}")
+    @Parameterized.Parameters(name = "mutable={0}, singleCellIndex={1}")
     public static synchronized Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
-                {true},
-                {false} });
+                {true, true},
+                {true, false},
+                {false, true},
+                {false, false}});
     }
 
     @BeforeClass
@@ -137,6 +150,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
 
     @After
     public void cleanup() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             deleteAllRows(conn,
@@ -146,6 +160,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         }
         EnvironmentEdgeManager.reset();
         resetIndexRegionObserverFailPoints();
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     private void setIndexRowStatusesToVerified(Connection conn, String dataTableFullName, String indexTableFullName) throws Exception {

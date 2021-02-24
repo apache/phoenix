@@ -25,6 +25,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.sql.ParameterMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
@@ -141,6 +142,8 @@ import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.parse.ShowSchemasStatement;
+import org.apache.phoenix.parse.ShowTablesStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TraceStatement;
@@ -1100,6 +1103,35 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
     }
 
+    private static class ExecutableShowTablesStatement extends ShowTablesStatement
+        implements CompilableStatement {
+
+        public ExecutableShowTablesStatement(String schema, String pattern) {
+          super(schema, pattern);
+        }
+
+        @Override
+        public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
+            throws SQLException {
+            PreparedStatement delegateStmt = QueryUtil.getTablesStmt(stmt.getConnection(), null,
+                getTargetSchema(), getDbPattern(), null);
+            return ((PhoenixPreparedStatement) delegateStmt).compileQuery();
+        }
+    }
+
+    // Delegates to a SELECT query against SYSCAT.
+    private static class ExecutableShowSchemasStatement extends ShowSchemasStatement implements CompilableStatement {
+
+        public ExecutableShowSchemasStatement(String pattern) { super(pattern); }
+
+        @Override
+        public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            PreparedStatement delegateStmt =
+                QueryUtil.getSchemasStmt(stmt.getConnection(), null, getSchemaPattern());
+            return ((PhoenixPreparedStatement) delegateStmt).compileQuery();
+        }
+    }
+
     private static class ExecutableCreateIndexStatement extends CreateIndexStatement implements CompilableStatement {
 
         public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
@@ -1677,6 +1709,16 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             return new ExecutableChangePermsStatement(permsString, isSchemaName, tableName, schemaName, isGroupName, userOrGroup,isGrantStatement);
         }
 
+        @Override
+        public ShowTablesStatement showTablesStatement(String schema, String pattern) {
+            return new ExecutableShowTablesStatement(schema, pattern);
+        }
+
+        @Override
+        public ShowSchemasStatement showSchemasStatement(String pattern) {
+            return new ExecutableShowSchemasStatement(pattern);
+        }
+
     }
     
     static class PhoenixStatementParser extends SQLParser {
@@ -1717,7 +1759,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
     /**
      * Execute the current batch of statements. If any exception occurs
-     * during execution, a {@link org.apache.phoenix.exception.BatchUpdateException}
+     * during execution, a org.apache.phoenix.exception.BatchUpdateException
      * is thrown which includes the index of the statement within the
      * batch when the exception occurred.
      */

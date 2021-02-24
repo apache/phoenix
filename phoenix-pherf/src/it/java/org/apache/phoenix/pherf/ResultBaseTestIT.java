@@ -22,15 +22,22 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.result.ResultUtil;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
+import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.experimental.categories.Category;
 
-public class ResultBaseTestIT extends BaseHBaseManagedTimeIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class ResultBaseTestIT extends BaseTest {
     protected static final String matcherScenario = ".*scenario/.*test.*xml";
     protected static final String matcherSchema = ".*datamodel/.*test.*sql";
 
@@ -40,6 +47,11 @@ public class ResultBaseTestIT extends BaseHBaseManagedTimeIT {
     protected static XMLConfigParser parser;
     protected static List<Path> resources;
     protected static ResultUtil resultUtil = new ResultUtil();
+
+    protected static Configuration getTestClusterConfig() {
+        // don't want callers to modify config.
+        return new Configuration(config);
+    }
 
     @BeforeClass public static synchronized void setUp() throws Exception {
 
@@ -51,9 +63,17 @@ public class ResultBaseTestIT extends BaseHBaseManagedTimeIT {
         PhoenixUtil.setZookeeper("localhost");
         reader = new SchemaReader(util, matcherSchema);
         parser = new XMLConfigParser(matcherScenario);
+
+        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
     }
 
     @AfterClass public static synchronized void tearDown() throws Exception {
-    	resultUtil.deleteDir(properties.getProperty("pherf.default.results.dir"));
+        dropNonSystemTables();
+        resultUtil.deleteDir(properties.getProperty("pherf.default.results.dir"));
+    }
+
+    @After
+    public void cleanUpAfterTest() throws Exception {
+        deletePriorMetaData(HConstants.LATEST_TIMESTAMP, getUrl());
     }
 }

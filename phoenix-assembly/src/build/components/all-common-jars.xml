@@ -27,154 +27,22 @@
       <directory>${project.basedir}/../phoenix-client-parent/phoenix-client/target</directory>
       <outputDirectory>/</outputDirectory>
       <includes>
-        <include>phoenix-client-${project.version}.jar</include>
+        <include>phoenix-client-${hbase.suffix}-${project.version}.jar</include>
       </includes>
     </fileSet>
     <fileSet>
       <directory>${project.basedir}/../phoenix-server/target</directory>
       <outputDirectory>/</outputDirectory>
       <includes>
-        <include>phoenix-server-${project.version}.jar</include>
+        <include>phoenix-server-${hbase.suffix}-${project.version}.jar</include>
       </includes>
     </fileSet>
     <fileSet>
-      <directory>${project.basedir}/../phoenix-queryserver/target/</directory>
+      <directory>${project.basedir}/../phoenix-pherf/target</directory>
       <outputDirectory>/</outputDirectory>
       <includes>
-        <include>phoenix-*-queryserver.jar</include>
+        <include>phoenix-pherf-${project.version}.jar</include>
       </includes>
-      <fileMode>0644</fileMode>
-    </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-queryserver-client/target/</directory>
-      <outputDirectory>/</outputDirectory>
-      <includes>
-        <include>phoenix-*-thin-client.jar</include>
-      </includes>
-      <fileMode>0644</fileMode>
-    </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-hive/target/</directory>
-      <outputDirectory>/</outputDirectory>
-      <includes>
-        <include>phoenix-*-hive.jar</include>
-      </includes>
-      <fileMode>0644</fileMode>
-    </fileSet>
-
-    <!-- This is only necessary until maven fixes the intra-project dependency bug
-      in maven 3.0. Until then, we have to include the jars for sub-projects explicitly.
-      Otherwise, test jars are pulled in wrongly.
-     -->
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-hadoop-compat/target/</directory>
-      <outputDirectory>lib</outputDirectory>
-      <includes>
-        <include>phoenix-*.jar</include>
-      </includes>
-      <fileMode>0644</fileMode>
-    </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-pig/target/</directory>
-      <outputDirectory>lib</outputDirectory>
-      <includes>
-        <include>phoenix-pig*.jar</include>
-      </includes>
-      <fileMode>0644</fileMode>
-    </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-pig/target/</directory>
-      <outputDirectory>/</outputDirectory>
-      <includes>
-        <include>phoenix-*-pig.jar</include>
-      </includes>
-      <fileMode>0644</fileMode>
-    </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-flume/target/</directory>
-      <outputDirectory>lib</outputDirectory>
-      <includes>
-        <include>phoenix-*.jar</include>
-      </includes>
-      <fileMode>0644</fileMode>
-    </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-kafka/target/</directory>
-      <outputDirectory>lib</outputDirectory>
-      <includes>
-        <include>phoenix-*.jar</include>
-      </includes>
-      <fileMode>0644</fileMode>
-    </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-core/target/</directory>
-      <outputDirectory>lib</outputDirectory>
-      <includes>
-        <include>phoenix-*.jar</include>
-      </includes>
-      <fileMode>0644</fileMode>
-    </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-spark/target/</directory>
-      <outputDirectory>lib</outputDirectory>
-      <includes>
-          <include>phoenix-*.jar</include>
-      </includes>
-      <fileMode>0644</fileMode>
-    </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-queryserver/target/</directory>
-      <outputDirectory>lib</outputDirectory>
-      <includes>
-        <include>phoenix-queryserver-*.jar</include>
-      </includes>
-      <fileMode>0644</fileMode>
-    </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-hive/target/</directory>
-      <outputDirectory>lib</outputDirectory>
-      <includes>
-        <include>phoenix-hive-*.jar</include>
-      </includes>
-      <fileMode>0644</fileMode>
-    </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-queryserver-client/target/</directory>
-      <outputDirectory>lib</outputDirectory>
-      <includes>
-        <include>phoenix-*.jar</include>
-      </includes>
-      <excludes>
-        <!-- this one goes in project root instead -->
-        <exclude>phoenix-*-thin-client.jar</exclude>
-      </excludes>
-      <fileMode>0644</fileMode>
-    </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-pherf/target/</directory>
-      <outputDirectory>lib</outputDirectory>
-      <includes>
-        <include>phoenix-*.jar</include>
-      </includes>
-      <fileMode>0644</fileMode>
-    </fileSet>
-    <fileSet>
-      <directory>
-        ${project.basedir}/../phoenix-hbase-compat-${hbase.compat.version}/target/
-      </directory>
-      <outputDirectory>lib</outputDirectory>
-      <includes>
-        <include>phoenix-*.jar</include>
-      </includes>
-      <fileMode>0644</fileMode>
-    </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-load-balancer/target/</directory>
-      <outputDirectory>lib</outputDirectory>
-      <includes>
-        <include>phoenix-*.jar</include>
-      </includes>
-      <fileMode>0644</fileMode>
     </fileSet>
   </fileSets>
 </component>

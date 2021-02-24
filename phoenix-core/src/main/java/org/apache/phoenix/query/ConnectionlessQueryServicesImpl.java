@@ -737,8 +737,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
      * Manually adds {@link GuidePostsInfo} for a table to the client-side cache. Not a
      * {@link ConnectionQueryServices} method. Exposed for testing purposes.
      *
-     * @param tableName Table name
-     * @param stats Stats instance
+     * @param key
+     * @param info
      */
     public void addTableStats(GuidePostsKey key, GuidePostsInfo info) {
         this.guidePostsCache.put(Objects.requireNonNull(key), info);

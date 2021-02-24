@@ -36,7 +36,7 @@ import org.apache.phoenix.util.SchemaUtil;
 
 /**
  * 
- * Built-in function for COUNT(distinct <expression>) aggregate function,
+ * Built-in function for {@code COUNT(distinct <expression>) } aggregate function,
  *
  * 
  * @since 1.2.1

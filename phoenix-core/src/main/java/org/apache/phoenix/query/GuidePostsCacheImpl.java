@@ -82,7 +82,7 @@ public class GuidePostsCacheImpl implements GuidePostsCache {
     }
 
     /**
-     * Returns the PTableStats for the given <code>tableName</code, using the provided
+     * Returns the PTableStats for the given <code>tableName</code>, using the provided
      * <code>valueLoader</code> if no such mapping exists.
      *
      * @see com.google.common.cache.LoadingCache#get(Object)

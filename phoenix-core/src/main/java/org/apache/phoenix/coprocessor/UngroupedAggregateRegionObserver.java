@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.adjustScanFilter;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
@@ -440,7 +441,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
 
         if (j != null)  {
-            theScanner = new HashJoinRegionScanner(theScanner, p, j, ScanUtil.getTenantId(scan), env, useQualifierAsIndex, useNewValueColumnQualifier);
+            theScanner = new HashJoinRegionScanner(theScanner, scan, p, j, ScanUtil.getTenantId(scan), env, useQualifierAsIndex, useNewValueColumnQualifier);
         }
         return new UngroupedAggregateRegionScanner(c, theScanner,region, scan, env, this);
     }
@@ -624,7 +625,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    private RegionScanner rebuildIndices(final RegionScanner innerScanner, final Region region, final Scan scan,
+    private RegionScanner rebuildIndices(RegionScanner innerScanner, final Region region, final Scan scan,
                                          final RegionCoprocessorEnvironment env) throws IOException {
         boolean oldCoproc = region.getTableDesc().hasCoprocessor(Indexer.class.getCanonicalName());
         byte[] valueBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE);
@@ -633,29 +634,28 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if (oldCoproc  && verifyType == IndexTool.IndexVerifyType.ONLY) {
             return new IndexerRegionScanner(innerScanner, region, scan, env, this);
         }
+        RegionScanner scanner;
         if (!scan.isRaw()) {
             Scan rawScan = new Scan(scan);
             rawScan.setRaw(true);
             rawScan.setMaxVersions();
             rawScan.getFamilyMap().clear();
-            // For rebuilds we use count (*) as query for regular tables which ends up setting the FKOF on scan
-            // This filter doesn't give us all columns and skips to the next row as soon as it finds 1 col
-            // For rebuilds we need all columns and all versions
-            if (scan.getFilter() instanceof FirstKeyOnlyFilter) {
-                rawScan.setFilter(null);
-            } else if (scan.getFilter() != null) {
-                // Override the filter so that we get all versions
-                rawScan.setFilter(new AllVersionsIndexRebuildFilter(scan.getFilter()));
-            }
+            adjustScanFilter(rawScan);
             rawScan.setCacheBlocks(false);
             for (byte[] family : scan.getFamilyMap().keySet()) {
                 rawScan.addFamily(family);
             }
+            scanner = ((BaseRegionScanner)innerScanner).getNewRegionScanner(rawScan);
             innerScanner.close();
-            RegionScanner scanner = region.getScanner(rawScan);
-            return getRegionScanner(scanner, region, scan, env, oldCoproc);
+        } else {
+            if (adjustScanFilter(scan)) {
+                scanner = ((BaseRegionScanner) innerScanner).getNewRegionScanner(scan);
+                innerScanner.close();
+            } else {
+                scanner = innerScanner;
+            }
         }
-        return getRegionScanner(innerScanner, region, scan, env, oldCoproc);
+        return getRegionScanner(scanner, region, scan, env, oldCoproc);
     }
     
     private RegionScanner collectStats(final RegionScanner innerScanner, StatisticsCollector stats,

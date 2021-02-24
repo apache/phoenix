@@ -44,13 +44,13 @@ import java.util.TreeSet;
 
 import javax.annotation.Nullable;
 
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
-import org.apache.commons.cli.PosixParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.HelpFormatter;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.PosixParser;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
@@ -1093,7 +1093,7 @@ public class PhoenixRuntime {
      * of their values in the object array.
      * @return values encoded in a byte array 
      * @throws SQLException
-     * @see {@link #decodeValues(Connection, String, byte[], List)}
+     * @see decodeValues(Connection, String, byte[], List)
      */
     @Deprecated
     public static byte[] encodeValues(Connection conn, String fullTableName, Object[] values, List<Pair<String, String>> columns) throws SQLException {
@@ -1159,7 +1159,7 @@ public class PhoenixRuntime {
      * of their values in the object array.
      * @return values encoded in a byte array 
      * @throws SQLException
-     * @see {@link #decodeValues(Connection, String, byte[], List)}
+     * @see decodeValues(Connection, String, byte[], List)
      */
     public static byte[] encodeColumnValues(Connection conn, String fullTableName, Object[] values, List<Pair<String, String>> columns) throws SQLException {
         PTable table = getTable(conn, fullTableName);
@@ -1410,11 +1410,12 @@ public class PhoenixRuntime {
      *    requestReadMetrics = PhoenixRuntime.getRequestReadMetrics(rs);
      *    PhoenixRuntime.resetMetrics(rs);
      * }
+     * }
      * </pre>
      * 
      * @param rs
      *            result set to get the metrics for
-     * @return a map of (table name) -> (map of (metric name) -> (metric value))
+     * @return a map of {@code (table name) -> (map of (metric name) -> (metric value)) }
      * @throws SQLException
      */
     public static Map<String, Map<MetricType, Long>> getRequestReadMetricInfo(ResultSet rs) throws SQLException {
@@ -1444,11 +1445,12 @@ public class PhoenixRuntime {
      *    requestReadMetrics = PhoenixRuntime.getRequestReadMetrics(rs);
      *    PhoenixRuntime.resetMetrics(rs);
      * }
+     * }
      * </pre>
      * 
      * @param rs
      *            result set to get the metrics for
-     * @return a map of metric name -> metric value
+     * @return a map of {@code  metric name -> metric value }
      * @throws SQLException
      */
     public static Map<MetricType, Long> getOverAllReadRequestMetricInfo(ResultSet rs) throws SQLException {
@@ -1483,11 +1485,12 @@ public class PhoenixRuntime {
      *    mutationReadMetrics = PhoenixRuntime.getReadMetricsForMutationsSinceLastReset(conn);
      *    PhoenixRuntime.resetMetrics(rs);
      * }
+     * }
      * </pre>
      *  
      * @param conn
      *            connection to get the metrics for
-     * @return a map of (table name) -> (map of (metric name) -> (metric value))
+     * @return a map of {@code  (table name) -> (map of (metric name) -> (metric value)) }
      * @throws SQLException
      */
     public static Map<String, Map<MetricType, Long>> getWriteMetricInfoForMutationsSinceLastReset(Connection conn) throws SQLException {
@@ -1522,10 +1525,11 @@ public class PhoenixRuntime {
      *    mutationReadMetrics = PhoenixRuntime.getReadMetricsForMutationsSinceLastReset(conn);
      *    PhoenixRuntime.resetMetrics(rs);
      * }
+     * }
      * </pre> 
      * @param conn
      *            connection to get the metrics for
-     * @return  a map of (table name) -> (map of (metric name) -> (metric value))
+     * @return  a map of {@code  (table name) -> (map of (metric name) -> (metric value)) }
      * @throws SQLException
      */
     public static Map<String, Map<MetricType, Long>> getReadMetricInfoForMutationsSinceLastReset(Connection conn) throws SQLException {
@@ -1542,7 +1546,7 @@ public class PhoenixRuntime {
     /**
      * Reset the read metrics collected in the result set.
      * 
-     * @see {@link #getRequestReadMetrics(ResultSet)} {@link #getOverAllReadRequestMetrics(ResultSet)}
+     * @see  #getRequestReadMetrics(ResultSet) #getOverAllReadRequestMetrics(ResultSet)
      * @param rs
      * @throws SQLException
      */
@@ -1554,7 +1558,7 @@ public class PhoenixRuntime {
     /**
      * Reset the mutation and reads-for-mutations metrics collected in the connection.
      * 
-     * @see {@link #getReadMetricsForMutationsSinceLastReset(Connection)} {@link #getWriteMetricsForMutationsSinceLastReset(Connection)}
+     * @see #getReadMetricsForMutationsSinceLastReset(Connection) #getWriteMetricsForMutationsSinceLastReset(Connection)
      * @param conn
      * @throws SQLException
      */

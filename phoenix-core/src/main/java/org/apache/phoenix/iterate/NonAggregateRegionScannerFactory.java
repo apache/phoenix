@@ -19,6 +19,9 @@
 package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.util.EncodedColumnsUtil.getMinMaxQualifiersFromScan;
+import static org.apache.phoenix.util.ScanUtil.getDummyResult;
+import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -157,13 +160,14 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
 
     final ImmutableBytesPtr tenantId = ScanUtil.getTenantId(scan);
     if (j != null) {
-        innerScanner = new HashJoinRegionScanner(env, innerScanner, arrayKVRefs, arrayFuncRefs,
+        innerScanner = new HashJoinRegionScanner(env, innerScanner, scan, arrayKVRefs, arrayFuncRefs,
                                                  p, j, tenantId, useQualifierAsIndex,
                                                  useNewValueColumnQualifier);
     }
     if (scanOffset != null) {
       innerScanner = getOffsetScanner(innerScanner, new OffsetResultIterator(
-              new RegionScannerResultIterator(innerScanner, getMinMaxQualifiersFromScan(scan), encodingScheme), scanOffset),
+              new RegionScannerResultIterator(innerScanner, getMinMaxQualifiersFromScan(scan), encodingScheme),
+                      scanOffset, getPageSizeMsForRegionScanner(scan)),
           scan.getAttribute(QueryConstants.LAST_SCAN) != null);
     }
     boolean spoolingEnabled =
@@ -219,7 +223,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
       ResultIterator inner = new RegionScannerResultIterator(s, EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan), encodingScheme);
       return new OrderedResultIterator(inner, orderByExpressions, spoolingEnabled,
-              thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize);
+              thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize, getPageSizeMsForRegionScanner(scan));
     } catch (IOException e) {
       throw new RuntimeException(e);
     } finally {
@@ -373,11 +377,13 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
           if (isFilterDone()) {
             return false;
           }
-
-          for (int i = 0; i < tuple.size(); i++) {
-            results.add(tuple.getValue(i));
+          if (isDummy(tuple)) {
+            getDummyResult(results);
+          } else {
+            for (int i = 0; i < tuple.size(); i++) {
+              results.add(tuple.getValue(i));
+            }
           }
-
           tuple = iterator.next();
           return !isFilterDone();
         } catch (Throwable t) {

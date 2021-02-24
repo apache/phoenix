@@ -203,8 +203,10 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     }
 
     @After
-    public void tearDown() throws SQLException {
+    public void tearDown() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         conn.close();
+        assertFalse("refCount leaked", refCountLeaked);
     }
     
     private String initAtable() throws SQLException {

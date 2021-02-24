@@ -253,7 +253,7 @@ import com.google.protobuf.Service;
  * is stored in a single header row. Column information is stored in a separate
  * row per column. Linking information (indexes, views etc) are stored using a
  * separate row for each link that uses the {@link LinkType} column value. The
- * parent->child links are stored in a separate SYSTEM.CHILD_LINK table.
+ * {@code parent->child } links are stored in a separate SYSTEM.CHILD_LINK table.
  * Metadata for all tables/views/indexes in the same schema are stored in a
  * single region which is enforced using the {@link MetaDataSplitPolicy}.
  * <p>
@@ -2402,8 +2402,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 releaseRowLocks(region, locks);
                 if(dropTableStats) {
                     Thread statsDeleteHandler = new Thread(new StatsDeleteHandler(env,
-                            loadedTable, tableNamesToDelete, sharedTablesToDelete),
-                            "thread-statsdeletehandler");
+                        loadedTable, tableNamesToDelete, sharedTablesToDelete),
+                        "thread-statsdeletehandler");
                     statsDeleteHandler.setDaemon(true);
                     statsDeleteHandler.start();
                 }
@@ -2421,7 +2421,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         }
     }
 
-    class StatsDeleteHandler implements Runnable {
+    private static class StatsDeleteHandler implements Runnable {
         PTable deletedTable;
         List<byte[]> physicalTableNames;
         List<MetaDataProtocol.SharedTableState> sharedTableStates;
@@ -2465,6 +2465,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             }
         }
     }
+
     private RowLock acquireLock(Region region, byte[] lockKey, List<RowLock> locks) throws IOException {
         RowLock rowLock = region.getRowLock(lockKey, false);
         if (rowLock == null) {

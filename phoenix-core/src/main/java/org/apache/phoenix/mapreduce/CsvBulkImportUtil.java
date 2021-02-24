@@ -41,8 +41,8 @@ public class CsvBulkImportUtil {
      * @param arrayDelimiter array delimiter character, can be null
      * @param binaryEncoding 
      */
-    public static void initCsvImportJob(Configuration conf, char fieldDelimiter, char quoteChar,
-            char escapeChar, String arrayDelimiter, String binaryEncoding) {
+    public static void initCsvImportJob(Configuration conf, char fieldDelimiter, Character quoteChar,
+            Character escapeChar, String arrayDelimiter, String binaryEncoding) {
         setChar(conf, CsvToKeyValueMapper.FIELD_DELIMITER_CONFKEY, fieldDelimiter);
         setChar(conf, CsvToKeyValueMapper.QUOTE_CHAR_CONFKEY, quoteChar);
         setChar(conf, CsvToKeyValueMapper.ESCAPE_CHAR_CONFKEY, escapeChar);
@@ -67,8 +67,10 @@ public class CsvBulkImportUtil {
     }
 
     @VisibleForTesting
-    static void setChar(Configuration conf, String confKey, char charValue) {
-        conf.set(confKey, Base64.encodeBytes(Character.toString(charValue).getBytes()));
+    static void setChar(Configuration conf, String confKey, Character charValue) {
+        if(charValue!=null) {
+            conf.set(confKey, Base64.encodeBytes(charValue.toString().getBytes()));
+        }
     }
 
     @VisibleForTesting

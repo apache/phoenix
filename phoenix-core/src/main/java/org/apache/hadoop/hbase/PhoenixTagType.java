@@ -19,7 +19,7 @@ package org.apache.hadoop.hbase;
 
 /**
     Used to persist the TagType in HBase Cell Tags.
-    All the type present here should be more than @{@link Tag#CUSTOM_TAG_TYPE_RANGE} which is 64.
+    All the type present here should be more than {Tag#CUSTOM_TAG_TYPE_RANGE which is 64.
  **/
 public final class PhoenixTagType {
     /**

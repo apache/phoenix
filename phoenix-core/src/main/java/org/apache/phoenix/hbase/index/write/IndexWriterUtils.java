@@ -34,7 +34,7 @@ public class IndexWriterUtils {
 
   /**
    * Maximum number of threads to allow per-table when writing. Each writer thread (from
-   * {@link IndexWriterUtils#NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY}) has a single HTable.
+   * IndexWriterUtils#NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY) has a single HTable.
    * However, each table is backed by a threadpool to manage the updates to that table. this
    * specifies the number of threads to allow in each of those tables. Generally, you shouldn't need
    * to change this, unless you have a small number of indexes to which most of the writes go.

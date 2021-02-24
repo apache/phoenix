@@ -84,7 +84,7 @@ public class ParseNodeFactory {
      *
      * Key used to look up a built-in function using the combination of
      * the lowercase name and the number of arguments. This disambiguates
-     * the aggregate MAX(<col>) from the non aggregate MAX(<col1>,<col2>).
+     * the aggregate {@code MAX(<col>) } from the non aggregate {@code MAX(<col1>,<col2>) }.
      *
      * 
      * @since 0.1
@@ -945,4 +945,11 @@ public class ParseNodeFactory {
         return new ChangePermsStatement(permsString, isSchemaName, tableName, schemaName, isGroupName, userOrGroup, isGrantStatement);
     }
 
+    public ShowTablesStatement showTablesStatement(String schema, String pattern) {
+        return new ShowTablesStatement(schema, pattern);
+    }
+
+    public ShowSchemasStatement showSchemasStatement(String pattern) {
+        return new ShowSchemasStatement(pattern);
+    }
 }

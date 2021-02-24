@@ -37,13 +37,13 @@ import org.apache.phoenix.util.StringUtil;
 
 /**
  * 
- * Implementation of the SUBSTR(<string>,<offset>[,<length>]) built-in function
- * where <offset> is the offset from the start of <string>. A positive offset
+ * Implementation of the {@code SUBSTR(<string>,<offset>[,<length>]) } built-in function
+ * where  {@code <offset> } is the offset from the start of {@code  <string> }. A positive offset
  * is treated as 1-based, a zero offset is treated as 0-based, and a negative
  * offset starts from the end of the string working backwards. The optional
- * <length> argument is the number of characters to return. In the absence of the
- * <length> argument, the rest of the string starting from <offset> is returned.
- * If <length> is less than 1, null is returned.
+ * {@code <length> } argument is the number of characters to return. In the absence of the
+ * {@code <length> }  argument, the rest of the string starting from {@code <offset> } is returned.
+ * If {@code <length> }  is less than 1, null is returned.
  *
  * 
  * @since 0.1

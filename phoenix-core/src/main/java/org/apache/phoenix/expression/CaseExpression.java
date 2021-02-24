@@ -107,10 +107,8 @@ public class CaseExpression extends BaseCompoundExpression {
     }
     /**
      * Construct CASE/WHEN expression
-     * @param expressions list of expressions in the form of:
-     *  ((<result expression>, <boolean expression>)+, [<optional else result expression>])
-     * @throws SQLException if return type of case expressions do not match and cannot
-     *  be coerced to a common type
+     * @param children list of expressions in the form of:
+     * {@code ((<result expression>, <boolean expression>)+, [<optional else result expression>]) }
      */
     public CaseExpression(List<Expression> children) {
         super(children);

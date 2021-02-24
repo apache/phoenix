@@ -39,7 +39,7 @@ import org.apache.phoenix.schema.types.PVarchar;
  * 
  * Function similar to the regexp_replace function in Postgres, which is used to pattern
  * match a segment of the string. Usage:
- * REGEXP_REPLACE(<source_char>,<pattern>,<replace_string>)
+ * {@code REGEXP_REPLACE(<source_char>,<pattern>,<replace_string>) }
  * source_char is the string in which we want to perform string replacement. pattern is a
  * Java compatible regular expression string, and we replace all the matching part with 
  * replace_string. The first 2 arguments are required and are {@link org.apache.phoenix.schema.types.PVarchar},

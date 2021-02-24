@@ -22,11 +22,13 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix-client-parent</artifactId>
-    <version>4.16.0-SNAPSHOT</version>
+    <version>4.17.0-SNAPSHOT</version>
   </parent>
-  <artifactId>phoenix-client</artifactId>
+
+  <artifactId>phoenix-client-${hbase.suffix}</artifactId>
   <name>Phoenix Client</name>
   <description>Phoenix Client</description>
+
   <packaging>jar</packaging>
 
   <build>
@@ -61,5 +63,28 @@
       </plugin>
     </plugins>
   </build>
+
+  <dependencies>
+    <!-- These must not be moved to phoenix-client-parent, see PHOENIX-6377 -->
+    <!-- Depend on all other internal projects -->
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
+      <optional>false</optional>
+    </dependency>
+    <dependency>
+      <groupId>sqlline</groupId>
+      <artifactId>sqlline</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-log4j12</artifactId>
+      <version>1.7.7</version>
+    </dependency>
+  </dependencies>
 
 </project>

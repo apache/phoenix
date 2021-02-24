@@ -27,11 +27,11 @@ import org.apache.phoenix.schema.types.PLong;
 
 
 /**
- * 
+ * {@code
  * Implementation of the LENGTH(<string>) build-in function. <string> is the string
  * of characters we want to find the length of. If <string> is NULL or empty, null
  * is returned.
- * 
+ * }
  * 
  * @since 0.1
  */

@@ -52,7 +52,7 @@ import org.slf4j.LoggerFactory;
  *  <li>ignoring memstore timestamps in favor of deciding when we want to overwrite keys based on how
  *    we obtain them</li>
  *   <li>ignoring time range updates (so 
- *    {@link ReseekableScanner#shouldUseScanner(Scan, SortedSet, long)} isn't supported from
+ *    ReseekableScanner#shouldUseScanner(Scan, SortedSet, long) isn't supported from
  *    {@link #getScanner()}).</li>
  * </ol>
  * <p>
@@ -67,7 +67,7 @@ import org.slf4j.LoggerFactory;
  * the previous implementation. Further, by being smart about how we manage the KVs, we can drop the
  * extra object creation we were doing to wrap the pending KVs (which we did previously to ensure
  * they sorted before the ones we got from the HRegion). We overwrite {@link KeyValue}s when we add
- * them from external sources {@link #add(KeyValue, boolean)}, but then don't overwrite existing
+ * them from external sources #add(KeyValue, boolean), but then don't overwrite existing
  * keyvalues when read them from the underlying table (because pending keyvalues should always
  * overwrite current ones) - this logic is all contained in LocalTableState.
  * @see LocalTableState

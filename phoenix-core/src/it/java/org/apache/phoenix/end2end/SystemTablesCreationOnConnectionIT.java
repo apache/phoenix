@@ -49,6 +49,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.UpgradeRequiredException;
@@ -68,9 +69,15 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class SystemTablesCreationOnConnectionIT {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(
+            SystemTablesCreationOnConnectionIT.class);
+
     private HBaseTestingUtility testUtil = null;
     private Set<String> hbaseTables;
     private static boolean setOldTimestampToInduceUpgrade = false;
@@ -81,7 +88,7 @@ public class SystemTablesCreationOnConnectionIT {
     private static final String PHOENIX_NAMESPACE_MAPPED_SYSTEM_CATALOG = "SYSTEM:CATALOG";
     private static final String PHOENIX_SYSTEM_CATALOG = "SYSTEM.CATALOG";
     private static final String EXECUTE_UPGRADE_COMMAND = "EXECUTE UPGRADE";
-    private static final String MODIFIED_MAX_VERSIONS ="5";
+    private static final String MODIFIED_MAX_VERSIONS = "5";
     private static final String CREATE_TABLE_STMT = "CREATE TABLE %s"
             + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2))";
     private static final String SELECT_STMT = "SELECT * FROM %s";
@@ -91,17 +98,17 @@ public class SystemTablesCreationOnConnectionIT {
     private static final String QUERY_SYSTEM_CATALOG = "SELECT * FROM SYSTEM.CATALOG LIMIT 1";
 
     private static final Set<String> PHOENIX_SYSTEM_TABLES = new HashSet<>(Arrays.asList(
-      "SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS", "SYSTEM.FUNCTION",
-      "SYSTEM.MUTEX", "SYSTEM.LOG", "SYSTEM.CHILD_LINK", "SYSTEM.TASK"));
+            "SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS", "SYSTEM.FUNCTION",
+            "SYSTEM.MUTEX", "SYSTEM.LOG", "SYSTEM.CHILD_LINK", "SYSTEM.TASK"));
 
     private static final Set<String> PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES = new HashSet<>(
-      Arrays.asList("SYSTEM:CATALOG", "SYSTEM:SEQUENCE", "SYSTEM:STATS", "SYSTEM:FUNCTION",
-        "SYSTEM:MUTEX", "SYSTEM:LOG", "SYSTEM:CHILD_LINK", "SYSTEM:TASK"));
+            Arrays.asList("SYSTEM:CATALOG", "SYSTEM:SEQUENCE", "SYSTEM:STATS", "SYSTEM:FUNCTION",
+                    "SYSTEM:MUTEX", "SYSTEM:LOG", "SYSTEM:CHILD_LINK", "SYSTEM:TASK"));
 
     private static class PhoenixSysCatCreationServices extends ConnectionQueryServicesImpl {
 
         PhoenixSysCatCreationServices(QueryServices services,
-                PhoenixEmbeddedDriver.ConnectionInfo connectionInfo, Properties info) {
+                                      PhoenixEmbeddedDriver.ConnectionInfo connectionInfo, Properties info) {
             super(services, connectionInfo, info);
         }
 
@@ -123,7 +130,7 @@ public class SystemTablesCreationOnConnectionIT {
 
         @Override
         protected PhoenixConnection upgradeSystemCatalogIfRequired(PhoenixConnection metaConnection,
-          long currentServerSideTableTimeStamp) throws InterruptedException, SQLException,
+                                                                   long currentServerSideTableTimeStamp) throws InterruptedException, SQLException,
                 TimeoutException, IOException {
             PhoenixConnection newMetaConnection = super.upgradeSystemCatalogIfRequired(
                     metaConnection, currentServerSideTableTimeStamp);
@@ -144,7 +151,7 @@ public class SystemTablesCreationOnConnectionIT {
 
         @Override // public for testing
         public synchronized ConnectionQueryServices getConnectionQueryServices(String url,
-                Properties info) throws SQLException {
+                                                                               Properties info) throws SQLException {
             if (cqs == null) {
                 cqs = new PhoenixSysCatCreationServices(new QueryServicesTestImpl(getDefaultProps(),
                         overrideProps), ConnectionInfo.create(url), info);
@@ -164,7 +171,6 @@ public class SystemTablesCreationOnConnectionIT {
         }
     }
 
-
     @Before
     public void resetVariables() {
         setOldTimestampToInduceUpgrade = false;
@@ -173,20 +179,27 @@ public class SystemTablesCreationOnConnectionIT {
     }
 
     @After
-    public void tearDownMiniCluster() {
+    public synchronized void tearDownMiniCluster() {
         try {
             if (testUtil != null) {
+                boolean isMasterAvailable =
+                        testUtil.getHBaseCluster().getMaster() != null;
+                boolean refCountLeaked = false;
+                if (isMasterAvailable) {
+                    refCountLeaked = CompatUtil.isAnyStoreRefCountLeaked(
+                            testUtil.getHBaseCluster().getMaster());
+                }
                 testUtil.shutdownMiniCluster();
                 testUtil = null;
+                assertFalse("refCount leaked", refCountLeaked);
             }
         } catch (Exception e) {
             // ignore
         }
     }
 
-
-     // Conditions: isDoNotUpgradePropSet is true
-     // Expected: We do not create SYSTEM.CATALOG even if this is the first connection to the server
+    // Conditions: isDoNotUpgradePropSet is true
+    // Expected: We do not create SYSTEM.CATALOG even if this is the first connection to the server
     @Test
     public void testFirstConnectionDoNotUpgradePropSet() throws Exception {
         startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
@@ -498,7 +511,7 @@ public class SystemTablesCreationOnConnectionIT {
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
         startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
         try (Connection ignored = DriverManager.getConnection(getJdbcUrl());
-                HBaseAdmin admin = testUtil.getHBaseAdmin()) {
+             HBaseAdmin admin = testUtil.getHBaseAdmin()) {
             HTableDescriptor htd = admin.getTableDescriptor(SYSTEM_MUTEX_HBASE_TABLE_NAME);
             HColumnDescriptor hColDesc = htd.getFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES);
             assertEquals("Did not find the correct TTL for SYSTEM.MUTEX", TTL_FOR_MUTEX,
@@ -543,6 +556,7 @@ public class SystemTablesCreationOnConnectionIT {
 
     /**
      * Return all created HBase tables
+     *
      * @return Set of HBase table name strings
      * @throws IOException if there is a problem listing all HBase tables
      */
@@ -566,6 +580,7 @@ public class SystemTablesCreationOnConnectionIT {
 
     /**
      * Alter the table metadata and return modified value
+     *
      * @param driver testing Phoenix driver
      * @return value of VERSIONS option for the table
      * @throws Exception if there is an error modifying the HBase metadata for SYSTEM.CATALOG
@@ -592,6 +607,7 @@ public class SystemTablesCreationOnConnectionIT {
 
     /**
      * Start the mini-cluster with server-side namespace mapping property specified
+     *
      * @param isNamespaceMappingEnabled true if namespace mapping is enabled
      * @throws Exception if there is an error starting the minicluster
      */
@@ -607,6 +623,7 @@ public class SystemTablesCreationOnConnectionIT {
 
     /**
      * Get the connection string for the mini-cluster
+     *
      * @return Phoenix connection string
      */
     private String getJdbcUrl() {
@@ -615,12 +632,13 @@ public class SystemTablesCreationOnConnectionIT {
 
     /**
      * Set namespace mapping related properties for the client connection
-     * @param nsMappingEnabled true if namespace mapping is enabled
+     *
+     * @param nsMappingEnabled          true if namespace mapping is enabled
      * @param systemTableMappingEnabled true if we are mapping SYSTEM tables to their own namespace
      * @return Properties object
      */
     private Properties getClientProperties(boolean nsMappingEnabled,
-            boolean systemTableMappingEnabled) {
+                                           boolean systemTableMappingEnabled) {
         Properties clientProps = new Properties();
         clientProps.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
                 Boolean.valueOf(nsMappingEnabled).toString());
@@ -631,6 +649,7 @@ public class SystemTablesCreationOnConnectionIT {
 
     /**
      * Initiate the first connection to the server with provided auto-upgrade property
+     *
      * @param isAutoUpgradeEnabled true if auto-upgrade is enabled
      * @return Phoenix JDBC driver
      * @throws Exception if starting the minicluster fails
@@ -681,7 +700,7 @@ public class SystemTablesCreationOnConnectionIT {
     // Expected: If this is the first connection to the server, we should be able to create all
     // namespace mapped system tables i.e. SYSTEM:.*
     private PhoenixSysCatCreationTestingDriver firstConnNSMappingServerEnabledClientEnabled()
-    throws Exception {
+            throws Exception {
         startMiniClusterWithToggleNamespaceMapping(Boolean.TRUE.toString());
         Properties clientProps = getClientProperties(true, true);
         PhoenixSysCatCreationTestingDriver driver =

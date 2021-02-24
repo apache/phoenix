@@ -24,13 +24,13 @@ import java.util.List;
 
 import com.google.common.base.Strings;
 import com.google.inject.Inject;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
-import org.apache.commons.cli.PosixParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.HelpFormatter;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.PosixParser;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -205,7 +205,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
         System.exit(exitCode);
     }
 
-    class JobFactory {
+    private static class JobFactory {
         Connection connection;
         Configuration configuration;
         private boolean useSnapshot;
@@ -456,8 +456,8 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 schemaName, dataTable, indexTable, useSnapshot, ts, batchSize, basePath,
                 outputFormat, outputMaxRows));
             JobFactory jobFactory =
-                    new JobFactory(connection, configuration, batchSize, useSnapshot, ts,
-                            outputInvalidRows, outputFormat, basePath, outputMaxRows, tenantId, mapperClass);
+                new JobFactory(connection, configuration, batchSize, useSnapshot, ts,
+                    outputInvalidRows, outputFormat, basePath, outputMaxRows, tenantId, mapperClass);
             // If we are running the scrutiny with both tables as the source, run two separate jobs,
             // one for each direction
             if (SourceTable.BOTH.equals(sourceTable)) {

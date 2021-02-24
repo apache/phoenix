@@ -34,11 +34,13 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Assume;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
+
+import static org.junit.Assert.assertFalse;
 
 public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     private static final String
@@ -219,6 +221,8 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
 
     @AfterClass
     public static synchronized void teardown() {
-        tearDownMiniClusterAsync(2);
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
+        tearDownMiniCluster(2);
+        assertFalse("refCount leaked", refCountLeaked);
     }
 }

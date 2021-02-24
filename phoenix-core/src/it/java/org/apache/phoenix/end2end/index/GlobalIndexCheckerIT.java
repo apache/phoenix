@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
@@ -71,8 +72,10 @@ import org.slf4j.LoggerFactory;
 public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     private static final Logger LOG = LoggerFactory.getLogger(GlobalIndexCheckerIT.class);
     private final boolean async;
+    private String indexDDLOptions;
     private String tableDDLOptions;
     private StringBuilder optionBuilder;
+    private StringBuilder indexOptionBuilder;
     private final boolean encoded;
     public GlobalIndexCheckerIT(boolean async, boolean encoded) {
         this.async = async;
@@ -89,10 +92,13 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
     @Before
     public void beforeTest(){
         optionBuilder = new StringBuilder();
+        indexOptionBuilder = new StringBuilder();
         if (!encoded) {
             optionBuilder.append(" COLUMN_ENCODED_BYTES=0");
+            indexOptionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
         }
         this.tableDDLOptions = optionBuilder.toString();
+        this.indexDDLOptions = indexOptionBuilder.toString();
     }
 
     @Parameters(
@@ -110,9 +116,11 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
 
     @After
     public void unsetFailForTesting() {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
         IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
         IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     public static void assertExplainPlan(Connection conn, String selectSql,
@@ -143,7 +151,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             conn.commit();
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
-                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") + this.indexDDLOptions);
             if (async) {
                 // run the index MR job.
                 IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
@@ -170,7 +178,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
-                    dataTableName + " (val1) include (val2, val3)");
+                    dataTableName + " (val1) include (val2, val3)" + this.indexDDLOptions);
 
             String dml = "DELETE from " + dataTableName + " WHERE id  = 'a'";
             conn.createStatement().executeUpdate(dml);
@@ -196,7 +204,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
-                    dataTableName + " (val1) include (val2, val3)");
+                    dataTableName + " (val1) include (val2, val3)" + this.indexDDLOptions);
             scn = EnvironmentEdgeManager.currentTimeMillis();
             // Configure IndexRegionObserver to fail the data write phase
             IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
@@ -235,7 +243,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
-                    dataTableName + " (val1) include (val2, val3)");
+                    dataTableName + " (val1) include (val2, val3)" + this.indexDDLOptions);
             conn.commit();
             // Read all index rows and rewrite them back directly. This will overwrite existing rows with newer
             // timestamps and set the empty column to value "x". This will make them unverified
@@ -287,7 +295,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
-                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") + this.indexDDLOptions);
             if (async) {
                 // run the index MR job.
                 IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
@@ -331,7 +339,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
-                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") + this.indexDDLOptions);
             if (async) {
                 // run the index MR job.
                 IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
@@ -376,7 +384,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         Connection conn = DriverManager.getConnection(getUrl());
         String indexTableName = generateUniqueName();
         conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
-                dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+                dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") + this.indexDDLOptions);
         if (async) {
             // run the index MR job.
             IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
@@ -446,7 +454,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             conn.commit();
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
-                    dataTableName + " (val1) include (val2, val3)");
+                    dataTableName + " (val1) include (val2, val3)" + this.indexDDLOptions);
             conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2) values ('a', 'ab', 'abcc')");
             conn.commit();
             String selectSql = "SELECT * from " + dataTableName + " WHERE val1  = 'ab'";
@@ -469,7 +477,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
-                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") + this.indexDDLOptions);
             if (async) {
                 // run the index MR job.
                 IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
@@ -502,7 +510,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
-                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") + this.indexDDLOptions);
             if (async) {
                 // run the index MR job.
                 IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
@@ -553,7 +561,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
                     " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), val3 varchar(10))" + tableDDLOptions);
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
-                    dataTableName + " (val1) include (val2, val3)");
+                    dataTableName + " (val1) include (val2, val3)" + this.indexDDLOptions);
 
             // Configure IndexRegionObserver to fail the data write phase
             IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
@@ -591,7 +599,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
                     " (id varchar(10) not null primary key, a.val1 varchar(10), b.val2 varchar(10), c.val3 varchar(10))" + tableDDLOptions);
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
-                    dataTableName + " (val1) include (val2, val3)");
+                    dataTableName + " (val1) include (val2, val3)" + this.indexDDLOptions);
             // Configure IndexRegionObserver to fail the data write phase
             IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
             conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val3) values ('a', 'ab','abcde')");
@@ -647,9 +655,9 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + "1 on " +
-                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : ""));
+                    dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") + this.indexDDLOptions);
             conn.createStatement().execute("CREATE INDEX " + indexTableName + "2 on " +
-                    dataTableName + " (val2) include (val1, val3)" + (async ? "ASYNC" : ""));
+                    dataTableName + " (val2) include (val1, val3)" + (async ? "ASYNC" : "") + this.indexDDLOptions);
             if (async) {
                 // run the index MR job.
                 IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "1");
@@ -765,10 +773,10 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
         conn.createStatement().execute("CREATE INDEX " + indexTableName + "1 on " +
                 dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") +
-            " VERSIONS=" + indexVersions);
+            " VERSIONS=" + indexVersions + (Strings.isNullOrEmpty(this.indexDDLOptions) ? "" : "," + this.indexDDLOptions));
         conn.createStatement().execute("CREATE INDEX " + indexTableName + "2 on " +
                 dataTableName + " (val2) include (val1, val3)" + (async ? "ASYNC" : "")+
-            " VERSIONS=" + indexVersions);
+            " VERSIONS=" + indexVersions + (Strings.isNullOrEmpty(this.indexDDLOptions) ? "" : "," + this.indexDDLOptions));
         conn.commit();
         if (async) {
             // run the index MR job.
@@ -835,7 +843,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             // Create an index on the view
             String indexName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexName + " on " +
-                    viewName + " (val2) include (val3)");
+                    viewName + " (val2) include (val3)" + this.indexDDLOptions);
             Properties props = new Properties();
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "o1");
             try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {

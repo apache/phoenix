@@ -36,7 +36,7 @@ import java.util.List;
  * Function used to get the external SQL type id from the internal SQL type integer.
  * Typically the external and internal ids are the same, but for some types (e.g. arrays)
  * there is are multiple specific internal types to represent multiple external types.
- * <p/>
+ * 
  * Usage:
  * ExternalSqlTypeId(12)
  * will return 12 based on {@link java.sql.Types#VARCHAR} being 12

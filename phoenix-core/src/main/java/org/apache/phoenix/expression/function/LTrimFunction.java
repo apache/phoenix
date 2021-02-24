@@ -34,8 +34,8 @@ import org.apache.phoenix.util.StringUtil;
 
 /**
  * 
- * Implementation of the LTrim(<string>) build-in function. It removes from the left end of
- * <string> space character and other function bytes in single byte utf8 characters 
+ * Implementation of the {@code LTrim(<string>) } build-in function. It removes from the left end of
+ * {@code <string> } space character and other function bytes in single byte utf8 characters 
  * set.
  * 
  * 

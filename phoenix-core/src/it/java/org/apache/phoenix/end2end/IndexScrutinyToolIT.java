@@ -14,6 +14,7 @@ import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.BAD_
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.BATCHES_PROCESSED_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.INVALID_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.VALID_ROW_COUNT;
+import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -69,6 +70,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import com.google.common.collect.Lists;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Tests for the {@link IndexScrutinyTool}
@@ -76,6 +79,7 @@ import com.google.common.collect.Lists;
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
+    private static final Logger LOGGER = LoggerFactory.getLogger(IndexScrutinyToolIT.class);
     public static final String MISSING_ROWS_QUERY_TEMPLATE =
         "SELECT \"SOURCE_TABLE\" , \"TARGET_TABLE\" , \"SCRUTINY_EXECUTE_TIME\" , " +
         "\"SOURCE_ROW_PK_HASH\" , \"SOURCE_TS\" , \"TARGET_TS\" , \"HAS_TARGET_ROW\" , " +
@@ -125,15 +129,25 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
     private Properties props;
 
     @Parameterized.Parameters public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] { { "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR)",
+        return Arrays.asList(new Object[][] {
+                { "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR) ",
+                        "CREATE INDEX %s ON %s (NAME, EMPLOY_DATE) INCLUDE (ZIP) IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2" },
+                { "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR)",
                 "CREATE LOCAL INDEX %s ON %s (NAME, EMPLOY_DATE) INCLUDE (ZIP)" }, { "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR) SALT_BUCKETS=2",
                 "CREATE INDEX %s ON %s (NAME, EMPLOY_DATE) INCLUDE (ZIP)" }, { "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, EMPLOY_DATE TIMESTAMP, EMPLOYER VARCHAR) SALT_BUCKETS=2",
                 "CREATE LOCAL INDEX %s ON %s (NAME, EMPLOY_DATE) INCLUDE (ZIP)" } });
     }
 
-    public IndexScrutinyToolIT(String dataTableDdl, String indexTableDdl) {
+    public IndexScrutinyToolIT(String dataTableDdl, String indexTableDdl) throws Exception {
         this.dataTableDdl = dataTableDdl;
         this.indexTableDdl = indexTableDdl;
+        if (isOnlyIndexSingleCell()) {
+            indexRegionObserverEnabled = Boolean.TRUE.toString();
+            doSetup();
+        } else {
+            indexRegionObserverEnabled = Boolean.FALSE.toString();
+            doSetup();
+        }
     }
 
     /**
@@ -154,10 +168,18 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
 
     }
 
-    @After public void teardown() throws SQLException {
+    @After
+    public void teardown() throws Exception {
         if (conn != null) {
             conn.close();
         }
+    }
+
+    private boolean isOnlyIndexSingleCell() {
+        if (indexTableDdl.contains(SINGLE_CELL_ARRAY_WITH_OFFSETS.toString()) && !dataTableDdl.contains(SINGLE_CELL_ARRAY_WITH_OFFSETS.toString())) {
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -284,6 +306,9 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
      * a covered index value is incorrect. Scrutiny should report the invalid row
      */
     @Test public void testCoveredValueIncorrect() throws Exception {
+        if (isOnlyIndexSingleCell()) {
+            return;
+        }
         // insert one valid row
         upsertRow(dataTableUpsertStmt, 1, "name-1", 94010);
         conn.commit();
@@ -301,6 +326,7 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
         List<Job> completedJobs = runScrutiny(schemaName, dataTableName, indexTableName);
         Job job = completedJobs.get(0);
         assertTrue(job.isSuccessful());
+
         Counters counters = job.getCounters();
         assertEquals(1, getCounterValue(counters, VALID_ROW_COUNT));
         assertEquals(1, getCounterValue(counters, INVALID_ROW_COUNT));
@@ -368,6 +394,9 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
      * number of incorrect rows when run with the index as the source table
      */
     @Test public void testMoreIndexRows() throws Exception {
+        if (isOnlyIndexSingleCell()) {
+            return;
+        }
         upsertRow(dataTableUpsertStmt, 1, "name-1", 95123);
         conn.commit();
         disableIndex();
@@ -381,6 +410,7 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
                 runScrutiny(schemaName, dataTableName, indexTableName, 10L, SourceTable.INDEX_TABLE_SOURCE);
         Job job = completedJobs.get(0);
         assertTrue(job.isSuccessful());
+
         Counters counters = job.getCounters();
         assertEquals(1, getCounterValue(counters, VALID_ROW_COUNT));
         assertEquals(2, getCounterValue(counters, INVALID_ROW_COUNT));
@@ -391,6 +421,9 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
      * incorrectly indexed row, it should be reported in each direction
      */
     @Test public void testBothDataAndIndexAsSource() throws Exception {
+        if (isOnlyIndexSingleCell()) {
+            return;
+        }
         // insert one valid row
         upsertRow(dataTableUpsertStmt, 1, "name-1", 94010);
         conn.commit();
@@ -420,6 +453,9 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
      * Tests that with the output to file option set, the scrutiny tool outputs invalid rows to file
      */
     @Test public void testOutputInvalidRowsToFile() throws Exception {
+        if (isOnlyIndexSingleCell()) {
+            return;
+        }
         insertOneValid_OneBadVal_OneMissingTarget();
 
         String[]
@@ -469,6 +505,9 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
      * Tests writing of results to the output table
      */
     @Test public void testOutputInvalidRowsToTable() throws Exception {
+        if (isOnlyIndexSingleCell()) {
+            return;
+        }
         insertOneValid_OneBadVal_OneMissingTarget();
         String[]
                 argValues =
@@ -646,9 +685,9 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
 
     private void generateUniqueTableNames() {
         schemaName = generateUniqueName();
-        dataTableName = generateUniqueName();
+        dataTableName = "TBL" + generateUniqueName();
         dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        indexTableName = generateUniqueName();
+        indexTableName = "IDX_" + generateUniqueName();
         indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
     }
 

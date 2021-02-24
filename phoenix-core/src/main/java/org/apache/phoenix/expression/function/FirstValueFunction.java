@@ -30,7 +30,7 @@ import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.types.PBoolean;
 
 /**
- * Built-in function for FIRST_VALUE(<expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC) aggregate
+ * Built-in function for {@code FIRST_VALUE(<expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC) aggregate }
  * function
  *
  */

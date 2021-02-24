@@ -19,6 +19,7 @@ import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYS
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
@@ -40,7 +41,6 @@ import java.util.Set;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -92,7 +92,7 @@ public class ViewUtil {
 
     /**
      * Find all the descendant views of a given table or view in a depth-first fashion.
-     * Note that apart from scanning the parent->child links, we also validate each view
+     * Note that apart from scanning the {@code parent->child } links, we also validate each view
      * by trying to resolve it.
      * Use {@link ViewUtil#findAllRelatives(Table, byte[], byte[], byte[], LinkType,
      * TableViewFinderResult)} if you want to find other links and don't care about orphan results.
@@ -295,7 +295,7 @@ public class ViewUtil {
     
     /**
      * Check metadata to find if a given table/view has any immediate child views. Note that this
-     * is not resilient to orphan parent->child links.
+     * is not resilient to orphan {@code parent->child } links.
      * @param sysCatOrsysChildLink For older (pre-4.15.0) clients, we look for child links inside
      *                             SYSTEM.CATALOG, otherwise we look for them inside
      *                             SYSTEM.CHILD_LINK
@@ -332,14 +332,15 @@ public class ViewUtil {
     }
 
     /**
-     * Attempt to drop an orphan child view i.e. a child view for which we see a parent->child entry
+     * Attempt to drop an orphan child view i.e. a child view for which we see a
+     * {@code parent->child } entry
      * in SYSTEM.CHILD_LINK/SYSTEM.CATALOG (as a child) but for whom the parent no longer exists.
      * @param env Region Coprocessor environment
      * @param tenantIdBytes tenantId of the parent
      * @param schemaName schema of the parent
      * @param tableOrViewName parent table/view name
      * @param sysCatOrSysChildLink SYSTEM.CATALOG or SYSTEM.CHILD_LINK which is used to find the
-     *                             parent->child linking rows
+     *                             {@code parent->child } linking rows
      * @throws IOException thrown if there is an error scanning SYSTEM.CHILD_LINK or SYSTEM.CATALOG
      * @throws SQLException thrown if there is an error getting a connection to the server or
      * an error retrieving the PTable for a child view
@@ -431,8 +432,8 @@ public class ViewUtil {
 
 
     /**
-     * Determines whether we should use SYSTEM.CATALOG or SYSTEM.CHILD_LINK to find parent->child
-     * links i.e. {@link LinkType#CHILD_TABLE}.
+     * Determines whether we should use SYSTEM.CATALOG or SYSTEM.CHILD_LINK to find
+     * {@code parent->child } links i.e. {@link LinkType#CHILD_TABLE}.
      * If the client is older than 4.15.0 and the SYSTEM.CHILD_LINK table does not exist, we use
      * the SYSTEM.CATALOG table. In all other cases, we use the SYSTEM.CHILD_LINK table.
      * This is required for backwards compatibility.
@@ -445,16 +446,14 @@ public class ViewUtil {
             Configuration conf) throws SQLException, IOException {
         byte[] fullTableName = SYSTEM_CHILD_LINK_NAME_BYTES;
         if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG) {
-            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(
-                    conf).unwrap(PhoenixConnection.class);
-                    HBaseAdmin admin = connection.getQueryServices().getAdmin()) {
 
+            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(conf).
+                    unwrap(PhoenixConnection.class)) {
+                PhoenixRuntime.getTableNoCache(connection, SYSTEM_CHILD_LINK_NAME);
+            } catch (TableNotFoundException e) {
                 // If this is an old client and the CHILD_LINK table doesn't exist i.e. metadata
                 // hasn't been updated since there was never a connection from a 4.15 client
-                if (!admin.tableExists(SchemaUtil.getPhysicalTableName(
-                        SYSTEM_CHILD_LINK_NAME_BYTES, conf))) {
-                    fullTableName = SYSTEM_CATALOG_NAME_BYTES;
-                }
+                fullTableName = SYSTEM_CATALOG_NAME_BYTES;
             } catch (SQLException e) {
                 logger.error("Error getting a connection on the server : " + e);
                 throw e;
@@ -756,12 +755,6 @@ public class ViewUtil {
                 .setTransactionProvider(parentTable.getTransactionProvider())
                 .setAutoPartitionSeqName(parentTable.getAutoPartitionSeqName())
                 .setAppendOnlySchema(parentTable.isAppendOnlySchema())
-                .setImmutableStorageScheme(parentTable.getImmutableStorageScheme() == null ?
-                        PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN :
-                        parentTable.getImmutableStorageScheme())
-                .setQualifierEncodingScheme(parentTable.getEncodingScheme() == null ?
-                        PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS :
-                        parentTable.getEncodingScheme())
                 .setBaseColumnCount(baseTableColumnCount)
                 .setTimeStamp(maxTableTimestamp)
                 .setExcludedColumns(ImmutableList.copyOf(excludedColumns))

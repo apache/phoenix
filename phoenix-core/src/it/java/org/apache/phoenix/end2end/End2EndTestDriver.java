@@ -27,6 +27,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
+//This is coming from HBase 1.x, and is intentionally not using the phoenix-thirdparty version
 import org.apache.commons.cli.CommandLine;
 import org.apache.hadoop.hbase.ClassFinder;
 import org.apache.hadoop.hbase.ClassFinder.FileNameFilter;

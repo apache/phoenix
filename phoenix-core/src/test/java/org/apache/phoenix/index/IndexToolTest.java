@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.index;
 
-import org.apache.commons.cli.CommandLine;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
 import org.apache.phoenix.mapreduce.index.IndexTool;

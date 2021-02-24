@@ -37,7 +37,7 @@ import org.apache.phoenix.schema.PDatum;
  * 2) the retrieve param metadata case where we don't have the bind values.
  * 
  * In both cases, during query compilation we figure out what type the bind variable
- * "should" be, based on how it's used in the query. For example foo < ? would expect
+ * "should" be, based on how it's used in the query. For example {@code foo < ? } would expect
  * that the bind variable type matches or can be coerced to the type of foo. For (1),
  * we check that the bind value has the correct type and for (2) we set the param
  * metadata type.

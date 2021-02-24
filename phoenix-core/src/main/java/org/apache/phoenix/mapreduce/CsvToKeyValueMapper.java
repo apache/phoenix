@@ -36,7 +36,7 @@ import com.google.common.collect.Iterables;
 
 /**
  * MapReduce mapper that converts CSV input lines into KeyValues that can be written to HFiles.
- * <p/>
+ * 
  * KeyValues are produced by executing UPSERT statements on a Phoenix connection and then
  * extracting the created KeyValues and rolling back the statement execution before it is
  * committed to HBase.
@@ -92,7 +92,7 @@ public class CsvToKeyValueMapper extends FormatToBytesWritableMapper<CSVRecord> 
     static class CsvLineParser implements LineParser<CSVRecord> {
         private final CSVFormat csvFormat;
 
-        CsvLineParser(char fieldDelimiter, char quote, char escape) {
+        CsvLineParser(Character fieldDelimiter, Character quote, Character escape) {
             this.csvFormat = CSVFormat.DEFAULT
                     .withIgnoreEmptyLines(true)
                     .withDelimiter(fieldDelimiter)

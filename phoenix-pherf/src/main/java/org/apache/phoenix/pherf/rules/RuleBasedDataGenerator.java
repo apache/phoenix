@@ -24,7 +24,7 @@ public interface RuleBasedDataGenerator {
      * Get data value based on the rules
      * Implementations should be thread safe as multiple theads will call it in parallel
      *
-     * @return {@link org.apache.phoenix.pherf.rules.DataValue} Container Type --> Value mapping
+     * @return {@link org.apache.phoenix.pherf.rules.DataValue} {@code Container Type --> Value } mapping
      */
     DataValue getDataValue();
 }

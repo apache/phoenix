@@ -24,11 +24,13 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.16.0-SNAPSHOT</version>
+    <version>4.17.0-SNAPSHOT</version>
   </parent>
-  <artifactId>phoenix-server</artifactId>
-  <name>Phoenix Server</name>
-  <description>Phoenix Server</description>
+
+  <artifactId>phoenix-server-${hbase.suffix}</artifactId>
+  <name>Phoenix Server JAR</name>
+  <description>Phoenix HBase Server Side JAR</description>
+
   <packaging>jar</packaging>
   <properties>
     <!-- Don't make a test-jar -->
@@ -96,6 +98,8 @@
                 <artifactSet>
                 <includes>
                   <include>org.apache.phoenix:phoenix-core</include>
+                  <include>org.apache.phoenix.thirdparty:phoenix-shaded-commons-cli</include>
+                  <include>org.apache.phoenix:phoenix-hbase-compat-${hbase.compat.version}</include>
                   <include>org.iq80.snappy:snappy</include>
                   <include>org.antlr:antlr*</include>
                   <include>org.apache.tephra:tephra*</include>
@@ -150,6 +154,11 @@
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
+      <optional>false</optional>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>

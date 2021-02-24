@@ -48,7 +48,7 @@ public class IndexMetaDataCacheClient {
      * Construct client used to send index metadata to each region server
      * for caching during batched put for secondary index maintenance.
      * @param connection the client connection
-     * @param cacheUsingTableRef table ref to table that will use the cache during its scan
+     * @param cacheUsingTable table ref to table that will use the cache during its scan
      */
     public IndexMetaDataCacheClient(PhoenixConnection connection, PTable cacheUsingTable) {
         serverCache = new ServerCacheClient(connection);

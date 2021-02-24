@@ -165,8 +165,6 @@ public interface PhoenixTransactionContext {
      *
      * @param dataTable  the table that the DDL command works on
      * @throws SQLException
-     * @throws InterruptedException
-     * @throws TimeoutException
      */
     public void commitDDLFence(PTable dataTable)
             throws SQLException;

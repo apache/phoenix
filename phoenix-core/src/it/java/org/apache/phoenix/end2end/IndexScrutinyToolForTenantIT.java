@@ -46,6 +46,7 @@ import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.INVA
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.VALID_ROW_COUNT;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -94,13 +95,16 @@ public  class IndexScrutinyToolForTenantIT extends IndexScrutinyToolBaseIT {
         connGlobal.commit();
     }
 
-    @After public void teardown() throws SQLException {
+    @After
+    public void teardown() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         if (connGlobal != null) {
             connGlobal.close();
         }
         if (connTenant != null) {
             connTenant.close();
         }
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     /**

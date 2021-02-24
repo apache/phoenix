@@ -25,6 +25,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.CUSTOM_ENTITY_DATA_FULL_NAME;
+import static org.apache.phoenix.util.TestUtil.ENTITY_HISTORY_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.PTSDB_NAME;
 import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
@@ -44,7 +45,9 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashSet;
 import java.util.Properties;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
@@ -349,6 +352,60 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(seq3, rs.getString("TABLE_NAME"));
             assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
             assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testShowSchemas() throws SQLException {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            ResultSet rs = conn.prepareStatement("show schemas").executeQuery();
+            assertTrue(rs.next());
+            assertEquals("SYSTEM", rs.getString("TABLE_SCHEM"));
+            assertEquals(null, rs.getString("TABLE_CATALOG"));
+            assertFalse(rs.next());
+            // Create another schema and make sure it is listed.
+            String schema = "showschemastest_" + generateUniqueName();
+            String fullTable = schema + "." + generateUniqueName();
+            ensureTableCreated(getUrl(), fullTable, ENTITY_HISTORY_TABLE_NAME, null);
+            // show schemas
+            rs = conn.prepareStatement("show schemas").executeQuery();
+            Set<String> schemas = new HashSet<>();
+            while (rs.next()) {
+                schemas.add(rs.getString("TABLE_SCHEM"));
+                assertEquals(null, rs.getString("TABLE_CATALOG"));
+            }
+            assertEquals(2, schemas.size());
+            assertTrue(schemas.contains("SYSTEM"));
+            assertTrue(schemas.contains(schema.toUpperCase()));
+            // show schemas like 'SYST%' and only SYSTEM should show up.
+            rs = conn.prepareStatement("show schemas like 'SYST%'").executeQuery();
+            assertTrue(rs.next());
+            assertEquals("SYSTEM", rs.getString("TABLE_SCHEM"));
+            assertEquals(null, rs.getString("TABLE_CATALOG"));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testShowTables() throws SQLException {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // List all the tables in a particular schema.
+            ResultSet rs = conn.prepareStatement("show tables in SYSTEM").executeQuery();
+            Set<String> tables = new HashSet<>();
+            while (rs.next()) {
+                tables.add(rs.getString("TABLE_NAME"));
+                assertEquals("SYSTEM", rs.getString("TABLE_SCHEM"));
+            }
+            assertEquals(8, tables.size());
+            assertTrue(tables.contains("CATALOG"));
+            assertTrue(tables.contains("FUNCTION"));
+
+            tables.clear();
+            // Add a filter on the table name.
+            rs = conn.prepareStatement("show tables in SYSTEM like 'FUNC%'").executeQuery();
+            while (rs.next()) tables.add(rs.getString("TABLE_NAME"));
+            assertEquals(1, tables.size());
+            assertTrue(tables.contains("FUNCTION"));
         }
     }
 

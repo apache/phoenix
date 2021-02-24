@@ -21,7 +21,7 @@
 	<parent>
 		<groupId>org.apache.phoenix</groupId>
 		<artifactId>phoenix</artifactId>
-		<version>4.16.0-SNAPSHOT</version>
+		<version>4.17.0-SNAPSHOT</version>
 	</parent>
 
 	<artifactId>phoenix-pherf</artifactId>
@@ -48,6 +48,12 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
+			<groupId>org.apache.phoenix</groupId>
+			<artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
+			<optional>false</optional>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
 			<groupId>com.googlecode.java-diff-utils</groupId>
 			<artifactId>diffutils</artifactId>
 			<version>1.2.1</version>
@@ -63,8 +69,8 @@
 			<version>3.3</version>
 		</dependency>
     <dependency>
-      <groupId>commons-cli</groupId>
-      <artifactId>commons-cli</artifactId>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
+      <artifactId>phoenix-shaded-commons-cli</artifactId>
     </dependency>
 
 		<!-- Test Dependencies -->
@@ -175,25 +181,6 @@
 			</plugin>
 		<plugin>
 			<groupId>org.apache.maven.plugins</groupId>
-			<artifactId>maven-install-plugin</artifactId>
-			<executions>
-				<execution>
-					<goals>
-						<goal>install-file</goal>
-					</goals>
-					<id>default-install</id>
-					<configuration>
-						<skip>true</skip>
-					</configuration>
-					<phase>install</phase>
-				</execution>
-			</executions>
-			<configuration>
-				<file>${basedir}/target/phoenix-pherf-${project.version}-minimal.jar</file>
-			</configuration>
-		</plugin>
-		<plugin>
-			<groupId>org.apache.maven.plugins</groupId>
 			<artifactId>maven-shade-plugin</artifactId>
 			<executions>
 				<execution>
@@ -202,10 +189,9 @@
 						<goal>shade</goal>
 					</goals>
 					<configuration>
-						<finalName>phoenix-pherf-${project.version}-minimal</finalName>
-						<shadedArtifactAttached>false</shadedArtifactAttached>
-						<promoteTransitiveDependencies>true</promoteTransitiveDependencies>
+						<promoteTransitiveDependencies>false</promoteTransitiveDependencies>
 						<shadeTestJar>false</shadeTestJar>
+						<dependencyReducedPomLocation>${basedir}/target/pom.xml</dependencyReducedPomLocation>
 						<transformers>
 							<transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
 							<transformer
@@ -227,10 +213,11 @@
 						<artifactSet>
 							<includes>
 								<include>org.apache.phoenix:phoenix-pherf</include>
+                                <include>com.google.guava:guava</include>
 								<include>com.googlecode.java-diff-utils:diffutils</include>
 								<include>org.apache.commons:commons-lang3</include>
 								<include>org.apache.commons:commons-math3</include>
-								<include>commons-cli:commons-cli</include>
+								<include>org.apache.phoenix.thirdparty:phoenix-shaded-commons-cli</include>
 								<include>joda-time:joda-time</include>
 								<include>org.apache.commons:commons-csv</include>
 								<include>commons-lang:commons-lang</include>
@@ -249,228 +236,10 @@
 								</excludes>
 							</filter>
 						</filters>
-
-						<relocations>
-
-							<!-- COM relocation -->
-							<relocation>
-								<pattern>com.codahale</pattern>
-								<shadedPattern>${shaded.package}.com.codahale</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>com.fasterxml</pattern>
-								<shadedPattern>${shaded.package}.com.fasterxml</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>com.jamesmurty</pattern>
-								<shadedPattern>${shaded.package}.com.jamesmurty</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>com.jcraft</pattern>
-								<shadedPattern>${shaded.package}.com.jcraft</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>com.lmax</pattern>
-								<shadedPattern>${shaded.package}.com.lmax</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>com.thoughtworks</pattern>
-								<shadedPattern>${shaded.package}.com.thoughtworks</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>com.yammer</pattern>
-								<shadedPattern>${shaded.package}.com.yammer</shadedPattern>
-							</relocation>
-
-							<!-- IO relocations -->
-							<relocation>
-								<pattern>io.netty</pattern>
-								<shadedPattern>${shaded.package}.io.netty</shadedPattern>
-							</relocation>
-
-							<!-- ORG relocations -->
-							<relocation>
-								<pattern>org.antlr</pattern>
-								<shadedPattern>${shaded.package}.org.antlr</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.aopalliance</pattern>
-								<shadedPattern>${shaded.package}.org.aopalliance</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.codehaus</pattern>
-								<shadedPattern>${shaded.package}.org.codehaus</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.fusesource</pattern>
-								<shadedPattern>${shaded.package}.org.fusesource</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.hamcrest</pattern>
-								<shadedPattern>${shaded.package}.org.hamcrest</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.hsqldb</pattern>
-								<shadedPattern>${shaded.package}.org.hsqldb</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.iq80</pattern>
-								<shadedPattern>${shaded.package}.org.iq80</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.jamon</pattern>
-								<shadedPattern>${shaded.package}.org.jamon</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.jboss</pattern>
-								<shadedPattern>${shaded.package}.org.jboss</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.jcodings</pattern>
-								<shadedPattern>${shaded.package}.org.jcodings</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.jets3t</pattern>
-								<shadedPattern>${shaded.package}.org.jets3t</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.joda</pattern>
-								<shadedPattern>${shaded.package}.org.joda</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.joni</pattern>
-								<shadedPattern>${shaded.package}.org.joni</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.junit</pattern>
-								<shadedPattern>${shaded.package}.org.junit</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.kosmix</pattern>
-								<shadedPattern>${shaded.package}.org.kosmix</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.mortbay</pattern>
-								<shadedPattern>${shaded.package}.org.mortbay</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.objectweb</pattern>
-								<shadedPattern>${shaded.package}.org.objectweb</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.stringtemplate</pattern>
-								<shadedPattern>${shaded.package}.org.stringtemplate</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.tukaani</pattern>
-								<shadedPattern>${shaded.package}.org.tukaani</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.znerd</pattern>
-								<shadedPattern>${shaded.package}.org.znerd</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.apache.avro</pattern>
-								<shadedPattern>${shaded.package}.org.apache.avro</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.apache.commons</pattern>
-								<shadedPattern>${shaded.package}.org.apache.commons</shadedPattern>
-								<excludes>
-									<exclude>org.apache.commons.csv.**</exclude>
-									<exclude>org.apache.commons.logging.**</exclude>
-								</excludes>
-							</relocation>
-							<relocation>
-								<pattern>org.apache.directory</pattern>
-								<shadedPattern>${shaded.package}.org.apache.directory</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.apache.http</pattern>
-								<shadedPattern>${shaded.package}.org.apache.http</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.apache.jasper</pattern>
-								<shadedPattern>${shaded.package}.org.apache.jasper</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.apache.jute</pattern>
-								<shadedPattern>${shaded.package}.org.apache.jute</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.apache.mina</pattern>
-								<shadedPattern>${shaded.package}.org.apache.mina</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.apache.oro</pattern>
-								<shadedPattern>${shaded.package}.org.apache.oro</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.apache.taglibs</pattern>
-								<shadedPattern>${shaded.package}.org.apache.taglibs</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.apache.thrift</pattern>
-								<shadedPattern>${shaded.package}.org.apache.thrift</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.apache.tools</pattern>
-								<shadedPattern>${shaded.package}.org.apache.tools</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.apache.twill</pattern>
-								<shadedPattern>${shaded.package}.org.apache.twill</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.apache.velocity</pattern>
-								<shadedPattern>${shaded.package}.org.apache.velocity</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>org.apache.zookeeper</pattern>
-								<shadedPattern>${shaded.package}.org.apache.zookeeper</shadedPattern>
-							</relocation>
-
-							<!-- NET relocations -->
-							<relocation>
-								<pattern>net</pattern>
-								<shadedPattern>${shaded.package}.net</shadedPattern>
-							</relocation>
-
-							<!-- Misc relocations -->
-							<relocation>
-								<pattern>antlr</pattern>
-								<shadedPattern>${shaded.package}.antlr</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>it.unimi</pattern>
-								<shadedPattern>${shaded.package}.it.unimi</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>jline</pattern>
-								<shadedPattern>${shaded.package}.jline</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>junit</pattern>
-								<shadedPattern>${shaded.package}.junit</shadedPattern>
-							</relocation>
-						</relocations>
 					</configuration>
 				</execution>
 			</executions>
 		</plugin>
-
-
-
-			<plugin>
-				<groupId>org.apache.rat</groupId>
-				<artifactId>apache-rat-plugin</artifactId>
-				<configuration>
-					<excludes>
-						<exclude>*/RESULTS/**</exclude>
-						<exclude>README.md</exclude>
-					</excludes>
-				</configuration>
-			</plugin>
 		</plugins>
 	</build>
 </project>
