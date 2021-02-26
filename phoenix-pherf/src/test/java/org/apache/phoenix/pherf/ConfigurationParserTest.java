@@ -26,7 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 
-import com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.pherf.configuration.*;
 import org.apache.phoenix.pherf.rules.DataValue;
 import org.junit.Test;
