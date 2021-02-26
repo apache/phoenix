@@ -103,6 +103,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY_ID;
@@ -360,6 +361,7 @@ public interface QueryConstants {
             COLUMN_QUALIFIER_COUNTER + " INTEGER, " +
             USE_STATS_FOR_PARALLELIZATION + " BOOLEAN, " +
             TRANSACTION_PROVIDER + " TINYINT, " +
+            PHYSICAL_TABLE_NAME + " VARCHAR," +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ","
             + TABLE_SCHEM + "," + TABLE_NAME + "," + COLUMN_NAME + "," + COLUMN_FAMILY + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
