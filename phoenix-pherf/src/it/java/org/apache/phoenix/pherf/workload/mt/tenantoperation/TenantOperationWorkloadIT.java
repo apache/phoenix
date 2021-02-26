@@ -19,9 +19,9 @@
 
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
-import com.clearspring.analytics.util.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.base.Supplier;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import com.lmax.disruptor.LifecycleAware;
 import com.lmax.disruptor.WorkHandler;

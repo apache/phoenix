@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
+import org.apache.hbase.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import com.lmax.disruptor.BlockingWaitStrategy;
 import com.lmax.disruptor.EventFactory;
@@ -26,7 +27,6 @@ import com.lmax.disruptor.RingBuffer;
 import com.lmax.disruptor.WorkHandler;
 import com.lmax.disruptor.dsl.Disruptor;
 import com.lmax.disruptor.dsl.ProducerType;
-import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
@@ -138,7 +138,7 @@ public class TenantOperationWorkload implements MultiTenantWorkload, Workload {
         Scenario scenario = operationFactory.getScenario();
         String currentThreadName = Thread.currentThread().getName();
         disruptor = new Disruptor<TenantOperationEvent>(TenantOperationEvent.EVENT_FACTORY, DEFAULT_BUFFER_SIZE,
-                Threads.getNamedThreadFactory(currentThreadName + "." + scenario.getName() ),
+                new ThreadFactoryBuilder().setNameFormat(currentThreadName + "." + scenario.getName() ).build(),
                 ProducerType.SINGLE, new BlockingWaitStrategy());
 
         this.disruptor.setDefaultExceptionHandler(this.exceptionHandler);
