@@ -351,8 +351,8 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             // i.e. without _IDX_ and with _IDX_ respectively
             physicalTable = sourcePhysicalName;
         } else {
-            table = pSourceTable.getTableName().toString();
             schema = pSourceTable.getSchemaName().toString();
+            table =  SchemaUtil.getTableNameFromFullName(pSourceTable.getPhysicalName().getString());
             physicalTable = SchemaUtil
                     .getPhysicalHBaseTableName(schema, table, isNamespaceEnabled).toString();
         }

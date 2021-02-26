@@ -96,8 +96,8 @@ import static org.junit.Assert.fail;
 public class ViewTTLIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(ViewTTLIT.class);
     private static final String ORG_ID_FMT = "00D0x000%s";
-    private static final String ID_FMT = "00A0y000%07d";
-    private static final String ZID_FMT = "00B0y000%07d";
+    static final String ID_FMT = "00A0y000%07d";
+    static final String ZID_FMT = "00B0y000%07d";
     private static final String PHOENIX_TTL_HEADER_SQL = "SELECT PHOENIX_TTL FROM SYSTEM.CATALOG "
             + "WHERE %s AND TABLE_SCHEM = '%s' AND TABLE_NAME = '%s' AND TABLE_TYPE = '%s'";
 
@@ -108,15 +108,15 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             = "ALTER VIEW \"%s\".\"%s\" ADD IF NOT EXISTS %s CHAR(10)";
     private static final int DEFAULT_NUM_ROWS = 5;
 
-    private static final String COL1_FMT = "a%05d";
-    private static final String COL2_FMT = "b%05d";
-    private static final String COL3_FMT = "c%05d";
-    private static final String COL4_FMT = "d%05d";
-    private static final String COL5_FMT = "e%05d";
-    private static final String COL6_FMT = "f%05d";
-    private static final String COL7_FMT = "g%05d";
-    private static final String COL8_FMT = "h%05d";
-    private static final String COL9_FMT = "i%05d";
+    static final String COL1_FMT = "a%05d";
+    static final String COL2_FMT = "b%05d";
+    static final String COL3_FMT = "c%05d";
+    static final String COL4_FMT = "d%05d";
+    static final String COL5_FMT = "e%05d";
+    static final String COL6_FMT = "f%05d";
+    static final String COL7_FMT = "g%05d";
+    static final String COL8_FMT = "h%05d";
+    static final String COL9_FMT = "i%05d";
 
     // Scans the HBase rows directly and asserts
     private void assertUsingHBaseRows(byte[] hbaseTableName,
@@ -2440,9 +2440,9 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private void verifyRowsBeforeTTLExpiration(
-            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> upsertedData,
-            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> fetchedData) {
+    static void verifyRowsBeforeTTLExpiration(
+            com.google.common.collect.Table<String, String, Object> upsertedData,
+            com.google.common.collect.Table<String, String, Object> fetchedData) {
 
         Set<String> upsertedRowKeys = upsertedData.rowKeySet();
         Set<String> fetchedRowKeys = fetchedData.rowKeySet();

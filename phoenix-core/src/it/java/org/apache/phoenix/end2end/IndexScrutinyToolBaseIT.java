@@ -17,6 +17,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyMapper;
+import org.apache.phoenix.mapreduce.index.IndexScrutinyMapperForTest;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
@@ -73,7 +74,7 @@ public class IndexScrutinyToolBaseIT extends BaseTest {
         return scrutiny.getJobs();
     }
 
-    protected String[] getArgValues(String schemaName, String dataTable, String indxTable, Long batchSize,
+    public String[] getArgValues(String schemaName, String dataTable, String indxTable, Long batchSize,
             SourceTable sourceTable, boolean outputInvalidRows, OutputFormat outputFormat, Long maxOutputRows, String tenantId, Long scrutinyTs) {
         final List<String> args = Lists.newArrayList();
         if (schemaName != null) {
@@ -127,6 +128,16 @@ public class IndexScrutinyToolBaseIT extends BaseTest {
             args.add(tenantId);
         }
         return args.toArray(new String[0]);
+    }
+
+    public static List<Job> runScrutinyTool(String schemaName, String dataTableName, String indexTableName,
+            Long batchSize, SourceTable sourceTable) throws Exception {
+        IndexScrutinyToolBaseIT it = new IndexScrutinyToolBaseIT();
+        final String[]
+                cmdArgs =
+                it.getArgValues(schemaName, dataTableName, indexTableName, batchSize, sourceTable,
+                        false, null, null, null, Long.MAX_VALUE);
+        return it.runScrutiny(IndexScrutinyMapperForTest.class, cmdArgs);
     }
 
     protected long getCounterValue(Counters counters, Enum<PhoenixScrutinyJobCounters> counter) {

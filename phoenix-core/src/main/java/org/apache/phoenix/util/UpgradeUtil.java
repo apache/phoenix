@@ -1343,7 +1343,7 @@ public class UpgradeUtil {
      */
     private static void syncViewIndexTable(ConnectionQueryServices cqs, PTable baseTable, ColumnFamilyDescriptor defaultColFam,
             Map<String, Object> syncedProps, Set<TableDescriptor> tableDescsToSync) throws SQLException {
-        String viewIndexName = MetaDataUtil.getViewIndexPhysicalName(baseTable.getPhysicalName().getString());
+        String viewIndexName = MetaDataUtil.getViewIndexPhysicalName(baseTable.getName().getString());
         if (!Strings.isNullOrEmpty(viewIndexName)) {
             try {
                 addTableDescIfPropsChanged(cqs.getTableDescriptor(Bytes.toBytes(viewIndexName)),
@@ -2364,7 +2364,7 @@ public class UpgradeUtil {
     private static void updateIndexesSequenceIfPresent(PhoenixConnection connection, PTable dataTable)
             throws SQLException {
         PName tenantId = connection.getTenantId();
-        PName physicalName = dataTable.getPhysicalName();
+        PName physicalName = dataTable.getName();
         PName oldPhysicalName = PNameFactory.newName(
                 physicalName.toString().replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR));
         String oldSchemaName = MetaDataUtil.getViewIndexSequenceSchemaName(oldPhysicalName, false);

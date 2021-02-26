@@ -596,6 +596,19 @@ public class MetaDataUtil {
         return getIndexPhysicalName(physicalTableName, VIEW_INDEX_TABLE_PREFIX);
     }
 
+    public static String getNamespaceMappedName(PName tableName, boolean isNamespaceMapped) {
+        String logicalName = tableName.getString();
+        if (isNamespaceMapped) {
+            logicalName = logicalName.replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR);
+        }
+        return logicalName;
+    }
+
+    public static String getViewIndexPhysicalName(PName logicalTableName, boolean isNamespaceMapped) {
+        String logicalName = getNamespaceMappedName(logicalTableName, isNamespaceMapped);
+        return getIndexPhysicalName(logicalName, VIEW_INDEX_TABLE_PREFIX);
+    }
+
     private static byte[] getIndexPhysicalName(byte[] physicalTableName, String indexPrefix) {
         return Bytes.toBytes(getIndexPhysicalName(Bytes.toString(physicalTableName), indexPrefix));
     }
@@ -680,13 +693,13 @@ public class MetaDataUtil {
         return new SequenceKey(isNamespaceMapped ? tenantId : null, schemaName, tableName, nSaltBuckets);
     }
 
-    public static String getViewIndexSequenceSchemaName(PName physicalName, boolean isNamespaceMapped) {
+    public static String getViewIndexSequenceSchemaName(PName logicalBaseTableName, boolean isNamespaceMapped) {
         if (!isNamespaceMapped) {
-            String baseTableName = SchemaUtil.getParentTableNameFromIndexTable(physicalName.getString(),
+            String baseTableName = SchemaUtil.getParentTableNameFromIndexTable(logicalBaseTableName.getString(),
                 MetaDataUtil.VIEW_INDEX_TABLE_PREFIX);
             return SchemaUtil.getSchemaNameFromFullName(baseTableName);
         } else {
-            return SchemaUtil.getSchemaNameFromFullName(physicalName.toString());
+            return SchemaUtil.getSchemaNameFromFullName(logicalBaseTableName.toString());
         }
 
     }

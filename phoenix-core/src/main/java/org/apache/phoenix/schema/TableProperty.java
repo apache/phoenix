@@ -294,6 +294,12 @@ public enum TableProperty {
         public Object getPTableValue(PTable table) {
             return table.isChangeDetectionEnabled();
         }
+    },
+
+    PHYSICAL_TABLE_NAME(PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false, false) {
+        @Override public Object getPTableValue(PTable table) {
+            return table.getPhysicalName(true);
+        }
     }
     ;
 

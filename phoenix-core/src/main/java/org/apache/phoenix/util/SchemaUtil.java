@@ -325,6 +325,10 @@ public class SchemaUtil {
                 SEPARATOR_BYTE_ARRAY, Bytes.toBytes(familyName));
     }
 
+    public static PName getTableName(PName schemaName, PName tableName) {
+        return PNameFactory.newName(getName(schemaName==null? null : schemaName.getString(), tableName.getString(), false));
+    }
+
     public static String getTableName(String schemaName, String tableName) {
         return getName(schemaName,tableName, false);
     }
