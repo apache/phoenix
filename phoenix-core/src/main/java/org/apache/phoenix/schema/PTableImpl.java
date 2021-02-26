@@ -29,6 +29,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
@@ -103,6 +104,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -121,7 +123,6 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-
 
 /**
  *
@@ -144,6 +145,7 @@ public class PTableImpl implements PTable {
     private final PName name;
     private final PName schemaName;
     private final PName tableName;
+    private final PName physicalTableNameColumnInSyscat;
     private final PName tenantId;
     private final PTableType type;
     private final PIndexState state;
@@ -169,6 +171,7 @@ public class PTableImpl implements PTable {
     private final PName parentName;
     private final PName parentSchemaName;
     private final PName parentTableName;
+    private final PName baseTableLogicalName;
     private final List<PName> physicalNames;
     private final boolean isImmutableRows;
     private final PName defaultFamilyName;
@@ -206,6 +209,7 @@ public class PTableImpl implements PTable {
         private PName name;
         private PName schemaName = PName.EMPTY_NAME;
         private PName tableName = PName.EMPTY_NAME;
+        private PName physicalTableName = PName.EMPTY_NAME;
         private PName tenantId;
         private PTableType type;
         private PIndexState state;
@@ -227,6 +231,7 @@ public class PTableImpl implements PTable {
         private PName parentName;
         private PName parentSchemaName;
         private PName parentTableName;
+        private PName baseTableLogicalName;
         private List<PName> physicalNames;
         private boolean isImmutableRows;
         private IndexMaintainer indexMaintainer;
@@ -404,6 +409,11 @@ public class PTableImpl implements PTable {
             return this;
         }
 
+        public Builder setBaseTableLogicalName(PName baseTableLogicalName) {
+            this.baseTableLogicalName = baseTableLogicalName;
+            return this;
+        }
+
         public Builder setPhysicalNames(List<PName> physicalNames) {
             this.physicalNames = physicalNames;
             return this;
@@ -505,6 +515,14 @@ public class PTableImpl implements PTable {
 
         public Builder setRowTimestampColPos(int rowTimestampColPos) {
             this.rowTimestampColPos = rowTimestampColPos;
+            return this;
+        }
+
+        public Builder setPhysicalTableName(PName physicalTableName) {
+            if (physicalTableName != null) {
+                propertyValues.put(PHYSICAL_TABLE_NAME, String.valueOf(physicalTableName));
+            }
+            this.physicalTableName = physicalTableName;
             return this;
         }
 
@@ -818,6 +836,7 @@ public class PTableImpl implements PTable {
         this.name = builder.name;
         this.schemaName = builder.schemaName;
         this.tableName = builder.tableName;
+        this.physicalTableNameColumnInSyscat = builder.physicalTableName;
         this.tenantId = builder.tenantId;
         this.type = builder.type;
         this.state = builder.state;
@@ -839,6 +858,7 @@ public class PTableImpl implements PTable {
         this.parentName = builder.parentName;
         this.parentSchemaName = builder.parentSchemaName;
         this.parentTableName = builder.parentTableName;
+        this.baseTableLogicalName = builder.baseTableLogicalName;
         this.physicalNames = builder.physicalNames;
         this.isImmutableRows = builder.isImmutableRows;
         this.indexMaintainer = builder.indexMaintainer;
@@ -928,6 +948,7 @@ public class PTableImpl implements PTable {
                 .setTenantId(table.getTenantId())
                 .setSchemaName(table.getSchemaName())
                 .setTableName(table.getTableName())
+                .setPhysicalTableName(table.getPhysicalName(true))
                 .setPkName(table.getPKName())
                 .setDefaultFamilyName(table.getDefaultFamilyName())
                 .setRowKeyOrderOptimizable(table.rowKeyOrderOptimizable())
@@ -936,6 +957,7 @@ public class PTableImpl implements PTable {
                         Collections.<PTable>emptyList() : table.getIndexes())
                 .setParentSchemaName(table.getParentSchemaName())
                 .setParentTableName(table.getParentTableName())
+                .setBaseTableLogicalName(table.getBaseTableLogicalName())
                 .setPhysicalNames(table.getPhysicalNames() == null ?
                         ImmutableList.<PName>of() : ImmutableList.copyOf(table.getPhysicalNames()))
                 .setViewModifiedUseStatsForParallelization(table
@@ -1559,7 +1581,28 @@ public class PTableImpl implements PTable {
     @Override
     public PName getParentName() {
         // a view on a table will not have a parent name but will have a physical table name (which is the parent)
-        return (type!=PTableType.VIEW || parentName!=null) ? parentName : getPhysicalName();
+        return (type!=PTableType.VIEW || parentName!=null) ? parentName :
+                ((baseTableLogicalName != null && !Strings.isNullOrEmpty(baseTableLogicalName.getString()))? baseTableLogicalName
+                        : getPhysicalName());
+    }
+
+    @Override
+    public PName getBaseTableLogicalName() {
+        PName result = null;
+        if (baseTableLogicalName != null && !Strings.isNullOrEmpty(baseTableLogicalName.getString())) {
+            result = baseTableLogicalName;
+        } else {
+            if (parentName != null) {
+                result = parentName;
+            } else {
+                if (type == PTableType.VIEW) {
+                    result = getPhysicalName();
+                } else if (type == PTableType.INDEX) {
+                    result = SchemaUtil.getTableName(parentSchemaName, parentTableName);
+                }
+            }
+        }
+        return result;
     }
 
     @Override
@@ -1586,10 +1629,26 @@ public class PTableImpl implements PTable {
 
     @Override
     public PName getPhysicalName() {
+        // For views, physicalName is base table physical name. There might be a case where the Phoenix table is pointing to another physical table.
+        // In that case, physicalTableName is not null
         if (physicalNames.isEmpty()) {
+            if (physicalTableNameColumnInSyscat != null && !Strings.isNullOrEmpty(
+                    physicalTableNameColumnInSyscat.getString())) {
+                return SchemaUtil.getPhysicalHBaseTableName(schemaName,
+                        physicalTableNameColumnInSyscat, isNamespaceMapped);
+            }
             return SchemaUtil.getPhysicalHBaseTableName(schemaName, tableName, isNamespaceMapped);
         } else {
             return PNameFactory.newName(physicalNames.get(0).getBytes());
+        }
+    }
+
+    @Override
+    public PName getPhysicalName(boolean returnColValueFromSyscat) {
+        if (returnColValueFromSyscat) {
+            return physicalTableNameColumnInSyscat;
+        } else {
+            return getPhysicalName();
         }
     }
 
@@ -1646,6 +1705,10 @@ public class PTableImpl implements PTable {
         }
         PName schemaName = PNameFactory.newName(table.getSchemaNameBytes().toByteArray());
         PName tableName = PNameFactory.newName(table.getTableNameBytes().toByteArray());
+        PName physicalTableName = null;
+        if (table.getPhysicalTableNameBytes() != null) {
+            physicalTableName = PNameFactory.newName(table.getPhysicalTableNameBytes().toByteArray());
+        }
         PTableType tableType = PTableType.values()[table.getTableType().ordinal()];
         PIndexState indexState = null;
         if (table.hasIndexState()) {
@@ -1682,9 +1745,13 @@ public class PTableImpl implements PTable {
         boolean isImmutableRows = table.getIsImmutableRows();
         PName parentSchemaName = null;
         PName parentTableName = null;
+        PName parentLogicalName = null;
         if (table.hasParentNameBytes()) {
             parentSchemaName = PNameFactory.newName(SchemaUtil.getSchemaNameFromFullName((table.getParentNameBytes().toByteArray())));
             parentTableName = PNameFactory.newName(SchemaUtil.getTableNameFromFullName(table.getParentNameBytes().toByteArray()));
+        }
+        if (table.getBaseTableLogicalNameBytes() != null) {
+            parentLogicalName = PNameFactory.newName(table.getBaseTableLogicalNameBytes().toByteArray());
         }
         PName defaultFamilyName = null;
         if (table.hasDefaultFamilyName()) {
@@ -1829,6 +1896,7 @@ public class PTableImpl implements PTable {
                     .setTenantId(tenantId)
                     .setSchemaName(schemaName)
                     .setTableName(tableName)
+                    .setPhysicalTableName(physicalTableName)
                     .setPkName(pkName)
                     .setDefaultFamilyName(defaultFamilyName)
                     .setRowKeyOrderOptimizable(rowKeyOrderOptimizable)
@@ -1836,6 +1904,7 @@ public class PTableImpl implements PTable {
                     .setIndexes(indexes == null ? Collections.<PTable>emptyList() : indexes)
                     .setParentSchemaName(parentSchemaName)
                     .setParentTableName(parentTableName)
+                    .setBaseTableLogicalName(parentLogicalName)
                     .setPhysicalNames(physicalNames == null ?
                             ImmutableList.<PName>of() : ImmutableList.copyOf(physicalNames))
                     .setColumns(columns)
@@ -1851,112 +1920,126 @@ public class PTableImpl implements PTable {
     }
 
     public static PTableProtos.PTable toProto(PTable table) {
-      PTableProtos.PTable.Builder builder = PTableProtos.PTable.newBuilder();
-      if(table.getTenantId() != null){
-        builder.setTenantId(ByteStringer.wrap(table.getTenantId().getBytes()));
-      }
-      builder.setSchemaNameBytes(ByteStringer.wrap(table.getSchemaName().getBytes()));
-      builder.setTableNameBytes(ByteStringer.wrap(table.getTableName().getBytes()));
-      builder.setTableType(ProtobufUtil.toPTableTypeProto(table.getType()));
-      if (table.getType() == PTableType.INDEX) {
-        if(table.getIndexState() != null) {
-          builder.setIndexState(table.getIndexState().getSerializedValue());
+        PTableProtos.PTable.Builder builder = PTableProtos.PTable.newBuilder();
+        if (table.getTenantId() != null) {
+            builder.setTenantId(ByteStringer.wrap(table.getTenantId().getBytes()));
         }
-        if(table.getViewIndexId() != null) {
-          builder.setViewIndexId(table.getViewIndexId());
-          builder.setViewIndexIdType(table.getviewIndexIdType().getSqlType());
-		}
-        if(table.getIndexType() != null) {
-            builder.setIndexType(ByteStringer.wrap(new byte[]{table.getIndexType().getSerializedValue()}));
+        builder.setSchemaNameBytes(ByteStringer.wrap(table.getSchemaName().getBytes()));
+        builder.setTableNameBytes(ByteStringer.wrap(table.getTableName().getBytes()));
+        if (table.getPhysicalName(true) == null) {
+            builder.setPhysicalTableNameBytes(ByteStringer.wrap(table.getTableName().getBytes()));
+        } else {
+            builder.setPhysicalTableNameBytes(ByteStringer.wrap(table.getPhysicalName(true).getBytes()));
         }
-      }
-      builder.setSequenceNumber(table.getSequenceNumber());
-      builder.setTimeStamp(table.getTimeStamp());
-      PName tmp = table.getPKName();
-      if (tmp != null) {
-        builder.setPkNameBytes(ByteStringer.wrap(tmp.getBytes()));
-      }
-      Integer bucketNum = table.getBucketNum();
-      int offset = 0;
-      if(bucketNum == null){
-        builder.setBucketNum(NO_SALTING);
-      } else {
-        offset = 1;
-        builder.setBucketNum(bucketNum);
-      }
-      List<PColumn> columns = table.getColumns();
-      int columnSize = columns.size();
-      for (int i = offset; i < columnSize; i++) {
-          PColumn column = columns.get(i);
-          builder.addColumns(PColumnImpl.toProto(column));
-      }
-      List<PTable> indexes = table.getIndexes();
-      for (PTable curIndex : indexes) {
-        builder.addIndexes(toProto(curIndex));
-      }
-      builder.setIsImmutableRows(table.isImmutableRows());
-      // TODO remove this field in 5.0 release
-      if (table.getParentName() != null) {
-          builder.setDataTableNameBytes(ByteStringer.wrap(table.getParentTableName().getBytes()));
-      }
-      if (table.getParentName() !=null) {
-          builder.setParentNameBytes(ByteStringer.wrap(table.getParentName().getBytes()));
-      }
-      if (table.getDefaultFamilyName()!= null) {
-        builder.setDefaultFamilyName(ByteStringer.wrap(table.getDefaultFamilyName().getBytes()));
-      }
-      builder.setDisableWAL(table.isWALDisabled());
-      builder.setMultiTenant(table.isMultiTenant());
-      builder.setStoreNulls(table.getStoreNulls());
-      if (table.getTransactionProvider() != null) {
-          builder.setTransactionProvider(table.getTransactionProvider().getCode());
-      }
-      if(table.getType() == PTableType.VIEW){
-        builder.setViewType(ByteStringer.wrap(new byte[]{table.getViewType().getSerializedValue()}));
-      }
-      if(table.getViewStatement()!=null){
-        builder.setViewStatement(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getViewStatement())));
-      }
-      for (int i = 0; i < table.getPhysicalNames().size(); i++) {
-        builder.addPhysicalNames(ByteStringer.wrap(table.getPhysicalNames().get(i).getBytes()));
-      }
-      builder.setBaseColumnCount(table.getBaseColumnCount());
-      builder.setRowKeyOrderOptimizable(table.rowKeyOrderOptimizable());
-      builder.setUpdateCacheFrequency(table.getUpdateCacheFrequency());
-      builder.setIndexDisableTimestamp(table.getIndexDisableTimestamp());
-      builder.setIsNamespaceMapped(table.isNamespaceMapped());
-      if (table.getAutoPartitionSeqName() != null) {
-          builder.setAutoParititonSeqName(table.getAutoPartitionSeqName());
-      }
-      builder.setIsAppendOnlySchema(table.isAppendOnlySchema());
-      if (table.getImmutableStorageScheme() != null) {
-          builder.setStorageScheme(ByteStringer.wrap(new byte[]{table.getImmutableStorageScheme().getSerializedMetadataValue()}));
-      }
-      if (table.getEncodedCQCounter() != null) {
-          Map<String, Integer> values = table.getEncodedCQCounter().values();
-          for (Entry<String, Integer> cqCounter : values.entrySet()) {
-              org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedCQCounter.Builder cqBuilder = org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedCQCounter.newBuilder();
-              cqBuilder.setColFamily(cqCounter.getKey());
-              cqBuilder.setCounter(cqCounter.getValue());
-              builder.addEncodedCQCounters(cqBuilder.build());
-          }
-      }
-      if (table.getEncodingScheme() != null) {
-          builder.setEncodingScheme(ByteStringer.wrap(new byte[]{table.getEncodingScheme().getSerializedMetadataValue()}));
-      }
-      if (table.useStatsForParallelization() != null) {
-          builder.setUseStatsForParallelization(table.useStatsForParallelization());
-      }
-      builder.setPhoenixTTL(table.getPhoenixTTL());
-      builder.setPhoenixTTLHighWaterMark(table.getPhoenixTTLHighWaterMark());
-      builder.setViewModifiedUpdateCacheFrequency(table.hasViewModifiedUpdateCacheFrequency());
-      builder.setViewModifiedUseStatsForParallelization(table.hasViewModifiedUseStatsForParallelization());
-      builder.setViewModifiedPhoenixTTL(table.hasViewModifiedPhoenixTTL());
-      if (table.getLastDDLTimestamp() != null) {
-          builder.setLastDDLTimestamp(table.getLastDDLTimestamp());
-      }
-      builder.setChangeDetectionEnabled(table.isChangeDetectionEnabled());
-      return builder.build();
+        builder.setTableType(ProtobufUtil.toPTableTypeProto(table.getType()));
+        if (table.getType() == PTableType.INDEX) {
+            if (table.getIndexState() != null) {
+                builder.setIndexState(table.getIndexState().getSerializedValue());
+            }
+            if (table.getViewIndexId() != null) {
+                builder.setViewIndexId(table.getViewIndexId());
+                builder.setViewIndexIdType(table.getviewIndexIdType().getSqlType());
+            }
+            if (table.getIndexType() != null) {
+                builder.setIndexType(ByteStringer
+                        .wrap(new byte[] { table.getIndexType().getSerializedValue() }));
+            }
+        }
+        builder.setSequenceNumber(table.getSequenceNumber());
+        builder.setTimeStamp(table.getTimeStamp());
+        PName tmp = table.getPKName();
+        if (tmp != null) {
+            builder.setPkNameBytes(ByteStringer.wrap(tmp.getBytes()));
+        }
+        Integer bucketNum = table.getBucketNum();
+        int offset = 0;
+        if (bucketNum == null) {
+            builder.setBucketNum(NO_SALTING);
+        } else {
+            offset = 1;
+            builder.setBucketNum(bucketNum);
+        }
+        List<PColumn> columns = table.getColumns();
+        int columnSize = columns.size();
+        for (int i = offset; i < columnSize; i++) {
+            PColumn column = columns.get(i);
+            builder.addColumns(PColumnImpl.toProto(column));
+        }
+        List<PTable> indexes = table.getIndexes();
+        for (PTable curIndex : indexes) {
+            builder.addIndexes(toProto(curIndex));
+        }
+        builder.setIsImmutableRows(table.isImmutableRows());
+        // TODO remove this field in 5.0 release
+        if (table.getParentName() != null) {
+            builder.setDataTableNameBytes(ByteStringer.wrap(table.getParentTableName().getBytes()));
+        }
+        if (table.getParentName() != null) {
+            builder.setParentNameBytes(ByteStringer.wrap(table.getParentName().getBytes()));
+        }
+        if (table.getBaseTableLogicalName() != null) {
+            builder.setBaseTableLogicalNameBytes(ByteStringer.wrap(table.getBaseTableLogicalName().getBytes()));
+        }
+        if (table.getDefaultFamilyName() != null) {
+            builder.setDefaultFamilyName(ByteStringer.wrap(table.getDefaultFamilyName().getBytes()));
+        }
+        builder.setDisableWAL(table.isWALDisabled());
+        builder.setMultiTenant(table.isMultiTenant());
+        builder.setStoreNulls(table.getStoreNulls());
+        if (table.getTransactionProvider() != null) {
+            builder.setTransactionProvider(table.getTransactionProvider().getCode());
+        }
+        if (table.getType() == PTableType.VIEW) {
+            builder.setViewType(
+                    ByteStringer.wrap(new byte[] { table.getViewType().getSerializedValue() }));
+        }
+        if (table.getViewStatement() != null) {
+            builder.setViewStatement(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getViewStatement())));
+        }
+        for (int i = 0; i < table.getPhysicalNames().size(); i++) {
+            builder.addPhysicalNames(ByteStringer.wrap(table.getPhysicalNames().get(i).getBytes()));
+        }
+        builder.setBaseColumnCount(table.getBaseColumnCount());
+        builder.setRowKeyOrderOptimizable(table.rowKeyOrderOptimizable());
+        builder.setUpdateCacheFrequency(table.getUpdateCacheFrequency());
+        builder.setIndexDisableTimestamp(table.getIndexDisableTimestamp());
+        builder.setIsNamespaceMapped(table.isNamespaceMapped());
+        if (table.getAutoPartitionSeqName() != null) {
+            builder.setAutoParititonSeqName(table.getAutoPartitionSeqName());
+        }
+        builder.setIsAppendOnlySchema(table.isAppendOnlySchema());
+        if (table.getImmutableStorageScheme() != null) {
+            builder.setStorageScheme(ByteStringer.wrap(new byte[] {
+                    table.getImmutableStorageScheme().getSerializedMetadataValue() }));
+        }
+        if (table.getEncodedCQCounter() != null) {
+            Map<String, Integer> values = table.getEncodedCQCounter().values();
+            for (Entry<String, Integer> cqCounter : values.entrySet()) {
+                org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedCQCounter.Builder
+                        cqBuilder =
+                        org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedCQCounter.newBuilder();
+                cqBuilder.setColFamily(cqCounter.getKey());
+                cqBuilder.setCounter(cqCounter.getValue());
+                builder.addEncodedCQCounters(cqBuilder.build());
+            }
+        }
+        if (table.getEncodingScheme() != null) {
+            builder.setEncodingScheme(ByteStringer
+                    .wrap(new byte[] { table.getEncodingScheme().getSerializedMetadataValue() }));
+        }
+        if (table.useStatsForParallelization() != null) {
+            builder.setUseStatsForParallelization(table.useStatsForParallelization());
+        }
+        builder.setPhoenixTTL(table.getPhoenixTTL());
+        builder.setPhoenixTTLHighWaterMark(table.getPhoenixTTLHighWaterMark());
+        builder.setViewModifiedUpdateCacheFrequency(table.hasViewModifiedUpdateCacheFrequency());
+        builder.setViewModifiedUseStatsForParallelization(table.hasViewModifiedUseStatsForParallelization());
+        builder.setViewModifiedPhoenixTTL(table.hasViewModifiedPhoenixTTL());
+        if (table.getLastDDLTimestamp() != null) {
+            builder.setLastDDLTimestamp(table.getLastDDLTimestamp());
+        }
+        builder.setChangeDetectionEnabled(table.isChangeDetectionEnabled());
+        return builder.build();
     }
 
     @Override

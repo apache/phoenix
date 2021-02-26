@@ -21,15 +21,18 @@ import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TimeKeeper;
 
 import com.google.common.collect.Lists;
@@ -43,6 +46,7 @@ public class PMetaDataImpl implements PMetaData {
     private PMetaDataCache metaData;
     private final TimeKeeper timeKeeper;
     private final PTableRefFactory tableRefFactory;
+    private HashMap<String, PTableKey> physicalNameToLogicalTableMap = new HashMap<>();
     
     public PMetaDataImpl(int initialCapacity, ReadOnlyProps props) {
         this(initialCapacity, TimeKeeper.SYSTEM, props);
@@ -68,6 +72,9 @@ public class PMetaDataImpl implements PMetaData {
     
     @Override
     public PTableRef getTableRef(PTableKey key) throws TableNotFoundException {
+        if (physicalNameToLogicalTableMap.containsKey(key.getName())) {
+            key = physicalNameToLogicalTableMap.get(key.getName());
+        }
         PTableRef ref = metaData.get(key);
         if (ref == null) {
             throw new TableNotFoundException(key.getName());
@@ -146,6 +153,12 @@ public class PMetaDataImpl implements PMetaData {
         }
         for (PTable index : table.getIndexes()) {
             metaData.put(index.getKey(), tableRefFactory.makePTableRef(index, this.timeKeeper.getCurrentTime(), resolvedTime));
+        }
+        if (table.getPhysicalName(true) != null && !table.getPhysicalName(true).getString().equals(table.getTableName().getString())) {
+            String physicalTableName =  table.getPhysicalName(true).getString().replace(
+                    QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR);
+            String physicalTableFullName = SchemaUtil.getTableName(table.getSchemaName() != null ? table.getSchemaName().getString() : null, physicalTableName);
+            this.physicalNameToLogicalTableMap.put(physicalTableFullName, key);
         }
     }
 

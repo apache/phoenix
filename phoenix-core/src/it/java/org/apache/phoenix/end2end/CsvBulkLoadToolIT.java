@@ -39,6 +39,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
@@ -56,6 +58,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -443,7 +446,80 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
             checkIndexTableIsVerified(indexTableName);
         }
     }
-    
+
+    @Test
+    public void testImportWithDifferentPhysicalName() throws Exception {
+        String schemaName = "S_" + generateUniqueName();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexTableName = String.format("%s_IDX", tableName);
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        String fullIndexTableName = SchemaUtil.getTableName(schemaName, indexTableName);
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE " + fullTableName + "(ID INTEGER NOT NULL PRIMARY KEY, "
+                + "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
+        String ddl = "CREATE  INDEX " + indexTableName + " ON " + fullTableName + "(FIRST_NAME ASC)";
+        stmt.execute(ddl);
+        String newTableName = LogicalTableNameIT.NEW_TABLE_PREFIX + generateUniqueName();
+        String fullNewTableName = SchemaUtil.getTableName(schemaName, newTableName);
+        try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+            String snapshotName = new StringBuilder(tableName).append("-Snapshot").toString();
+            admin.snapshot(snapshotName, TableName.valueOf(fullTableName));
+            admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(fullNewTableName));
+        }
+        LogicalTableNameIT.renameAndDropPhysicalTable(conn, "NULL", schemaName, tableName, newTableName);
+
+        String csvName = "/tmp/input_logical_name.csv";
+        FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+        FSDataOutputStream outputStream = fs.create(new Path(csvName));
+        PrintWriter printWriter = new PrintWriter(outputStream);
+        printWriter.println("1,FirstName 1,LastName 1");
+        printWriter.println("2,FirstName 2,LastName 2");
+        printWriter.close();
+
+        CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+        csvBulkLoadTool.setConf(getUtility().getConfiguration());
+        int
+                exitCode =
+                csvBulkLoadTool
+                        .run(new String[] { "--input", csvName, "--table", tableName,
+                                "--schema", schemaName,
+                                "--zookeeper", zkQuorum });
+        assertEquals(0, exitCode);
+
+        ResultSet rs = stmt.executeQuery("SELECT /*+ NO_INDEX */ id, FIRST_NAME FROM " + fullTableName + " where first_name='FirstName 2'");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals("FirstName 2", rs.getString(2));
+        String selectFromIndex = "SELECT FIRST_NAME FROM " + fullTableName + " where FIRST_NAME='FirstName 1'";
+        rs = stmt.executeQuery("EXPLAIN " + selectFromIndex);
+        assertTrue(QueryUtil.getExplainPlan(rs).contains(indexTableName));
+        rs = stmt.executeQuery(selectFromIndex);
+        assertTrue(rs.next());
+        assertEquals("FirstName 1", rs.getString(1));
+
+        String csvNameForIndex = "/tmp/input_logical_name_index.csv";
+        // Now just run the tool on the index table and check that the index has extra row.
+        outputStream = fs.create(new Path(csvNameForIndex));
+        printWriter = new PrintWriter(outputStream);
+        printWriter.println("3,FirstName 3,LastName 3");
+        printWriter.close();
+        exitCode = csvBulkLoadTool
+                        .run(new String[] { "--input", csvNameForIndex, "--table", tableName,
+                                "--schema", schemaName,
+                                "--index-table", indexTableName, "--zookeeper", zkQuorum });
+        assertEquals(0, exitCode);
+        selectFromIndex = "SELECT FIRST_NAME FROM " + fullTableName + " where FIRST_NAME='FirstName 3'";
+        rs = stmt.executeQuery("EXPLAIN " + selectFromIndex);
+        assertTrue(QueryUtil.getExplainPlan(rs).contains(indexTableName));
+        rs = stmt.executeQuery(selectFromIndex);
+        assertTrue(rs.next());
+        assertEquals("FirstName 3", rs.getString(1));
+        rs.close();
+        stmt.close();
+
+        checkIndexTableIsVerified(fullIndexTableName);
+    }
+
     @Test
     public void testInvalidArguments() {
         String tableName = "TABLE8";
