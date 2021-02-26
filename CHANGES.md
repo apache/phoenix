@@ -18,6 +18,40 @@
 -->
 # PHOENIX Changelog
 
+## Release 5.1.1 - Unreleased (as of 2021-02-26)
+
+
+
+### IMPROVEMENTS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-6388](https://issues.apache.org/jira/browse/PHOENIX-6388) | Add sampled logging for read repairs |  Minor | . |
+| [PHOENIX-6396](https://issues.apache.org/jira/browse/PHOENIX-6396) | PChar illegal data exception should not contain value |  Major | . |
+| [PHOENIX-6380](https://issues.apache.org/jira/browse/PHOENIX-6380) | phoenix-client-embedded depends on logging classes |  Major | core |
+
+
+### BUG FIXES:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-6386](https://issues.apache.org/jira/browse/PHOENIX-6386) | Bulkload generates unverified index rows |  Major | core |
+| [PHOENIX-6343](https://issues.apache.org/jira/browse/PHOENIX-6343) | Phoenix allows duplicate column names when one of them is a primary key |  Major | core |
+| [PHOENIX-5250](https://issues.apache.org/jira/browse/PHOENIX-5250) | The accumulated wal files can't be cleaned |  Blocker | . |
+| [PHOENIX-6382](https://issues.apache.org/jira/browse/PHOENIX-6382) | Shaded artifact names and descriptions have unresolved ${hbase.profile} strings |  Major | core |
+| [PHOENIX-6377](https://issues.apache.org/jira/browse/PHOENIX-6377) | phoenix-client has erronous maven dependecies |  Critical | core |
+| [PHOENIX-5440](https://issues.apache.org/jira/browse/PHOENIX-5440) | multiple warnings when building phoenix |  Minor | . |
+
+
+### OTHER:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-6394](https://issues.apache.org/jira/browse/PHOENIX-6394) | PostCommit Jenkins job detects incorrect HBase profile to rebuild with 2.3 and 2.4 |  Major | . |
+| [PHOENIX-6359](https://issues.apache.org/jira/browse/PHOENIX-6359) | New module to support HBase 2.4.1+ releases |  Major | . |
+
+
+
 ## Release 5.1.0 - Unreleased (as of 2021-02-05)
 
 

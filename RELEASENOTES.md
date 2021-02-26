@@ -16,6 +16,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 -->
+# PHOENIX  5.1.1 Release Notes
+
+These release notes cover new developer and user-facing incompatibilities, important issues, features, and major improvements.
+
+
+---
+
+* [PHOENIX-6359](https://issues.apache.org/jira/browse/PHOENIX-6359) | *Major* | **New module to support HBase 2.4.1+ releases**
+
+Added phoenix-hbase-compat-2.4.1 to support latest patch versions of HBase 2.4 release line.
+
+
+---
+
+* [PHOENIX-6343](https://issues.apache.org/jira/browse/PHOENIX-6343) | *Major* | **Phoenix allows duplicate column names when one of them is a primary key**
+
+Although user provided CF can have same column name as one of primary keys, default CF is no longer supported to have same column name as primary key columns.
+
+
+---
+
+* [PHOENIX-5250](https://issues.apache.org/jira/browse/PHOENIX-5250) | *Blocker* | **The accumulated wal files can't be cleaned**
+
+When updating from  an earlier version, and using HBase 2.1.x, HBase 2.2.6 or earlier, HBase 2.3.3 or earlier, or HBase 2.4.0, HBase is unable to clean up WAL files that include data for global indexed tables with the old implementation.
+
+To avoid running out of disk space, use IndexUpgradeTool to upgrade all tables with global indexes, and then restart all region servers as soon as possible.
+
+
+
 # PHOENIX  5.1.0 Release Notes
 
 These release notes cover new developer and user-facing incompatibilities, important issues, features, and major improvements.
