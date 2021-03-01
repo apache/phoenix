@@ -17,11 +17,12 @@
  */
 {
     "_comment": "Lists all phoenix compatible client versions against the current branch version for a given hbase profile If hbase profile is 1.3, phoenix client versions 4.14.3 and 4.15.0 are tested against current branch version",
-    "1.3": ["4.14.3", "4.15.0"],
-    "1.4": ["4.14.3", "4.15.0"],
-    "1.5": ["4.15.0"],
-    "2.1": ["5.1.0"],
-    "2.2": ["5.1.0"],
-    "2.3": ["5.1.0"],
-    "2.4": ["5.1.0"]
+    "1.3": [ {"artifactId":"phoenix-client", "version":"4.14.3-HBase-1.3"}, {"artifactId":"phoenix-client", "version":"4.15.0-HBase-1.3"}, {"artifactId":"phoenix-client-hbase-1.3", "version":"4.16.0"} ],
+    "1.4": [ {"artifactId":"phoenix-client", "version":"4.14.3-HBase-1.4"}, {"artifactId":"phoenix-client", "version":"4.15.0-HBase-1.4"}, {"artifactId":"phoenix-client-hbase-1.4", "version":"4.16.0"} ],
+    "1.5": [ {"artifactId":"phoenix-client", "version":"4.15-HBase-1.5"}, {"artifactId":"phoenix-client-hbase-1.5", "version":"4.16.0"} ],
+    "1.6": [ {"artifactId":"phoenix-client-hbase-1.6", "version":"4.16.0"} ],
+    "2.1": [ {"artifactId":"phoenix-client-hbase-2.1", "version":"5.1.0"} ],
+    "2.2": [ {"artifactId":"phoenix-client-hbase-2.2", "version":"5.1.0"} ],
+    "2.3": [ {"artifactId":"phoenix-client-hbase-2.3", "version":"5.1.0"} ],
+    "2.4": [ {"artifactId":"phoenix-client-hbase-2.4", "version":"5.1.0"} ]
 }

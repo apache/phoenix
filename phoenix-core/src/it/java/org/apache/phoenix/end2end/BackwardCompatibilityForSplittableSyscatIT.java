@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.MavenCoordinates;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.junit.Before;
 import org.junit.Test;
@@ -45,16 +46,16 @@ import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.UpgradePr
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
 public class BackwardCompatibilityForSplittableSyscatIT extends SplitSystemCatalogIT {
-    private final String compatibleClientVersion;
+    private final MavenCoordinates compatibleClientVersion;
     private String zkQuorum;
     private String url;
 
     @Parameterized.Parameters(name = "BackwardCompatibilityForSplitableSyscatIT_compatibleClientVersion={0}")
-    public static synchronized Collection<String> data() throws Exception {
+    public static synchronized Collection<MavenCoordinates> data() throws Exception {
         return computeClientVersions();
     }
 
-    public BackwardCompatibilityForSplittableSyscatIT(String compatibleClientVersion) {
+    public BackwardCompatibilityForSplittableSyscatIT(MavenCoordinates compatibleClientVersion) {
         this.compatibleClientVersion = compatibleClientVersion;
     }
 
