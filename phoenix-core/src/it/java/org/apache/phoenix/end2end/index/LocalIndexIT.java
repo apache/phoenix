@@ -80,6 +80,26 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     }
 
     @Test
+    public void testSelectFromIndexWithAdditionalWhereClause() throws Exception {
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+
+        Connection conn = getConnection();
+        conn.setAutoCommit(true);
+        if (isNamespaceMapped) {
+            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+        }
+
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (pk INTEGER PRIMARY KEY, v1 FLOAT, v2 FLOAT)");
+        conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1, 0.01, 1.0)");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM "+tableName+" WHERE v1 < 0.1 and v2 < 10.0");
+        rs.next();
+        assertEquals(1, rs.getInt(1));
+        rs.close();
+    }
+
+    @Test
     public void testDeleteFromLocalIndex() throws Exception {
         String tableName = schemaName + "." + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
@@ -211,13 +231,13 @@ public class LocalIndexIT extends BaseLocalIndexIT {
                     QueryUtil.getExplainPlan(rs));
         rs.close();
 
-        // 4. Longer prefix on the index, use it.
+        // 4. Longer prefix on the index.
+        // Note: This cannot use the local index, see PHOENIX-6300
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4 AND v1 = 3 AND v3 = 1");
         assertEquals(
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + physicalTableName + " [1,3,4,3]\n"
-                    + "    SERVER FILTER BY FIRST KEY ONLY AND \"V3\" = 1\n"
-                    + "CLIENT MERGE SORT",
+                    + physicalTableName + " [3,4]\n"
+                    + "    SERVER FILTER BY (V1 = 3.0 AND V3 = 1)",
                     QueryUtil.getExplainPlan(rs));
         rs.close();
     }
@@ -353,13 +373,12 @@ public class LocalIndexIT extends BaseLocalIndexIT {
                     QueryUtil.getExplainPlan(rs));
         rs.close();
 
-        // 10. Use index even when also filtering on non-indexed column
+        // 10. Cannot use index even when also filtering on non-indexed column, see PHOENIX-6400
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v2 = 2 AND v1 = 3");
         assertEquals(
-            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + indexPhysicalTableName + " [1,2]\n"
-                            + "    SERVER FILTER BY FIRST KEY ONLY AND \"V1\" = 3.0\n"
-                            + "CLIENT MERGE SORT",
+            "CLIENT PARALLEL 1-WAY FULL SCAN OVER "
+                    + indexPhysicalTableName + "\n"
+                            + "    SERVER FILTER BY (V2 = 2.0 AND V1 = 3.0)",
                     QueryUtil.getExplainPlan(rs));
         rs.close();
 
