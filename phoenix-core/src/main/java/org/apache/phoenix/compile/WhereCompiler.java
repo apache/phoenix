@@ -59,6 +59,7 @@ import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
@@ -200,6 +201,16 @@ public class WhereCompiler {
                 return ref;
             }
             PTable table = ref.getTable();
+            // If current table in the context is local index and table in column reference is global that
+            // means the column is not present in the local index. Local indexes do not currently support this.
+            // Throwing this exception here will cause this plan to be ignored when enumerating possible plans
+            // during the optimizing phase.
+            if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL
+                    && (table.getIndexType() == null || table.getIndexType() == IndexType.GLOBAL)) {
+                String schemaNameStr = table.getSchemaName()==null?null:table.getSchemaName().getString();
+                String tableNameStr = table.getTableName()==null?null:table.getTableName().getString();
+                throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, ref.getColumn().getName().getString());
+            }
             // Track if we need to compare KeyValue during filter evaluation
             // using column family. If the column qualifier is enough, we
             // just use that.
