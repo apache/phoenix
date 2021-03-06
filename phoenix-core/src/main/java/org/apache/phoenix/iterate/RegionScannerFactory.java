@@ -41,9 +41,12 @@ import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -63,6 +66,8 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -124,6 +129,25 @@ public abstract class RegionScannerFactory {
       private byte[] actualStartKey = getActualStartKey();
       private boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
       final long pageSizeMs = getPageSizeMsForRegionScanner(scan);
+      Expression extraWhere = null;
+
+      {
+          // for local indexes construct the row filter for uncovered columns if it exists
+          if (ScanUtil.isLocalIndex(scan)) {
+              byte[] expBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER);
+              if (expBytes != null) {
+                  try {
+                      ByteArrayInputStream stream = new ByteArrayInputStream(expBytes);
+                      DataInputStream input = new DataInputStream(stream);
+                      extraWhere = ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
+                      extraWhere.readFields(input);
+                  } catch (IOException io) {
+                      // should not happen since we're reading from a byte[]
+                      throw new RuntimeException(io);
+                  }
+              }
+          }
+      }
 
       // Get the actual scan start row of local index. This will be used to compare the row
       // key of the results less than scan start row when there are references.
@@ -205,6 +229,17 @@ public abstract class RegionScannerFactory {
              */
             IndexUtil.wrapResultUsingOffset(env, result, offset, dataColumns,
                 tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
+
+            if (extraWhere != null) {
+                Tuple merged = useQualifierAsListIndex ? new PositionBasedResultTuple(result) :
+                    new ResultTuple(Result.create(result));
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                extraWhere.evaluate(merged, ptr);
+                if (!Boolean.TRUE.equals(extraWhere.getDataType().toObject(ptr))) {
+                    result.clear();
+                    return next;
+                }
+            }
           }
           if (projector != null) {
             Tuple toProject = useQualifierAsListIndex ? new PositionBasedResultTuple(result) :

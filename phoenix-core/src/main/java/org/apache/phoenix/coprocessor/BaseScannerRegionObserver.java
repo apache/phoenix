@@ -80,6 +80,8 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
         "_IndexRebuildDisableLoggingVerifyType";
     public static final String INDEX_REBUILD_DISABLE_LOGGING_BEYOND_MAXLOOKBACK_AGE =
         "_IndexRebuildDisableLoggingBeyondMaxLookbackAge";
+    public static final String LOCAL_INDEX_FILTER = "_LocalIndexFilter";
+    public static final String LOCAL_INDEX_FILTER_STR = "_LocalIndexFilterStr";
 
     /* 
     * Attribute to denote that the index maintainer has been serialized using its proto-buf presentation.
