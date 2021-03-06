@@ -19,6 +19,9 @@ package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.util.EncodedColumnsUtil.isPossibleToUseEncodedCQFilter;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.Collections;
@@ -30,11 +33,14 @@ import com.google.common.base.Optional;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
@@ -201,16 +207,6 @@ public class WhereCompiler {
                 return ref;
             }
             PTable table = ref.getTable();
-            // If current table in the context is local index and table in column reference is global that
-            // means the column is not present in the local index. Local indexes do not currently support this.
-            // Throwing this exception here will cause this plan to be ignored when enumerating possible plans
-            // during the optimizing phase.
-            if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL
-                    && (table.getIndexType() == null || table.getIndexType() == IndexType.GLOBAL)) {
-                String schemaNameStr = table.getSchemaName()==null?null:table.getSchemaName().getString();
-                String tableNameStr = table.getTableName()==null?null:table.getTableName().getString();
-                throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, ref.getColumn().getName().getString());
-            }
             // Track if we need to compare KeyValue during filter evaluation
             // using column family. If the column qualifier is enough, we
             // just use that.
@@ -282,6 +278,25 @@ public class WhereCompiler {
 
         if (LiteralExpression.isBooleanFalseOrNull(whereClause)) {
             context.setScanRanges(ScanRanges.NOTHING);
+        } else if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL) {
+            if (whereClause != null && !ExpressionUtil.evaluatesToTrue(whereClause)) {
+                // pass any extra where as scan attribute so it can be evaluated after all
+                // columns from the main CF have been merged in
+                ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                try {
+                    DataOutputStream output = new DataOutputStream(stream);
+                    WritableUtils.writeVInt(output, ExpressionType.valueOf(whereClause).ordinal());
+                    whereClause.write(output);
+                    stream.close();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+                scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER, stream.toByteArray());
+
+                // this is needed just for ExplainTable, since de-serializing an expression does not restore
+                // its display properties, and that cannot be changed, due to backwards compatibility
+                scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER_STR, Bytes.toBytes(whereClause.toString()));
+            }
         } else if (whereClause != null && !ExpressionUtil.evaluatesToTrue(whereClause)) {
             Filter filter = null;
             final Counter counter = new Counter();
