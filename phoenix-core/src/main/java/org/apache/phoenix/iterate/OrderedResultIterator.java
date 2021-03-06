@@ -280,6 +280,11 @@ public class OrderedResultIterator implements PeekingResultIterator {
             final SizeAwareQueue<ResultEntry> queueEntries = ((RecordPeekingResultIterator)resultIterator).getQueueEntries();
             long startTime = EnvironmentEdgeManager.currentTimeMillis();
             for (Tuple result = delegate.next(); result != null; result = delegate.next()) {
+                // result might be empty if it was filtered by a local index
+                if (result.size() == 0) {
+                    continue;
+                }
+
                 if (isDummy(result)) {
                     dummyTuple = result;
                     return resultIterator;
