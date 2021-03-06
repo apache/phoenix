@@ -178,10 +178,19 @@ public abstract class ExplainTable {
                 }
             } while (filterIterator.hasNext());
         }
+        String whereFilterStr = null;
         if (whereFilter != null) {
+            whereFilterStr = whereFilter.toString();
+        } else {
+            byte[] expBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER_STR);
+            if (expBytes != null) {
+                whereFilterStr = Bytes.toString(expBytes);
+            }
+        }
+        if (whereFilterStr != null) {
             String serverWhereFilter = "SERVER FILTER BY "
                 + (firstKeyOnlyFilter == null ? "" : "FIRST KEY ONLY AND ")
-                + whereFilter.toString();
+                + whereFilterStr;
             planSteps.add("    " + serverWhereFilter);
             if (explainPlanAttributesBuilder != null) {
                 explainPlanAttributesBuilder.setServerWhereFilter(serverWhereFilter);
