@@ -28,13 +28,89 @@ import org.apache.phoenix.schema.types.PLong;
 public enum MetricType {
 
 	NO_OP_METRIC("no", "No op metric",LogLevel.OFF, PLong.INSTANCE),
-	// mutation (write) related metrics 
+	// mutation (write) related metrics
+
     MUTATION_BATCH_SIZE("ms", "Number of mutations in the batch",LogLevel.OFF, PLong.INSTANCE),
     MUTATION_BYTES("mb", "Size of mutations in bytes",LogLevel.OFF, PLong.INSTANCE),
     MUTATION_COMMIT_TIME("mt", "Time it took to commit a batch of mutations",LogLevel.OFF, PLong.INSTANCE),
     MUTATION_BATCH_FAILED_SIZE("mfs", "Number of mutations that failed to be committed",LogLevel.OFF, PLong.INSTANCE),
     MUTATION_SQL_COUNTER("msc", "Counter for number of mutation sql statements",LogLevel.OFF, PLong.INSTANCE),
+    UPSERT_SQL_COUNTER("uc", "Counter for number of upsert sql queries", LogLevel.OFF, PLong.INSTANCE),
+    UPSERT_COMMIT_TIME("ut", "Time it took to commit a batch of upserts", LogLevel.OFF, PLong.INSTANCE),
+    UPSERT_MUTATION_BYTES("umb", "Size of mutations in upsert statement in bytes",LogLevel.OFF, PLong.INSTANCE),
+    UPSERT_MUTATION_SQL_COUNTER("umsc", "Counter for number of upsert mutations committed",LogLevel.OFF, PLong.INSTANCE),
+    UPSERT_BATCH_FAILED_SIZE("ubfs", "Number of upsert mutations in a batch that failed to be committed",
+            LogLevel.OFF, PLong.INSTANCE),
+    UPSERT_BATCH_FAILED_COUNTER("ubfc", "Number of upsert mutation batches that failed to be committed",
+            LogLevel.OFF, PLong.INSTANCE),
+
+    UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER("uassc", "Counter which indicates the total number of upsert Mutations which passed  executeUpdate phase "
+            + "(since last commit called) and subsequent conn.commit() are successful.", LogLevel.OFF, PLong.INSTANCE),
+    UPSERT_AGGREGATE_FAILURE_SQL_COUNTER("uafsc", "Counter which indicates the total number of upsert Mutations for all statements which failed either  in executeUpdate phase  "
+            + "(since last commit called) or subsequent conn.commit() fails", LogLevel.OFF, PLong.INSTANCE),
+    UPSERT_SUCCESS_SQL_COUNTER("ussc", "Counter for number of upsert sql queries that successfully"
+            + " passed the executeMutation phase, or if autoCommit is true, the total"
+            + " number of successful upserts", LogLevel.OFF, PLong.INSTANCE),
+    UPSERT_FAILED_SQL_COUNTER("ufsc", "Counter for number of upsert sql queries that"
+            + " failed the executeMutation phase, or if autoCommit is true, the total"
+            + " number of upsert failures", LogLevel.OFF, PLong.INSTANCE),
+    UPSERT_SQL_QUERY_TIME("uqt", "Time taken by upsert sql queries inside executeMutation or if"
+            + " autoCommit is true, the total time taken for executeMutation + conn.commit",
+            LogLevel.OFF, PLong.INSTANCE),
+
+    // delete-specific metrics updated during executeMutation
+    DELETE_SQL_COUNTER("dc", "Counter for number of delete sql queries", LogLevel.OFF, PLong.INSTANCE),
+    DELETE_SUCCESS_SQL_COUNTER("dssc", "Counter for number of delete sql queries that successfully"
+            + " passed the executeMutation phase, or if autoCommit is true, the total"
+            + " number of successful deletes", LogLevel.OFF, PLong.INSTANCE),
+    DELETE_AGGREGATE_SUCCESS_SQL_COUNTER("dassc", "Counter which indicates if everything in the executeUpdate phase for all "
+            + "statements (since last commit called) and subsequent conn.commit() is successful.", LogLevel.OFF, PLong.INSTANCE),
+    DELETE_AGGREGATE_FAILURE_SQL_COUNTER("dafsc", "Counter which indicates  if anything in the executeUpdate phase for any "
+            + "statements (since last commit called) or subsequent conn.commit() fails.", LogLevel.OFF, PLong.INSTANCE),
+    DELETE_FAILED_SQL_COUNTER("dfsc", "Counter for number of delete sql queries that"
+            + " failed the executeMutation phase, or if autoCommit is true, the total"
+            + " number of delete failures", LogLevel.OFF, PLong.INSTANCE),
+    DELETE_SQL_QUERY_TIME("dqt", "Time taken by delete sql queries inside executeMutation or if"
+            + " autoCommit is true, the total time taken for executeMutation + conn.commit",
+            LogLevel.OFF, PLong.INSTANCE),
+
+    DELETE_COMMIT_TIME("dt", "Time it took to commit a batch of deletes", LogLevel.OFF, PLong.INSTANCE),
+    DELETE_MUTATION_BYTES("dmb", "Size of mutations in delete statement in bytes",LogLevel.OFF, PLong.INSTANCE),
+    DELETE_MUTATION_SQL_COUNTER("dmsc", "Counter for number of delete mutations committed",LogLevel.OFF, PLong.INSTANCE),
+    DELETE_BATCH_FAILED_SIZE("dbfs", "Number of delete mutations in a batch that failed to be committed",
+            LogLevel.OFF, PLong.INSTANCE),
+    DELETE_BATCH_FAILED_COUNTER("dbfc", "Number of delete mutation batches that failed to be committed",
+            LogLevel.OFF, PLong.INSTANCE),
+
+    // select-specific query (read) metrics updated during executeQuery
+    SELECT_SUCCESS_SQL_COUNTER("sss", "Counter for number of select sql queries that successfully"
+            + " passed the executeQuery phase", LogLevel.OFF, PLong.INSTANCE),
+    SELECT_AGGREGATE_SUCCESS_SQL_COUNTER("sassc","Counter which indicates  if everything in executeQuery"
+            + " phase and all rs.next() are successful",LogLevel.OFF, PLong.INSTANCE),
+    SELECT_AGGREGATE_FAILURE_SQL_COUNTER("safsc","Counter which indicates if anything in "
+            + "executeQuery phase or any of the rs.next() fail",LogLevel.OFF, PLong.INSTANCE),
+    SELECT_POINTLOOKUP_SUCCESS_SQL_COUNTER("spls", "Counter for number of point lookup select sql "
+            + "queries that succeeded the executeQuery phase", LogLevel.OFF, PLong.INSTANCE),
+    SELECT_SCAN_SUCCESS_SQL_COUNTER("sscs", "Counter for number of scan select sql queries "
+            + "that succeed the executeQuery phase", LogLevel.OFF, PLong.INSTANCE),
+    SELECT_FAILED_SQL_COUNTER("sfsc", "Counter for number of select sql queries that"
+            + " failed the executeQuery phase", LogLevel.OFF, PLong.INSTANCE),
+    SELECT_POINTLOOKUP_FAILED_SQL_COUNTER("splf", "Counter for number of point lookup select sql "
+            + "queries that failed the executeQuery phase", LogLevel.OFF, PLong.INSTANCE),
+    SELECT_SCAN_FAILED_SQL_COUNTER("sscf", "Counter for number of scan select sql queries "
+            + "that failed the executeQuery phase", LogLevel.OFF, PLong.INSTANCE),
+    SELECT_SQL_QUERY_TIME("sqt", "Time taken by select sql queries inside executeQuery",
+            LogLevel.OFF, PLong.INSTANCE),
+
     INDEX_COMMIT_FAILURE_SIZE("p3s", "Number of mutations that failed in phase 3", LogLevel.OFF, PLong.INSTANCE),
+    QUERY_POINTLOOKUP_TIMEOUT_COUNTER("qplo", "Number of times the point lookup select query timed out"
+            + " when fetching results", LogLevel.DEBUG, PLong.INSTANCE),
+    QUERY_SCAN_TIMEOUT_COUNTER("qso", "Number of times the scan select query timed out"
+            + " when fetching results", LogLevel.DEBUG, PLong.INSTANCE),
+    QUERY_POINTLOOKUP_FAILED_COUNTER("qplf", "Number of times the point lookup select query failed"
+            + " when fetching results", LogLevel.DEBUG, PLong.INSTANCE),
+    QUERY_SCAN_FAILED_COUNTER("qsf", "Number of times the scan select query failed when fetching"
+            + " results", LogLevel.DEBUG, PLong.INSTANCE),
     // query (read) related metrics
     QUERY_TIME("qt", "Query times",LogLevel.OFF, PLong.INSTANCE),
     QUERY_TIMEOUT_COUNTER("qo", "Number of times query timed out",LogLevel.DEBUG, PLong.INSTANCE),
