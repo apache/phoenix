@@ -306,12 +306,12 @@
         
         <scenario tableName="PHERF.TEST_TABLE" rowCount="99" name="testPreAndPostDdls">
             <preScenarioDdls>
-                 <ddl statement="CREATE INDEX IDX_DIVISION ON ? (DIVISION)" tableName="PHERF.PHERF_PROD_TEST_UNSALTED"/>
+                 <ddl statement="CREATE INDEX IDX_DIVISION ON ? (DIVISION)" tableName="PHERF.TEST_TABLE"/>
             </preScenarioDdls>
  
             <postScenarioDdls>
-                 <ddl statement="CREATE INDEX IDX_OLDVAL_STRING ON ? (OLDVAL_STRING)" tableName="PHERF.PHERF_PROD_TEST_UNSALTED"/>
-                 <ddl statement="CREATE INDEX IDX_CONNECTION_ID ON ? (CONNECTION_ID)" tableName="PHERF.PHERF_PROD_TEST_UNSALTED"/>
+                 <ddl statement="CREATE INDEX IDX_OLDVAL_STRING ON ? (OLDVAL_STRING)" tableName="PHERF.TEST_TABLE"/>
+                 <ddl statement="CREATE INDEX IDX_CONNECTION_ID ON ? (CONNECTION_ID)" tableName="PHERF.TEST_TABLE"/>
             </postScenarioDdls>
             
             <querySet concurrency="1" executionType="SERIAL" executionDurationInMs="5000"
