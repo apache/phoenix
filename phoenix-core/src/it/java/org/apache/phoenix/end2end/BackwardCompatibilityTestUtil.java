@@ -30,7 +30,6 @@ import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 
 import java.io.BufferedReader;
@@ -95,6 +94,11 @@ public final class BackwardCompatibilityTestUtil {
         + INDEX_REBUILD_ASYNC;
     public static final String MVN_HOME = "maven.home";
     public static final String JAVA_TMP_DIR = "java.io.tmpdir";
+    public static final String DELIMITER = "-HBase-";
+    public static final String PHOENIX_4_14_3_VERSION = "4.14.3";
+    public static final String PHOENIX_4_15_0_VERSION = "4.15.0";
+    public static final String OLD_PHOENIX_CLIENT_JAR_NAME = "phoenix-client";
+    public static final String NEW_PHOENIX_CLIENT_JAR_PREFIX = "phoenix-client-hbase";
 
     public enum UpgradeProps {
         NONE,
@@ -121,10 +125,26 @@ public final class BackwardCompatibilityTestUtil {
             JsonNode jsonNode = mapper.readTree(inputStream);
             JsonNode HBaseProfile = jsonNode.get(hbaseProfile);
             for (final JsonNode clientVersion : HBaseProfile) {
-                clientVersions.add(clientVersion.textValue() + "-HBase-" + hbaseProfile);
+                clientVersions.add(clientVersion.textValue() + DELIMITER + hbaseProfile);
             }
         }
+
         return clientVersions;
+    }
+
+    public static boolean isUsingNewNamingScheme(String clientVersion) {
+        String phoenixClientVersion = getPhoenixClientVersion(clientVersion);
+
+        return !phoenixClientVersion.equals(PHOENIX_4_14_3_VERSION) &&
+                !phoenixClientVersion.equals(PHOENIX_4_15_0_VERSION);
+    }
+
+    public static String getHBaseProfile(String clientVersion) {
+        return clientVersion.split(DELIMITER)[1];
+    }
+
+    public static String getPhoenixClientVersion(String clientVersion) {
+        return clientVersion.split(DELIMITER)[0];
     }
 
     // Executes the queries listed in the operation file with a given client version
@@ -137,7 +157,14 @@ public final class BackwardCompatibilityTestUtil {
         assertNotNull(fileUrl);
         cmdParams.add(new File(fileUrl.getFile()).getAbsolutePath());
         cmdParams.add(zkQuorum);
-        cmdParams.add(clientVersion);
+
+        if (isUsingNewNamingScheme(clientVersion)) {
+            cmdParams.add(getPhoenixClientVersion(clientVersion));
+            cmdParams.add(NEW_PHOENIX_CLIENT_JAR_PREFIX + "-" + getHBaseProfile(clientVersion));
+        } else {
+            cmdParams.add(clientVersion);
+            cmdParams.add(OLD_PHOENIX_CLIENT_JAR_NAME);
+        }
 
         fileUrl = BackwardCompatibilityIT.class.getClassLoader()
                 .getResource(SQL_DIR + operation + SQL_EXTENSION);

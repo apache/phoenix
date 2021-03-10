@@ -21,20 +21,21 @@
 
 zk_url=$1
 client_version=$2
-sqlfile=$3
-resultfile=$4
-tmp_dir=$5
-maven_home=$6
+phoenix_client_jar_name=$3
+sqlfile=$4
+resultfile=$5
+tmp_dir=$6
+maven_home=$7
 
 if [ -n $maven_home ]; then
    export PATH=$maven_home/bin:$PATH
 fi
 
-mvn -B dependency:get -Dartifact=org.apache.phoenix:phoenix-client:$client_version
-mvn -B dependency:copy -Dartifact=org.apache.phoenix:phoenix-client:$client_version \
+mvn -B dependency:get -Dartifact=org.apache.phoenix:$phoenix_client_jar_name:$client_version
+mvn -B dependency:copy -Dartifact=org.apache.phoenix:$phoenix_client_jar_name:$client_version \
 -DoutputDirectory=$tmp_dir
 
-phoenix_client_jar=$tmp_dir/phoenix-client-$client_version.jar
+phoenix_client_jar=$tmp_dir/$phoenix_client_jar_name-$client_version.jar
 java -cp ".:$phoenix_client_jar" sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver \
 -u jdbc:phoenix:$zk_url -n none -p none --color=false --fastConnect=true --outputformat=csv \
 --silent=true --verbose=false --isolation=TRANSACTION_READ_COMMITTED --run=$sqlfile &> $resultfile
