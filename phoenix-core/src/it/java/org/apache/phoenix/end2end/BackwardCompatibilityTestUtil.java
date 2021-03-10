@@ -103,7 +103,7 @@ public final class BackwardCompatibilityTestUtil {
     private BackwardCompatibilityTestUtil() {
     }
 
-    public static List<String> computeClientVersions() throws Exception {
+    public static List<MavenCoordinates> computeClientVersions() throws Exception {
         String hbaseVersion = VersionInfo.getVersion();
         Pattern p = Pattern.compile("\\d+\\.\\d+");
         Matcher m = p.matcher(hbaseVersion);
@@ -111,7 +111,7 @@ public final class BackwardCompatibilityTestUtil {
         if (m.find()) {
             hbaseProfile = m.group();
         }
-        List<String> clientVersions = Lists.newArrayList();
+        List<MavenCoordinates> clientVersions = Lists.newArrayList();
         ObjectMapper mapper = new ObjectMapper();
         mapper.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
         try (InputStream inputStream = BackwardCompatibilityIT.class
@@ -120,14 +120,14 @@ public final class BackwardCompatibilityTestUtil {
             JsonNode jsonNode = mapper.readTree(inputStream);
             JsonNode HBaseProfile = jsonNode.get(hbaseProfile);
             for (final JsonNode clientVersion : HBaseProfile) {
-                clientVersions.add(clientVersion.textValue() + "-HBase-" + hbaseProfile);
+                clientVersions.add(mapper.treeToValue(clientVersion, MavenCoordinates.class));
             }
         }
         return clientVersions;
     }
 
     // Executes the queries listed in the operation file with a given client version
-    public static void executeQueryWithClientVersion(String clientVersion, String operation,
+    public static void executeQueryWithClientVersion(MavenCoordinates clientVersion, String operation,
                                                      String zkQuorum) throws Exception {
         List<String> cmdParams = Lists.newArrayList();
         cmdParams.add(BASH);
@@ -136,7 +136,9 @@ public final class BackwardCompatibilityTestUtil {
         assertNotNull(fileUrl);
         cmdParams.add(new File(fileUrl.getFile()).getAbsolutePath());
         cmdParams.add(zkQuorum);
-        cmdParams.add(clientVersion);
+        cmdParams.add(clientVersion.getGroupId());
+        cmdParams.add(clientVersion.getArtifactId());
+        cmdParams.add(clientVersion.getVersion());
 
         fileUrl = BackwardCompatibilityIT.class.getClassLoader()
                 .getResource(SQL_DIR + operation + SQL_EXTENSION);
@@ -196,11 +198,11 @@ public final class BackwardCompatibilityTestUtil {
     }
 
 
-    public static void checkForPreConditions(String compatibleClientVersion, Configuration conf) throws Exception {
+    public static void checkForPreConditions(MavenCoordinates compatibleClientVersion, Configuration conf) throws Exception {
         // For the first code cut of any major version, there wouldn't be any backward compatible
         // clients. Hence the test wouldn't run and just return true when the client
         // version to be tested is same as current version
-        assumeFalse(compatibleClientVersion.contains(MetaDataProtocol.CURRENT_CLIENT_VERSION));
+        assumeFalse(compatibleClientVersion.getVersion().contains(MetaDataProtocol.CURRENT_CLIENT_VERSION));
         // Make sure that cluster is clean before test execution with no system tables
         try (org.apache.hadoop.hbase.client.Connection conn =
                      ConnectionFactory.createConnection(conf);
@@ -320,5 +322,45 @@ public final class BackwardCompatibilityTestUtil {
                 }
             }
         }
+    }
+
+    public static class MavenCoordinates {
+        private String groupId = "org.apache.phoenix";
+        private String artifactId;
+        private String version;
+
+        public MavenCoordinates() {
+            super();
+        }
+
+        public String getGroupId() {
+            return groupId;
+        }
+
+        public void setGroupId(String groupId) {
+            this.groupId = groupId;
+        }
+
+        public String getArtifactId() {
+            return artifactId;
+        }
+
+        public void setArtifactId(String artifactId) {
+            this.artifactId = artifactId;
+        }
+
+        public String getVersion() {
+            return version;
+        }
+
+        public void setVersion(String version) {
+            this.version = version;
+        }
+
+        @Override
+        public String toString() {
+            return groupId + ":" + artifactId + ":" + version;
+        }
+
     }
 }

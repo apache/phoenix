@@ -57,14 +57,17 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.SystemCatalogRegionObserver;
 import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
+import org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.MavenCoordinates;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.SystemTaskSplitPolicy;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -84,21 +87,21 @@ import org.slf4j.LoggerFactory;
 public class BackwardCompatibilityIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(
-        BackwardCompatibilityIT.class);
+            BackwardCompatibilityIT.class);
 
-    private final String compatibleClientVersion;
+    private final MavenCoordinates compatibleClientVersion;
     private static Configuration conf;
     private static HBaseTestingUtility hbaseTestUtil;
     private static String zkQuorum;
     private static String url;
     private String tmpDir;
 
-    public BackwardCompatibilityIT(String compatibleClientVersion) {
+    public BackwardCompatibilityIT(MavenCoordinates compatibleClientVersion) {
         this.compatibleClientVersion = compatibleClientVersion;
     }
 
     @Parameters(name = "BackwardCompatibilityIT_compatibleClientVersion={0}")
-    public static synchronized Collection<String> data() throws Exception {
+    public static synchronized Collection<MavenCoordinates> data() throws Exception {
         return computeClientVersions();
     }
 
@@ -115,11 +118,11 @@ public class BackwardCompatibilityIT {
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
         checkForPreConditions(compatibleClientVersion, conf);
     }
-    
+
     @After
-    public void cleanUpAfterTest() throws Exception {
-        boolean refCountLeaked = CompatUtil.isAnyStoreRefCountLeaked(
-            hbaseTestUtil.getAdmin());
+    public synchronized void cleanUpAfterTest() throws Exception {
+        boolean refCountLeaked = CompatUtil.isAnyStoreRefCountLeaked(hbaseTestUtil.getAdmin());
+        ConnectionFactory.shutdown();
         try {
             DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
         } finally {
@@ -333,7 +336,7 @@ public class BackwardCompatibilityIT {
         executeQueryWithClientVersion(compatibleClientVersion,
             CREATE_DIVERGED_VIEW, zkQuorum);
 
-        String[] versionArr = compatibleClientVersion.split("\\.");
+        String[] versionArr = compatibleClientVersion.getVersion().split("\\.");
         int majorVersion = Integer.parseInt(versionArr[0]);
         int minorVersion = Integer.parseInt(versionArr[1]);
         org.apache.hadoop.hbase.client.Connection conn = null;
@@ -375,12 +378,11 @@ public class BackwardCompatibilityIT {
             TaskMetaDataEndpoint.class.getName()));
         assertExpectedOutput(QUERY_CREATE_DIVERGED_VIEW);
         admin.close();
-        conn.close();
     }
 
     @Test
     public void testSystemTaskCreationWithIndexAsyncRebuild() throws Exception {
-        String[] versionArr = compatibleClientVersion.split("\\.");
+        String[] versionArr = compatibleClientVersion.getVersion().split("\\.");
         int majorVersion = Integer.parseInt(versionArr[0]);
         int minorVersion = Integer.parseInt(versionArr[1]);
         // index async rebuild support min version check
@@ -397,11 +399,12 @@ public class BackwardCompatibilityIT {
     @Test
     public void testViewIndexIdCreatedWithOldClient() throws Exception {
         executeQueryWithClientVersion(compatibleClientVersion, ADD_VIEW_INDEX, zkQuorum);
-        try (org.apache.hadoop.hbase.client.Connection conn =
-                     hbaseTestUtil.getConnection(); Admin admin = conn.getAdmin()) {
+        org.apache.hadoop.hbase.client.Connection conn = hbaseTestUtil.getConnection();
+        try (Admin admin = conn.getAdmin()) {
             HTableDescriptor tableDescriptor = admin.getTableDescriptor(
                     TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
-            assertFalse("Coprocessor " + SystemCatalogRegionObserver.class.getName()
+            //The oldest client we test is 5.1.0, which already adds SystemCatalogRegionObserver
+            assertTrue("Coprocessor " + SystemCatalogRegionObserver.class.getName()
                     + " has been added with compatible client version: "
                     + compatibleClientVersion, tableDescriptor.hasCoprocessor(
                     SystemCatalogRegionObserver.class.getName()));
