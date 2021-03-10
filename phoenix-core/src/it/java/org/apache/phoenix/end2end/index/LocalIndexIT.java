@@ -153,6 +153,23 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         rs.next();
         assertEquals(6, rs.getInt(1));
         rs.close();
+
+        rs = conn.createStatement().executeQuery("SELECT * FROM "+tableName+" WHERE v1 > 0 AND v3 > 5 LIMIT 2");
+        assertTrue(rs.next());
+        assertTrue(rs.next());
+        assertFalse(rs.next());
+        rs.close();
+
+        rs = conn.createStatement().executeQuery("SELECT * FROM "+tableName+" WHERE v1 > 0 AND v3 > 5 LIMIT 1");
+        assertTrue(rs.next());
+        assertFalse(rs.next());
+        rs.close();
+
+        rs = conn.createStatement().executeQuery("SELECT * FROM "+tableName+" WHERE v3 > 5 ORDER BY v1 LIMIT 2");
+        assertTrue(rs.next());
+        assertTrue(rs.next());
+        assertFalse(rs.next());
+        rs.close();
     }
 
     @Test
