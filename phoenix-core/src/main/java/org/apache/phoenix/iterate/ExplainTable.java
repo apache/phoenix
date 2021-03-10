@@ -226,8 +226,17 @@ public abstract class ExplainTable {
             if (offset != null) {
                 planSteps.add("    SERVER OFFSET " + offset);
             }
+            Long limit = null;
             if (pageFilter != null) {
-                planSteps.add("    SERVER " + pageFilter.getPageSize() + " ROW LIMIT");
+                limit = pageFilter.getPageSize();
+            } else {
+                byte[] limitBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_LIMIT);
+                if (limitBytes != null) {
+                    limit = Bytes.toLong(limitBytes);
+                }
+            }
+            if (limit != null) {
+                planSteps.add("    SERVER " + limit + " ROW LIMIT");
             }
             if (explainPlanAttributesBuilder != null) {
                 explainPlanAttributesBuilder.setServerOffset(offset);

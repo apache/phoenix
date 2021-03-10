@@ -132,6 +132,7 @@ public abstract class RegionScannerFactory {
       private boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
       final long pageSizeMs = getPageSizeMsForRegionScanner(scan);
       Expression extraWhere = null;
+      long extraLimit = -1;
 
       {
           // for local indexes construct the row filter for uncovered columns if it exists
@@ -147,6 +148,10 @@ public abstract class RegionScannerFactory {
                       // should not happen since we're reading from a byte[]
                       throw new RuntimeException(io);
                   }
+              }
+              byte[] limitBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_LIMIT);
+              if (limitBytes != null) {
+                  extraLimit = Bytes.toLong(limitBytes);
               }
           }
       }
@@ -258,6 +263,9 @@ public abstract class RegionScannerFactory {
             if (arrayElementCell != null) {
               result.add(arrayElementCell);
             }
+          }
+          if (extraLimit >= 0 && --extraLimit == 0) {
+              return false;
           }
           // There is a scanattribute set to retrieve the specific array element
           return next;
