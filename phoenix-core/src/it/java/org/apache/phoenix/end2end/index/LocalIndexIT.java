@@ -308,6 +308,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         assertEquals(
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
                     + physicalTableName + " [1,3,4,3]\n"
+                    + "    SERVER MERGE [0.V3]\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY AND \"V3\" = 1\n"
                     + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
@@ -337,6 +338,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         assertEquals(
             "CLIENT PARALLEL 16-WAY RANGE SCAN OVER "
                     + indexPhysicalTableName + " [1,2,3]\n"
+                    + "    SERVER MERGE [0.V1]\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                     + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
@@ -382,6 +384,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         assertEquals(
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
                     + indexPhysicalTableName + " [1]\n"
+                            + "    SERVER MERGE [0.V1]\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY\n"
                             + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
@@ -402,6 +405,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         assertEquals(
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
                     + indexPhysicalTableName + " [1,2]\n"
+                            + "    SERVER MERGE [0.V1]\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY\n"
                             + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
@@ -430,6 +434,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         assertEquals(
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
                     + indexPhysicalTableName + " [1,2]\n"
+                            + "    SERVER MERGE [0.V1]\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY\n"
                             + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
@@ -440,6 +445,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         assertEquals(
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
                     + indexPhysicalTableName + " [1,2]\n"
+                            + "    SERVER MERGE [0.V1]\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY AND TO_INTEGER(\"V4\") = 4\n"
                             + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
@@ -450,6 +456,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         assertEquals(
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
                     + indexPhysicalTableName + " [1,2]\n"
+                    + "    SERVER MERGE [0.V1]\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY AND \"V1\" = 3.0\n"
                     + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
@@ -656,6 +663,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
                         + indexPhysicalTableName + " [1]\n"
+                                + "    SERVER MERGE [0.K3]\n"
                                 + "    SERVER FILTER BY FIRST KEY ONLY\n"
                                 + "CLIENT MERGE SORT",
                         QueryUtil.getExplainPlan(rs));
@@ -678,6 +686,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY REVERSE RANGE SCAN OVER "
                         + indexPhysicalTableName + " [1]\n"
+                                + "    SERVER MERGE [0.K3]\n"
                                 + "    SERVER FILTER BY FIRST KEY ONLY\n"
                                 + "CLIENT MERGE SORT",
                         QueryUtil.getExplainPlan(rs));
@@ -773,6 +782,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
                         + indexPhysicalTableName + " [1,'a']\n"
+                                + "    SERVER MERGE [0.K3]\n"
                                 + "    SERVER FILTER BY FIRST KEY ONLY\n"
                                 + "CLIENT MERGE SORT",
                         QueryUtil.getExplainPlan(rs));
@@ -796,6 +806,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
                         + indexPhysicalTableName +" [1,*] - [1,'z']\n"
+                        + "    SERVER MERGE [0.K3]\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
                          + "CLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
@@ -832,6 +843,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
                         + indexPhysicalTableName +" [1,*] - [1,'z']\n"
+                        + "    SERVER MERGE [0.K3]\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
                         + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"V1\", \"T_ID\", \"K3\"]\nCLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
@@ -860,6 +872,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
                         + indexPhysicalTableName +" [1,*] - [1,'z']\n"
+                        + "    SERVER MERGE [0.K3]\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
                         + "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"V1\"]\nCLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));

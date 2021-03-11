@@ -187,6 +187,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
                 query = "SELECT b.* from " + fullTableName + " where int_col1 = 4 AND char_col1 = 'chara'";
                 rs = conn.createStatement().executeQuery("EXPLAIN " + query);
                 assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName +" [1,'chara',4]\n" +
+                        "    SERVER MERGE [B.VARCHAR_COL2, B.CHAR_COL2, B.INT_COL2, B.DECIMAL_COL2, B.DATE_COL]\n" +
                         "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
                 rs = conn.createStatement().executeQuery(query);
                 assertTrue(rs.next());
