@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
@@ -44,6 +45,7 @@ import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
@@ -177,6 +179,13 @@ public abstract class ExplainTable {
                     distinctFilter = (DistinctPrefixFilter)filter;
                 }
             } while (filterIterator.hasNext());
+        }
+        Set<PColumn> dataColumns = context.getDataColumns();
+        if (dataColumns != null && !dataColumns.isEmpty()) {
+            planSteps.add("    SERVER MERGE " + dataColumns.toString());
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setServerMergeColumns(dataColumns);
+            }
         }
         String whereFilterStr = null;
         if (whereFilter != null) {
