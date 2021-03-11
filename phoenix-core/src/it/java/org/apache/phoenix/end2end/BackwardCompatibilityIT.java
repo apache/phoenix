@@ -326,7 +326,7 @@ public class BackwardCompatibilityIT {
         assertExpectedOutput(QUERY_CREATE_ADD);
 
         // Deletes with the new client
-        executeQueriesWithCurrentVersion(ADD_DELETE,url, NONE);
+        executeQueriesWithCurrentVersion(ADD_DELETE, url, NONE);
         executeQueriesWithCurrentVersion(QUERY_ADD_DELETE, url, NONE);
         assertExpectedOutput(QUERY_ADD_DELETE);
     }
@@ -389,10 +389,20 @@ public class BackwardCompatibilityIT {
         if (majorVersion > 4 || (majorVersion == 4 && minorVersion >= 15)) {
             executeQueryWithClientVersion(compatibleClientVersion,
                 INDEX_REBUILD_ASYNC, zkQuorum);
-            // wait 5 seconds to finish the rebuild job
-            Thread.sleep(5000);
-            executeQueriesWithCurrentVersion(QUERY_INDEX_REBUILD_ASYNC, url, NONE);
-            assertExpectedOutput(QUERY_INDEX_REBUILD_ASYNC);
+            // wait to finish the rebuild job (convoluted logic to preserve the AssertionError)
+            int retryCount=0;
+            while (true) {
+                try {
+                    Thread.sleep(5000);
+                    executeQueriesWithCurrentVersion(QUERY_INDEX_REBUILD_ASYNC, url, NONE);
+                    assertExpectedOutput(QUERY_INDEX_REBUILD_ASYNC);
+                    break;
+                } catch (AssertionError e) {
+                    if (retryCount++ > 10) {
+                        throw e;
+                    }
+                }
+            }
         }
     }
 
