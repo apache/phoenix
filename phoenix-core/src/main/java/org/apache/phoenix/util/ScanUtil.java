@@ -180,12 +180,19 @@ public class ScanUtil {
             newScan.setFamilyMap(clonedMap);
             // Carry over the reversed attribute
             newScan.setReversed(scan.isReversed());
-            newScan.setSmall(scan.isSmall());
+            if (scan.isSmall()) {
+                // HBASE-25644 : Only if Scan#setSmall(boolean) is called with
+                // true, readType should be set PREAD. For non-small scan,
+                // setting setSmall(false) is redundant and degrades perf
+                // without HBASE-25644 fix.
+                newScan.setSmall(true);
+            }
             return newScan;
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
+
     /**
      * Intersects the scan start/stop row with the startKey and stopKey
      * @param scan
