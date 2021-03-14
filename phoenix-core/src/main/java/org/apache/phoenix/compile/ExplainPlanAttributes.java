@@ -72,7 +72,7 @@ public class ExplainPlanAttributes {
     // For non-Join queries related Plans, rhsJoinQueryExplainPlan will always
     // be null
     private final ExplainPlanAttributes rhsJoinQueryExplainPlan;
-    private Set<PColumn> serverMergeColumns;
+    private final Set<PColumn> serverMergeColumns;
 
     private static final ExplainPlanAttributes EXPLAIN_PLAN_INSTANCE =
         new ExplainPlanAttributes();

@@ -55,11 +55,14 @@ import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.Estimate;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
@@ -278,42 +281,67 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(pk1,pk2,v1,v2)");
 
         // 1. same prefix length, no other restrictions, but v3 is in the SELECT. Use the main table.
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4");
-        assertEquals(
-            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + physicalTableName + " [3,4]",
-                    QueryUtil.getExplainPlan(rs));
-        rs.close();
+        ExplainPlan explainPlan = conn.prepareStatement("SELECT * FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4")
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+                explainPlan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
+        assertEquals(physicalTableName.toString(), explainPlanAttributes.getTableName());
+        assertEquals(" [3,4]", explainPlanAttributes.getKeyRanges());
 
         // 2. same prefix length, no other restrictions. Only index columns used. Use the index.
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4");
-        assertEquals(
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                        + indexPhysicalTableName + " [1,3,4]\n"
-                                + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                                + "CLIENT MERGE SORT",
-                        QueryUtil.getExplainPlan(rs));
-        rs.close();
+        explainPlan = conn.prepareStatement("SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4")
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+        explainPlanAttributes =
+                explainPlan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
+        assertEquals(indexPhysicalTableName, explainPlanAttributes.getTableName());
+        assertEquals(" [1,3,4]", explainPlanAttributes.getKeyRanges());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                explainPlanAttributes.getServerWhereFilter());
+        assertEquals("CLIENT MERGE SORT",
+                explainPlanAttributes.getClientSortAlgo());
 
         // 3. same prefix length, but there's a column not on the index
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4 AND v3 = 1");
-        assertEquals(
-            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + physicalTableName + " [3,4]\n"
-                    + "    SERVER FILTER BY V3 = 1",
-                    QueryUtil.getExplainPlan(rs));
-        rs.close();
+        explainPlan = conn.prepareStatement("SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4 AND v3 = 1")
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+        explainPlanAttributes =
+                explainPlan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
+        assertEquals(physicalTableName.toString(), explainPlanAttributes.getTableName());
+        assertEquals(" [3,4]", explainPlanAttributes.getKeyRanges());
+        assertEquals("SERVER FILTER BY V3 = 1",
+                explainPlanAttributes.getServerWhereFilter());
 
         // 4. Longer prefix on the index, use it.
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4 AND v1 = 3 AND v3 = 1");
-        assertEquals(
-            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + physicalTableName + " [1,3,4,3]\n"
-                    + "    SERVER MERGE [0.V3]\n"
-                    + "    SERVER FILTER BY FIRST KEY ONLY AND \"V3\" = 1\n"
-                    + "CLIENT MERGE SORT",
-                    QueryUtil.getExplainPlan(rs));
-        rs.close();
+        explainPlan = conn.prepareStatement("SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4 AND v1 = 3 AND v3 = 1")
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+        explainPlanAttributes =
+                explainPlan.getPlanStepsAsAttributes();
+        assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("RANGE SCAN ",
+                explainPlanAttributes.getExplainScanType());
+        assertEquals(physicalTableName.toString(), explainPlanAttributes.getTableName());
+        assertEquals(" [1,3,4,3]", explainPlanAttributes.getKeyRanges());
+        assertEquals("[0.V3]", explainPlanAttributes.getServerMergeColumns().toString());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY AND \"V3\" = 1",
+                explainPlanAttributes.getServerWhereFilter());
+        assertEquals("CLIENT MERGE SORT",
+                explainPlanAttributes.getClientSortAlgo());
     }
 
     @Test
