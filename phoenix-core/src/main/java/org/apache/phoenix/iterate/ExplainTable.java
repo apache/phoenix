@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
@@ -44,6 +45,7 @@ import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
@@ -178,10 +180,26 @@ public abstract class ExplainTable {
                 }
             } while (filterIterator.hasNext());
         }
+        Set<PColumn> dataColumns = context.getDataColumns();
+        if (dataColumns != null && !dataColumns.isEmpty()) {
+            planSteps.add("    SERVER MERGE " + dataColumns.toString());
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setServerMergeColumns(dataColumns);
+            }
+        }
+        String whereFilterStr = null;
         if (whereFilter != null) {
+            whereFilterStr = whereFilter.toString();
+        } else {
+            byte[] expBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER_STR);
+            if (expBytes != null) {
+                whereFilterStr = Bytes.toString(expBytes);
+            }
+        }
+        if (whereFilterStr != null) {
             String serverWhereFilter = "SERVER FILTER BY "
                 + (firstKeyOnlyFilter == null ? "" : "FIRST KEY ONLY AND ")
-                + whereFilter.toString();
+                + whereFilterStr;
             planSteps.add("    " + serverWhereFilter);
             if (explainPlanAttributesBuilder != null) {
                 explainPlanAttributesBuilder.setServerWhereFilter(serverWhereFilter);
@@ -217,8 +235,17 @@ public abstract class ExplainTable {
             if (offset != null) {
                 planSteps.add("    SERVER OFFSET " + offset);
             }
+            Long limit = null;
             if (pageFilter != null) {
-                planSteps.add("    SERVER " + pageFilter.getPageSize() + " ROW LIMIT");
+                limit = pageFilter.getPageSize();
+            } else {
+                byte[] limitBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_LIMIT);
+                if (limitBytes != null) {
+                    limit = Bytes.toLong(limitBytes);
+                }
+            }
+            if (limit != null) {
+                planSteps.add("    SERVER " + limit + " ROW LIMIT");
             }
             if (explainPlanAttributesBuilder != null) {
                 explainPlanAttributesBuilder.setServerOffset(offset);

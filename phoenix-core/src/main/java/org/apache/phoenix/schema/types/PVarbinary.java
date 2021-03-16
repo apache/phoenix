@@ -142,7 +142,7 @@ public class PVarbinary extends PBinaryBase {
         StringBuilder buf = new StringBuilder();
         buf.append('[');
         if (length > 0) {
-            for (int i = o; i < length; i++) {
+            for (int i = o; i < o + length; i++) {
                 buf.append(0xFF & b[i]);
                 buf.append(',');
             }

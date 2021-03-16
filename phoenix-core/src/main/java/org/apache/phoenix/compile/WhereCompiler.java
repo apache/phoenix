@@ -19,6 +19,9 @@ package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.util.EncodedColumnsUtil.isPossibleToUseEncodedCQFilter;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.Collections;
@@ -30,11 +33,14 @@ import com.google.common.base.Optional;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
@@ -59,6 +65,7 @@ import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
@@ -271,6 +278,25 @@ public class WhereCompiler {
 
         if (LiteralExpression.isBooleanFalseOrNull(whereClause)) {
             context.setScanRanges(ScanRanges.NOTHING);
+        } else if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL) {
+            if (whereClause != null && !ExpressionUtil.evaluatesToTrue(whereClause)) {
+                // pass any extra where as scan attribute so it can be evaluated after all
+                // columns from the main CF have been merged in
+                ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                try {
+                    DataOutputStream output = new DataOutputStream(stream);
+                    WritableUtils.writeVInt(output, ExpressionType.valueOf(whereClause).ordinal());
+                    whereClause.write(output);
+                    stream.close();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+                scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER, stream.toByteArray());
+
+                // this is needed just for ExplainTable, since de-serializing an expression does not restore
+                // its display properties, and that cannot be changed, due to backwards compatibility
+                scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER_STR, Bytes.toBytes(whereClause.toString()));
+            }
         } else if (whereClause != null && !ExpressionUtil.evaluatesToTrue(whereClause)) {
             Filter filter = null;
             final Counter counter = new Counter();

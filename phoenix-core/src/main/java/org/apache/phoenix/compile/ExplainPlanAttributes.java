@@ -18,9 +18,12 @@
 
 package org.apache.phoenix.compile;
 
+import java.util.Set;
+
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.schema.PColumn;
 
 /**
  * ExplainPlan attributes that contain individual attributes of ExplainPlan
@@ -69,6 +72,7 @@ public class ExplainPlanAttributes {
     // For non-Join queries related Plans, rhsJoinQueryExplainPlan will always
     // be null
     private final ExplainPlanAttributes rhsJoinQueryExplainPlan;
+    private final Set<PColumn> serverMergeColumns;
 
     private static final ExplainPlanAttributes EXPLAIN_PLAN_INSTANCE =
         new ExplainPlanAttributes();
@@ -107,6 +111,7 @@ public class ExplainPlanAttributes {
         this.clientCursorName = null;
         this.clientSortAlgo = null;
         this.rhsJoinQueryExplainPlan = null;
+        this.serverMergeColumns = null;
     }
 
     public ExplainPlanAttributes(String abstractExplainPlan,
@@ -126,7 +131,8 @@ public class ExplainPlanAttributes {
             Integer clientOffset, Integer clientRowLimit,
             Integer clientSequenceCount, String clientCursorName,
             String clientSortAlgo,
-            ExplainPlanAttributes rhsJoinQueryExplainPlan) {
+            ExplainPlanAttributes rhsJoinQueryExplainPlan,
+            Set<PColumn> serverMergeColumns) {
         this.abstractExplainPlan = abstractExplainPlan;
         this.splitsChunk = splitsChunk;
         this.estimatedRows = estimatedRows;
@@ -160,6 +166,7 @@ public class ExplainPlanAttributes {
         this.clientCursorName = clientCursorName;
         this.clientSortAlgo = clientSortAlgo;
         this.rhsJoinQueryExplainPlan = rhsJoinQueryExplainPlan;
+        this.serverMergeColumns = serverMergeColumns;
     }
 
     public String getAbstractExplainPlan() {
@@ -294,6 +301,10 @@ public class ExplainPlanAttributes {
         return rhsJoinQueryExplainPlan;
     }
 
+    public Set<PColumn> getServerMergeColumns() {
+        return serverMergeColumns;
+    }
+
     public static ExplainPlanAttributes getDefaultExplainPlan() {
         return EXPLAIN_PLAN_INSTANCE;
     }
@@ -332,6 +343,7 @@ public class ExplainPlanAttributes {
         private String clientCursorName;
         private String clientSortAlgo;
         private ExplainPlanAttributes rhsJoinQueryExplainPlan;
+        private Set<PColumn> serverMergeColumns;
 
         public ExplainPlanAttributesBuilder() {
             // default
@@ -383,6 +395,7 @@ public class ExplainPlanAttributes {
             this.clientSortAlgo = explainPlanAttributes.getClientSortAlgo();
             this.rhsJoinQueryExplainPlan =
                 explainPlanAttributes.getRhsJoinQueryExplainPlan();
+            this.serverMergeColumns = explainPlanAttributes.getServerMergeColumns();
         }
 
         public ExplainPlanAttributesBuilder setAbstractExplainPlan(
@@ -580,6 +593,12 @@ public class ExplainPlanAttributes {
             return this;
         }
 
+        public ExplainPlanAttributesBuilder setServerMergeColumns(
+                Set<PColumn> columns) {
+            this.serverMergeColumns = columns;
+            return this;
+        }
+
         public ExplainPlanAttributes build() {
             return new ExplainPlanAttributes(abstractExplainPlan, splitsChunk,
                 estimatedRows, estimatedSizeInBytes, iteratorTypeAndScanSize,
@@ -592,7 +611,7 @@ public class ExplainPlanAttributes {
                 clientFilterBy, clientAggregate, clientSortedBy,
                 clientAfterAggregate, clientDistinctFilter, clientOffset,
                 clientRowLimit, clientSequenceCount, clientCursorName,
-                clientSortAlgo, rhsJoinQueryExplainPlan);
+                clientSortAlgo, rhsJoinQueryExplainPlan, serverMergeColumns);
         }
     }
 }

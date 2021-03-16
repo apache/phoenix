@@ -52,6 +52,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
+import org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.MavenCoordinates;
 import org.apache.phoenix.coprocessor.SystemCatalogRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
@@ -77,18 +78,18 @@ import org.junit.runners.Parameterized.Parameters;
 @Category(NeedsOwnMiniClusterTest.class)
 public class BackwardCompatibilityIT {
 
-    private final String compatibleClientVersion;
+    private final MavenCoordinates compatibleClientVersion;
     private static Configuration conf;
     private static HBaseTestingUtility hbaseTestUtil;
     private static String zkQuorum;
     private static String url;
 
-    public BackwardCompatibilityIT(String compatibleClientVersion) {
+    public BackwardCompatibilityIT(MavenCoordinates compatibleClientVersion) {
         this.compatibleClientVersion = compatibleClientVersion;
     }
 
     @Parameters(name = "BackwardCompatibilityIT_compatibleClientVersion={0}")
-    public static synchronized Collection<String> data() throws Exception {
+    public static synchronized Collection<MavenCoordinates> data() throws Exception {
         return computeClientVersions();
     }
 
@@ -134,7 +135,7 @@ public class BackwardCompatibilityIT {
     public void testCreateDivergedViewWithOldClientReadFromNewClient() throws Exception {
         // Create a base table, view and make it diverge from an old client
         executeQueryWithClientVersion(compatibleClientVersion, CREATE_DIVERGED_VIEW, zkQuorum);
-        executeQueriesWithCurrentVersion(QUERY_CREATE_DIVERGED_VIEW,url, NONE);
+        executeQueriesWithCurrentVersion(QUERY_CREATE_DIVERGED_VIEW, url, NONE);
         assertExpectedOutput(QUERY_CREATE_DIVERGED_VIEW);
     }
 
@@ -318,7 +319,7 @@ public class BackwardCompatibilityIT {
         executeQueryWithClientVersion(compatibleClientVersion,
             CREATE_DIVERGED_VIEW, zkQuorum);
 
-        String[] versionArr = compatibleClientVersion.split("\\.");
+        String[] versionArr = compatibleClientVersion.getVersion().split("\\.");
         int majorVersion = Integer.parseInt(versionArr[0]);
         int minorVersion = Integer.parseInt(versionArr[1]);
         org.apache.hadoop.hbase.client.Connection conn = null;
@@ -360,37 +361,51 @@ public class BackwardCompatibilityIT {
             TaskMetaDataEndpoint.class.getName()));
         assertExpectedOutput(QUERY_CREATE_DIVERGED_VIEW);
         admin.close();
-        conn.close();
     }
 
     @Test
     public void testSystemTaskCreationWithIndexAsyncRebuild() throws Exception {
-        String[] versionArr = compatibleClientVersion.split("\\.");
+        String[] versionArr = compatibleClientVersion.getVersion().split("\\.");
         int majorVersion = Integer.parseInt(versionArr[0]);
         int minorVersion = Integer.parseInt(versionArr[1]);
         // index async rebuild support min version check
         if (majorVersion > 4 || (majorVersion == 4 && minorVersion >= 15)) {
             executeQueryWithClientVersion(compatibleClientVersion,
                 INDEX_REBUILD_ASYNC, zkQuorum);
-            // wait 5 seconds to finish the rebuild job
-            Thread.sleep(5000);
-            executeQueriesWithCurrentVersion(QUERY_INDEX_REBUILD_ASYNC, url, NONE);
-            assertExpectedOutput(QUERY_INDEX_REBUILD_ASYNC);
+            // wait to finish the rebuild job (convoluted logic to preserve the AssertionError)
+            int retryCount=0;
+            while (true) {
+                try {
+                    Thread.sleep(5000);
+                    executeQueriesWithCurrentVersion(QUERY_INDEX_REBUILD_ASYNC, url, NONE);
+                    assertExpectedOutput(QUERY_INDEX_REBUILD_ASYNC);
+                    break;
+                } catch (AssertionError e) {
+                    if (retryCount++ > 10) {
+                        throw e;
+                    }
+                }
+            }
         }
     }
 
     @Test
     public void testViewIndexIdCreatedWithOldClient() throws Exception {
+        String[] versionArr = compatibleClientVersion.getVersion().split("\\.");
+        int majorVersion = Integer.parseInt(versionArr[0]);
+        int minorVersion = Integer.parseInt(versionArr[1]);
+
         executeQueryWithClientVersion(compatibleClientVersion, ADD_VIEW_INDEX, zkQuorum);
-        try (org.apache.hadoop.hbase.client.Connection conn =
-                     hbaseTestUtil.getConnection(); Admin admin = conn.getAdmin()) {
+        org.apache.hadoop.hbase.client.Connection conn = hbaseTestUtil.getConnection();
+        try (Admin admin = conn.getAdmin()) {
             HTableDescriptor tableDescriptor = admin.getTableDescriptor(
                     TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
-            assertFalse("Coprocessor " + SystemCatalogRegionObserver.class.getName()
-                    + " has been added with compatible client version: "
-                    + compatibleClientVersion, tableDescriptor.hasCoprocessor(
-                    SystemCatalogRegionObserver.class.getName()));
-
+            if (majorVersion == 4 && minorVersion <= 15) {
+                assertFalse("Coprocessor " + SystemCatalogRegionObserver.class.getName()
+                        + " has been added with compatible client version: "
+                        + compatibleClientVersion, tableDescriptor.hasCoprocessor(
+                        SystemCatalogRegionObserver.class.getName()));
+            }
             executeQueriesWithCurrentVersion(QUERY_VIEW_INDEX, url, NONE);
             assertExpectedOutput(QUERY_VIEW_INDEX);
 

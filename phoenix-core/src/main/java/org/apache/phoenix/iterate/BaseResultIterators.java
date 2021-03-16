@@ -281,7 +281,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
 
             if (perScanLimit != null) {
-                ScanUtil.andFilterAtEnd(scan, new PageFilter(perScanLimit));
+                if (scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER) == null) {
+                    ScanUtil.andFilterAtEnd(scan, new PageFilter(perScanLimit));
+                } else {
+                    // if we have a local index filter and a limit, handle the limit after the filter
+                    // we cast the limit to a long even though it passed as an Integer so that
+                    // if we need extend this in the future the serialization is unchanged
+                    scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_LIMIT, Bytes.toBytes((long)perScanLimit));
+                }
             }
             
             if(offset!=null){
@@ -405,6 +412,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         ImmutableStorageScheme storageScheme = table.getImmutableStorageScheme();
         BitSet trackedColumnsBitset = isPossibleToUseEncodedCQFilter(encodingScheme, storageScheme) && !hasDynamicColumns(table) ? new BitSet(10) : null;
         boolean filteredColumnNotInProjection = false;
+
         for (Pair<byte[], byte[]> whereCol : context.getWhereConditionColumns()) {
             byte[] filteredFamily = whereCol.getFirst();
             if (!(familyMap.containsKey(filteredFamily))) {
@@ -444,22 +452,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 preventSeekToColumn = referencedCfCount == 1 && hbaseServerVersion < MIN_SEEK_TO_COLUMN_VERSION;
             }
         }
-        for (Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
-            ImmutableBytesPtr cf = new ImmutableBytesPtr(entry.getKey());
-            NavigableSet<byte[]> qs = entry.getValue();
-            NavigableSet<ImmutableBytesPtr> cols = null;
-            if (qs != null) {
-                cols = new TreeSet<ImmutableBytesPtr>();
-                for (byte[] q : qs) {
-                    cols.add(new ImmutableBytesPtr(q));
-                    if (trackedColumnsBitset != null) {
-                        int qualifier = encodingScheme.decode(q);
-                        trackedColumnsBitset.set(qualifier);
-                    }
-                }
-            }
-            columnsTracker.put(cf, cols);
-        }
         // Making sure that where condition CFs are getting scanned at HRS.
         for (Pair<byte[], byte[]> whereCol : context.getWhereConditionColumns()) {
             byte[] family = whereCol.getFirst();
@@ -491,6 +483,22 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     scan.addColumn(family, whereCol.getSecond());
                 }
             }
+        }
+        for (Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
+            ImmutableBytesPtr cf = new ImmutableBytesPtr(entry.getKey());
+            NavigableSet<byte[]> qs = entry.getValue();
+            NavigableSet<ImmutableBytesPtr> cols = null;
+            if (qs != null) {
+                cols = new TreeSet<ImmutableBytesPtr>();
+                for (byte[] q : qs) {
+                    cols.add(new ImmutableBytesPtr(q));
+                    if (trackedColumnsBitset != null) {
+                        int qualifier = encodingScheme.decode(q);
+                        trackedColumnsBitset.set(qualifier);
+                    }
+                }
+            }
+            columnsTracker.put(cf, cols);
         }
         if (!columnsTracker.isEmpty()) {
             if (preventSeekToColumn) {
