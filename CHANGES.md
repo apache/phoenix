@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 5.1.1 - Unreleased (as of 2021-03-11)
+## Release 5.1.1 - Unreleased (as of 2021-03-16)
 
 
 
@@ -26,6 +26,8 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-6409](https://issues.apache.org/jira/browse/PHOENIX-6409) | Include local index uncovered columns merge in explain plan. |  Minor | . |
+| [PHOENIX-6385](https://issues.apache.org/jira/browse/PHOENIX-6385) | Not to use Scan#setSmall for HBase 2.x versions |  Major | . |
 | [PHOENIX-6402](https://issues.apache.org/jira/browse/PHOENIX-6402) | Allow using local indexes with uncovered columns in the WHERE clause |  Blocker | . |
 | [PHOENIX-6388](https://issues.apache.org/jira/browse/PHOENIX-6388) | Add sampled logging for read repairs |  Minor | . |
 | [PHOENIX-6396](https://issues.apache.org/jira/browse/PHOENIX-6396) | PChar illegal data exception should not contain value |  Major | . |
