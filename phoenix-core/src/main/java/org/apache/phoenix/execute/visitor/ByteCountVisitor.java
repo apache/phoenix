@@ -23,7 +23,6 @@ import org.apache.phoenix.compile.TraceQueryPlan;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.ClientAggregatePlan;
 import org.apache.phoenix.execute.ClientScanPlan;
-import org.apache.phoenix.execute.CorrelatePlan;
 import org.apache.phoenix.execute.CursorFetchPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.LiteralResultIterationPlan;
@@ -90,11 +89,6 @@ public class ByteCountVisitor implements QueryPlanVisitor<Double> {
 
     @Override
     public Double visit(UnnestArrayPlan plan) {
-        return getByteCountFromRowCountAndRowWidth(plan);
-    }
-
-    @Override
-    public Double visit(CorrelatePlan plan) {
         return getByteCountFromRowCountAndRowWidth(plan);
     }
 
