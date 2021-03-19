@@ -333,6 +333,47 @@ public class GroupByIT extends BaseQueryIT {
             conn.close();
         }
     }
-    
 
+    @Test
+    public void testGroupByHavingWithAlias() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            conn.setAutoCommit(false);
+            String tableName = generateUniqueName();
+            String ddl = "CREATE TABLE " + tableName + " (a_string varchar not null, col1 integer"
+              + " CONSTRAINT pk PRIMARY KEY (a_string))";
+            createTestTable(getUrl(), ddl);
+
+            String dml = "UPSERT INTO " + tableName + " VALUES(?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            stmt.setString(1, "a");
+            stmt.setInt(2, 40);
+            stmt.execute();
+            stmt.setString(1, "b");
+            stmt.setInt(2, 20);
+            stmt.execute();
+            stmt.setString(1, "c");
+            stmt.setInt(2, 30);
+            stmt.execute();
+            stmt.execute();
+            conn.commit();
+
+            String query = "SELECT a_string, sum(col1) as sumCol1 FROM " + tableName
+              + " GROUP BY a_string HAVING sumCol1>20 ORDER BY sumCol1";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("c", rs.getString(1));
+            assertEquals(30, rs.getInt(2));
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals(40, rs.getInt(2));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
 }
