@@ -26,7 +26,6 @@ import org.apache.phoenix.compile.TraceQueryPlan;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.ClientAggregatePlan;
 import org.apache.phoenix.execute.ClientScanPlan;
-import org.apache.phoenix.execute.CorrelatePlan;
 import org.apache.phoenix.execute.CursorFetchPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.LiteralResultIterationPlan;
@@ -203,16 +202,6 @@ public class RowCountVisitor implements QueryPlanVisitor<Double> {
     @Override
     public Double visit(UnnestArrayPlan plan) {
         return plan.getDelegate().accept(this);
-    }
-
-    @Override
-    public Double visit(CorrelatePlan plan) {
-        Double lhsRows = plan.getDelegate().accept(this);
-        if (lhsRows != null) {
-            return lhsRows * SEMI_OR_ANTI_JOIN_FACTOR;
-        }
-
-        return null;
     }
 
     @Override
