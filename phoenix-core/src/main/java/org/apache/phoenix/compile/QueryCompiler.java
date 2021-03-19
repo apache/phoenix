@@ -180,8 +180,6 @@ public class QueryCompiler {
         if (scn == null) {
             return;
         }
-        ColumnResolver resolver =
-            FromCompiler.getResolverForQuery(select, conn);
         int maxLookBackAge = conn.getQueryServices().
             getConfiguration().getInt(ScanInfoUtil.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
             ScanInfoUtil.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE);
