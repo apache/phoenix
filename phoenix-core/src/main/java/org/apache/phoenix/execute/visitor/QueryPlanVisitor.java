@@ -39,7 +39,6 @@ public interface QueryPlanVisitor<E> {
     E visit(SortMergeJoinPlan plan);
     E visit(UnionPlan plan);
     E visit(UnnestArrayPlan plan);
-    E visit(CorrelatePlan plan);
     E visit(CursorFetchPlan plan);
     E visit(ListJarsQueryPlan plan);
     E visit(TraceQueryPlan plan);
