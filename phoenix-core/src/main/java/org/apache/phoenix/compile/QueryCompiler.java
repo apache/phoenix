@@ -194,8 +194,6 @@ public class QueryCompiler {
         if (scn == null) {
             return;
         }
-        ColumnResolver resolver =
-            FromCompiler.getResolverForQuery(select, conn);
         long maxLookBackAgeInMillis =
             CompatBaseScannerRegionObserver.getMaxLookbackInMillis(conn.getQueryServices().
             getConfiguration());
