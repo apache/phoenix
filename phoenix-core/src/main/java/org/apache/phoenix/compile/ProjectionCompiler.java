@@ -159,6 +159,11 @@ public class ProjectionCompiler {
                         String schemaName = table.getSchemaName().getString();
                         ref = resolver.resolveColumn(schemaName.length() == 0 ? null : schemaName, table.getTableName().getString(), colName);
                     }
+                    // The freshly revolved column's family better be the same as the original one.
+                    // If not, trigger the disambiguation logic. Also see PTableImpl.getColumnForColumnName(...)
+                    if (column.getFamilyName() != null && !column.getFamilyName().equals(ref.getColumn().getFamilyName())) {
+                        throw new AmbiguousColumnException();
+                    }
                 } catch (AmbiguousColumnException e) {
                     if (column.getFamilyName() != null) {
                         ref = resolver.resolveColumn(tableAlias != null ? tableAlias : table.getTableName().getString(), column.getFamilyName().getString(), colName);
