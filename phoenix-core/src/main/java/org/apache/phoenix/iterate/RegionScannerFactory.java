@@ -214,18 +214,13 @@ public abstract class RegionScannerFactory {
           if (isDummy(result)) {
             return true;
           }
-          Cell arrayElementCell = null;
           if (result.size() == 0) {
             return next;
-          }
-          if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
-            int arrayElementCellPosition = replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
-            arrayElementCell = result.get(arrayElementCellPosition);
           }
           if (ScanUtil.isLocalIndex(scan) && !ScanUtil.isAnalyzeTable(scan)) {
             if(actualStartKey!=null) {
               next = scanTillScanStartRow(s, arrayKVRefs, arrayFuncRefs, result,
-                  null, arrayElementCell);
+                  null);
               if (result.isEmpty() || isDummy(result)) {
                 return next;
               }
@@ -247,6 +242,11 @@ public abstract class RegionScannerFactory {
                     return next;
                 }
             }
+          }
+          Cell arrayElementCell = null;
+          if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
+            int arrayElementCellPosition = replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+            arrayElementCell = result.get(arrayElementCellPosition);
           }
           if (projector != null) {
             Tuple toProject = useQualifierAsListIndex ? new PositionBasedResultTuple(result) :
@@ -345,7 +345,7 @@ public abstract class RegionScannerFactory {
       private boolean scanTillScanStartRow(final RegionScanner s,
           final Set<KeyValueColumnExpression> arrayKVRefs,
           final Expression[] arrayFuncRefs, List<Cell> result,
-          ScannerContext scannerContext, Cell arrayElementCell) throws IOException {
+          ScannerContext scannerContext) throws IOException {
         boolean next = true;
         Cell firstCell = result.get(0);
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
@@ -368,10 +368,6 @@ public abstract class RegionScannerFactory {
           }
           if (isDummy(result)) {
             return true;
-          }
-          if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
-            int arrayElementCellPosition = replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
-            arrayElementCell = result.get(arrayElementCellPosition);
           }
           firstCell = result.get(0);
         }

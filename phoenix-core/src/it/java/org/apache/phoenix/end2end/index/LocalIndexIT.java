@@ -83,6 +83,36 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     }
 
     @Test
+    public void testSelectFromIndexWithUncoveredArrayIndex() throws Exception {
+        if (isNamespaceMapped) {
+            return;
+        }
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+
+        Connection conn = getConnection();
+        conn.setAutoCommit(true);
+
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (pk INTEGER PRIMARY KEY, v1 FLOAT, v2 FLOAT[])");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1, 2, ARRAY[3,4])");
+
+        conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT v2[1] FROM "+tableName+" WHERE v1 < 3");
+        rs.next();
+        assertEquals(3, rs.getInt(1));
+        rs.close();
+
+        conn.createStatement().execute("DROP INDEX " + indexName + " ON " + tableName);
+        conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v2[2])");
+
+        rs = conn.createStatement().executeQuery("SELECT v2[1] FROM "+tableName+" WHERE v2[2] < 5");
+        rs.next();
+        assertEquals(3, rs.getInt(1));
+        rs.close();
+    }
+
+    @Test
     public void testSelectFromIndexWithAdditionalWhereClause() throws Exception {
         if (isNamespaceMapped) {
             return;
