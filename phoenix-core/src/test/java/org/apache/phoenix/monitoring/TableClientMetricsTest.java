@@ -77,7 +77,7 @@ import static org.junit.Assert.assertTrue;
  */
 public class TableClientMetricsTest {
 
-    static Map<String, TableClientMetrics> tableMetricsSet = new HashMap<>();
+    private static Map<String, TableClientMetrics> tableMetricsSet = new HashMap<>();
 
     public void verifyMetricsFromTableClientMetrics() {
         assertFalse(tableMetricsSet.isEmpty());
@@ -207,7 +207,6 @@ public class TableClientMetricsTest {
     /**
      * This test is for getTableName()
      */
-
     @Test
     public void testTableClientMetricsforTableName() {
         Configuration conf = new Configuration();

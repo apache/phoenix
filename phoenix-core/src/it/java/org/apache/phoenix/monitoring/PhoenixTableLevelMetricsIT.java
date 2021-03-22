@@ -45,7 +45,6 @@ import org.apache.phoenix.util.InstanceResolver;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 
-
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
@@ -134,8 +133,9 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
 
-    private static final String CREATE_TABLE_DDL = "CREATE TABLE %s (K VARCHAR(%d) NOT NULL"
-            + " PRIMARY KEY, V VARCHAR)";
+    private static final String
+            CREATE_TABLE_DDL =
+            "CREATE TABLE %s (K VARCHAR(%d) NOT NULL" + " PRIMARY KEY, V VARCHAR)";
     private static final String UPSERT_DML = "UPSERT INTO %s VALUES (?, ?)";
     private static final String KEY = "key";
     private static final String VALUE = "value";
@@ -143,8 +143,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
     private static long injectDelay;
     private static HBaseTestingUtility hbaseTestUtil;
 
-    @BeforeClass
-    public static void doSetup() throws Exception {
+    @BeforeClass public static void doSetup() throws Exception {
         final Configuration conf = HBaseConfiguration.create();
         conf.set(QueryServices.TABLE_LEVEL_METRICS_ENABLED, String.valueOf(true));
         conf.set(QueryServices.METRIC_PUBLISHER_ENABLED, String.valueOf(true));
@@ -172,13 +171,11 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
 
         // Add our own driver
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(BaseTest.DRIVER_CLASS_NAME_ATTRIB,
-                PhoenixMetricsTestingDriver.class.getName());
+        props.put(BaseTest.DRIVER_CLASS_NAME_ATTRIB, PhoenixMetricsTestingDriver.class.getName());
         initAndRegisterTestDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
     }
 
-    @AfterClass
-    public static void tearDownMiniCluster() {
+    @AfterClass public static void tearDownMiniCluster() {
         try {
             if (hbaseTestUtil != null) {
                 hbaseTestUtil.shutdownMiniCluster();
@@ -188,32 +185,30 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
-    /** Assert table-level metrics related to SELECT queries
-     * @param tableName table name
-     * @param isPointLookup true if it is a point lookup
-     * @param expectedSqlSuccessCt expected number of successes related to query execution
-     * @param expectedSqlFailureCt expected number of failures related to query execution
-     * @param expectedMinTimeElapsed minimum expected time elapsed during query execution
-     * @param hasResultSetIterationStarted true if we have actually started issuing the scan(s) and
-     *                                     iterating over results via ResultSet.next() calls
-     * @param expectedResultSetIterFailedCounter expected number of failures related to rs.next()
+    /**
+     * Assert table-level metrics related to SELECT queries
+     *
+     * @param tableName                           table name
+     * @param isPointLookup                       true if it is a point lookup
+     * @param expectedSqlSuccessCt                expected number of successes related to query execution
+     * @param expectedSqlFailureCt                expected number of failures related to query execution
+     * @param expectedMinTimeElapsed              minimum expected time elapsed during query execution
+     * @param hasResultSetIterationStarted        true if we have actually started issuing the scan(s) and
+     *                                            iterating over results via ResultSet.next() calls
+     * @param expectedResultSetIterFailedCounter  expected number of failures related to rs.next()
      * @param expectedResultSetIterTimeoutCounter expected number of timeouts related to rs.next()
-     * @param rs current ResultSet which we can use to check table-level metric values against
-     *           the ReadMetricQueue and OverallQueryMetrics. Null indicates that rs iteration
-     *           has not started yet due to an exception in the executeMutation step itself
+     * @param rs                                  current ResultSet which we can use to check table-level metric values against
+     *                                            the ReadMetricQueue and OverallQueryMetrics. Null indicates that rs iteration
+     *                                            has not started yet due to an exception in the executeMutation step itself
      */
-    static void assertSelectQueryTableMetrics(
-            final String tableName,
-            final boolean isPointLookup,
+    static void assertSelectQueryTableMetrics(final String tableName, final boolean isPointLookup,
             final long expectedSelectAggregateSuccessCt,
-            final long expectedSelectAggregateFailureCt,
-            final long expectedSqlSuccessCt,
-            final long expectedSqlFailureCt,
-            final long expectedMinTimeElapsed,
+            final long expectedSelectAggregateFailureCt, final long expectedSqlSuccessCt,
+            final long expectedSqlFailureCt, final long expectedMinTimeElapsed,
             final boolean hasResultSetIterationStarted,
             final long expectedResultSetIterFailedCounter,
-            final long expectedResultSetIterTimeoutCounter,
-            final ResultSet rs) throws SQLException {
+            final long expectedResultSetIterTimeoutCounter, final ResultSet rs)
+            throws SQLException {
         // The resultSet must be closed since we modify certain timing related metrics when calling rs.close()
         if (hasResultSetIterationStarted) {
             assertTrue(rs != null && rs.isClosed());
@@ -222,21 +217,31 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
         }
         assertFalse(getPhoenixTableClientMetrics().isEmpty());
         assertFalse(getPhoenixTableClientMetrics().get(tableName).isEmpty());
-        final long expectedTimeToFetchAllRecordsRsNext = rs == null ? 0 :
-                getOverAllReadRequestMetricInfo(rs).get(RESULT_SET_TIME_MS);
-        final long expectedScanBytes = rs == null || rs.isBeforeFirst() ? 0 :
-                getRequestReadMetricInfo(rs).get(tableName).get(SCAN_BYTES);
+        final long
+                expectedTimeToFetchAllRecordsRsNext =
+                rs == null ? 0 : getOverAllReadRequestMetricInfo(rs).get(RESULT_SET_TIME_MS);
+        final long
+                expectedScanBytes =
+                rs == null || rs.isBeforeFirst() ?
+                        0 :
+                        getRequestReadMetricInfo(rs).get(tableName).get(SCAN_BYTES);
         final long expectedSqlCounter = expectedSqlSuccessCt + expectedSqlFailureCt;
 
         for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(tableName)) {
             assertMetricValue(metric, SELECT_SQL_COUNTER, expectedSqlCounter, CompareOp.EQ);
-            assertMetricValue(metric, SELECT_AGGREGATE_FAILURE_SQL_COUNTER, expectedSelectAggregateFailureCt, CompareOp.EQ);
-            assertMetricValue(metric, SELECT_AGGREGATE_SUCCESS_SQL_COUNTER, expectedSelectAggregateSuccessCt, CompareOp.EQ);
-            assertMetricValue(metric, SELECT_SUCCESS_SQL_COUNTER, expectedSqlSuccessCt, CompareOp.EQ);
-            assertMetricValue(metric, isPointLookup ? SELECT_POINTLOOKUP_SUCCESS_SQL_COUNTER :
+            assertMetricValue(metric, SELECT_AGGREGATE_FAILURE_SQL_COUNTER,
+                    expectedSelectAggregateFailureCt, CompareOp.EQ);
+            assertMetricValue(metric, SELECT_AGGREGATE_SUCCESS_SQL_COUNTER,
+                    expectedSelectAggregateSuccessCt, CompareOp.EQ);
+            assertMetricValue(metric, SELECT_SUCCESS_SQL_COUNTER, expectedSqlSuccessCt,
+                    CompareOp.EQ);
+            assertMetricValue(metric, isPointLookup ?
+                    SELECT_POINTLOOKUP_SUCCESS_SQL_COUNTER :
                     SELECT_SCAN_SUCCESS_SQL_COUNTER, expectedSqlSuccessCt, CompareOp.EQ);
-            assertMetricValue(metric, SELECT_FAILED_SQL_COUNTER, expectedSqlFailureCt, CompareOp.EQ);
-            assertMetricValue(metric, isPointLookup ? SELECT_POINTLOOKUP_FAILED_SQL_COUNTER :
+            assertMetricValue(metric, SELECT_FAILED_SQL_COUNTER, expectedSqlFailureCt,
+                    CompareOp.EQ);
+            assertMetricValue(metric, isPointLookup ?
+                    SELECT_POINTLOOKUP_FAILED_SQL_COUNTER :
                     SELECT_SCAN_FAILED_SQL_COUNTER, expectedSqlFailureCt, CompareOp.EQ);
             assertMetricValue(metric, SELECT_SQL_QUERY_TIME, expectedMinTimeElapsed, CompareOp.GT);
 
@@ -248,124 +253,152 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     assertMetricValue(metric, SCAN_BYTES, 0, CompareOp.EQ);
                 }
                 assertMetricValue(metric, SCAN_BYTES, expectedScanBytes, CompareOp.EQ);
-                assertMetricValue(metric, QUERY_FAILED_COUNTER, expectedResultSetIterFailedCounter, CompareOp.EQ);
-                assertMetricValue(metric, isPointLookup ? QUERY_POINTLOOKUP_FAILED_COUNTER :
-                        QUERY_SCAN_FAILED_COUNTER, expectedResultSetIterFailedCounter, CompareOp.EQ);
-                assertMetricValue(metric, QUERY_TIMEOUT_COUNTER, expectedResultSetIterTimeoutCounter, CompareOp.EQ);
-                assertMetricValue(metric, isPointLookup ? QUERY_POINTLOOKUP_TIMEOUT_COUNTER :
-                        QUERY_SCAN_TIMEOUT_COUNTER, expectedResultSetIterTimeoutCounter, CompareOp.EQ);
-                assertMetricValue(metric, RESULT_SET_TIME_MS, expectedTimeToFetchAllRecordsRsNext, CompareOp.EQ);
+                assertMetricValue(metric, QUERY_FAILED_COUNTER, expectedResultSetIterFailedCounter,
+                        CompareOp.EQ);
+                assertMetricValue(metric, isPointLookup ?
+                                QUERY_POINTLOOKUP_FAILED_COUNTER :
+                                QUERY_SCAN_FAILED_COUNTER, expectedResultSetIterFailedCounter,
+                        CompareOp.EQ);
+                assertMetricValue(metric, QUERY_TIMEOUT_COUNTER,
+                        expectedResultSetIterTimeoutCounter, CompareOp.EQ);
+                assertMetricValue(metric, isPointLookup ?
+                                QUERY_POINTLOOKUP_TIMEOUT_COUNTER :
+                                QUERY_SCAN_TIMEOUT_COUNTER, expectedResultSetIterTimeoutCounter,
+                        CompareOp.EQ);
+                assertMetricValue(metric, RESULT_SET_TIME_MS, expectedTimeToFetchAllRecordsRsNext,
+                        CompareOp.EQ);
             } else {
                 assertMetricValue(metric, SCAN_BYTES, 0, CompareOp.EQ);
                 assertMetricValue(metric, QUERY_FAILED_COUNTER, 0, CompareOp.EQ);
-                assertMetricValue(metric, isPointLookup ? QUERY_POINTLOOKUP_FAILED_COUNTER :
+                assertMetricValue(metric, isPointLookup ?
+                        QUERY_POINTLOOKUP_FAILED_COUNTER :
                         QUERY_SCAN_FAILED_COUNTER, 0, CompareOp.EQ);
                 assertMetricValue(metric, QUERY_TIMEOUT_COUNTER, 0, CompareOp.EQ);
-                assertMetricValue(metric, isPointLookup ? QUERY_POINTLOOKUP_TIMEOUT_COUNTER :
+                assertMetricValue(metric, isPointLookup ?
+                        QUERY_POINTLOOKUP_TIMEOUT_COUNTER :
                         QUERY_SCAN_TIMEOUT_COUNTER, 0, CompareOp.EQ);
                 assertMetricValue(metric, RESULT_SET_TIME_MS, 0, CompareOp.EQ);
             }
         }
     }
 
-    /** Assert table-level metrics related to UPSERT and DELETE queries
-     * @param tableName table name
-     * @param expectedUpsertOrDeleteSuccessSqlCt expected number of successes for upsert or delete
-     *                                           mutation execution
-     * @param expectedUpsertOrDeleteFailedSqlCt expected number of failures for upsert or delete
-     *                                          mutation execution
+    /**
+     * Assert table-level metrics related to UPSERT and DELETE queries
+     *
+     * @param tableName                             table name
+     * @param expectedUpsertOrDeleteSuccessSqlCt    expected number of successes for upsert or delete
+     *                                              mutation execution
+     * @param expectedUpsertOrDeleteFailedSqlCt     expected number of failures for upsert or delete
+     *                                              mutation execution
      * @param expectedMinUpsertOrDeleteSqlQueryTime minimum expected time elapsed during upsert or
      *                                              delete mutation execution
-     * @param hasMutationBeenExplicitlyCommitted true if conn.commit() was explicitly called,
-     *                                           false if connection was autoCommit = true or if
-     *                                           conn.commit() was not called
-     * @param expectedMutBatchSize total number of mutations to be committed
-     * @param expectedMinUpsertOrDeleteCommitTime minimum expected time taken to commit upsert or
-     *                                            delete mutations
+     * @param hasMutationBeenExplicitlyCommitted    true if conn.commit() was explicitly called,
+     *                                              false if connection was autoCommit = true or if
+     *                                              conn.commit() was not called
+     * @param expectedMutBatchSize                  total number of mutations to be committed
+     * @param expectedMinUpsertOrDeleteCommitTime   minimum expected time taken to commit upsert or
+     *                                              delete mutations
      * @param expectedUpsertOrDeleteBatchFailedSize expected total size of upsert or delete mutation
      *                                              batches that failed to commit
-     * @param writeMutMetrics write mutation metrics object
-     * @param conn connection object. Note: this method must be called after connection close
-     *             since that's where we populate table-level write metrics
+     * @param writeMutMetrics                       write mutation metrics object
+     * @param conn                                  connection object. Note: this method must be called after connection close
+     *                                              since that's where we populate table-level write metrics
      */
-    private static void assertMutationTableMetrics(
-            final boolean isUpsert,
-            final String tableName,
+    private static void assertMutationTableMetrics(final boolean isUpsert, final String tableName,
             final long expectedUpsertOrDeleteSuccessSqlCt,
             final long expectedUpsertOrDeleteFailedSqlCt,
             final long expectedMinUpsertOrDeleteSqlQueryTime,
-            final boolean hasMutationBeenExplicitlyCommitted,
-            final long expectedMutBatchSize,
+            final boolean hasMutationBeenExplicitlyCommitted, final long expectedMutBatchSize,
             final long expectedMinUpsertOrDeleteCommitTime,
             final long expectedUpsertOrDeleteBatchFailedSize,
             final long expectedUpsertOrDeleteAggregateSuccessCt,
             final long expectedUpsertOrDeleteAggregateFailureCt,
-            final Map<MetricType, Long> writeMutMetrics,
-            final Connection conn) throws SQLException {
+            final Map<MetricType, Long> writeMutMetrics, final Connection conn)
+            throws SQLException {
         assertTrue(conn != null && conn.isClosed());
         assertFalse(hasMutationBeenExplicitlyCommitted && writeMutMetrics == null);
         assertFalse(getPhoenixTableClientMetrics().isEmpty());
         assertFalse(getPhoenixTableClientMetrics().get(tableName).isEmpty());
 
-        final long expectedUpsertOrDeleteSqlCt =
+        final long
+                expectedUpsertOrDeleteSqlCt =
                 expectedUpsertOrDeleteSuccessSqlCt + expectedUpsertOrDeleteFailedSqlCt;
 
         for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(tableName)) {
             // executeMutation() related metrics:
             assertMetricValue(metric, isUpsert ? UPSERT_SQL_COUNTER : DELETE_SQL_COUNTER,
                     expectedUpsertOrDeleteSqlCt, CompareOp.EQ);
-            assertMetricValue(metric, isUpsert ? UPSERT_SUCCESS_SQL_COUNTER : DELETE_SUCCESS_SQL_COUNTER,
+            assertMetricValue(metric,
+                    isUpsert ? UPSERT_SUCCESS_SQL_COUNTER : DELETE_SUCCESS_SQL_COUNTER,
                     expectedUpsertOrDeleteSuccessSqlCt, CompareOp.EQ);
-            assertMetricValue(metric, isUpsert ? UPSERT_FAILED_SQL_COUNTER : DELETE_FAILED_SQL_COUNTER,
+            assertMetricValue(metric,
+                    isUpsert ? UPSERT_FAILED_SQL_COUNTER : DELETE_FAILED_SQL_COUNTER,
                     expectedUpsertOrDeleteFailedSqlCt, CompareOp.EQ);
             assertMetricValue(metric, isUpsert ? UPSERT_SQL_QUERY_TIME : DELETE_SQL_QUERY_TIME,
                     expectedMinUpsertOrDeleteSqlQueryTime, CompareOp.GTEQ);
 
             if (hasMutationBeenExplicitlyCommitted) {
                 // conn.commit() related metrics
-                assertMetricValue(metric, MUTATION_BATCH_SIZE, writeMutMetrics.get(MUTATION_BATCH_SIZE), CompareOp.EQ);
+                assertMetricValue(metric, MUTATION_BATCH_SIZE,
+                        writeMutMetrics.get(MUTATION_BATCH_SIZE), CompareOp.EQ);
                 assertMetricValue(metric, MUTATION_BATCH_SIZE, expectedMutBatchSize, CompareOp.EQ);
-                assertMetricValue(metric, MUTATION_BYTES, writeMutMetrics.get(MUTATION_BYTES), CompareOp.EQ);
-                assertMetricValue(metric, MUTATION_BATCH_FAILED_SIZE, writeMutMetrics.get(MUTATION_BATCH_FAILED_SIZE), CompareOp.EQ);
-                assertMetricValue(metric, MUTATION_BATCH_FAILED_SIZE, expectedUpsertOrDeleteBatchFailedSize, CompareOp.EQ);
-
+                assertMetricValue(metric, MUTATION_BYTES, writeMutMetrics.get(MUTATION_BYTES),
+                        CompareOp.EQ);
+                assertMetricValue(metric, MUTATION_BATCH_FAILED_SIZE,
+                        writeMutMetrics.get(MUTATION_BATCH_FAILED_SIZE), CompareOp.EQ);
+                assertMetricValue(metric, MUTATION_BATCH_FAILED_SIZE,
+                        expectedUpsertOrDeleteBatchFailedSize, CompareOp.EQ);
 
                 assertMetricValue(metric, isUpsert ? UPSERT_COMMIT_TIME : DELETE_COMMIT_TIME,
                         writeMutMetrics.get(isUpsert ? UPSERT_COMMIT_TIME : DELETE_COMMIT_TIME),
                         CompareOp.EQ);
-                if(expectedUpsertOrDeleteAggregateSuccessCt > 0){
-                    assertMetricValue(metric, isUpsert ? UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER : DELETE_AGGREGATE_SUCCESS_SQL_COUNTER
-                            , expectedUpsertOrDeleteAggregateSuccessCt, CompareOp.EQ);
+                if (expectedUpsertOrDeleteAggregateSuccessCt > 0) {
+                    assertMetricValue(metric, isUpsert ?
+                                    UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER :
+                                    DELETE_AGGREGATE_SUCCESS_SQL_COUNTER,
+                            expectedUpsertOrDeleteAggregateSuccessCt, CompareOp.EQ);
                 }
-                if(expectedUpsertOrDeleteAggregateFailureCt > 0){
-                    assertMetricValue(metric, isUpsert ? UPSERT_AGGREGATE_FAILURE_SQL_COUNTER : DELETE_AGGREGATE_FAILURE_SQL_COUNTER
-                            , expectedUpsertOrDeleteAggregateFailureCt, CompareOp.EQ);
+                if (expectedUpsertOrDeleteAggregateFailureCt > 0) {
+                    assertMetricValue(metric, isUpsert ?
+                                    UPSERT_AGGREGATE_FAILURE_SQL_COUNTER :
+                                    DELETE_AGGREGATE_FAILURE_SQL_COUNTER,
+                            expectedUpsertOrDeleteAggregateFailureCt, CompareOp.EQ);
                 }
                 if (expectedUpsertOrDeleteBatchFailedSize > 0) {
-                    assertMetricValue(metric, isUpsert ? UPSERT_COMMIT_TIME : DELETE_COMMIT_TIME,
-                            0, CompareOp.EQ);
-                    assertMetricValue(metric, isUpsert ? UPSERT_MUTATION_SQL_COUNTER : DELETE_MUTATION_SQL_COUNTER,
-                            0, CompareOp.EQ);
+                    assertMetricValue(metric, isUpsert ? UPSERT_COMMIT_TIME : DELETE_COMMIT_TIME, 0,
+                            CompareOp.EQ);
+                    assertMetricValue(metric,
+                            isUpsert ? UPSERT_MUTATION_SQL_COUNTER : DELETE_MUTATION_SQL_COUNTER, 0,
+                            CompareOp.EQ);
                 } else {
                     assertMetricValue(metric, isUpsert ? UPSERT_COMMIT_TIME : DELETE_COMMIT_TIME,
                             expectedMinUpsertOrDeleteCommitTime, CompareOp.GTEQ);
-                    assertMetricValue(metric, isUpsert ? UPSERT_MUTATION_SQL_COUNTER : DELETE_MUTATION_SQL_COUNTER,
+                    assertMetricValue(metric,
+                            isUpsert ? UPSERT_MUTATION_SQL_COUNTER : DELETE_MUTATION_SQL_COUNTER,
                             expectedMutBatchSize, CompareOp.EQ);
                 }
                 assertMetricValue(metric, isUpsert ? UPSERT_MUTATION_BYTES : DELETE_MUTATION_BYTES,
-                        writeMutMetrics.get(isUpsert ? UPSERT_MUTATION_BYTES : DELETE_MUTATION_BYTES),
+                        writeMutMetrics
+                                .get(isUpsert ? UPSERT_MUTATION_BYTES : DELETE_MUTATION_BYTES),
                         CompareOp.EQ);
-                assertMetricValue(metric, isUpsert ? UPSERT_MUTATION_SQL_COUNTER : DELETE_MUTATION_SQL_COUNTER,
-                        writeMutMetrics.get(isUpsert ? UPSERT_MUTATION_SQL_COUNTER : DELETE_MUTATION_SQL_COUNTER),
-                        CompareOp.EQ);
-                assertMetricValue(metric, isUpsert ? UPSERT_BATCH_FAILED_SIZE : DELETE_BATCH_FAILED_SIZE,
-                        writeMutMetrics.get(isUpsert ? UPSERT_BATCH_FAILED_SIZE : DELETE_BATCH_FAILED_SIZE),
-                        CompareOp.EQ);
-                assertMetricValue(metric, isUpsert ? UPSERT_BATCH_FAILED_SIZE : DELETE_BATCH_FAILED_SIZE,
+                assertMetricValue(metric,
+                        isUpsert ? UPSERT_MUTATION_SQL_COUNTER : DELETE_MUTATION_SQL_COUNTER,
+                        writeMutMetrics.get(isUpsert ?
+                                UPSERT_MUTATION_SQL_COUNTER :
+                                DELETE_MUTATION_SQL_COUNTER), CompareOp.EQ);
+                assertMetricValue(metric,
+                        isUpsert ? UPSERT_BATCH_FAILED_SIZE : DELETE_BATCH_FAILED_SIZE,
+                        writeMutMetrics.get(isUpsert ?
+                                UPSERT_BATCH_FAILED_SIZE :
+                                DELETE_BATCH_FAILED_SIZE), CompareOp.EQ);
+                assertMetricValue(metric,
+                        isUpsert ? UPSERT_BATCH_FAILED_SIZE : DELETE_BATCH_FAILED_SIZE,
                         expectedUpsertOrDeleteBatchFailedSize, CompareOp.EQ);
-                assertMetricValue(metric, isUpsert ? UPSERT_BATCH_FAILED_COUNTER : DELETE_BATCH_FAILED_COUNTER,
-                        writeMutMetrics.get(isUpsert ? UPSERT_BATCH_FAILED_COUNTER : DELETE_BATCH_FAILED_COUNTER),
-                        CompareOp.EQ);
+                assertMetricValue(metric,
+                        isUpsert ? UPSERT_BATCH_FAILED_COUNTER : DELETE_BATCH_FAILED_COUNTER,
+                        writeMutMetrics.get(isUpsert ?
+                                UPSERT_BATCH_FAILED_COUNTER :
+                                DELETE_BATCH_FAILED_COUNTER), CompareOp.EQ);
             }
         }
     }
@@ -373,10 +406,11 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
     /**
      * Checks that if the metric is of the passed in type, it has the expected value
      * (based on the CompareOp). If the metric type is different than checkType, ignore
-     * @param m metric to check
-     * @param checkType type to check for
+     *
+     * @param m            metric to check
+     * @param checkType    type to check for
      * @param compareValue value to compare against
-     * @param op CompareOp
+     * @param op           CompareOp
      */
     private static void assertMetricValue(Metric m, MetricType checkType, long compareValue,
             CompareOp op) {
@@ -401,8 +435,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
-    @Before
-    public void resetTableLevelMetrics() {
+    @Before public void resetTableLevelMetrics() {
         clearTableLevelMetrics();
         failExecuteQueryAndClientSideDeletes = false;
         injectDelay = 0L;
@@ -414,8 +447,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
 
     }
 
-    @Test
-    public void testTableLevelMetricsforSuccessfulPointLookupQuery() throws Exception {
+    @Test public void testTableLevelMetricsforSuccessfulPointLookupQuery() throws Exception {
         String tableName = generateUniqueName();
         ResultSet rs;
         try (Connection conn = getConnFromTestDriver()) {
@@ -429,8 +461,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
         assertSelectQueryTableMetrics(tableName, true, 1, 0, 1, 0, 0, true, 0, 0, rs);
     }
 
-    @Test
-    public void testTableLevelMetricsforSuccessfulScanQuery() throws Exception {
+    @Test public void testTableLevelMetricsforSuccessfulScanQuery() throws Exception {
         String tableName = generateUniqueName();
         ResultSet rs;
         try (Connection conn = getConnFromTestDriver()) {
@@ -446,8 +477,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
         assertSelectQueryTableMetrics(tableName, false, 1, 0, 1, 0, 0, true, 0, 0, rs);
     }
 
-    @Test
-    public void testTableLevelMetricsforFailingSelectQuery() throws Exception {
+    @Test public void testTableLevelMetricsforFailingSelectQuery() throws Exception {
         String tableName = generateUniqueName();
         try (Connection conn = getConnFromTestDriver()) {
             createTableAndInsertValues(tableName, false, false, 10, true, conn, false);
@@ -464,8 +494,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
-    @Test
-    public void testTableLevelMetricsforDelayedSelectQuery() throws Exception {
+    @Test public void testTableLevelMetricsforDelayedSelectQuery() throws Exception {
         String tableName = generateUniqueName();
         ResultSet rs;
         try (Connection conn = getConnFromTestDriver()) {
@@ -474,14 +503,14 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
         try (Connection conn = getConnFromTestDriver(); Statement stmt = conn.createStatement()) {
             injectDelay = 1000;
             rs = stmt.executeQuery(String.format(POINT_LOOKUP_SELECT_QUERY, tableName));
-            assertSelectQueryTableMetrics(tableName, true, 0, 0, 1, 0, injectDelay, false, 0, 0, rs);
+            assertSelectQueryTableMetrics(tableName, true, 0, 0, 1, 0, injectDelay, false, 0, 0,
+                    rs);
             rs.next();
         }
         assertSelectQueryTableMetrics(tableName, true, 1, 0, 1, 0, injectDelay, true, 0, 0, rs);
     }
 
-    @Test
-    public void testTableLevelMetricsForSelectFetchResultsTimeout() throws SQLException {
+    @Test public void testTableLevelMetricsForSelectFetchResultsTimeout() throws SQLException {
         String tableName = generateUniqueName();
         final int queryTimeout = 10; //seconds
         ResultSet rs;
@@ -505,8 +534,8 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
         assertSelectQueryTableMetrics(tableName, true, 0, 1, 1, 0, 0, true, 1, 1, rs);
     }
 
-    @Test
-    public void testTableLevelMetricsForSelectFetchResultsTimeoutSlowScanner() throws SQLException {
+    @Test public void testTableLevelMetricsForSelectFetchResultsTimeoutSlowScanner()
+            throws SQLException {
         String tableName = generateUniqueName();
         final int queryTimeout = 10; //seconds
         ResultSet rs;
@@ -533,8 +562,8 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
         assertSelectQueryTableMetrics(tableName, true, 0, 1, 1, 0, 0, true, 1, 1, rs);
     }
 
-    @Test
-    public void testTableLevelMetricsForSelectFetchResultsServerSideFailure() throws SQLException {
+    @Test public void testTableLevelMetricsForSelectFetchResultsServerSideFailure()
+            throws SQLException {
         String tableName = generateUniqueName();
         ResultSet rs;
         try (Connection conn = getConnFromTestDriver()) {
@@ -542,12 +571,12 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
         }
         try (Connection conn = getConnFromTestDriver(); Statement stmt = conn.createStatement()) {
             rs = stmt.executeQuery(String.format(POINT_LOOKUP_SELECT_QUERY, tableName));
-            assertSelectQueryTableMetrics(tableName, true, 0, 0,1, 0, 0, false, 0, 0, rs);
+            assertSelectQueryTableMetrics(tableName, true, 0, 0, 1, 0, 0, false, 0, 0, rs);
 
             // Inject a failure during the scan operation on the server-side
             DelayedOrFailingRegionServer.injectFailureForRegionOfTable(tableName);
             try {
-                while(rs.next()) {
+                while (rs.next()) {
                     // do nothing
                 }
                 fail();
@@ -566,18 +595,14 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
         assertSelectQueryTableMetrics(tableName, true, 0, 1, 1, 0, 0, true, 1, 0, rs);
     }
 
-    @Test
-    public void testTableLevelMetricsForUpsert() throws Throwable {
+    @Test public void testTableLevelMetricsForUpsert() throws Throwable {
         String tableName = generateUniqueName();
         int numRows = 10000;
         Connection conn = null;
         Throwable exception = null;
         try {
             conn = getConnFromTestDriver();
-            while(true) {
-                createTableAndInsertValues(tableName, true, false, numRows, true, conn, false);
-            }
-
+            createTableAndInsertValues(tableName, true, false, numRows, true, conn, false);
         } catch (Throwable t) {
             exception = t;
         } finally {
@@ -587,18 +612,18 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
             assertNotNull("Failed to get a connection!", conn);
             // Get write metrics before closing the connection since that clears those metrics
-            Map<MetricType, Long> writeMutMetrics =
+            Map<MetricType, Long>
+                    writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             // Must be asserted after connection close since that's where
             // we populate table-level metrics
-            assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, 0, 0,
-                    1, 0, writeMutMetrics, conn);
+            assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, 0, 0, 1, 0,
+                    writeMutMetrics, conn);
         }
     }
 
-    @Test
-    public void testTableLevelMetricsForBatchUpserts() throws Throwable {
+    @Test public void testTableLevelMetricsForBatchUpserts() throws Throwable {
         String tableName = generateUniqueName();
         int numRows = 20;
         Connection conn = null;
@@ -615,16 +640,16 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
             assertNotNull("Failed to get a connection!", conn);
             // Get write metrics before closing the connection since that clears those metrics
-            Map<MetricType, Long> writeMutMetrics =
+            Map<MetricType, Long>
+                    writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, 0, 0,
-                    1, 0, writeMutMetrics, conn);
+            assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, 0, 0, 1, 0,
+                    writeMutMetrics, conn);
         }
     }
 
-    @Test
-    public void testTableLevelMetricsAutoCommitTrueUpsert() throws Throwable {
+    @Test public void testTableLevelMetricsAutoCommitTrueUpsert() throws Throwable {
         String tableName = generateUniqueName();
         String ddl = String.format(CREATE_TABLE_DDL, tableName, 20);
         int numRows = 10;
@@ -652,18 +677,19 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                 throw exception;
             }
             assertNotNull("Failed to get a connection!", conn);
-            Map<MetricType, Long> writeMutMetrics =
+            Map<MetricType, Long>
+                    writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             // Time taken during executeMutation should be longer than the actual
             // mutation commit time since autoCommit was on
-            assertMutationTableMetrics(true, tableName, numRows, 0, writeMutMetrics.get(UPSERT_COMMIT_TIME),
-                    true, numRows, 0, 0, numRows, 0, writeMutMetrics, conn);
+            assertMutationTableMetrics(true, tableName, numRows, 0,
+                    writeMutMetrics.get(UPSERT_COMMIT_TIME), true, numRows, 0, 0, numRows, 0,
+                    writeMutMetrics, conn);
         }
     }
 
-    @Test
-    public void testTableLevelMetricsforFailingUpsert() throws Throwable {
+    @Test public void testTableLevelMetricsforFailingUpsert() throws Throwable {
         String tableName = generateUniqueName();
         // Restrict the key to just 2 characters so that we fail later
         String ddl = String.format(CREATE_TABLE_DDL, tableName, 2);
@@ -694,13 +720,11 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
             assertNotNull("Failed to get a connection!", conn);
             conn.close();
-            assertMutationTableMetrics(true, tableName, 0, 1,
-                    0, false, 0, 0, 0, 1, 0, null, conn);
+            assertMutationTableMetrics(true, tableName, 0, 1, 0, false, 0, 0, 0, 1, 0, null, conn);
         }
     }
 
-    @Test
-    public void testTableLevelMetricsforUpsertSqlTime() throws Throwable {
+    @Test public void testTableLevelMetricsforUpsertSqlTime() throws Throwable {
         String tableName = generateUniqueName();
         String ddl = String.format(CREATE_TABLE_DDL, tableName, 10);
         int numRows = 10;
@@ -731,16 +755,16 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                 throw exception;
             }
             assertNotNull("Failed to get a connection!", conn);
-            Map<MetricType, Long> writeMutMetrics =
+            Map<MetricType, Long>
+                    writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(true, tableName, numRows, 0, delay, true, numRows, 0, 0,
-                    1, 0, writeMutMetrics, conn);
+            assertMutationTableMetrics(true, tableName, numRows, 0, delay, true, numRows, 0, 0, 1,
+                    0, writeMutMetrics, conn);
         }
     }
 
-    @Test
-    public void testTableLevelMetricsUpsertCommitFailedWithAutoCommitTrue() throws Throwable {
+    @Test public void testTableLevelMetricsUpsertCommitFailedWithAutoCommitTrue() throws Throwable {
         String tableName = generateUniqueName();
         String ddl = String.format(CREATE_TABLE_DDL, tableName, 10);
         int numRows = 10;
@@ -761,7 +785,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     prepStmt.executeUpdate();
                 }
             }
-        }catch (CommitException e) {
+        } catch (CommitException e) {
             Throwable retriesExhaustedEx = null;
             for (Throwable t = e.getCause(); t != null; t = t.getCause()) {
                 if (t instanceof RetriesExhaustedWithDetailsException) {
@@ -779,16 +803,16 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                 throw exception;
             }
             assertNotNull("Failed to get a connection!", conn);
-            Map<MetricType, Long> writeMutMetrics =
+            Map<MetricType, Long>
+                    writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(true, tableName, 0, 1, 0, true, 1, 0, 1,
-                    0, 1,writeMutMetrics, conn);
+            assertMutationTableMetrics(true, tableName, 0, 1, 0, true, 1, 0, 1, 0, 1,
+                    writeMutMetrics, conn);
         }
     }
 
-    @Test
-    public void testTableLevelMetricsUpsertCommitFailed() throws Throwable {
+    @Test public void testTableLevelMetricsUpsertCommitFailed() throws Throwable {
         String tableName = generateUniqueName();
         String ddl = String.format(CREATE_TABLE_DDL, tableName, 10);
         int numRows = 10;
@@ -830,16 +854,16 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                 throw exception;
             }
             assertNotNull("Failed to get a connection!", conn);
-            Map<MetricType, Long> writeMutMetrics =
+            Map<MetricType, Long>
+                    writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, 0, numRows,
-                    0, 1,writeMutMetrics, conn);
+            assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, 0, numRows, 0,
+                    1, writeMutMetrics, conn);
         }
     }
 
-    @Test
-    public void testUpsertCommitTimeSlowRS() throws Throwable {
+    @Test public void testUpsertCommitTimeSlowRS() throws Throwable {
         String tableName = generateUniqueName();
         String ddl = String.format(CREATE_TABLE_DDL, tableName, 10);
         int numRows = 10;
@@ -870,16 +894,16 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                 throw exception;
             }
             assertNotNull("Failed to get a connection!", conn);
-            Map<MetricType, Long> writeMutMetrics =
+            Map<MetricType, Long>
+                    writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, delayRs, 0,
-                    1, 0, writeMutMetrics, conn);
+            assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, delayRs, 0, 1,
+                    0, writeMutMetrics, conn);
         }
     }
 
-    @Test
-    public void testTableLevelMetricsForPointDelete() throws Throwable {
+    @Test public void testTableLevelMetricsForPointDelete() throws Throwable {
         String tableName = generateUniqueName();
         int numRows = 15;
         Connection conn = null;
@@ -901,16 +925,16 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
             assertNotNull("Failed to get a connection!", conn);
             // Get write metrics before closing the connection since that clears those metrics
-            Map<MetricType, Long> writeMutMetrics =
+            Map<MetricType, Long>
+                    writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(false, tableName, 1, 0, 0, true, 1, 0, 0,
-                    1, 0, writeMutMetrics, conn);
+            assertMutationTableMetrics(false, tableName, 1, 0, 0, true, 1, 0, 0, 1, 0,
+                    writeMutMetrics, conn);
         }
     }
 
-    @Test
-    public void testTableLevelMetricsForDeleteAll() throws Throwable {
+    @Test public void testTableLevelMetricsForDeleteAll() throws Throwable {
         String tableName = generateUniqueName();
         int numRows = 15;
         Connection conn = null;
@@ -932,22 +956,23 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
             assertNotNull("Failed to get a connection!", conn);
             // Get write metrics before closing the connection since that clears those metrics
-            Map<MetricType, Long> writeMutMetrics =
+            Map<MetricType, Long>
+                    writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, 0, 0,
-                    1, 0, writeMutMetrics, conn);
+            assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, 0, 0, 1, 0,
+                    writeMutMetrics, conn);
         }
     }
 
-    @Test
-    public void testTableLevelMetricsAutoCommitTrueDelete() throws Throwable {
+    @Test public void testTableLevelMetricsAutoCommitTrueDelete() throws Throwable {
         String tableName = generateUniqueName();
         int numRows = 15;
         Connection conn = null;
         Throwable exception = null;
         try (Connection ddlAndUpsertConn = getConnFromTestDriver()) {
-            createTableAndInsertValues(tableName, true, true, numRows, true, ddlAndUpsertConn, false);
+            createTableAndInsertValues(tableName, true, true, numRows, true, ddlAndUpsertConn,
+                    false);
             // Reset metrics from the upserts
             PhoenixRuntime.resetMetrics(ddlAndUpsertConn);
             clearTableLevelMetrics();
@@ -965,19 +990,19 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
             assertNotNull("Failed to get a connection!", conn);
             // Get write metrics before closing the connection since that clears those metrics
-            Map<MetricType, Long> writeMutMetrics =
+            Map<MetricType, Long>
+                    writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             // When autoCommit = true, deletes happen on the server and so mutation metrics are not
             // accumulated for those mutations
             assertNull(writeMutMetrics);
             conn.close();
-            assertMutationTableMetrics(false, tableName, 1, 0, 0, false, 0, 0, 0,
-                    0, 0, writeMutMetrics, conn);
+            assertMutationTableMetrics(false, tableName, 1, 0, 0, false, 0, 0, 0, 0, 0,
+                    writeMutMetrics, conn);
         }
     }
 
-    @Test
-    public void testTableLevelMetricsforFailingDelete() throws Throwable {
+    @Test public void testTableLevelMetricsforFailingDelete() throws Throwable {
         String tableName = generateUniqueName();
         int numRows = 15;
         Connection conn = null;
@@ -1005,18 +1030,16 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
             assertNotNull("Failed to get a connection!", conn);
             // Get write metrics before closing the connection since that clears those metrics
-            Map<MetricType, Long> writeMutMetrics =
+            Map<MetricType, Long>
+                    writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             assertNull(writeMutMetrics);
             conn.close();
-            assertMutationTableMetrics(false, tableName, 0, 1,
-                    0, false, 0, 0,
-                    0, 0, 1, null, conn);
+            assertMutationTableMetrics(false, tableName, 0, 1, 0, false, 0, 0, 0, 0, 1, null, conn);
         }
     }
 
-    @Test
-    public void testTableLevelMetricsforDelayedDeleteQuery() throws Throwable {
+    @Test public void testTableLevelMetricsforDelayedDeleteQuery() throws Throwable {
         String tableName = generateUniqueName();
         Connection conn = null;
         Throwable exception = null;
@@ -1039,16 +1062,16 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
             assertNotNull("Failed to get a connection!", conn);
             // Get write metrics before closing the connection since that clears those metrics
-            Map<MetricType, Long> writeMutMetrics =
+            Map<MetricType, Long>
+                    writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(false, tableName, 1, 0, injectDelay, true, 1, 0, 0,
-                    1,0,writeMutMetrics, conn);
+            assertMutationTableMetrics(false, tableName, 1, 0, injectDelay, true, 1, 0, 0, 1, 0,
+                    writeMutMetrics, conn);
         }
     }
 
-    @Test
-    public void testTableLevelMetricsDeleteCommitFailed() throws Throwable {
+    @Test public void testTableLevelMetricsDeleteCommitFailed() throws Throwable {
         String tableName = generateUniqueName();
         int numRows = 15;
         Connection conn = null;
@@ -1085,16 +1108,16 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
             assertNotNull("Failed to get a connection!", conn);
             // Get write metrics before closing the connection since that clears those metrics
-            Map<MetricType, Long> writeMutMetrics =
+            Map<MetricType, Long>
+                    writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, 0, numRows,
-                    0, 1,writeMutMetrics, conn);
+            assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, 0, numRows, 0, 1,
+                    writeMutMetrics, conn);
         }
     }
 
-    @Test
-    public void testDeleteCommitTimeSlowRS() throws Throwable {
+    @Test public void testDeleteCommitTimeSlowRS() throws Throwable {
         String tableName = generateUniqueName();
         int numRows = 15;
         Connection conn = null;
@@ -1120,18 +1143,19 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
             assertNotNull("Failed to get a connection!", conn);
             // Get write metrics before closing the connection since that clears those metrics
-            Map<MetricType, Long> writeMutMetrics =
+            Map<MetricType, Long>
+                    writeMutMetrics =
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
-            assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, delayRs, 0,
-                    1,0, writeMutMetrics, conn);
+            assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, delayRs, 0, 1, 0,
+                    writeMutMetrics, conn);
         }
     }
 
     private Connection getConnFromTestDriver() throws SQLException {
         Connection conn = DriverManager.getConnection(url);
-        assertTrue(conn.unwrap(PhoenixConnection.class).getQueryServices()
-                instanceof PhoenixMetricsTestingQueryServices);
+        assertTrue(conn.unwrap(PhoenixConnection.class)
+                .getQueryServices() instanceof PhoenixMetricsTestingQueryServices);
         return conn;
     }
 
@@ -1149,13 +1173,12 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
         private final long delay;
         private AtomicLong time;
 
-        public MyClock (long time, long delay) {
+        public MyClock(long time, long delay) {
             this.time = new AtomicLong(time);
             this.delay = delay;
         }
 
-        @Override
-        public long currentTime() {
+        @Override public long currentTime() {
             long currentTime = this.time.get();
             this.time.addAndGet(this.delay);
             return currentTime;
@@ -1173,12 +1196,10 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
         }
 
         // Make plan.iterator() fail (ultimately calls CQSI.getAllTableRegions())
-        @Override
-        public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
+        @Override public List<HRegionLocation> getAllTableRegions(byte[] tableName)
+                throws SQLException {
             if (failExecuteQueryAndClientSideDeletes) {
-                throw new SQLExceptionInfo
-                        .Builder(GET_TABLE_REGIONS_FAIL)
-                        .build().buildException();
+                throw new SQLExceptionInfo.Builder(GET_TABLE_REGIONS_FAIL).build().buildException();
             }
             try {
                 Thread.sleep(injectDelay);
@@ -1201,17 +1222,17 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             overrideProps = props;
         }
 
-        @Override
-        public boolean acceptsURL(String url) {
+        @Override public boolean acceptsURL(String url) {
             return true;
         }
 
-        @Override
-        public synchronized ConnectionQueryServices getConnectionQueryServices(String url,
+        @Override public synchronized ConnectionQueryServices getConnectionQueryServices(String url,
                 Properties info) throws SQLException {
             if (cqs == null) {
-                cqs = new PhoenixMetricsTestingQueryServices(new QueryServicesTestImpl(
-                        getDefaultProps(), overrideProps), ConnectionInfo.create(url), info);
+                cqs =
+                        new PhoenixMetricsTestingQueryServices(
+                                new QueryServicesTestImpl(getDefaultProps(), overrideProps),
+                                ConnectionInfo.create(url), info);
                 cqs.init(url, info);
             }
             return cqs;

@@ -33,7 +33,7 @@ public class MetricServiceResolver {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MetricServiceResolver.class);
 
-    MetricPublisherSupplierFactory metricSupplier = null;
+    private MetricPublisherSupplierFactory metricSupplier = null;
 
     public MetricPublisherSupplierFactory instantiate(String classString) {
         Preconditions.checkNotNull(classString);
