@@ -13,22 +13,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.monitoring;
 
 /**
- * Interface for configurable MetricPublisher interface construction
+ * Interface for configurable registering Metrics interface construction
  *
  */
-public interface MetricPublisherSupplierFactory extends MetricsRegistry {
+
+public interface MetricsRegistry {
 
     /**
-     * Interface for Registering Publisher Method
+     * Interface for Registering Metrics
      */
-    void registerMetricProvider();
+    void registerMetrics(TableClientMetrics tInstance);
 
     /**
-     * Interface for UnRegistering Publisher Method
+     * Interface for unRegistering Metrics
      */
-    void unregisterMetricProvider();
+    void unRegisterMetrics(TableClientMetrics tInstance);
 }

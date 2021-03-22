@@ -286,7 +286,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_IS_TABLE_LEVEL_METRICS_ENABLED = false;
     public static final boolean DEFAULT_IS_METRIC_PUBLISHER_ENABLED = false;
     public static final String DEFAULT_ALLOWED_LIST_FOR_TABLE_LEVEL_METRICS = null; //All the tables metrics will be allowed.
-    public static final String DEFAULT_METRIC_PUBLISHER_CLASS_NAME = null;
+    public static final String DEFAULT_METRIC_PUBLISHER_CLASS_NAME = "org.apache.phoenix.monitoring.JmxMetricProvider";
     public static final String DEFAULT_CLIENT_METRICS_TAG = "FAT_CLIENT";
 
     public static final boolean DEFAULT_TRANSACTIONAL = false;
