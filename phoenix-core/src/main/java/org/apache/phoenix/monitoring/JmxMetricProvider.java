@@ -30,7 +30,7 @@ import java.util.Map;
 public class JmxMetricProvider implements MetricPublisherSupplierFactory {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(JmxMetricProvider.class);
-    private static MetricRegistry metricRegistry;
+    private MetricRegistry metricRegistry;
 
     @Override public void registerMetricProvider() {
         metricRegistry = createMetricRegistry();
@@ -42,7 +42,7 @@ public class JmxMetricProvider implements MetricPublisherSupplierFactory {
 
     }
 
-    private MetricRegistry createMetricRegistry() {
+    private  MetricRegistry createMetricRegistry() {
         LOGGER.info("Creating Metric Registry for Phoenix Table Level Metrics");
         MetricRegistryInfo
                 registryInfo =

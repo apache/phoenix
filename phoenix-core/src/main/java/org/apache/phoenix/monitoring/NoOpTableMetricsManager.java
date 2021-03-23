@@ -24,27 +24,25 @@ import java.util.Map;
 
 public class NoOpTableMetricsManager extends TableMetricsManager {
 
-    public NoOpTableMetricsManager(QueryServicesOptions opts) {
-        super(opts);
-    }
+    public static NoOpTableMetricsManager noOpsTableMetricManager = new NoOpTableMetricsManager();
 
-    public static void pushMetricsFromConnInstanceMethod(Map<String, Map<MetricType, Long>> map) {
+    private NoOpTableMetricsManager() {
 
     }
 
-    public static Map<String, List<PhoenixTableMetric>> getTableMetricsMethod() {
-        return null;
-    }
-
-    public static void clearTableLevelMetricsMethod() {
+    @Override public void updateMetrics(String tableName, MetricType type, long value) {
 
     }
 
-    public static void updateMetricsMethod(String tableName, MetricType type, long value) {
+    @Override public void pushMetricsFromConnInstance(Map<String, Map<MetricType, Long>> map) {
 
     }
 
-    public static Long getMetricValue(String tableName, MetricType type) {
+    @Override public void clearTableLevelMetrics() {
+
+    }
+
+    @Override public Map<String, List<PhoenixTableMetric>> getTableLevelMetrics() {
         return null;
     }
 }

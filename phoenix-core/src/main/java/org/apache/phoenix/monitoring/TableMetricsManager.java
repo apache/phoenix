@@ -47,22 +47,17 @@ public class TableMetricsManager {
     private static boolean isTableLevelMetricsEnabled;
     private static boolean isMetricPublisherEnabled;
     private static final Set<String> allowedListOfTableNames = new HashSet<>();
-    private static ConcurrentMap<String, TableClientMetrics> tableClientMetricsMapping;
+    private static ConcurrentMap<String, TableClientMetrics> tableClientMetricsMapping = null;
     // Singleton object
-    public static TableMetricsManager tableMetricsManager = null;
-    private static QueryServicesOptions options;
+    protected static TableMetricsManager tableMetricsManager = null;
     private static MetricPublisherSupplierFactory mPublisher = null;
+    private static QueryServicesOptions options = null;
 
-    @VisibleForTesting public TableMetricsManager(QueryServicesOptions opts) {
-        options = opts;
+    public TableMetricsManager(QueryServicesOptions ops) {
+        options = ops;
         isTableLevelMetricsEnabled = options.isTableLevelMetricsEnabled();
         LOGGER.info(String.format("Phoenix Table metrics enabled status: %s",
                 isTableLevelMetricsEnabled));
-        // Return simply if table level metrics are not enabled
-        if (!isTableLevelMetricsEnabled) {
-            tableMetricsManager = new NoOpTableMetricsManager(options);
-            return;
-        }
         tableClientMetricsMapping = new ConcurrentHashMap<>();
 
         String tableNamesList = options.getAllowedListTableNames();
@@ -71,10 +66,12 @@ public class TableMetricsManager {
                 allowedListOfTableNames.add(tableName);
             }
         }
-
         isMetricPublisherEnabled = options.isMetricPublisherEnabled();
         LOGGER.info(String.format("Phoenix table level metrics publisher enabled status %s",
                 isMetricPublisherEnabled));
+    }
+
+    public TableMetricsManager() {
     }
 
     @VisibleForTesting public static void setInstance(TableMetricsManager metricsManager) {
@@ -92,13 +89,16 @@ public class TableMetricsManager {
             synchronized (TableMetricsManager.class) {
                 if (tableMetricsManager == null) {
                     QueryServicesOptions options = QueryServicesOptions.withDefaults();
+                    if (!options.isTableLevelMetricsEnabled()) {
+                        tableMetricsManager = NoOpTableMetricsManager.noOpsTableMetricManager;
+                        return tableMetricsManager;
+                    }
                     tableMetricsManager = new TableMetricsManager(options);
                     LOGGER.info("Phoenix Table metrics created object for metrics manager");
                     if (isMetricPublisherEnabled) {
                         String className = options.getMetricPublisherClass();
                         if (className != null) {
                             MetricServiceResolver mResolver = new MetricServiceResolver();
-
                             LOGGER.info(String.format(
                                     "Phoenix table level metrics publisher className %s",
                                     className));
@@ -127,7 +127,7 @@ public class TableMetricsManager {
      *
      * @param map of tableName to pair of (MetricType, Metric Value)
      */
-    private void pushMetricsFromConnInstance(Map<String, Map<MetricType, Long>> map) {
+    public void pushMetricsFromConnInstance(Map<String, Map<MetricType, Long>> map) {
 
         if (map == null) {
             LOGGER.debug("Phoenix table level metrics input map cannott be null");
@@ -153,7 +153,7 @@ public class TableMetricsManager {
      * @param type
      * @param value
      */
-    private void updateMetrics(String tableName, MetricType type, long value) {
+    public void updateMetrics(String tableName, MetricType type, long value) {
 
         long startTime = EnvironmentEdgeManager.currentTime();
 
@@ -195,7 +195,7 @@ public class TableMetricsManager {
                     LOGGER.info(String.format("Phoenix Table metrics creating object for table: %s",
                             tableName));
                     tInstance = new TableClientMetrics(tableName);
-                    if(isMetricPublisherEnabled) {
+                    if (isMetricPublisherEnabled) {
                         mPublisher.registerMetrics(tInstance);
                     }
                     tableClientMetricsMapping.put(tableName, tInstance);
@@ -210,7 +210,7 @@ public class TableMetricsManager {
      *
      * @return map of table name ->TableMetric
      */
-    private Map<String, List<PhoenixTableMetric>> getTableLevelMetrics() {
+    public Map<String, List<PhoenixTableMetric>> getTableLevelMetrics() {
 
         long startTime = EnvironmentEdgeManager.currentTime();
         Map<String, List<PhoenixTableMetric>> map = new HashMap<>();
@@ -226,7 +226,7 @@ public class TableMetricsManager {
     /**
      * Helps reset the localstore(tableClientMetricsMapping)
      */
-    private void clearTableLevelMetrics() {
+    public void clearTableLevelMetrics() {
         if (tableClientMetricsMapping != null) {
             tableClientMetricsMapping.clear();
         }

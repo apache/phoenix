@@ -105,6 +105,7 @@ import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_SERVER_SIDE_MAS
 
 import java.util.Map.Entry;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.client.Consistency;
@@ -716,6 +717,11 @@ public class QueryServicesOptions {
 
     public boolean isMetricPublisherEnabled() {
         return config.getBoolean(METRIC_PUBLISHER_ENABLED, DEFAULT_IS_METRIC_PUBLISHER_ENABLED);
+    }
+
+    @VisibleForTesting
+    public void setAllowedListForTableLevelMetrics(String tableNameList){
+        set(ALLOWED_LIST_FOR_TABLE_LEVEL_METRICS,tableNameList);
     }
 
     public int getScanCacheSize() {
