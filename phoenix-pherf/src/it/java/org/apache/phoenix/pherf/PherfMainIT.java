@@ -54,8 +54,7 @@ public class PherfMainIT extends ResultBaseTestIT {
     public void testPherfMain() throws Exception {
         String[] args = { "-q", "-l",
                 "--schemaFile", ".*create_prod_test_unsalted.sql",
-                "--scenarioFile", ".*prod_test_unsalted_scenario.xml",
-                "-m", "--monitorFrequency", "10" };
+                "--scenarioFile", ".*prod_test_unsalted_scenario.xml"};
         Pherf pherf = new Pherf(args);
         pherf.run();
 
