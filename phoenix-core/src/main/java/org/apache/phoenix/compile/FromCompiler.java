@@ -253,7 +253,7 @@ public class FromCompiler {
     }
 
     public static ColumnResolver getResolverForSchema(String schema, PhoenixConnection connection) throws SQLException {
-        return new SchemaResolver(connection, SchemaUtil.normalizeIdentifier(schema), true);
+        return new SchemaResolver(connection, schema, true);
     }
 
     public static ColumnResolver getResolver(NamedTableNode tableNode, PhoenixConnection connection) throws SQLException {

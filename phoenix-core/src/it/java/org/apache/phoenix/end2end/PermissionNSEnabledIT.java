@@ -82,6 +82,38 @@ public class PermissionNSEnabledIT extends BasePermissionsIT {
     }
 
     @Test
+    public void testLowerCaseSchemaPermissions() throws Throwable{
+        try {
+            grantSystemTableAccess();
+            final String schemaName = "\"" + ("S_" + generateUniqueName()).toLowerCase() + "\"";
+            superUser1.runAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    try {
+                        AccessControlClient.grant(getUtility().getConnection(), regularUser1.getShortName(),
+                                Permission.Action.ADMIN);
+                    } catch (Throwable e) {
+                        if (e instanceof Exception) {
+                            throw (Exception)e;
+                        } else {
+                            throw new Exception(e);
+                        }
+                    }
+                    return null;
+                }
+            });
+            verifyAllowed(createSchema(schemaName), regularUser1);
+            // Unprivileged user cannot drop a schema
+            verifyDenied(dropSchema(schemaName), AccessDeniedException.class, unprivilegedUser);
+            verifyDenied(createSchema(schemaName), AccessDeniedException.class, unprivilegedUser);
+
+            verifyAllowed(dropSchema(schemaName), regularUser1);
+        } finally {
+            revokeAll();
+        }
+    }
+
+    @Test
     public void testConnectionCreationFailsWhenNoExecPermsOnSystemCatalog() throws Throwable {
         try {
             grantSystemTableAccess();
