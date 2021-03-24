@@ -201,6 +201,35 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testCreateSequenceWhenNamespaceEnabledAndIsLowerCase() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
+        Connection nsConn = DriverManager.getConnection(getUrl(), props);
+
+        String sequenceSchemaName = "\"test_seq_schema\"";
+        String sequenceName = "\"m_seq\"";
+        nsConn.createStatement().execute("CREATE SCHEMA " + sequenceSchemaName);
+        nsConn.createStatement().execute("USE " + sequenceSchemaName);
+        nsConn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
+        String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='"
+                + SchemaUtil.normalizeIdentifier(sequenceName) + "'";
+        ResultSet rs = nsConn.prepareStatement(query).executeQuery();
+        assertTrue(rs.next());
+        assertEquals(SchemaUtil.normalizeIdentifier(sequenceSchemaName), rs.getString("sequence_schema"));
+        assertEquals(SchemaUtil.normalizeIdentifier(sequenceName), rs.getString("sequence_name"));
+        assertEquals(2, rs.getInt("current_value"));
+        assertEquals(4, rs.getInt("increment_by"));
+        assertFalse(rs.next());
+        try {
+            nsConn.createStatement().execute(
+                    "CREATE SEQUENCE " + sequenceSchemaName + "." + sequenceName + " START WITH 2 INCREMENT BY 4");
+            fail();
+        } catch (SequenceAlreadyExistsException e) {
+
+        }
+    }
+
+    @Test
     public void testCreateSequence() throws Exception {
         String sequenceName = generateSequenceNameWithSchema();
         String sequenceNameWithoutSchema = getNameWithoutSchema(sequenceName);
