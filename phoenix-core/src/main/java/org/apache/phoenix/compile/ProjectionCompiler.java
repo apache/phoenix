@@ -81,6 +81,7 @@ import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.ProjectedColumn;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
@@ -158,6 +159,11 @@ public class ProjectionCompiler {
                     } else {
                         String schemaName = table.getSchemaName().getString();
                         ref = resolver.resolveColumn(schemaName.length() == 0 ? null : schemaName, table.getTableName().getString(), colName);
+                    }
+                    // The freshly revolved column's family better be the same as the original one.
+                    // If not, trigger the disambiguation logic. Also see PTableImpl.getColumnForColumnName(...)
+                    if (column.getFamilyName() != null && !column.getFamilyName().equals(ref.getColumn().getFamilyName())) {
+                        throw new AmbiguousColumnException();
                     }
                 } catch (AmbiguousColumnException e) {
                     if (column.getFamilyName() != null) {
@@ -694,6 +700,11 @@ public class ProjectionCompiler {
                          if (expression.getDataType().isArrayType()) {
                              indexProjectedColumns.add(expression);
                              PColumn col = expression.getColumn();
+                             // hack'ish... For covered columns with local indexes we defer to the server.
+                             if (col instanceof ProjectedColumn && ((ProjectedColumn) col)
+                                     .getSourceColumnRef() instanceof LocalIndexDataColumnRef) {
+                                 return null;
+                             }
                              PTable table = context.getCurrentTable().getTable();
                              KeyValueColumnExpression keyValueColumnExpression;
                              if (table.getImmutableStorageScheme() != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {

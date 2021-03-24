@@ -342,6 +342,97 @@ public class MultiCfQueryExecIT extends ParallelStatsEnabledIT {
     }
 
     @Test
+    public void testCFWildcardProjection() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            String ddl =
+                    "CREATE TABLE IF NOT EXISTS " + tableName + " (pk1 INTEGER NOT NULL PRIMARY KEY, x.v1 VARCHAR, y.v2 INTEGER)";
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1, 'test', 2)");
+            conn.commit();
+
+            ResultSet rs = conn.createStatement().executeQuery("SELECT x.* FROM "+tableName+" WHERE y.v2 = 2");
+            assertTrue(rs.next());
+            assertEquals("test", rs.getString(1));
+            rs.close();
+
+            // make sure this works with a local index as well (only the data plan needs to be adjusted)
+            conn.createStatement().execute("CREATE LOCAL INDEX " + tableName + "_IDX ON " + tableName + "(y.v2)");
+            conn.commit();
+
+            rs = conn.createStatement().executeQuery("SELECT x.* FROM "+tableName+" WHERE y.v2 = 2");
+            assertTrue(rs.next());
+            assertEquals("test", rs.getString(1));
+            rs.close();
+
+            rs = conn.createStatement().executeQuery("SELECT y.* FROM "+tableName+" WHERE x.v1 <> 'blah'");
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            rs.close();
+        }
+    }
+
+    @Test
+    public void testMultipleCFWildcardProjection() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            String ddl =
+                    "CREATE TABLE IF NOT EXISTS " + tableName + " (pk1 INTEGER NOT NULL PRIMARY KEY, x.v1 VARCHAR, y.v2 INTEGER, z.v3 INTEGER)";
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1, 'test', 2, 3)");
+            conn.commit();
+
+            ResultSet rs = conn.createStatement().executeQuery("SELECT x.*, z.* FROM "+tableName+" WHERE y.v2 = 2");
+            assertTrue(rs.next());
+            assertEquals("test", rs.getString(1));
+            assertEquals(3, rs.getInt(2));
+            rs.close();
+
+            // make sure this works with a local index as well (only the data plan needs to be adjusted)
+            conn.createStatement().execute("CREATE LOCAL INDEX " + tableName + "_IDX ON " + tableName + "(y.v2)");
+            conn.commit();
+
+            rs = conn.createStatement().executeQuery("SELECT x.*, z.* FROM "+tableName+" WHERE y.v2 = 2");
+            assertTrue(rs.next());
+            assertEquals("test", rs.getString(1));
+            assertEquals(3, rs.getInt(2));
+            rs.close();
+
+            rs = conn.createStatement().executeQuery("SELECT x.*, y.* FROM "+tableName+" WHERE z.v3 = 3");
+            assertTrue(rs.next());
+            assertEquals("test", rs.getString(1));
+            assertEquals(2, rs.getInt(2));
+            rs.close();
+        }
+    }
+
+    @Test
+    public void testMixedDefaultAndExplicitCFs() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            String ddl =
+                    "CREATE TABLE IF NOT EXISTS " + tableName + " (pk1 INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, y.v1 INTEGER)";
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1, 'test', 2)");
+            conn.commit();
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM "+tableName);
+            assertTrue(rs.next());
+            // Without PHOENIX-6423 this would throw a type mismatch exception, because it would confuse the 3rd
+            // column to also be the VARCHAR column.
+            assertEquals(2, rs.getInt(3));
+            rs.close();
+
+            // make sure this works with a local index as well (only the data plan needs to be adjusted)
+            conn.createStatement().execute("CREATE LOCAL INDEX " + tableName + "_IDX ON " + tableName + "(v1)");
+            conn.commit();
+            rs = conn.createStatement().executeQuery("SELECT * FROM "+tableName);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(3));
+            rs.close();
+        }
+    }
+
+    @Test
     public void testBug3890() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();

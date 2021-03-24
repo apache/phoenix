@@ -59,7 +59,6 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.ClientAggregatePlan;
 import org.apache.phoenix.execute.ClientScanPlan;
-import org.apache.phoenix.execute.CorrelatePlan;
 import org.apache.phoenix.execute.CursorFetchPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.HashJoinPlan.HashSubPlan;
@@ -5229,11 +5228,6 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
         @Override
         public List<QueryPlan> visit(UnnestArrayPlan plan) {
-            return Collections.emptyList();
-        }
-
-        @Override
-        public List<QueryPlan> visit(CorrelatePlan plan) {
             return Collections.emptyList();
         }
 

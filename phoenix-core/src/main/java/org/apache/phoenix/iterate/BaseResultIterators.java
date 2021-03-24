@@ -497,6 +497,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         trackedColumnsBitset.set(qualifier);
                     }
                 }
+            } else {
+                // cannot use EncodedQualifiersColumnProjectionFilter in this case
+                // since there's an unknown set of qualifiers (cf.*)
+                trackedColumnsBitset = null;
             }
             columnsTracker.put(cf, cols);
         }
