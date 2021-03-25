@@ -29,11 +29,11 @@ import java.util.UUID;
 
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.HelpFormatter;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
-import org.apache.phoenix.thirdparty.org.apache.commons.cli.PosixParser;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
@@ -123,7 +123,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
 
         Options options = getOptions();
 
-        CommandLineParser parser = new PosixParser();
+        CommandLineParser parser = new DefaultParser(false, false);
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);
@@ -178,40 +178,12 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         return loadData(conf, cmdLine);
     }
 
-    /**
-     * Check schema or table name that start with two double quotes i.e ""t"" -> true
-     */
-    private boolean isStartWithTwoDoubleQuotes (String name) {
-        boolean start = false;
-        boolean end = false;
-        if (name != null && name.length() > 1) {
-             int length = name.length();
-             start = name.substring(0,2).equals("\"\"");
-             end =  name.substring(length-2, length).equals("\"\"");
-             if (start && !end) {
-                 throw new IllegalArgumentException("Invalid table/schema name " + name +
-                         ". Please check if name end with two double quotes.");
-             }
-        }
-        return start;
-    }
-
 
     private int loadData(Configuration conf, CommandLine cmdLine) throws Exception {
         String tableName = cmdLine.getOptionValue(TABLE_NAME_OPT.getOpt());
         String schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPT.getOpt());
         String indexTableName = cmdLine.getOptionValue(INDEX_TABLE_NAME_OPT.getOpt());
-        boolean quotedTableName = isStartWithTwoDoubleQuotes(tableName);
-        if (quotedTableName) {
-            // Commons-cli cannot parse full quoted argument i.e "t" (CLI-275).
-            // if \"\"t\"\" passed, then both pairs of quoted are left intact as ""t"".
-            // So remove one pair of quote from tablename ""t"" -> "t".
-            tableName = tableName.substring(1, tableName.length() - 1);
-        }
-        boolean quotedSchemaName = isStartWithTwoDoubleQuotes(schemaName);
-        if (quotedSchemaName) {
-            schemaName = schemaName.substring(1,schemaName.length() - 1);
-        }
+
         String qualifiedTableName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
         String qualifiedIndexTableName = null;
         if (indexTableName != null){
