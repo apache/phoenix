@@ -28,10 +28,10 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.HelpFormatter;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
-import org.apache.phoenix.thirdparty.org.apache.commons.cli.PosixParser;
 import org.apache.phoenix.pherf.PherfConstants.CompareType;
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
 import org.apache.phoenix.pherf.configuration.DataModel;
@@ -129,7 +129,7 @@ public class Pherf {
     WorkloadExecutor workloadExecutor;
 
     public Pherf(String[] args) throws Exception {
-        CommandLineParser parser = new PosixParser();
+        CommandLineParser parser = new DefaultParser(false, false);
         CommandLine command = null;
         HelpFormatter hf = new HelpFormatter();
 
