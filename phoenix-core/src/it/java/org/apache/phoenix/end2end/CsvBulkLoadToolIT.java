@@ -206,8 +206,8 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
                 "--input", "/tmp/input8.csv",
                 "--table", "table8",
                 "--zookeeper", zkQuorum,
-                "-q", "\"\"",
-                "-e", "\"\"",
+                "-q", "",
+                "-e", "",
                 "--delimiter", "\\t"
                 });
         assertEquals(0, exitCode);
@@ -701,7 +701,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
         int exitCode = csvBulkLoadTool.run(new String[] {
                 "--input", "/tmp/input1.csv",
-                "--table", "\"\"t\"\"",
+                "--table", "\"t\"",
                 "--schema", "S",
                 "--zookeeper", zkQuorum});
         assertEquals(0, exitCode);
@@ -736,7 +736,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         int exitCode = csvBulkLoadTool.run(new String[] {
                 "--input", "/tmp/input1.csv",
                 "--table", "T",
-                "--schema", "\"\"s\"\"",
+                "--schema", "\"s\"",
                 "--zookeeper", zkQuorum});
         assertEquals(0, exitCode);
         ResultSet rs = stmt.executeQuery("SELECT id, name, t FROM \"s\".T ORDER BY id");

@@ -170,7 +170,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
     private CommandLine parseOptions(String[] args) {
         final Options options = getOptions();
 
-        CommandLineParser parser = new DefaultParser();
+        CommandLineParser parser = new DefaultParser(false, false);
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);
