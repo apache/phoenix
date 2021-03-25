@@ -196,9 +196,17 @@ public class PhoenixKeyValueUtil {
         long size = 0;
         // iterate over table
         for (Entry<TableRef, MultiRowMutationState> tableEntry : tableMutationMap.entrySet()) {
-            // iterate over rows
-            for (Entry<ImmutableBytesPtr, RowMutationState> rowEntry : tableEntry.getValue().entrySet()) {
-                size += calculateRowMutationSize(rowEntry);
+            size += calculateMultiRowMutationSize(tableEntry.getValue());
+        }
+        return size;
+    }
+
+    public static long getEstimatedRowMutationSizeWithBatch(Map<TableRef, List<MultiRowMutationState>> tableMutationMap) {
+        long size = 0;
+        // iterate over table
+        for (Entry<TableRef, List<MultiRowMutationState>> tableEntry : tableMutationMap.entrySet()) {
+            for (MultiRowMutationState batch : tableEntry.getValue()) {
+                size += calculateMultiRowMutationSize(batch);
             }
         }
         return size;
@@ -212,6 +220,15 @@ public class PhoenixKeyValueUtil {
             return (KeyValue) c;
         }
         return KeyValueUtil.copyToNewKeyValue(c);
+    }
+
+    private static long calculateMultiRowMutationSize(MultiRowMutationState mutations) {
+        long size = 0;
+        // iterate over rows
+        for (Entry<ImmutableBytesPtr, RowMutationState> rowEntry : mutations.entrySet()) {
+            size += calculateRowMutationSize(rowEntry);
+        }
+        return size;
     }
 
     private static long calculateRowMutationSize(Entry<ImmutableBytesPtr, RowMutationState> rowEntry) {
