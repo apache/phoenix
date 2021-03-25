@@ -21,11 +21,11 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.HelpFormatter;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
-import org.apache.phoenix.thirdparty.org.apache.commons.cli.PosixParser;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.hbase.HConstants;
@@ -225,7 +225,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
 
         final Options options = getOptions();
 
-        CommandLineParser parser = new PosixParser();
+        CommandLineParser parser = new DefaultParser(false, false);
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);
