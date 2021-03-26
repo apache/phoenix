@@ -78,7 +78,7 @@ public class SchemaReaderIT extends BaseTest {
     private void assertApplySchemaTest() {
         try {
             util.setZookeeper("localhost");
-            SchemaReader reader = new SchemaReader(util, ".*datamodel/.*test.*sql");
+            SchemaReader reader = new SchemaReader(util, ".*datamodel/.*test_schema.*sql");
 
             List<Path> resources = new ArrayList<>(reader.getResourceList());
             assertTrue("Could not pull list of schema files.", resources.size() > 0);

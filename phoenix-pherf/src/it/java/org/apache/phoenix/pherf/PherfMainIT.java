@@ -23,6 +23,7 @@ import org.apache.phoenix.pherf.result.Result;
 import org.apache.phoenix.pherf.result.ResultValue;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 import org.apache.phoenix.pherf.result.impl.CSVFileResultHandler;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.contrib.java.lang.system.ExpectedSystemExit;

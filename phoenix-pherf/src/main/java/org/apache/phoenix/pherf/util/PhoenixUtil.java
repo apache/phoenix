@@ -18,16 +18,33 @@
 
 package org.apache.phoenix.pherf.util;
 
+import com.google.gson.Gson;
 import org.apache.phoenix.mapreduce.index.automation.PhoenixMRJobSubmitter;
 import org.apache.phoenix.pherf.PherfConstants;
-import org.apache.phoenix.pherf.configuration.*;
+import org.apache.phoenix.pherf.configuration.Column;
+import org.apache.phoenix.pherf.configuration.DataTypeMapping;
+import org.apache.phoenix.pherf.configuration.Ddl;
+import org.apache.phoenix.pherf.configuration.Query;
+import org.apache.phoenix.pherf.configuration.QuerySet;
+import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.result.DataLoadTimeSummary;
+import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.*;
+import java.math.BigDecimal;
+import java.sql.Array;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.Date;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -40,6 +57,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 
 public class PhoenixUtil {
+    public static final String ASYNC_KEYWORD = "ASYNC";
+    public static final Gson GSON = new Gson();
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixUtil.class);
     private static String zookeeper;
     private static int rowCountOverride = 0;
@@ -47,7 +66,6 @@ public class PhoenixUtil {
     private static PhoenixUtil instance;
     private static boolean useThinDriver;
     private static String queryServerUrl;
-    private static final String ASYNC_KEYWORD = "ASYNC";
     private static final int ONE_MIN_IN_MS = 60000;
     private static String CurrentSCN = null;
 
@@ -79,6 +97,10 @@ public class PhoenixUtil {
 
     public static boolean isThinDriver() {
         return PhoenixUtil.useThinDriver;
+    }
+
+    public static Gson getGSON() {
+        return GSON;
     }
 
     public Connection getConnection() throws Exception {
@@ -262,6 +284,7 @@ public class PhoenixUtil {
                 column.setType(DataTypeMapping.valueOf(resultSet.getString("TYPE_NAME").replace(" ", "_")));
                 column.setLength(resultSet.getInt("COLUMN_SIZE"));
                 columnList.add(column);
+                LOGGER.debug(String.format("getColumnsMetaData for column name : %s", column.getName()));
             }
         } finally {
             if (null != resultSet) {
@@ -330,7 +353,7 @@ public class PhoenixUtil {
      * @param tableName
      * @throws InterruptedException
      */
-    private void waitForAsyncIndexToFinish(String tableName) throws InterruptedException {
+    public void waitForAsyncIndexToFinish(String tableName) throws InterruptedException {
     	//Wait for up to 15 mins for ASYNC index build to start
     	boolean jobStarted = false;
     	for (int i=0; i<15; i++) {
@@ -450,4 +473,156 @@ public class PhoenixUtil {
         }
         return buf.toString();
     }
+
+    public PreparedStatement buildStatement(RulesApplier rulesApplier, Scenario scenario, List<Column> columns,
+            PreparedStatement statement, SimpleDateFormat simpleDateFormat) throws Exception {
+
+        int count = 1;
+        for (Column column : columns) {
+            DataValue dataValue = rulesApplier.getDataForRule(scenario, column);
+            switch (column.getType()) {
+            case VARCHAR:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.VARCHAR);
+                } else {
+                    statement.setString(count, dataValue.getValue());
+                }
+                break;
+            case CHAR:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.CHAR);
+                } else {
+                    statement.setString(count, dataValue.getValue());
+                }
+                break;
+            case DECIMAL:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.DECIMAL);
+                } else {
+                    statement.setBigDecimal(count, new BigDecimal(dataValue.getValue()));
+                }
+                break;
+            case INTEGER:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.INTEGER);
+                } else {
+                    statement.setInt(count, Integer.parseInt(dataValue.getValue()));
+                }
+                break;
+            case UNSIGNED_LONG:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.OTHER);
+                } else {
+                    statement.setLong(count, Long.parseLong(dataValue.getValue()));
+                }
+                break;
+            case BIGINT:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.BIGINT);
+                } else {
+                    statement.setLong(count, Long.parseLong(dataValue.getValue()));
+                }
+                break;
+            case TINYINT:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.TINYINT);
+                } else {
+                    statement.setLong(count, Integer.parseInt(dataValue.getValue()));
+                }
+                break;
+            case DATE:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.DATE);
+                } else {
+                    Date
+                            date =
+                            new java.sql.Date(simpleDateFormat.parse(dataValue.getValue()).getTime());
+                    statement.setDate(count, date);
+                }
+                break;
+            case VARCHAR_ARRAY:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.ARRAY);
+                } else {
+                    Array
+                            arr =
+                            statement.getConnection().createArrayOf("VARCHAR", dataValue.getValue().split(","));
+                    statement.setArray(count, arr);
+                }
+                break;
+            case VARBINARY:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.VARBINARY);
+                } else {
+                    statement.setBytes(count, dataValue.getValue().getBytes());
+                }
+                break;
+            case TIMESTAMP:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.TIMESTAMP);
+                } else {
+                    java.sql.Timestamp
+                            ts =
+                            new java.sql.Timestamp(simpleDateFormat.parse(dataValue.getValue()).getTime());
+                    statement.setTimestamp(count, ts);
+                }
+                break;
+            default:
+                break;
+            }
+            count++;
+        }
+        return statement;
+    }
+
+    public String buildSql(final List<Column> columns, final String tableName) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("upsert into ");
+        builder.append(tableName);
+        builder.append(" (");
+        int count = 1;
+        for (Column column : columns) {
+            builder.append(column.getName());
+            if (count < columns.size()) {
+                builder.append(",");
+            } else {
+                builder.append(")");
+            }
+            count++;
+        }
+        builder.append(" VALUES (");
+        for (int i = 0; i < columns.size(); i++) {
+            if (i < columns.size() - 1) {
+                builder.append("?,");
+            } else {
+                builder.append("?)");
+            }
+        }
+        return builder.toString();
+    }
+
+    public org.apache.hadoop.hbase.util.Pair<Long, Long> getResults(
+            Query query,
+            ResultSet rs,
+            String queryIteration,
+            boolean isSelectCountStatement,
+            Long queryStartTime) throws Exception {
+
+        Long resultRowCount = 0L;
+        while (rs.next()) {
+            if (isSelectCountStatement) {
+                resultRowCount = rs.getLong(1);
+            } else {
+                resultRowCount++;
+            }
+            long queryElapsedTime = EnvironmentEdgeManager.currentTimeMillis() - queryStartTime;
+            if (queryElapsedTime >= query.getTimeoutDuration()) {
+                LOGGER.error("Query " + queryIteration + " exceeded timeout of "
+                        +  query.getTimeoutDuration() + " ms at " + queryElapsedTime + " ms.");
+                return new org.apache.hadoop.hbase.util.Pair(resultRowCount, queryElapsedTime);
+            }
+        }
+        return new org.apache.hadoop.hbase.util.Pair(resultRowCount, EnvironmentEdgeManager.currentTimeMillis() - queryStartTime);
+    }
+
 }
