@@ -30,7 +30,9 @@ public enum DataTypeMapping {
     VARCHAR_ARRAY("VARCHAR ARRAY", Types.ARRAY),
     VARBINARY("VARBINARY", Types.VARBINARY),
     TIMESTAMP("TIMESTAMP", Types.TIMESTAMP),
+    BOOLEAN("BOOLEAN", Types.BOOLEAN),
     BIGINT("BIGINT", Types.BIGINT),
+    UNSIGNED_INT("UNSIGNED_INT", Types.INTEGER),
     TINYINT("TINYINT", Types.TINYINT);
 
     private final String sType;

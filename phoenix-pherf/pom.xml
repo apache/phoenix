@@ -73,11 +73,15 @@
 			<artifactId>commons-math3</artifactId>
 			<version>3.3</version>
 		</dependency>
-    <dependency>
-      <groupId>org.apache.phoenix.thirdparty</groupId>
-      <artifactId>phoenix-shaded-commons-cli</artifactId>
-    </dependency>
-
+		<dependency>
+			<groupId>com.google.code.gson</groupId>
+			<artifactId>gson</artifactId>
+			<version>2.8.6</version>
+		</dependency>
+		<dependency>
+		  <groupId>org.apache.phoenix.thirdparty</groupId>
+		  <artifactId>phoenix-shaded-commons-cli</artifactId>
+		</dependency>
 		<!-- Test Dependencies -->
 		<dependency>
 			<groupId>junit</groupId>
@@ -133,7 +137,7 @@
 	<build>
 		<resources>
 			<resource>
-				<directory>src/main/resources</directory>
+				<directory>src/it/resources</directory>
 			</resource>
 			<resource>
 				<directory>config</directory>
@@ -221,7 +225,7 @@
 						<artifactSet>
 							<includes>
 								<include>org.apache.phoenix:phoenix-pherf</include>
-                                <include>com.google.guava:guava</include>
+								<include>org.apache.phoenix.thirdparty:phoenix-shaded-guava</include>
 								<include>com.googlecode.java-diff-utils:diffutils</include>
 								<include>org.apache.commons:commons-lang3</include>
 								<include>org.apache.commons:commons-math3</include>
@@ -230,6 +234,8 @@
 								<include>org.apache.commons:commons-csv</include>
 								<include>commons-lang:commons-lang</include>
 								<include>commons-io:commons-io</include>
+								<include>com.google.code.gson:gson</include>
+								<include>com.lmax:disruptor</include>
 							</includes>
 						</artifactSet>
 						<filters>

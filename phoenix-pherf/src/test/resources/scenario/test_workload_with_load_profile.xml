@@ -17,7 +17,7 @@
   ~   limitations under the License.
   -->
 
-<datamodel name="test_scenario">
+<datamodel name="model_1">
     <datamapping>
         <column>
             <!-- This column type defines what will generally happen to VARCHAR fields unless they are explicitly defined or overridden elsewhere -->
@@ -196,7 +196,7 @@
                 <datavalue distribution="20">
                     <value>LMN</value>
                 </datavalue>
-            </valuelist>            
+            </valuelist>
         </column>
         <column>
             <type>CHAR</type>
@@ -215,12 +215,12 @@
             <prefix>VBOxx00</prefix>
         </column>
         <column>
-           <type>VARCHAR</type>
-           <userDefined>true</userDefined>
-           <dataSequence>SEQUENTIAL</dataSequence>
-           <length>1</length>
-           <name>FIELD</name>
-       </column>
+            <type>VARCHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <length>1</length>
+            <name>FIELD</name>
+        </column>
         <column>
             <type>INTEGER</type>
             <dataSequence>SEQUENTIAL</dataSequence>
@@ -230,123 +230,141 @@
         </column>
     </datamapping>
     <scenarios>
-        <scenario tableName="PHERF.TEST_TABLE" rowCount="100" name="testScenarioRW">
-            <!-- Scenario level rule overrides will be unsupported in V1.
-                    You can use the general datamappings in the mean time-->
-            <dataOverride>
-                <column>
-                    <type>VARCHAR</type>
-                    <userDefined>true</userDefined>
-                    <dataSequence>RANDOM</dataSequence>
-                    <length>5</length>
-                    <name>FIELD</name>
-                </column>
-            </dataOverride>
-
-            <!--
-                This is used to add mixed R/W workloads.
-
-                If this tag exists, a writer pool will be created based on the below properties.
-                These props will override the default values in pherf.properties, but only for this
-                scenario.The write jobs will run in conjunction with the querySet below.
-            -->
-            <writeParams executionDurationInMs="10000">
-                <!--
-                    Number of writer it insert into the threadpool
-                -->
-                <writerThreadCount>2</writerThreadCount>
-
-                <!--
-                    Time in Ms that each thread will sleep between batch writes. This helps to
-                    throttle writers.
-                -->
-                <threadSleepDuration>10</threadSleepDuration>
-
+        <scenario tableName="PHERF.Z11" name="scenario_11">
+            <loadProfile>
                 <batchSize>1</batchSize>
-            </writeParams>
-            <querySet concurrency="1" executionType="PARALLEL" executionDurationInMs="10000">
-                <query id="q3" statement="select count(*) from PHERF.TEST_TABLE"/>
-                <query id="q4" statement="select sum(SOME_INT) from PHERF.TEST_TABLE"/>
+                <numOperations>1000</numOperations>
+                <tenantDistribution id="t111" weight="10" numTenants="10"></tenantDistribution>
+                <tenantDistribution id="t112" weight="10" numTenants="10"></tenantDistribution>
+                <tenantDistribution id="t113" weight="80" numTenants="1"></tenantDistribution>
+                <opDistribution id="op111" weight="50"></opDistribution>
+                <opDistribution id="op112" weight="0"></opDistribution>
+                <opDistribution id="op113" weight="0"></opDistribution>
+                <opDistribution id="op114" weight="50"></opDistribution>
+                <opDistribution id="op115" weight="0"></opDistribution>
+            </loadProfile>
+
+
+            <preScenarioDdls>
+                <ddl statement="CREATE VIEW IF NOT EXISTS PHERF.Z11 (field1 VARCHAR, field2 VARCHAR) AS SELECT * FROM PHERF.TEST_TABLE" />
+            </preScenarioDdls>
+
+            <upserts>
+                <upsert id="op111">
+                    <column>
+                        <type>CHAR</type>
+                        <name>PARENT_ID</name>
+                    </column>
+                    <column>
+                        <type>DATE</type>
+                        <name>CREATED_DATE</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>FIELD</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>OTHER_ID</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>OLDVAL_STRING</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>NEWVAL_STRING</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>FIELD1</name>
+                    </column>
+                </upsert>
+            </upserts>
+
+            <idleTimes>
+                <idleTime id="op114" idleTime="50"></idleTime>
+            </idleTimes>
+            <udfs>
+                <udf id="op115" >
+                    <clazzName>org.apache.phoenix.pherf.ConfigurationParserTest.TestUDF</clazzName>
+                    <args>Hello</args>
+                    <args>World</args>
+                </udf>
+            </udfs>
+            <querySet>
+                <query id="op112" statement="select count(*) from PHERF.Z11"/>
+                <query id="op113" statement="select sum(SOME_INT) from PHERF.Z11"/>
             </querySet>
 
         </scenario>
+        <scenario tableName="PHERF.Z12" name="scenario_12">
+            <loadProfile>
+                <batchSize>5</batchSize>
+                <numOperations>1000</numOperations>
+                <tenantDistribution id="t121" weight="10" numTenants="5"></tenantDistribution>
+                <tenantDistribution id="t122" weight="10" numTenants="5"></tenantDistribution>
+                <tenantDistribution id="t123" weight="80" numTenants="5"></tenantDistribution>
+                <opDistribution id="op121" weight="50"></opDistribution>
+                <opDistribution id="op122" weight="5"></opDistribution>
+                <opDistribution id="op123" weight="5"></opDistribution>
+                <opDistribution id="op124" weight="40"></opDistribution>
+                <opDistribution id="op125" weight="0"></opDistribution>
+            </loadProfile>
 
-        <scenario tableName="PHERF.TEST_TABLE" rowCount="30" name="testScenario">
-            <!-- Scenario level rule overrides will be unsupported in V1.
-                    You can use the general datamappings in the mean time-->
-            <dataOverride>
-                <column>
-                    <type>VARCHAR</type>
-                    <userDefined>true</userDefined>
-                    <dataSequence>RANDOM</dataSequence>
-                    <length>10</length>
-                    <name>FIELD</name>
-                </column>
-            </dataOverride>
-            
-            <!--Note: 1. Minimum of executionDurationInMs or numberOfExecutions. Which ever is reached first 
-                      2. DDL included in query are executed only once on start of querySet execution.
-            -->
-            <querySet concurrency="1-3" executionType="SERIAL" executionDurationInMs="5000"
-                      numberOfExecutions="100">
-                <query id="q1" tenantId="123456789012345" expectedAggregateRowCount="0"
-                       statement="select count(*) from PHERF.TEST_TABLE"/>
-                <!-- queryGroup is a way to organize queries across tables or scenario files.
-                    The value will be dumped to results. This gives a value to group by on reporting to compare queries -->
-                <query id="q2" queryGroup="g1"
-                       statement="select sum(SOME_INT) from PHERF.TEST_TABLE"/>
-            </querySet>
-            <!--Minimum of executionDurationInMs or numberOfExecutions. Which ever is reached first -->
-            <querySet concurrency="2-3" executionType="PARALLEL" executionDurationInMs="10000"
-                      numberOfExecutions="10">
-                <query id="q3" statement="select count(*) from PHERF.TEST_TABLE"/>
-                <query id="q4" statement="select sum(SOME_INT) from PHERF.TEST_TABLE"/>
-            </querySet>
-        </scenario>
-        
-        <scenario tableName="PHERF.TEST_TABLE" rowCount="99" name="testPreAndPostDdls">
             <preScenarioDdls>
-                 <ddl statement="CREATE INDEX IDX_DIVISION ON ? (DIVISION)" tableName="PHERF.TEST_TABLE"/>
+                <ddl statement="CREATE VIEW IF NOT EXISTS PHERF.Z12 (field1 VARCHAR, field2 VARCHAR) AS SELECT * FROM PHERF.TEST_TABLE" />
             </preScenarioDdls>
- 
-            <postScenarioDdls>
-                 <ddl statement="CREATE INDEX IDX_OLDVAL_STRING ON ? (OLDVAL_STRING)" tableName="PHERF.TEST_TABLE"/>
-                 <ddl statement="CREATE INDEX IDX_CONNECTION_ID ON ? (CONNECTION_ID)" tableName="PHERF.TEST_TABLE"/>
-            </postScenarioDdls>
-            
-            <querySet concurrency="1" executionType="SERIAL" executionDurationInMs="5000"
-                      numberOfExecutions="1">
-                <query id="q1" expectedAggregateRowCount="99" statement="select count(*) from PHERF.TEST_TABLE"/>
+
+            <upserts>
+                <upsert id="op121">
+                    <column>
+                        <type>CHAR</type>
+                        <name>PARENT_ID</name>
+                    </column>
+                    <column>
+                        <type>DATE</type>
+                        <name>CREATED_DATE</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>FIELD</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>OTHER_ID</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>OLDVAL_STRING</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>NEWVAL_STRING</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>FIELD1</name>
+                    </column>
+                </upsert>
+            </upserts>
+
+            <idleTimes>
+                <idleTime id="op124" idleTime="100"></idleTime>
+            </idleTimes>
+            <querySet>
+                <query id="op122" statement="select count(*) from PHERF.Z12"/>
+                <query id="op123" statement="select sum(SOME_INT) from PHERF.Z12"/>
             </querySet>
+            <udfs>
+                <udf id="op125" >
+                    <clazzName>org.apache.phoenix.pherf.ConfigurationParserTest.TestUDF</clazzName>
+                    <args>Hello</args>
+                    <args>World</args>
+                </udf>
+            </udfs>
+
         </scenario>
-        
-        <!-- To configure a Write Workload to write to a tenant specific view users need to
-             specify the tenantId attribute on the scenario, specifying the tenant they 
-             want to write data for as the attribute value. This tells Pherf to take out a 
-             tenant-specific connection for executing the write workload. 
-             The name of the tenant specific view to write to can then be specified as the value of
-             the tablename attribute. This assumes the tenant specific view has been created. To 
-             dynamically create the view see comments below with regard to the ddl attribute. 
-        -->
-        <scenario tableName="PHERF.TEST_VIEW" tenantId="xyzdefghijklmno"
-                    rowCount="100" name="testMTWriteScenario">
-           <preScenarioDdls>
-                <ddl statement="CREATE VIEW IF NOT EXISTS PHERF.TEST_VIEW (field1 VARCHAR, field2 VARCHAR) AS SELECT * FROM PHERF.TEST_MULTI_TENANT_TABLE" />
-            </preScenarioDdls>
-        </scenario>
-        <!--  Scenario level DDL that is dynamically executed before the Write Workload is run.
-              This pattern is really useful when you want to write data to multi-tenant view and the tenant id is
-              tightly bound to the scenario. In such cases you can't create the view through the data model flow.
-              The value of the tableName attribute is name of the view that is dynamically created based on the DDL
-              in the ddl attribute. Queries accessing the View will need to manually make sure Pherf was run with the -l option at
-              least once. 
-         -->
-        <scenario tableName="PHERF.TEST_MT_VIEW" tenantId="abcdefghijklmno" 
-                    rowCount="100" name="testMTDdlWriteScenario">
-            <preScenarioDdls>
-                <ddl statement="CREATE VIEW IF NOT EXISTS PHERF.TEST_MT_VIEW (field1 VARCHAR) AS SELECT * FROM PHERF.TEST_MULTI_TENANT_TABLE" />
-            </preScenarioDdls>
-        </scenario>
-        
+
     </scenarios>
 </datamodel>

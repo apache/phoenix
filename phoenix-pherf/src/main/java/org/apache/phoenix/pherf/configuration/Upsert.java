@@ -21,35 +21,22 @@ package org.apache.phoenix.pherf.configuration;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 
 import javax.xml.bind.annotation.XmlAttribute;
-import javax.xml.bind.annotation.XmlType;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-@XmlType
-public class Query {
+public class Upsert {
 
     private String id;
-    private String queryGroup;
-    private String tenantId;
+    private String upsertGroup;
     private String statement;
-    private Long expectedAggregateRowCount;
-    private String ddl;
+    private List<Column> columns;
     private boolean useGlobalConnection;
     private Pattern pattern;
     private long timeoutDuration = Long.MAX_VALUE;
 
-    public Query() {
+    public Upsert() {
     	pattern = Pattern.compile("\\[.*?\\]");
-    }
-    
-    /**
-     * SQL statement
-     *
-     * @return
-     */
-    @XmlAttribute
-    public String getStatement() {
-        return statement;
     }
 
     public String getDynamicStatement(RulesApplier ruleApplier, Scenario scenario)
@@ -63,92 +50,31 @@ public class Query {
             needQuotes =
                     (dynamicColumn.getType() == DataTypeMapping.CHAR
                             || dynamicColumn.getType() == DataTypeMapping.VARCHAR) ? "'" : "";
-            ret =
-                    ret.replace("[" + dynamicField + "]",
-                            needQuotes + ruleApplier.getDataValue(dynamicColumn).getValue()
+            ret = ret.replace("[" + dynamicField + "]",
+                    needQuotes + ruleApplier.getDataValue(dynamicColumn).getValue()
                                     + needQuotes);
         }
         return ret;
     }
 
-    public void setStatement(String statement) {
-        // normalize statement - merge all consecutive spaces into one
-        this.statement = statement.replaceAll("\\s+", " ");
-    }
-
     /**
-     * Tenant Id used by connection of this query
-     *
-     * @return
-     */
-    @XmlAttribute
-    public String getTenantId() {
-        return tenantId;
-    }
-
-    public void setTenantId(String tenantId) {
-        this.tenantId = tenantId;
-    }
-
-    /**
-     * Expected aggregate row count is matched if specified
-     *
-     * @return
-     */
-    @XmlAttribute
-    public Long getExpectedAggregateRowCount() {
-        return expectedAggregateRowCount;
-    }
-
-    public void setExpectedAggregateRowCount(Long expectedAggregateRowCount) {
-        this.expectedAggregateRowCount = expectedAggregateRowCount;
-    }
-
-    /**
-     * DDL is executed only once. If tenantId is specified then DDL is executed with tenant
-     * specific connection.
-     *
-     * @return
-     */
-    @XmlAttribute
-    public String getDdl() {
-        return ddl;
-    }
-
-    public void setDdl(String ddl) {
-        this.ddl = ddl;
-    }
-
-    /**
-     * queryGroup attribute is just a string value to help correlate queries across sets or files.
+     * upsertGroup attribute is just a string value to help correlate upserts across sets or files.
      * This helps to make sense of reporting results.
      *
      * @return the group id
      */
     @XmlAttribute
-    public String getQueryGroup() {
-        return queryGroup;
+    public String getUpsertGroup() {
+        return upsertGroup;
     }
 
-    public void setQueryGroup(String queryGroup) {
-        this.queryGroup = queryGroup;
+    public void setUpsertGroup(String upsertGroup) {
+        this.upsertGroup = upsertGroup;
     }
 
-    /**
-     * Set hint to query
-     *
-     * @param queryHint
-     */
-    public void setHint(String queryHint) {
-        if (null != queryHint) {
-            this.statement =
-                    this.statement.toUpperCase()
-                            .replace("SELECT ", "SELECT /*+ " + queryHint + "*/ ");
-        }
-    }
 
     /**
-     * Query ID, Use UUID if none specified
+     * Upsert ID, Use UUID if none specified
      *
      * @return
      */
@@ -162,6 +88,14 @@ public class Query {
 
     public void setId(String id) {
         this.id = id;
+    }
+
+    public List<Column> getColumns() {
+        return columns;
+    }
+
+    public void setColumns(List<Column> columns) {
+        this.columns = columns;
     }
 
     @XmlAttribute
@@ -180,5 +114,22 @@ public class Query {
 
     public void setTimeoutDuration(long timeoutDuration) {
         this.timeoutDuration = timeoutDuration;
+    }
+
+    public String getStatement() {
+        return statement;
+    }
+
+    public void setStatement(String statement) {
+        // normalize statement - merge all consecutive spaces into one
+        this.statement = statement.replaceAll("\\s+", " ");
+    }
+
+    public List<Column> getColumn() {
+        return columns;
+    }
+
+    public void setColumn(List<Column> columns) {
+        this.columns = columns;
     }
 }

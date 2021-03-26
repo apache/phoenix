@@ -18,10 +18,15 @@
 
 package org.apache.phoenix.pherf;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.phoenix.pherf.result.ResultUtil;
+import org.apache.phoenix.pherf.workload.mt.tenantoperation.TenantOperationIT;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.util.Properties;
 
 public class ResultBaseTest {
@@ -42,6 +47,10 @@ public class ResultBaseTest {
     }
     
     @AfterClass public static synchronized void tearDown() throws Exception {
-    	new ResultUtil().deleteDir(properties.getProperty("pherf.default.results.dir"));
+        try {
+            new ResultUtil().deleteDir(properties.getProperty("pherf.default.results.dir"));
+        } catch (Exception e) {
+            // swallow
+        }
     }
 }

@@ -25,6 +25,7 @@ import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.result.ResultUtil;
 import org.apache.phoenix.pherf.schema.SchemaReader;
@@ -37,9 +38,9 @@ import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class ResultBaseTestIT extends BaseTest {
-    protected static final String matcherScenario = ".*scenario/.*test.*xml";
-    protected static final String matcherSchema = ".*datamodel/.*test.*sql";
+public class ResultBaseTestIT extends ParallelStatsDisabledIT {
+    protected static final String matcherScenario = ".*scenario/.*test_scenario.*xml";
+    protected static final String matcherSchema = ".*datamodel/.*test_schema.*sql";
 
     protected static PhoenixUtil util = PhoenixUtil.create(true);
     protected static Properties properties;
