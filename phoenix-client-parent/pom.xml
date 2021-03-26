@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.16.1-SNAPSHOT</version>
+    <version>4.16.1</version>
   </parent>
   <artifactId>phoenix-client-parent</artifactId>
   <name>Phoenix Client Parent</name>

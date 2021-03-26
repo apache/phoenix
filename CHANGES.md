@@ -18,6 +18,43 @@
 -->
 # PHOENIX Changelog
 
+## Release 4.16.1 - Unreleased (as of 2021-03-26)
+
+
+
+### IMPROVEMENTS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-6409](https://issues.apache.org/jira/browse/PHOENIX-6409) | Include local index uncovered columns merge in explain plan. |  Minor | . |
+| [PHOENIX-6385](https://issues.apache.org/jira/browse/PHOENIX-6385) | Not to use Scan#setSmall for HBase 2.x versions |  Major | . |
+| [PHOENIX-6402](https://issues.apache.org/jira/browse/PHOENIX-6402) | Allow using local indexes with uncovered columns in the WHERE clause |  Blocker | . |
+| [PHOENIX-6388](https://issues.apache.org/jira/browse/PHOENIX-6388) | Add sampled logging for read repairs |  Minor | . |
+| [PHOENIX-6396](https://issues.apache.org/jira/browse/PHOENIX-6396) | PChar illegal data exception should not contain value |  Major | . |
+| [PHOENIX-6182](https://issues.apache.org/jira/browse/PHOENIX-6182) | IndexTool to verify and repair every index row |  Major | . |
+| [PHOENIX-5543](https://issues.apache.org/jira/browse/PHOENIX-5543) | Implement show schemas / show tables SQL commands |  Minor | . |
+
+
+### BUG FIXES:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-6424](https://issues.apache.org/jira/browse/PHOENIX-6424) | SELECT cf1.\* FAILS with a WHERE clause including cf2. |  Major | . |
+| [PHOENIX-6421](https://issues.apache.org/jira/browse/PHOENIX-6421) | Selecting an indexed array value from an uncovered column with local index returns NULL |  Major | . |
+| [PHOENIX-6423](https://issues.apache.org/jira/browse/PHOENIX-6423) | Wildcard queries fail with mixed default and explicit column families. |  Critical | . |
+| [PHOENIX-6400](https://issues.apache.org/jira/browse/PHOENIX-6400) | Do no use local index with uncovered columns in the WHERE clause. |  Blocker | . |
+| [PHOENIX-6370](https://issues.apache.org/jira/browse/PHOENIX-6370) | 4.x branch still includes the phoenix-pig example files |  Trivial | . |
+| [PHOENIX-6386](https://issues.apache.org/jira/browse/PHOENIX-6386) | Bulkload generates unverified index rows |  Major | core |
+
+
+### SUB-TASKS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-6408](https://issues.apache.org/jira/browse/PHOENIX-6408) | LIMIT on local index query with uncovered columns in the WHERE returns wrong result. |  Major | . |
+
+
+
 ## Release 4.16.0 - Unreleased (as of 2021-02-16)
 
 

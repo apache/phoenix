@@ -23,7 +23,7 @@
   <parent>
     <artifactId>phoenix</artifactId>
     <groupId>org.apache.phoenix</groupId>
-    <version>4.16.1-SNAPSHOT</version>
+    <version>4.16.1</version>
   </parent>
 
   <artifactId>phoenix-hbase-compat-1.5.0</artifactId>
