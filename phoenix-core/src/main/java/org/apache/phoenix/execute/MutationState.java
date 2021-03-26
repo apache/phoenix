@@ -448,7 +448,7 @@ public class MutationState implements SQLCloseable {
         boolean isIndex = table.getType() == PTableType.INDEX;
         boolean incrementRowCount = dstMutations == this.mutationsMap;
         // we only need to check if the new mutation batch (srcRows) conflicts with the
-        // last mutation batch
+        // last mutation batch since we try to merge it with that only
         MultiRowMutationState existingRows = getLastMutationBatch(dstMutations, tableRef);
 
         if (existingRows == null) { // no rows found for this table

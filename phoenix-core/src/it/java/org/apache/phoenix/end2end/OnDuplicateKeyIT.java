@@ -619,40 +619,41 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            String ddl = "create table " + tableName + "(pk varchar primary key, counter1 bigint, counter2 smallint)";
+            String ddl = "create table " + tableName + "(pk varchar primary key, counter1 bigint, counter2 varchar)";
             conn.createStatement().execute(ddl);
             createIndex(conn, tableName);
 
             // row doesn't exist
-            conn.createStatement().execute(String.format("UPSERT INTO %s VALUES('a',0,1)", tableName));
+            conn.createStatement().execute(String.format("UPSERT INTO %s VALUES('a',0,'abc')", tableName));
             conn.createStatement().execute(String.format(
-                "UPSERT INTO %s VALUES('a',1,1) ON DUPLICATE KEY UPDATE counter1 = counter1 + 2", tableName));
+                "UPSERT INTO %s VALUES('a',1,'zzz') ON DUPLICATE KEY UPDATE counter1 = counter1 + 2", tableName));
             conn.commit();
-            assertRow(conn, tableName, "a", 2, 1);
+            assertRow(conn, tableName, "a", 2, "abc");
 
             // row exists
-            conn.createStatement().execute(String.format("UPSERT INTO %s VALUES('a', 7, 4)", tableName));
+            conn.createStatement().execute(String.format("UPSERT INTO %s VALUES('a', 7, 'fff')", tableName));
             conn.createStatement().execute(String.format(
-                "UPSERT INTO %s VALUES('a',1,1) ON DUPLICATE KEY UPDATE counter1 = counter1 + 2", tableName));
+                "UPSERT INTO %s VALUES('a',1, 'bazz') ON DUPLICATE KEY UPDATE counter1 = counter1 + 2," +
+                    "counter2 = counter2 || 'ddd'", tableName));
             conn.commit();
-            assertRow(conn, tableName, "a", 9, 4);
+            assertRow(conn, tableName, "a", 9, "fffddd");
 
             // partial update
             conn.createStatement().execute(String.format(
-                "UPSERT INTO %s (pk, counter2) VALUES('a',100) ON DUPLICATE KEY UPDATE counter1 = counter1 + 2", tableName));
+                "UPSERT INTO %s (pk, counter2) VALUES('a', 'gggg') ON DUPLICATE KEY UPDATE counter1 = counter1 + 2", tableName));
             conn.createStatement().execute(String.format(
-                "UPSERT INTO %s (pk, counter2) VALUES ('a',125)", tableName));
+                "UPSERT INTO %s (pk, counter2) VALUES ('a', 'bar')", tableName));
             conn.commit();
-            assertRow(conn, tableName, "a", 11, 125);
+            assertRow(conn, tableName, "a", 11, "bar");
         }
     }
 
-    private void assertRow(Connection conn, String tableName, String expectedPK, int expectedCol1, int expectedCol2) throws SQLException {
+    private void assertRow(Connection conn, String tableName, String expectedPK, int expectedCol1, String expectedCol2) throws SQLException {
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(expectedPK,rs.getString(1));
         assertEquals(expectedCol1,rs.getInt(2));
-        assertEquals(expectedCol2,rs.getInt(3));
+        assertEquals(expectedCol2,rs.getString(3));
         assertFalse(rs.next());
     }
 

@@ -49,6 +49,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.execute.MutationState.joinSortedIntArrays;
+import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -219,22 +220,22 @@ public class MutationStateTest {
 
     @Test
     public void testOnDupAndUpsertInSameCommitBatch() throws Exception {
+        String dataTable1 = generateUniqueName();
+        String dataTable2 = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement().execute(
-                "create table MUTATION_TEST1" +
-                    "( id1 UNSIGNED_INT not null primary key," +
-                    "appId1 VARCHAR)");
-            conn.createStatement().execute(
-                "create table MUTATION_TEST2" +
-                    "( id2 UNSIGNED_INT not null primary key," +
-                    "appId2 VARCHAR)");
+            conn.createStatement().execute(String.format(
+                "create table %s (id1 UNSIGNED_INT not null primary key, appId1 VARCHAR)", dataTable1));
+            conn.createStatement().execute(String.format(
+                "create table %s (id2 UNSIGNED_INT not null primary key, appId2 VARCHAR)", dataTable2));
 
-            conn.createStatement().execute("upsert into MUTATION_TEST1(id1,appId1) values(111,'app1')");
-            conn.createStatement().execute(
-                "upsert into MUTATION_TEST1(id1,appId1) values(111, 'app1') ON DUPLICATE KEY UPDATE appId1 = null");
-            conn.createStatement().execute("upsert into MUTATION_TEST2(id2,appId2) values(222,'app2')");
-            conn.createStatement().execute(
-                "upsert into MUTATION_TEST2(id2,appId2) values(222,'app2') ON DUPLICATE KEY UPDATE appId2 = null");
+            conn.createStatement().execute(String.format(
+                "upsert into %s(id1,appId1) values(111,'app1')", dataTable1));
+            conn.createStatement().execute(String.format(
+                "upsert into %s(id1,appId1) values(111, 'app1') ON DUPLICATE KEY UPDATE appId1 = null", dataTable1));
+            conn.createStatement().execute(String.format(
+                "upsert into %s(id2,appId2) values(222,'app2')", dataTable2));
+            conn.createStatement().execute(String.format(
+                "upsert into %s(id2,appId2) values(222,'app2') ON DUPLICATE KEY UPDATE appId2 = null", dataTable2));
 
             final PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
             MutationState state = pconn.getMutationState();
@@ -252,18 +253,19 @@ public class MutationStateTest {
             List<Map<TableRef, MultiRowMutationState>> commitBatches = state.createCommitBatches();
             assertEquals(2, commitBatches.size());
             // first commit batch should only contain regular upserts
-            verifyCommitBatch(commitBatches.get(0), false);
-            verifyCommitBatch(commitBatches.get(1), true);
+            verifyCommitBatch(commitBatches.get(0), false, 2, 1);
+            verifyCommitBatch(commitBatches.get(1), true, 2, 1);
         }
     }
 
-    private void verifyCommitBatch(Map<TableRef, MultiRowMutationState> commitBatch, boolean conditional) {
+    private void verifyCommitBatch(Map<TableRef, MultiRowMutationState> commitBatch, boolean conditional,
+        int numberOfBatches, int rowsPerBatch) {
         // one for each table
-        assertEquals(2, commitBatch.size());
+        assertEquals(numberOfBatches, commitBatch.size());
         for (Map.Entry<TableRef, MultiRowMutationState> entry : commitBatch.entrySet()) {
             TableRef tableRef = entry.getKey();
             MultiRowMutationState batch = entry.getValue();
-            assertEquals(1, batch.size());
+            assertEquals(rowsPerBatch, batch.size());
             for (Map.Entry<ImmutableBytesPtr, RowMutationState> row : batch.entrySet()) {
                 ImmutableBytesPtr key = row.getKey();
                 RowMutationState rowMutationState = row.getValue();
