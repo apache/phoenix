@@ -125,7 +125,9 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
+import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcServer.Call;
 import org.apache.hadoop.hbase.ipc.RpcUtil;
@@ -973,6 +975,25 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         return table;
     }
 
+    private PName getPhysicalTableName(Region region, byte[] tenantId, byte[] schema, byte[] table, long timestamp) throws IOException {
+        byte[] key = SchemaUtil.getTableKey(tenantId, schema, table);
+        Scan scan = MetaDataUtil.newTableRowsScan(key, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                timestamp);
+        scan.addColumn(TABLE_FAMILY_BYTES, PHYSICAL_TABLE_NAME_BYTES);
+        try (RegionScanner scanner = region.getScanner(scan)) {
+            List<Cell> results = Lists.newArrayList();
+            scanner.next(results);
+            Cell physicalTableNameKv = null;
+            if (results.size() > 0) {
+                physicalTableNameKv = results.get(0);
+            }
+            PName physicalTableName =
+                    physicalTableNameKv != null ? newPName(physicalTableNameKv.getValueArray(),
+                            physicalTableNameKv.getValueOffset(), physicalTableNameKv.getValueLength()) : null;
+            return physicalTableName;
+        }
+    }
+
     private PTable getTable(RegionScanner scanner, long clientTimeStamp, long tableTimeStamp,
                             int clientVersion)
             throws IOException, SQLException {
@@ -1246,7 +1267,17 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     }
 
                     if (parentTable == null) {
-                        physicalTables.add(famName);
+                        if (indexType == IndexType.LOCAL) {
+                            PName tablePhysicalName = getPhysicalTableName(env.getRegion(),null, SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(),
+                                    SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(), clientTimeStamp);
+                            if (tablePhysicalName == null) {
+                                physicalTables.add(famName);
+                            } else {
+                                physicalTables.add(SchemaUtil.getPhysicalHBaseTableName(schemaName, tablePhysicalName, isNamespaceMapped));
+                            }
+                        } else {
+                            physicalTables.add(famName);
+                        }
                         // If this is a view index, then one of the link is IDX_VW -> _IDX_ PhysicalTable link. Since famName is _IDX_ and we can't get this table hence it is null, we need to use actual view name
                         parentLogicalName = (tableType == INDEX ? SchemaUtil.getTableName(parentSchemaName, parentTableName) : famName);
                     } else {
