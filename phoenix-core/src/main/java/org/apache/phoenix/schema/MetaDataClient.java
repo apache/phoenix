@@ -892,8 +892,6 @@ public class MetaDataClient {
         // only need to inherit columns and indexes for view indexes and views
         if ( (table.getType()==PTableType.INDEX && hasIndexId)
                 || (table.getType() == PTableType.VIEW && table.getViewType() != ViewType.MAPPED)) {
-            // For views and view indexes, table.getParentLogicalName returns the base table logical name
-            // For child views, table.getParentName returns the parent view name
             String parentName = table.getParentName().getString();
             String parentSchemaName = SchemaUtil.getSchemaNameFromFullName(parentName);
             String parentTableName = SchemaUtil.getTableNameFromFullName(parentName);

@@ -37,10 +37,12 @@ import java.sql.Timestamp;
 import java.util.Properties;
 
 import org.apache.phoenix.cache.ServerCacheClient;
+import org.apache.phoenix.end2end.LogicalTableNameBaseIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -52,7 +54,63 @@ public abstract class HashJoinIT extends BaseJoinIT {
     public HashJoinIT(String[] indexDDL, String[] plans) {
         super(indexDDL, plans);
     }
-    
+
+    public void testInnerJoin(boolean renamePhysicalTable) throws Exception {
+        Connection conn = getConnection();
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String fullNameRealItemTable =getTableNameMap().get(JOIN_ITEM_TABLE_FULL_NAME);
+        String fullNameSupplierTable =getTableNameMap().get(JOIN_SUPPLIER_TABLE_FULL_NAME);
+        if (renamePhysicalTable) {
+            LogicalTableNameBaseIT.createAndPointToNewPhysicalTable(conn, fullNameRealItemTable, false);
+            LogicalTableNameBaseIT.createAndPointToNewPhysicalTable(conn, fullNameSupplierTable, false);
+        }
+        String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name, next value for " + seqName + " FROM " + tableName1 + " item INNER JOIN " + tableName2 + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"";
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "0000000001");
+            assertEquals(rs.getString(2), "T1");
+            assertEquals(rs.getString(3), "0000000001");
+            assertEquals(rs.getString(4), "S1");
+            assertEquals(1, rs.getInt(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "0000000002");
+            assertEquals(rs.getString(2), "T2");
+            assertEquals(rs.getString(3), "0000000001");
+            assertEquals(rs.getString(4), "S1");
+            assertEquals(2, rs.getInt(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "0000000003");
+            assertEquals(rs.getString(2), "T3");
+            assertEquals(rs.getString(3), "0000000002");
+            assertEquals(rs.getString(4), "S2");
+            assertEquals(3, rs.getInt(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "0000000004");
+            assertEquals(rs.getString(2), "T4");
+            assertEquals(rs.getString(3), "0000000002");
+            assertEquals(rs.getString(4), "S2");
+            assertEquals(4, rs.getInt(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "0000000005");
+            assertEquals(rs.getString(2), "T5");
+            assertEquals(rs.getString(3), "0000000005");
+            assertEquals(rs.getString(4), "S5");
+            assertEquals(5, rs.getInt(5));
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "0000000006");
+            assertEquals(rs.getString(2), "T6");
+            assertEquals(rs.getString(3), "0000000006");
+            assertEquals(rs.getString(4), "S6");
+            assertEquals(6, rs.getInt(5));
+
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
     
     @Test
     public void testDefaultJoin() throws Exception {
@@ -102,54 +160,7 @@ public abstract class HashJoinIT extends BaseJoinIT {
 
     @Test
     public void testInnerJoin() throws Exception {
-        Connection conn = getConnection();
-        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
-        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
-        String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name, next value for " + seqName + " FROM " + tableName1 + " item INNER JOIN " + tableName2 + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"";
-        try {
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), "0000000001");
-            assertEquals(rs.getString(2), "T1");
-            assertEquals(rs.getString(3), "0000000001");
-            assertEquals(rs.getString(4), "S1");
-            assertEquals(1, rs.getInt(5));
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), "0000000002");
-            assertEquals(rs.getString(2), "T2");
-            assertEquals(rs.getString(3), "0000000001");
-            assertEquals(rs.getString(4), "S1");
-            assertEquals(2, rs.getInt(5));
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), "0000000003");
-            assertEquals(rs.getString(2), "T3");
-            assertEquals(rs.getString(3), "0000000002");
-            assertEquals(rs.getString(4), "S2");
-            assertEquals(3, rs.getInt(5));
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), "0000000004");
-            assertEquals(rs.getString(2), "T4");
-            assertEquals(rs.getString(3), "0000000002");
-            assertEquals(rs.getString(4), "S2");
-            assertEquals(4, rs.getInt(5));
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), "0000000005");
-            assertEquals(rs.getString(2), "T5");
-            assertEquals(rs.getString(3), "0000000005");
-            assertEquals(rs.getString(4), "S5");
-            assertEquals(5, rs.getInt(5));
-            assertTrue (rs.next());
-            assertEquals(rs.getString(1), "0000000006");
-            assertEquals(rs.getString(2), "T6");
-            assertEquals(rs.getString(3), "0000000006");
-            assertEquals(rs.getString(4), "S6");
-            assertEquals(6, rs.getInt(5));
-
-            assertFalse(rs.next());
-        } finally {
-            conn.close();
-        }
+       testInnerJoin(false);
     }
             
     @Test
