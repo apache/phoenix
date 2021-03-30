@@ -466,7 +466,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
             admin.snapshot(snapshotName, TableName.valueOf(fullTableName));
             admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(fullNewTableName));
         }
-        LogicalTableNameIT.renameAndDropPhysicalTable(conn, "NULL", schemaName, tableName, newTableName);
+        LogicalTableNameIT.renameAndDropPhysicalTable(conn, "NULL", schemaName, tableName, newTableName, false);
 
         String csvName = "/tmp/input_logical_name.csv";
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
