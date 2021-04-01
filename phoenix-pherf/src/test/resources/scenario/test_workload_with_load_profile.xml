@@ -234,14 +234,14 @@
             <loadProfile>
                 <batchSize>1</batchSize>
                 <numOperations>1000</numOperations>
-                <tenantDistribution id="t111" weight="10" numTenants="10"></tenantDistribution>
-                <tenantDistribution id="t112" weight="10" numTenants="10"></tenantDistribution>
-                <tenantDistribution id="t113" weight="80" numTenants="1"></tenantDistribution>
-                <opDistribution id="op111" weight="50"></opDistribution>
-                <opDistribution id="op112" weight="0"></opDistribution>
-                <opDistribution id="op113" weight="0"></opDistribution>
-                <opDistribution id="op114" weight="50"></opDistribution>
-                <opDistribution id="op115" weight="0"></opDistribution>
+                <tenantDistribution id="t111" weight="10" numTenants="10"/>
+                <tenantDistribution id="t112" weight="10" numTenants="10"/>
+                <tenantDistribution id="t113" weight="80" numTenants="1"/>
+                <opDistribution id="op111" weight="50"/>
+                <opDistribution id="op112" weight="0"/>
+                <opDistribution id="op113" weight="0"/>
+                <opDistribution id="op114" weight="50"/>
+                <opDistribution id="op115" weight="0"/>
             </loadProfile>
 
 
@@ -283,7 +283,7 @@
             </upserts>
 
             <idleTimes>
-                <idleTime id="op114" idleTime="50"></idleTime>
+                <idleTime id="op114" idleTime="50"/>
             </idleTimes>
             <udfs>
                 <udf id="op115" >
@@ -302,14 +302,14 @@
             <loadProfile>
                 <batchSize>5</batchSize>
                 <numOperations>1000</numOperations>
-                <tenantDistribution id="t121" weight="10" numTenants="5"></tenantDistribution>
-                <tenantDistribution id="t122" weight="10" numTenants="5"></tenantDistribution>
-                <tenantDistribution id="t123" weight="80" numTenants="5"></tenantDistribution>
-                <opDistribution id="op121" weight="50"></opDistribution>
-                <opDistribution id="op122" weight="5"></opDistribution>
-                <opDistribution id="op123" weight="5"></opDistribution>
-                <opDistribution id="op124" weight="40"></opDistribution>
-                <opDistribution id="op125" weight="0"></opDistribution>
+                <tenantDistribution id="t121" weight="10" numTenants="5"/>
+                <tenantDistribution id="t122" weight="10" numTenants="5"/>
+                <tenantDistribution id="t123" weight="80" numTenants="5"/>
+                <opDistribution id="op121" weight="50"/>
+                <opDistribution id="op122" weight="5"/>
+                <opDistribution id="op123" weight="5"/>
+                <opDistribution id="op124" weight="40"/>
+                <opDistribution id="op125" weight="0"/>
             </loadProfile>
 
             <preScenarioDdls>
@@ -350,7 +350,7 @@
             </upserts>
 
             <idleTimes>
-                <idleTime id="op124" idleTime="100"></idleTime>
+                <idleTime id="op124" idleTime="100"/>
             </idleTimes>
             <querySet>
                 <query id="op122" statement="select count(*) from PHERF.Z12"/>
@@ -365,6 +365,51 @@
             </udfs>
 
         </scenario>
+        <scenario tableName="PHERF.Z13" name="scenario_13">
+            <loadProfile>
+                <batchSize>1</batchSize>
+                <numOperations>1000</numOperations>
+                <tenantDistribution useGlobalConnection="true"/>
+                <opDistribution id="op131" weight="100"/>
+            </loadProfile>
 
+
+            <preScenarioDdls>
+                <ddl statement="CREATE VIEW IF NOT EXISTS PHERF.Z13 (field1 VARCHAR, field2 VARCHAR) AS SELECT * FROM PHERF.TEST_TABLE WHERE PARENT_ID = 'aAAyYhnNbBs9kWk'" />
+            </preScenarioDdls>
+
+            <upserts>
+                <upsert id="op131" useGlobalConnection="true">
+                    <column>
+                        <type>CHAR</type>
+                        <name>PARENT_ID_SEQ</name>
+                    </column>
+                    <column>
+                        <type>DATE</type>
+                        <name>CREATED_DATE</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>FIELD</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>OTHER_ID</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>OLDVAL_STRING</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>NEWVAL_STRING</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>FIELD1</name>
+                    </column>
+                </upsert>
+            </upserts>
+        </scenario>
     </scenarios>
 </datamodel>
