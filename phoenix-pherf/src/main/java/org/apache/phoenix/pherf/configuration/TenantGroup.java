@@ -21,13 +21,15 @@ package org.apache.phoenix.pherf.configuration;
 import javax.xml.bind.annotation.XmlAttribute;
 
 public class TenantGroup {
+    public static final String DEFAULT_GLOBAL_ID = "GLOBAL";
     private String id;
     private int weight;
     private int numTenants;
+    private boolean useGlobalConnection;
 
     @XmlAttribute
     public String getId() {
-        return id;
+        return useGlobalConnection ? DEFAULT_GLOBAL_ID: id;
     }
 
     public void setId(String id) {
@@ -36,7 +38,7 @@ public class TenantGroup {
 
     @XmlAttribute
     public int getWeight() {
-        return weight;
+        return useGlobalConnection ? 100 : weight;
     }
 
     public void setWeight(int weight) {
@@ -44,9 +46,17 @@ public class TenantGroup {
     }
 
     @XmlAttribute
-    public int getNumTenants() { return numTenants; }
+    public int getNumTenants() { return useGlobalConnection ? 1 : numTenants; }
 
     public void setNumTenants(int numTenants) { this.numTenants = numTenants; }
 
+    @XmlAttribute
+    public boolean isUseGlobalConnection() {
+        return useGlobalConnection;
+    }
+
+    public void setUseGlobalConnection(boolean useGlobalConnection) {
+        this.useGlobalConnection = useGlobalConnection;
+    }
 
 }

@@ -24,8 +24,8 @@ import java.util.List;
 @XmlType
 public class LoadProfile {
     private static final int MIN_BATCH_SIZE = 1;
-    private static final String DEFAULT_TENANT_ID_FMT = "00D%s%07d";
-    private static final int DEFAULT_GROUP_ID_LEN = 5;
+    private static final String DEFAULT_TENANT_ID_FMT = "T%s%08d";
+    private static final int DEFAULT_GROUP_ID_LEN = 6;
     private static final int DEFAULT_TENANT_ID_LEN = 15;
 
     // Holds the batch size to be used in upserts.
@@ -37,7 +37,15 @@ public class LoadProfile {
      * TenantId format should typically have 2 parts -
      * 1. string fmt - that hold the tenant group id.
      * 2. int fmt - that holds a random number between 1 and max tenants
-     * for e.g DEFAULT_TENANT_ID_FMT = "00D%s%07d";
+     * for e.g DEFAULT_TENANT_ID_FMT = "T%s%08d";
+     *
+     * When the Tenant Group is configured to use a global connection,
+     * for now this is modelled as a special tenant whose id will translate to "TGLOBAL00000001"
+     * since the group id => "GLOBAL" and num tenants = 1.
+     * For now this is a hack/temporary workaround.
+     *
+     * TODO :
+     * Ideally it needs to be built into the framework and injected during event generation.
      */
     private String tenantIdFormat;
     private int groupIdLength;

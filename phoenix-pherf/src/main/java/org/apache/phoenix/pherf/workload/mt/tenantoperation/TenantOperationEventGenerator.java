@@ -120,10 +120,10 @@ public class TenantOperationEventGenerator
 
             Operation op = operationMap.get(opId);
             int numTenants = tenantGroupMap.get(tenantGroupId).getNumTenants();
-            String tenantIdPrefix = Strings.padStart(tenantGroupId, loadProfile.getGroupIdLength(), '0');
+            String tenantIdPrefix = Strings.padStart(tenantGroupId, loadProfile.getGroupIdLength(), 'x');
             String formattedTenantId = String.format(loadProfile.getTenantIdFormat(),
                     tenantIdPrefix.substring(0, loadProfile.getGroupIdLength()), RANDOM.nextInt(numTenants));
-            String paddedTenantId = Strings.padStart(formattedTenantId, loadProfile.getTenantIdLength(), '0');
+            String paddedTenantId = Strings.padStart(formattedTenantId, loadProfile.getTenantIdLength(), 'x');
             String tenantId = paddedTenantId.substring(0, loadProfile.getTenantIdLength());
 
             TenantOperationInfo sample = new TenantOperationInfo(modelName, scenarioName, tableName,

@@ -25,6 +25,7 @@ import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.mt.IdleTimeOperation;
 import org.apache.phoenix.pherf.workload.mt.OperationStats;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,7 +49,7 @@ class IdleTimeOperationSupplier extends BaseOperationSupplier {
 
             @Override
             public OperationStats apply(final TenantOperationInfo input) {
-
+                Preconditions.checkNotNull(input);
                 final IdleTimeOperation operation = (IdleTimeOperation) input.getOperation();
                 final IdleTime idleTime = operation.getIdleTime();
 
