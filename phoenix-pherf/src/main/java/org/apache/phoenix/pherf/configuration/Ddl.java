@@ -23,7 +23,8 @@ import javax.xml.bind.annotation.XmlAttribute;
 public class Ddl {
 	private String statement;
 	private String tableName;
-	
+	private boolean useGlobalConnection;
+
 	public Ddl() {
 	}
 	
@@ -55,7 +56,16 @@ public class Ddl {
 	public void setTableName(String tableName) {
 		this.tableName = tableName;
 	}
-	
+
+	@XmlAttribute
+	public boolean isUseGlobalConnection() {
+		return useGlobalConnection;
+	}
+
+	public void setUseGlobalConnection(boolean useGlobalConnection) {
+		this.useGlobalConnection = useGlobalConnection;
+	}
+
 	public String toString(){
 		if (statement.contains("?")) {
 			return statement.replace("?", tableName);

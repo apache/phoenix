@@ -59,7 +59,7 @@ public class RuleGeneratorTest {
         RulesApplier rulesApplier = loader.getRulesApplier();
 
         for (Column dataMapping : model.getDataMappingColumns()) {
-            if ((dataMapping.getType() == DataTypeMapping.DATE) && (dataMapping.getName().equals("CREATED_DATE"))) {
+            if ((dataMapping.getType() == DataTypeMapping.DATE) && (dataMapping.getName().equals("SOME_DATE"))) {
                 // Test directly through generator method and that it converts to Phoenix type
                 assertRandomDateValue(dataMapping, rulesApplier);
 
@@ -92,7 +92,8 @@ public class RuleGeneratorTest {
 
         for (Column dataMapping : model.getDataMappingColumns()) {
             if ((dataMapping.getType() == DataTypeMapping.DATE)
-                    && (dataMapping.getUseCurrentDate() == true)) {
+                    && (dataMapping.getUseCurrentDate() == true)
+                    && (dataMapping.getDataSequence() != DataSequence.SEQUENTIAL)) {
 
                 // Generate the date using rules
                 DataValue value = rulesApplier.getDataValue(dataMapping);

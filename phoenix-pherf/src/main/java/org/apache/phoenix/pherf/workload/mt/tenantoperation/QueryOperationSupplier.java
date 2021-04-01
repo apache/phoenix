@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
+import org.apache.phoenix.pherf.configuration.TenantGroup;
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.pherf.configuration.DataModel;
@@ -26,6 +27,7 @@ import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.mt.OperationStats;
 import org.apache.phoenix.pherf.workload.mt.QueryOperation;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,17 +52,23 @@ public class QueryOperationSupplier extends BaseOperationSupplier {
 
             @Override
             public OperationStats apply(final TenantOperationInfo input) {
-
+                Preconditions.checkNotNull(input);
                 final QueryOperation operation = (QueryOperation) input.getOperation();
+                final Query query = operation.getQuery();
                 final String tenantGroup = input.getTenantGroupId();
                 final String opGroup = input.getOperationGroupId();
-                final String tenantId = input.getTenantId();
                 final String scenarioName = input.getScenarioName();
                 final String tableName = input.getTableName();
-                final Query query = operation.getQuery();
+
+                // TODO:
+                // Ideally the fact that the op needs to executed using global connection
+                // needs to be built into the framework and injected during event generation.
+                // For now a special tenant whose id = "TGLOBAL00000001" will be logged.
+                final boolean isTenantGroupGlobal = (tenantGroup.compareTo(TenantGroup.DEFAULT_GLOBAL_ID) == 0);
+                final String tenantId = isTenantGroupGlobal || query.isUseGlobalConnection() ? null : input.getTenantId();
 
                 String opName = String.format("%s:%s:%s:%s:%s", scenarioName, tableName,
-                        opGroup, tenantGroup, tenantId);
+                        opGroup, tenantGroup, input.getTenantId());
                 LOGGER.info("\nExecuting query " + query.getStatement());
 
                 long startTime = 0;
