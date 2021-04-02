@@ -37,17 +37,19 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.List;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * A supplier of {@link Function} that takes {@link UpsertOperation} as an input
  */
 class UpsertOperationSupplier extends BaseOperationSupplier {
     private static final Logger LOGGER = LoggerFactory.getLogger(UpsertOperationSupplier.class);
+    private ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     public UpsertOperationSupplier(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario) {
         super(phoenixUtil, model, scenario);
     }
-
     @Override
     public Function<TenantOperationInfo, OperationStats> get() {
         return new Function<TenantOperationInfo, OperationStats>() {
@@ -65,7 +67,7 @@ class UpsertOperationSupplier extends BaseOperationSupplier {
                 final String opGroup = input.getOperationGroupId();
                 final String tableName = input.getTableName();
                 final String scenarioName = input.getScenarioName();
-                final List<Column> columns = upsert.getColumn();
+
                 // TODO:
                 // Ideally the fact that the op needs to executed using global connection
                 // needs to be built into the framework and injected during event generation.
@@ -73,23 +75,39 @@ class UpsertOperationSupplier extends BaseOperationSupplier {
 
                 final boolean isTenantGroupGlobal = (tenantGroup.compareTo(TenantGroup.DEFAULT_GLOBAL_ID) == 0);
                 final String tenantId = isTenantGroupGlobal || upsert.isUseGlobalConnection() ? null : input.getTenantId();
-
                 final String opName = String.format("%s:%s:%s:%s:%s",
                         scenarioName, tableName, opGroup, tenantGroup, input.getTenantId());
-
                 long rowsCreated = 0;
                 long startTime = 0, duration, totalDuration;
                 int status = 0;
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
                 try (Connection connection = phoenixUtil.getConnection(tenantId)) {
-                    String sql = phoenixUtil.buildSql(columns, tableName);
+                    // If list of columns has not been not provided or lazy loaded
+                    // then use the metadata call to get the column list.
+                    if (upsert.getColumn().isEmpty()) {
+                        rwLock.writeLock().lock();
+                        try {
+                            if (upsert.getColumn().isEmpty()) {
+                                LOGGER.info("Fetching columns metadata from db for operation : " + opName);
+                                List<Column> allCols = phoenixUtil.getColumnsFromPhoenix(scenario.getSchemaName(),
+                                        scenario.getTableNameWithoutSchemaName(),
+                                        connection);
+                                upsert.setColumn(allCols);
+                            }
+                        } finally {
+                            rwLock.writeLock().unlock();
+                        }
+                    }
+
+                    String sql = phoenixUtil.buildSql(upsert.getColumn(), tableName);
+                    LOGGER.info("Operation " + opName + " executing " + sql);
                     startTime = EnvironmentEdgeManager.currentTimeMillis();
                     PreparedStatement stmt = null;
                     try {
                         stmt = connection.prepareStatement(sql);
                         for (long i = rowCount; i > 0; i--) {
-                            LOGGER.debug("Operation " + opName + " executing ");
-                            stmt = phoenixUtil.buildStatement(rulesApplier, scenario, columns, stmt, simpleDateFormat);
+                            stmt = phoenixUtil.buildStatement(rulesApplier, scenario, upsert.getColumn(), stmt, simpleDateFormat);
                             if (useBatchApi) {
                                 stmt.addBatch();
                             } else {

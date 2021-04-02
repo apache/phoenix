@@ -19,8 +19,11 @@
 package org.apache.phoenix.pherf.configuration;
 
 import org.apache.phoenix.pherf.rules.RulesApplier;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 import javax.xml.bind.annotation.XmlAttribute;
+import javax.xml.bind.annotation.XmlElement;
+import javax.xml.bind.annotation.XmlElementWrapper;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -30,7 +33,7 @@ public class Upsert {
     private String id;
     private String upsertGroup;
     private String statement;
-    private List<Column> columns;
+    private List<Column> column;
     private boolean useGlobalConnection;
     private Pattern pattern;
     private long timeoutDuration = Long.MAX_VALUE;
@@ -90,12 +93,13 @@ public class Upsert {
         this.id = id;
     }
 
-    public List<Column> getColumns() {
-        return columns;
+    public List<Column> getColumn() {
+        if (column == null) return Lists.newArrayList();
+        return column;
     }
 
-    public void setColumns(List<Column> columns) {
-        this.columns = columns;
+    public void setColumn(List<Column> column) {
+        this.column = column;
     }
 
     @XmlAttribute
@@ -123,13 +127,5 @@ public class Upsert {
     public void setStatement(String statement) {
         // normalize statement - merge all consecutive spaces into one
         this.statement = statement.replaceAll("\\s+", " ");
-    }
-
-    public List<Column> getColumn() {
-        return columns;
-    }
-
-    public void setColumn(List<Column> columns) {
-        this.columns = columns;
     }
 }
