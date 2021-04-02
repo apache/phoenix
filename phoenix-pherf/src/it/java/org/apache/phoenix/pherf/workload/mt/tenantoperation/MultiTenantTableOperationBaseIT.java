@@ -19,8 +19,6 @@
 
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.XMLConfigParserTest;
@@ -28,10 +26,7 @@ import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
-import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.experimental.categories.Category;
 
 import java.net.URL;
 import java.nio.file.Path;
@@ -43,17 +38,10 @@ import java.util.Properties;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-@Category(NeedsOwnMiniClusterTest.class)
-public class MultiTenantOperationBaseIT extends ParallelStatsDisabledIT {
-    enum TestOperationGroup {
-        upsertOp, queryOp1, queryOp2, idleOp, udfOp
-    }
+public class MultiTenantTableOperationBaseIT extends ParallelStatsDisabledIT {
 
-    static enum  TestTenantGroup {
-        tg1, tg2, tg3
-    }
-    protected static final String matcherScenario = ".*scenario/.*test_mt_workload.*xml";
-    protected static final String matcherSchema = ".*datamodel/.*test_schema_mt*.*sql";
+    protected static final String matcherScenario = ".*scenario/.*test_tbl_workload.*xml";
+    protected static final String matcherSchema = ".*datamodel/.*test_schema_tbl*.*sql";
 
     protected static PhoenixUtil util = PhoenixUtil.create(true);
     protected static Properties properties;
@@ -81,10 +69,6 @@ public class MultiTenantOperationBaseIT extends ParallelStatsDisabledIT {
         assertNotNull(scenarioUrl);
         Path p = Paths.get(scenarioUrl.toURI());
         return XMLConfigParser.readDataModel(p);
-    }
-
-    @AfterClass public static synchronized void tearDown() throws Exception {
-        dropNonSystemTables();
     }
 
 }
