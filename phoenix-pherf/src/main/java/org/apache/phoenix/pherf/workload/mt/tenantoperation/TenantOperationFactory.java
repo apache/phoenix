@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
+import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.thirdparty.com.google.common.base.Charsets;
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.base.Supplier;
@@ -49,6 +50,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Factory class for operation suppliers.
@@ -94,6 +97,7 @@ public class TenantOperationFactory {
             Maps.newEnumMap(Operation.OperationType.class);
 
     private final BloomFilter<TenantView> tenantsLoaded;
+    private ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     public TenantOperationFactory(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario) {
         this.phoenixUtil = phoenixUtil;
@@ -269,48 +273,15 @@ public class TenantOperationFactory {
 
         // Check if pre run ddls are needed.
         if (!tenantsLoaded.mightContain(tenantView)) {
-
-            Supplier<Function<TenantOperationInfo, OperationStats>> preRunOpSupplier =
-                    operationSuppliers.get(Operation.OperationType.PRE_RUN);
-            // Check if the scenario has a PRE_RUN operation.
-            if (preRunOpSupplier != null) {
-                // Initialize the tenant using the pre scenario ddls.
-                final PreScenarioOperation
-                        operation = new PreScenarioOperation() {
-                    @Override public List<Ddl> getPreScenarioDdls() {
-                        List<Ddl> ddls = scenario.getPreScenarioDdls();
-                        return ddls == null ? Lists.<Ddl>newArrayList() : ddls;
-                    }
-
-                    @Override public String getId() {
-                        return OperationType.PRE_RUN.name();
-                    }
-
-                    @Override public OperationType getType() {
-                        return OperationType.PRE_RUN;
-                    }
-                };
-                // Initialize with the pre run operation.
-                TenantOperationInfo preRunSample = new TenantOperationInfo(
-                        input.getModelName(),
-                        input.getScenarioName(),
-                        input.getTableName(),
-                        input.getTenantGroupId(),
-                        Operation.OperationType.PRE_RUN.name(),
-                        input.getTenantId(), operation);
-
-                try {
-                    // Run the initialization operation.
-                    OperationStats stats = preRunOpSupplier.get().apply(preRunSample);
-                    LOGGER.info(phoenixUtil.getGSON().toJson(stats));
-                } catch (Exception e) {
-                    LOGGER.error(String.format("Failed to initialize tenant. [%s, %s] ",
-                            tenantView.tenantId,
-                            tenantView.viewName), e);
+            rwLock.writeLock().lock();
+            try {
+                if (!tenantsLoaded.mightContain(tenantView)) {
+                    executePreRunOpsForTenant(tenantView, input);
+                    tenantsLoaded.put(tenantView);
                 }
+            } finally {
+                rwLock.writeLock().unlock();
             }
-
-            tenantsLoaded.put(tenantView);
         }
 
         Supplier<Function<TenantOperationInfo, OperationStats>> opSupplier =
@@ -319,6 +290,49 @@ public class TenantOperationFactory {
             throw new IllegalArgumentException("Unknown operation type");
         }
         return opSupplier;
+    }
+
+    private void executePreRunOpsForTenant(TenantView tenantView, TenantOperationInfo input) {
+
+        Supplier<Function<TenantOperationInfo, OperationStats>> preRunOpSupplier =
+                operationSuppliers.get(Operation.OperationType.PRE_RUN);
+        // Check if the scenario has a PRE_RUN operation.
+        if (preRunOpSupplier != null) {
+            // Initialize the tenant using the pre scenario ddls.
+            final PreScenarioOperation
+                    operation = new PreScenarioOperation() {
+                @Override public List<Ddl> getPreScenarioDdls() {
+                    List<Ddl> ddls = scenario.getPreScenarioDdls();
+                    return ddls == null ? Lists.<Ddl>newArrayList() : ddls;
+                }
+
+                @Override public String getId() {
+                    return OperationType.PRE_RUN.name();
+                }
+
+                @Override public OperationType getType() {
+                    return OperationType.PRE_RUN;
+                }
+            };
+            // Initialize with the pre run operation.
+            TenantOperationInfo preRunSample = new TenantOperationInfo(
+                    input.getModelName(),
+                    input.getScenarioName(),
+                    input.getTableName(),
+                    input.getTenantGroupId(),
+                    Operation.OperationType.PRE_RUN.name(),
+                    input.getTenantId(), operation);
+
+            try {
+                // Run the initialization operation.
+                OperationStats stats = preRunOpSupplier.get().apply(preRunSample);
+                LOGGER.info(phoenixUtil.getGSON().toJson(stats));
+            } catch (Exception e) {
+                LOGGER.error(String.format("Failed to initialize tenant. [%s, %s] ",
+                        tenantView.tenantId,
+                        tenantView.viewName), e);
+            }
+        }
     }
 
 }
