@@ -196,7 +196,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
         // Make sure we don't overflow Long, though this is really unlikely to happen.
         assert(limit == null || Long.MAX_VALUE / estimatedEntrySize >= limit + this.offset);
 
-        this.estimatedByteSize = limit == null ? 0 : (limit + this.offset) * estimatedEntrySize;
+        // Both BufferedSortedQueue and SizeBoundQueue won't allocate more than thresholdBytes.
+        this.estimatedByteSize = limit == null ? 0 : Math.min((limit + this.offset) * estimatedEntrySize, thresholdBytes);
         this.pageSizeMs = pageSizeMs;
     }
 
