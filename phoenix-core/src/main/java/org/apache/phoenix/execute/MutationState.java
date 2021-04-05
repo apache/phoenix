@@ -486,11 +486,11 @@ public class MutationState implements SQLCloseable {
             Map<PColumn, byte[]> newValues = newRowMutationState.getColumnValues();
             if (existingValues != PRow.DELETE_MARKER && newValues != PRow.DELETE_MARKER) {
                 // Check if we can merge existing column values with new column values
-                long beforeMerge = existingRowMutationState.calculateEstimatedSize();
+                long beforeMergeSize = existingRowMutationState.calculateEstimatedSize();
                 boolean isMerged = existingRowMutationState.join(rowEntry.getValue());
                 if (isMerged) {
                     // decrement estimated size by the size of the old row
-                    estimatedSize -= beforeMerge;
+                    estimatedSize -= beforeMergeSize;
                     // increment estimated size by the size of the new row
                     estimatedSize += existingRowMutationState.calculateEstimatedSize();
                 } else {

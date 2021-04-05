@@ -248,6 +248,8 @@ public class MutationStateTest {
                 ++actualPairs;
                 assertEquals(1, nextTable.getSecond().size());
             }
+            // we have 2 tables and each table has 2 mutation batches
+            // so we should get 4 <table name, [mutations]> pairs
             assertEquals(4, actualPairs);
 
             List<Map<TableRef, MultiRowMutationState>> commitBatches = state.createCommitBatches();
