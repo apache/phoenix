@@ -136,6 +136,9 @@ public class IndexExtendedIT extends BaseTest {
         if (!mutable) {
             return;
         }
+        if (!localIndex && useSnapshot) {
+            return; // Building from snapshot is not supported for global indexes
+        }
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);

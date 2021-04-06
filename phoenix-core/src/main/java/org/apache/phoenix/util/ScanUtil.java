@@ -1065,6 +1065,21 @@ public class ScanUtil {
         return false;
     }
 
+    private static boolean containsColumn(Scan scan, byte[] cf, byte[] cq) {
+        Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
+        if (familyMap == null || familyMap.isEmpty()) {
+            return false;
+        }
+        if (!familyMap.containsKey(cf)) {
+            return false;
+        }
+        NavigableSet<byte[]> set = familyMap.get(cf);
+        if (set == null || set.isEmpty()) {
+            return false;
+        }
+        return set.contains(cq);
+    }
+
     private static boolean addEmptyColumnToFilter(Scan scan, byte[] emptyCF, byte[] emptyCQ, Filter filter,  boolean addedEmptyColumn) {
         if (filter instanceof EncodedQualifiersColumnProjectionFilter) {
             ((EncodedQualifiersColumnProjectionFilter) filter).addTrackedColumn(ENCODED_EMPTY_COLUMN_NAME);
@@ -1123,6 +1138,35 @@ public class ScanUtil {
         }
         if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
             scan.addColumn(emptyCF, emptyCQ);
+        }
+    }
+
+    public static void adjustScanFilersForEmptyColumn(Scan scan, PTable table, PhoenixConnection phoenixConnection) throws SQLException {
+        Filter filter = scan.getFilter();
+        if (filter == null) {
+            return;
+        }
+        if (table.getType() != PTableType.TABLE) {
+            return;
+        }
+        String schemaName = table.getSchemaName().getString();
+        String tableName = table.getTableName().getString();
+        try {
+            PhoenixRuntime.getTable(phoenixConnection, SchemaUtil.getTableName(schemaName, tableName));
+        } catch (TableNotFoundException e) {
+            // This index table must be being deleted. No need to set the scan attributes
+            return;
+        }
+        byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
+        byte[] emptyCQ = table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
+                        QueryConstants.EMPTY_COLUMN_BYTES :
+                        table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+        if (containsColumn(scan, emptyCF, emptyCQ)) {
+            if (filter instanceof FilterList) {
+                addEmptyColumnToFilterList(scan, emptyCF, emptyCQ, (FilterList) filter, false);
+            } else {
+                addEmptyColumnToFilter(scan, emptyCF, emptyCQ, filter, false);
+            }
         }
     }
 

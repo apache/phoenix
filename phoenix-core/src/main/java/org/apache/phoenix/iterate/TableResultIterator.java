@@ -57,6 +57,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
@@ -140,6 +141,7 @@ public class TableResultIterator implements ResultIterator {
                 .getInt(QueryConstants.HASH_JOIN_CACHE_RETRIES, QueryConstants.DEFAULT_HASH_JOIN_CACHE_RETRIES);
         ScanUtil.setScanAttributesForIndexReadRepair(scan, table, plan.getContext().getConnection());
         ScanUtil.setScanAttributesForPhoenixTTL(scan, table, plan.getContext().getConnection());
+        ScanUtil.adjustScanFilersForEmptyColumn(scan, table, plan.getContext().getConnection());
         if (plan.getContext().getConnection().getQueryServices().getProps().getBoolean(
                 QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB,
                 QueryServicesOptions.DEFAULT_PHOENIX_SERVER_PAGING_ENABLED)) {

@@ -57,12 +57,15 @@ public class ValueGetterTuple extends BaseTuple {
 
     @Override
     public KeyValue getValue(byte[] family, byte[] qualifier) {
-        ImmutableBytesWritable value = null;
         try {
-            value = valueGetter.getLatestValue(new ColumnReference(family, qualifier), ts);
+            KeyValue kv = valueGetter.getLatestKeyValue(new ColumnReference(family, qualifier), ts);
+            if (kv != null) {
+                return kv;
+            }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        ImmutableBytesWritable value = null;
         byte[] rowKey = valueGetter.getRowKey();
         int valueOffset = 0;
         int valueLength = 0;
@@ -72,7 +75,7 @@ public class ValueGetterTuple extends BaseTuple {
             valueOffset = value.getOffset();
             valueLength = value.getLength();
         }
-    	return new KeyValue(rowKey, 0, rowKey.length, family, 0, family.length, qualifier, 0, qualifier.length, HConstants.LATEST_TIMESTAMP, Type.Put, valueBytes, valueOffset, valueLength);
+    	return new KeyValue(rowKey, 0, rowKey.length, family, 0, family.length, qualifier, 0, qualifier.length, ts, Type.Put, valueBytes, valueOffset, valueLength);
     }
 
     @Override
