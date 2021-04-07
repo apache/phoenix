@@ -198,6 +198,16 @@ public class TephraTransactionProvider implements PhoenixTransactionProvider {
     public Class<? extends RegionObserver> getGCCoprocessor() {return null;}
 
     @Override
+    public String getCoprocessorClassName() {
+        return "org.apache.phoenix.coprocessor.TephraTransactionalProcessor";
+    }
+
+    @Override
+    public String getGCCoprocessorClassName() {
+        return null;
+    }
+    
+    @Override
     public Provider getProvider() {
         return TransactionFactory.Provider.TEPHRA;
     }

@@ -201,6 +201,16 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
     }
 
     @Override
+    public String getCoprocessorClassName() {
+        return "org.apache.phoenix.coprocessor.OmidTransactionalProcessor";
+    }
+
+    @Override
+    public String getGCCoprocessorClassName() {
+        return "org.apache.phoenix.coprocessor.OmidGCProcessor";
+    }
+
+    @Override
     public Provider getProvider() {
         return TransactionFactory.Provider.OMID;
     }
@@ -214,4 +224,5 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
     public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp) {
         return TTable.markPutAsCommitted(put, timestamp, timestamp);
     }
+
 }

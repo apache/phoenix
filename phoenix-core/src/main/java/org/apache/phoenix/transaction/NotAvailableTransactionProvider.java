@@ -86,4 +86,14 @@ public class NotAvailableTransactionProvider implements PhoenixTransactionProvid
     public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp) {
         throw new UnsupportedOperationException(message);
     }
+
+    @Override
+    public String getCoprocessorClassName() {
+        throw new UnsupportedOperationException(message);
+    }
+
+    @Override
+    public String getGCCoprocessorClassName() {
+        throw new UnsupportedOperationException(message);
+    }
 }

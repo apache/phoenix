@@ -1,0 +1,526 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.phoenix</groupId>
+    <artifactId>phoenix-client-parent</artifactId>
+    <version>5.2.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>phoenix-client-byo-shaded-hbase-${hbase.suffix}</artifactId>
+  <name>Phoenix Client BYO Shaded HBase</name>
+  <description>Phoenix client that depends on the shaded HBase client JAR</description>
+  <packaging>jar</packaging>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>embedded-shaded</id>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
+              <shadeTestJar>false</shadeTestJar>
+              <createSourcesJar>true</createSourcesJar>
+              <dependencyReducedPomLocation>${basedir}/target/pom.xml</dependencyReducedPomLocation>
+              <artifactSet>
+                <includes>
+                  <include>*:*</include>
+                </includes>
+                <excludes>
+                  <exclude>org.apache.phoenix:phoenix-client</exclude>
+                  <exclude>xom:xom</exclude>
+                </excludes>
+              </artifactSet>
+              <relocations>
+                <!-- To be kept mostly in sync with phoenix-client-parent -->
+                
+<!--                 <relocation> -->
+<!--                   <pattern>org/</pattern> -->
+<!--                   <shadedPattern>${shaded.package}.org.</shadedPattern> -->
+<!--                   <excludes> -->
+<!--                     <exclude>org/apache/hadoop/**</exclude> -->
+<!--                     Our non-shaded htrace and logging libraries -->
+<!--                     <exclude>org/apache/htrace/**</exclude> -->
+<!--                     <exclude>org/slf4j/**</exclude> -->
+<!--                     <exclude>org/apache/commons/logging/**</exclude> -->
+<!--                     <exclude>org/apache/log4j/**</exclude> -->
+<!--                     Not the org/ packages that are a part of the jdk -->
+<!--                     <exclude>org/ietf/jgss/**</exclude> -->
+<!--                     <exclude>org/omg/**</exclude> -->
+<!--                     <exclude>org/w3c/dom/**</exclude> -->
+<!--                     <exclude>org/xml/sax/**</exclude> -->
+    
+<!--                     Extras compared to Hadoop -->
+<!--                     Hbase classes - Maybe these could be shaded as well ? -->
+<!--                     <exclude>org/apache/hbase/**</exclude> -->
+<!--                     Phoenix classes -->
+<!--                     <exclude>org/apache/phoenix/**</exclude> -->
+<!--                     <exclude>org/apache/omid/**</exclude> -->
+<!--                     Do want/need to expose Tephra as well ? -->
+<!--                     We must use the HBase shaded version instead -->
+<!--                   </excludes> -->
+<!--                 </relocation> -->
+                <relocation>
+                  <pattern>org/antlr/</pattern>
+                  <shadedPattern>${shaded.package}.org.antlr</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/aopalliance/</pattern>
+                  <shadedPattern>${shaded.package}.org.aopalliance</shadedPattern>
+                </relocation>
+                <!-- HBase shaded ! -->
+                <relocation>
+                  <pattern>org/apache/commons/beanutils/</pattern>
+                  <shadedPattern>org.apache.hadoop.hbase.shaded.org.apache.commons.beanutils.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/apache/commons/cli/</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.commons.cli.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/apache/commons/codec/</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.commons.codec.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/apache/commons/collections/</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.commons.collections.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/apache/commons/collections4/</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.commons.collections4.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/apache/commons/compress/</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.commons.compress.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/apache/commons/configuration/</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.commons.configuration.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <!-- HBase shaded ! -->
+                  <pattern>org/apache/commons/configuration2/</pattern>
+                  <shadedPattern>org.apache.hadoop.hbase.shaded.org.apache.commons.configuration2.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/apache/commons/csv/</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.commons.csv.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/apache/commons/daemon/</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.commons.daemon.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/apache/commons/io/</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.commons.io.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/apache/commons/lang/</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.commons.lang.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/apache/commons/lang3/</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.commons.lang3.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/apache/commons/pool2/</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.commons.pool2.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/checkerframework/</pattern>
+                  <shadedPattern>${shaded.package}.org.checkerframework.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/codehaus/</pattern>
+                  <shadedPattern>${shaded.package}.org.codehaus.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/eclipse/</pattern>
+                  <shadedPattern>${shaded.package}.org.eclipse.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/fusesource/</pattern>
+                  <shadedPattern>${shaded.package}.org.fusesource.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/iq80/</pattern>
+                  <shadedPattern>${shaded.package}.org.iq80.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/jboss/</pattern>
+                  <shadedPattern>${shaded.package}.org.jboss.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/jcodings/</pattern>
+                  <shadedPattern>${shaded.package}.org.jcodings.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/jline/</pattern>
+                  <shadedPattern>${shaded.package}.org.jline.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/joda/</pattern>
+                  <shadedPattern>${shaded.package}.org.joda.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/joni/</pattern>
+                  <shadedPattern>${shaded.package}.org.joni.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/objectweb/</pattern>
+                  <shadedPattern>${shaded.package}.org.objectweb.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org/yaml/</pattern>
+                  <shadedPattern>${shaded.package}.org.yaml.</shadedPattern>
+                </relocation>
+
+
+                <relocation>
+                  <pattern>com/beust/</pattern>
+                  <shadedPattern>${shaded.package}.com.beust.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com/clearspring/</pattern>
+                  <shadedPattern>${shaded.package}.com.clearspring.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com/codehale/</pattern>
+                  <shadedPattern>${shaded.package}.come.codehale.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com/fasterxml/</pattern>
+                  <shadedPattern>${shaded.package}.com.fasterxml.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com/force/</pattern>
+                  <shadedPattern>${shaded.package}.com.force.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com/google/gson</pattern>
+                  <shadedPattern>${shaded.package}.com.google.gson.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com/google/inject</pattern>
+                  <shadedPattern>${shaded.package}.com.google.inject.</shadedPattern>
+                </relocation>
+                <!-- HBase shaded ! -->
+                <relocation>
+                  <pattern>com/google/protobuf</pattern>
+                  <shadedPattern>org.apache.hadoop.hbase.shaded.com.google.protobuf</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com/ibm/</pattern>
+                  <shadedPattern>${shaded.package}.com.ibm.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com/lmax/</pattern>
+                  <shadedPattern>${shaded.package}.com.lmax.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com/sun/jna</pattern>
+                  <shadedPattern>${shaded.package}.com.sun.jna.</shadedPattern>
+                </relocation>
+
+                <relocation>
+                  <pattern>io/</pattern>
+                  <shadedPattern>${shaded.package}.io.</shadedPattern>
+                  <excludes>
+                    <!-- Exclude config keys for Hadoop that look like package names -->
+                    <exclude>io/compression/**</exclude>
+                    <exclude>io/mapfile/**</exclude>
+                    <exclude>io/map/index/*</exclude>
+                    <exclude>io/seqfile/**</exclude>
+                    <exclude>io/file/buffer/size</exclude>
+                    <exclude>io/skip/checksum/errors</exclude>
+                    <exclude>io/sort/*</exclude>
+                    <exclude>io/serializations</exclude>
+                  </excludes>
+                </relocation>
+                <!-- JSRs that haven't made it to inclusion in J2SE -->
+                <relocation>
+                  <pattern>javax/el/</pattern>
+                  <shadedPattern>${shaded.package}.javax.el.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax/cache/</pattern>
+                  <shadedPattern>${shaded.package}.javax.cache.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax/servlet/</pattern>
+                  <shadedPattern>${shaded.package}.javax.servlet.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax/ws/</pattern>
+                  <shadedPattern>${shaded.package}.javax.ws.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax/annotation/</pattern>
+                  <shadedPattern>${shaded.package}.javax.annotation.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax/inject/</pattern>
+                  <shadedPattern>${shaded.package}.javax.inject.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax/validation/</pattern>
+                  <shadedPattern>${shaded.package}.javax.validation.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>net/</pattern>
+                  <shadedPattern>${shaded.package}.net.</shadedPattern>
+                  <excludes>
+                    <!-- Exclude config keys for Hadoop that look like package names -->
+                    <exclude>net/topology/**</exclude>
+                  </excludes>
+                </relocation>
+                <!-- okio declares a top level package instead of nested -->
+                <relocation>
+                  <pattern>okio/</pattern>
+                  <shadedPattern>${shaded.package}.okio.</shadedPattern>
+                </relocation>
+                <!-- Phoenix specific relocations -->
+                <relocation>
+                  <!-- Tephra -->
+                  <pattern>co/</pattern>
+                  <shadedPattern>${shaded.package}.co.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>it/</pattern>
+                  <shadedPattern>${shaded.package}.it.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javassist/</pattern>
+                  <shadedPattern>${shaded.package}.javassist.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>jersey/</pattern>
+                  <shadedPattern>${shaded.package}.jersey.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>jline/</pattern>
+                  <shadedPattern>${shaded.package}.jline.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>mozilla/</pattern>
+                  <shadedPattern>${shaded.package}.mozilla.</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>tables/</pattern>
+                  <shadedPattern>${shaded.package}.tables.</shadedPattern>
+                </relocation>
+                
+                <!-- START Special cases for hbase-shaded-client compatibility -->
+                <relocation>
+                  <pattern>com/google/protobuf/</pattern>
+                  <shadedPattern>org.apache.hadoop.hbase.shaded.com.google.protobuf.</shadedPattern>
+                </relocation>
+                <!-- END Special cases for hbase-shaded-client compatibility  -->
+                
+                <!-- Phoenix specific relocations end -->
+              </relocations>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <dependencies>
+    <!-- These must not be moved to phoenix-client-parent, see PHOENIX-6377 -->
+    <!-- Depend on all other internal projects -->
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-core</artifactId>
+      <exclusions>
+        <!-- We get logging from hbase-shaded-client -->
+        <exclusion>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-log4j12</artifactId>
+        </exclusion>
+        <!-- We are going to use the HBase shaded protobuf libs instead -->
+        <exclusion>
+          <groupId>com.google.protobuf</groupId>
+          <artifactId>protobuf-java</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
+      <optional>false</optional>
+    </dependency>
+    <dependency>
+      <groupId>sqlline</groupId>
+      <artifactId>sqlline</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    
+    <!-- hbase-shaded-client requires htrac-core4 -->
+    <dependency>
+      <groupId>org.apache.htrace</groupId>
+      <artifactId>htrace-core4</artifactId>
+      <version>4.2.0-incubating</version>
+    </dependency>
+
+    <!-- Hadoop dependencies -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-common</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-auth</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-yarn-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-core</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs-client</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- Why do I have to explicitly set it provided if it's a transitive provided dependency ?? -->
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <scope>provided</scope>
+      <version>27.0-jre</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+      <scope>provided</scope>
+      <version>4.5.2</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-client</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-framework</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    
+    <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-recipes</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- HBase dependencies -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-common</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-mapreduce</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-metrics-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-metrics</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-protocol</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-protocol-shaded</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-client</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-hadoop-compat</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-hadoop2-compat</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-zookeeper</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-endpoint</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    
+    <dependency>
+      <groupId>org.apache.hbase.thirdparty</groupId>
+      <artifactId>hbase-shaded-miscellaneous</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase.thirdparty</groupId>
+      <artifactId>hbase-shaded-protobuf</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+  </dependencies>
+</project>

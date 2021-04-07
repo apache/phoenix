@@ -324,10 +324,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    public static void serializeIntoScan(Scan scan) {
-        scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
-    }
-
     @Override
     public void preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> e, Scan scan)
             throws IOException {

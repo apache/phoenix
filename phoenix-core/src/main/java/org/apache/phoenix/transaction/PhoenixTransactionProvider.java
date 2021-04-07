@@ -53,6 +53,8 @@ public interface PhoenixTransactionProvider {
     public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo, int port) throws  SQLException;
     public Class<? extends RegionObserver> getCoprocessor();
     public Class<? extends RegionObserver> getGCCoprocessor();
+    public String getCoprocessorClassName();
+    public String getGCCoprocessorClassName();
 
     public TransactionFactory.Provider getProvider();
     public boolean isUnsupported(Feature feature);

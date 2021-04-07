@@ -211,6 +211,7 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.hbase.index.Indexer;
+import org.apache.phoenix.hbase.index.builder.IndexBuilder;
 import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
@@ -958,12 +959,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // PHOENIX-3072: Set index priority if this is a system table or index table
         if (tableType == PTableType.SYSTEM) {
             tableDescriptorBuilder.setValue(QueryConstants.PRIORITY,
-                    String.valueOf(PhoenixRpcSchedulerFactory.getMetadataPriority(config)));
+                    String.valueOf(QueryServicesOptions.getMetadataPriority(config)));
         } else if (tableType == PTableType.INDEX // Global, mutable index
                 && !isLocalIndexTable(tableDescriptorBuilder.build().getColumnFamilyNames())
                 && !Boolean.TRUE.equals(tableProps.get(PhoenixDatabaseMetaData.IMMUTABLE_ROWS))) {
             tableDescriptorBuilder.setValue(QueryConstants.PRIORITY,
-                    String.valueOf(PhoenixRpcSchedulerFactory.getIndexPriority(config)));
+                    String.valueOf(QueryServicesOptions.getIndexPriority(config)));
         }
         return tableDescriptorBuilder;
     }
@@ -978,6 +979,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return false;
     }
 
+    /**
+     * Enable indexing on the given table
+     * @param descBuilder {@link TableDescriptor} for the table on which indexing should be enabled
+   * @param builder class to use when building the index for this table
+   * @param properties map of custom configuration options to make available to your
+     *          {@link IndexBuilder} on the server-side
+   * @param priority TODO
+     * @throws IOException the Indexer coprocessor cannot be added
+     */
+    public static void enableIndexing(TableDescriptorBuilder descBuilder, Class<? extends IndexBuilder> builder,
+        Map<String, String> properties, int priority) throws IOException {
+      if (properties == null) {
+        properties = new HashMap<String, String>();
+      }
+      properties.put(Indexer.INDEX_BUILDER_CONF_KEY, builder.getName());
+      descBuilder.addCoprocessor(QueryConstants.INDEX_REGION_OBSERVER_CLASSNAME, null, priority, properties);
+    }
 
     private void addCoprocessors(byte[] tableName, TableDescriptorBuilder builder,
                                  PTableType tableType, Map<String,Object> tableProps,
@@ -1005,28 +1023,28 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
             if (!isTransactional && !isViewBaseTransactional
                     && (tableType == PTableType.INDEX || isViewIndex)) {
-                if (!indexRegionObserverEnabled && newDesc.hasCoprocessor(GlobalIndexChecker.class.getName())) {
-                    builder.removeCoprocessor(GlobalIndexChecker.class.getName());
-                } else if (indexRegionObserverEnabled && !newDesc.hasCoprocessor(GlobalIndexChecker.class.getName()) &&
+                if (!indexRegionObserverEnabled && newDesc.hasCoprocessor(QueryConstants.GLOBAL_INDEX_CHECKER_CLASSNAME)) {
+                    builder.removeCoprocessor(QueryConstants.GLOBAL_INDEX_CHECKER_CLASSNAME);
+                } else if (indexRegionObserverEnabled && !newDesc.hasCoprocessor(QueryConstants.GLOBAL_INDEX_CHECKER_CLASSNAME) &&
                         !isLocalIndexTable(newDesc.getColumnFamilyNames())) {
-                    if (newDesc.hasCoprocessor(IndexRegionObserver.class.getName())) {
-                        builder.removeCoprocessor(IndexRegionObserver.class.getName());
+                    if (newDesc.hasCoprocessor(QueryConstants.INDEX_REGION_OBSERVER_CLASSNAME)) {
+                        builder.removeCoprocessor(QueryConstants.INDEX_REGION_OBSERVER_CLASSNAME);
                     }
-                    builder.addCoprocessor(GlobalIndexChecker.class.getName(), null, priority - 1, null);
+                    builder.addCoprocessor(QueryConstants.GLOBAL_INDEX_CHECKER_CLASSNAME, null, priority - 1, null);
                 }
             }
 
-            if (!newDesc.hasCoprocessor(ScanRegionObserver.class.getName())) {
-                builder.addCoprocessor(ScanRegionObserver.class.getName(), null, priority, null);
+            if (!newDesc.hasCoprocessor(QueryConstants.SCAN_REGION_OBSERVER_CLASSNAME)) {
+                builder.addCoprocessor(QueryConstants.SCAN_REGION_OBSERVER_CLASSNAME, null, priority, null);
             }
-            if (!newDesc.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName())) {
-                builder.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, priority, null);
+            if (!newDesc.hasCoprocessor(QueryConstants.UNGROUPED_AGGREGATE_REGION_OBSERVER_CLASSNAME)) {
+                builder.addCoprocessor(QueryConstants.UNGROUPED_AGGREGATE_REGION_OBSERVER_CLASSNAME, null, priority, null);
             }
-            if (!newDesc.hasCoprocessor(GroupedAggregateRegionObserver.class.getName())) {
-                builder.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, priority, null);
+            if (!newDesc.hasCoprocessor(QueryConstants.GROUPED_AGGREGATE_REGION_OBSERVER_CLASSNAME)) {
+                builder.addCoprocessor(QueryConstants.GROUPED_AGGREGATE_REGION_OBSERVER_CLASSNAME, null, priority, null);
             }
-            if (!newDesc.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
-                builder.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, priority, null);
+            if (!newDesc.hasCoprocessor(QueryConstants.SERVER_CACHING_ENDPOINT_IMPL_CLASSNAME)) {
+                builder.addCoprocessor(QueryConstants.SERVER_CACHING_ENDPOINT_IMPL_CLASSNAME, null, priority, null);
             }
 
             // TODO: better encapsulation for this
@@ -1037,20 +1055,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     && !SchemaUtil.isMetaTable(tableName)
                     && !SchemaUtil.isStatsTable(tableName)) {
                 if (isTransactional) {
-                    if (!newDesc.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
-                        builder.addCoprocessor(PhoenixTransactionalIndexer.class.getName(), null, priority, null);
+                    if (!newDesc.hasCoprocessor(QueryConstants.PHOENIX_TRANSACTIONAL_INDEXER_CLASSNAME)) {
+                        builder.addCoprocessor(QueryConstants.PHOENIX_TRANSACTIONAL_INDEXER_CLASSNAME, null, priority, null);
                     }
                     // For alter table, remove non transactional index coprocessor
-                    if (newDesc.hasCoprocessor(Indexer.class.getName())) {
-                        builder.removeCoprocessor(Indexer.class.getName());
+                    if (newDesc.hasCoprocessor(QueryConstants.INDEXER_CLASSNAME)) {
+                        builder.removeCoprocessor(QueryConstants.INDEXER_CLASSNAME);
                     }
-                    if (newDesc.hasCoprocessor(IndexRegionObserver.class.getName())) {
-                        builder.removeCoprocessor(IndexRegionObserver.class.getName());
+                    if (newDesc.hasCoprocessor(QueryConstants.INDEX_REGION_OBSERVER_CLASSNAME)) {
+                        builder.removeCoprocessor(QueryConstants.INDEX_REGION_OBSERVER_CLASSNAME);
                     }
                 } else {
                     // If exception on alter table to transition back to non transactional
-                    if (newDesc.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
-                        builder.removeCoprocessor(PhoenixTransactionalIndexer.class.getName());
+                    if (newDesc.hasCoprocessor(QueryConstants.PHOENIX_TRANSACTIONAL_INDEXER_CLASSNAME)) {
+                        builder.removeCoprocessor(QueryConstants.PHOENIX_TRANSACTIONAL_INDEXER_CLASSNAME);
                     }
                     // we only want to mess with the indexing coprocs if we're on the original
                     // CREATE statement. Otherwise, if we're on an ALTER or CREATE TABLE
@@ -1058,19 +1076,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     // because they should be upgraded or downgraded using the IndexUpgradeTool
                     if (!doesPhoenixTableAlreadyExist(existingDesc)) {
                         if (indexRegionObserverEnabled) {
-                            if (newDesc.hasCoprocessor(Indexer.class.getName())) {
-                                builder.removeCoprocessor(Indexer.class.getName());
+                            if (newDesc.hasCoprocessor(QueryConstants.INDEXER_CLASSNAME)) {
+                                builder.removeCoprocessor(QueryConstants.INDEXER_CLASSNAME);
                             }
-                            if (!newDesc.hasCoprocessor(IndexRegionObserver.class.getName())) {
+                            if (!newDesc.hasCoprocessor(QueryConstants.INDEX_REGION_OBSERVER_CLASSNAME)) {
                                 Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                                 opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
-                                IndexRegionObserver.enableIndexing(builder, PhoenixIndexBuilder.class, opts, priority);
+                                enableIndexing(builder, PhoenixIndexBuilder.class, opts, priority);
                             }
                         } else {
-                            if (newDesc.hasCoprocessor(IndexRegionObserver.class.getName())) {
-                                builder.removeCoprocessor(IndexRegionObserver.class.getName());
+                            if (newDesc.hasCoprocessor(QueryConstants.INDEX_REGION_OBSERVER_CLASSNAME)) {
+                                builder.removeCoprocessor(QueryConstants.INDEX_REGION_OBSERVER_CLASSNAME);
                             }
-                            if (!newDesc.hasCoprocessor(Indexer.class.getName())) {
+                            if (!newDesc.hasCoprocessor(QueryConstants.INDEXER_CLASSNAME)) {
                                 Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                                 opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
                                 Indexer.enableIndexing(builder, PhoenixIndexBuilder.class, opts, priority);
@@ -1081,16 +1099,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
 
             if ((SchemaUtil.isStatsTable(tableName) || SchemaUtil.isMetaTable(tableName))
-                    && !newDesc.hasCoprocessor(MultiRowMutationEndpoint.class.getName())) {
-                builder.addCoprocessor(MultiRowMutationEndpoint.class.getName(),
+                    && !newDesc.hasCoprocessor(QueryConstants.MULTI_ROW_MUTATION_ENDPOINT_CLASSNAME)) {
+                builder.addCoprocessor(QueryConstants.MULTI_ROW_MUTATION_ENDPOINT_CLASSNAME,
                         null, priority, null);
             }
 
             Set<byte[]> familiesKeys = builder.build().getColumnFamilyNames();
             for (byte[] family: familiesKeys) {
                 if (Bytes.toString(family).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-                    if (!newDesc.hasCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName())) {
-                        builder.addCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName(),
+                    if (!newDesc.hasCoprocessor(QueryConstants.INDEX_HALF_STORE_FILE_READER_GENERATOR_CLASSNAME)) {
+                        builder.addCoprocessor(QueryConstants.INDEX_HALF_STORE_FILE_READER_GENERATOR_CLASSNAME,
                             null, priority, null);
                         break;
                     }
@@ -1100,54 +1118,54 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Setup split policy on Phoenix metadata table to ensure that the key values of a Phoenix table
             // stay on the same region.
             if (SchemaUtil.isMetaTable(tableName) || SchemaUtil.isFunctionTable(tableName)) {
-                if (!newDesc.hasCoprocessor(MetaDataEndpointImpl.class.getName())) {
-                    builder.addCoprocessor(MetaDataEndpointImpl.class.getName(), null, priority, null);
+                if (!newDesc.hasCoprocessor(QueryConstants.META_DATA_ENDPOINT_IMPL_CLASSNAME)) {
+                    builder.addCoprocessor(QueryConstants.META_DATA_ENDPOINT_IMPL_CLASSNAME, null, priority, null);
                 }
                 if (SchemaUtil.isMetaTable(tableName) ) {
-                    if (!newDesc.hasCoprocessor(MetaDataRegionObserver.class.getName())) {
-                        builder.addCoprocessor(MetaDataRegionObserver.class.getName(), null, priority + 1, null);
+                    if (!newDesc.hasCoprocessor(QueryConstants.META_DATA_REGION_OBSERVER_CLASSNAME)) {
+                        builder.addCoprocessor(QueryConstants.META_DATA_REGION_OBSERVER_CLASSNAME, null, priority + 1, null);
                     }
                 }
             } else if (SchemaUtil.isSequenceTable(tableName)) {
-                if (!newDesc.hasCoprocessor(SequenceRegionObserver.class.getName())) {
-                    builder.addCoprocessor(SequenceRegionObserver.class.getName(), null, priority, null);
+                if (!newDesc.hasCoprocessor(QueryConstants.SEQUENCE_REGION_OBSERVER_CLASSNAME)) {
+                    builder.addCoprocessor(QueryConstants.SEQUENCE_REGION_OBSERVER_CLASSNAME, null, priority, null);
                 }
             } else if (SchemaUtil.isTaskTable(tableName)) {
-                if (!newDesc.hasCoprocessor(TaskRegionObserver.class.getName())) {
-                    builder.addCoprocessor(TaskRegionObserver.class.getName(), null, priority, null);
+                if (!newDesc.hasCoprocessor(QueryConstants.TASK_REGION_OBSERVER_CLASSNAME)) {
+                    builder.addCoprocessor(QueryConstants.TASK_REGION_OBSERVER_CLASSNAME, null, priority, null);
                 }
                 if (!newDesc.hasCoprocessor(
-                        TaskMetaDataEndpoint.class.getName())) {
-                    builder.addCoprocessor(TaskMetaDataEndpoint.class.getName(),
+                        QueryConstants.TASK_META_DATA_ENDPOINT_CLASSNAME)) {
+                    builder.addCoprocessor(QueryConstants.TASK_META_DATA_ENDPOINT_CLASSNAME,
                         null, priority, null);
                 }
             } else if (SchemaUtil.isChildLinkTable(tableName)) {
-                if (!newDesc.hasCoprocessor(ChildLinkMetaDataEndpoint.class.getName())) {
-                    builder.addCoprocessor(ChildLinkMetaDataEndpoint.class.getName(), null, priority, null);
+                if (!newDesc.hasCoprocessor(QueryConstants.CHILD_LINK_META_DATA_ENDPOINT_CLASSNAME)) {
+                    builder.addCoprocessor(QueryConstants.CHILD_LINK_META_DATA_ENDPOINT_CLASSNAME, null, priority, null);
                 }
             }
 
             if (isTransactional) {
-                Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
-                if (!newDesc.hasCoprocessor(coprocessorClass.getName())) {
-                    builder.addCoprocessor(coprocessorClass.getName(), null, priority - 10, null);
+                String coprocessorClassName = provider.getTransactionProvider().getCoprocessorClassName();
+                if (!newDesc.hasCoprocessor(coprocessorClassName)) {
+                    builder.addCoprocessor(coprocessorClassName, null, priority - 10, null);
                 }
-                Class<? extends RegionObserver> coprocessorGCClass = provider.getTransactionProvider().getGCCoprocessor();
-                if (coprocessorGCClass != null) {
-                    if (!newDesc.hasCoprocessor(coprocessorGCClass.getName())) {
-                        builder.addCoprocessor(coprocessorGCClass.getName(), null, priority - 10, null);
+                String coprocessorGCClassName = provider.getTransactionProvider().getGCCoprocessorClassName();
+                if (coprocessorGCClassName != null) {
+                    if (!newDesc.hasCoprocessor(coprocessorGCClassName)) {
+                        builder.addCoprocessor(coprocessorGCClassName, null, priority - 10, null);
                     }
                 }
             } else {
                 // Remove all potential transactional coprocessors
                 for (TransactionFactory.Provider aprovider : TransactionFactory.Provider.available()) {
-                    Class<? extends RegionObserver> coprocessorClass = aprovider.getTransactionProvider().getCoprocessor();
-                    Class<? extends RegionObserver> coprocessorGCClass = aprovider.getTransactionProvider().getGCCoprocessor();
-                    if (coprocessorClass != null && newDesc.hasCoprocessor(coprocessorClass.getName())) {
-                        builder.removeCoprocessor(coprocessorClass.getName());
+                    String coprocessorClassName = aprovider.getTransactionProvider().getCoprocessorClassName();
+                    String coprocessorGCClassName = aprovider.getTransactionProvider().getGCCoprocessorClassName();
+                    if (coprocessorClassName != null && newDesc.hasCoprocessor(coprocessorClassName)) {
+                        builder.removeCoprocessor(coprocessorClassName);
                     }
-                    if (coprocessorGCClass != null && newDesc.hasCoprocessor(coprocessorGCClass.getName())) {
-                        builder.removeCoprocessor(coprocessorGCClass.getName());
+                    if (coprocessorGCClassName != null && newDesc.hasCoprocessor(coprocessorGCClassName)) {
+                        builder.removeCoprocessor(coprocessorGCClassName);
                     }
                 }
             }
@@ -1155,15 +1173,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // The priority for this co-processor should be set higher than the GlobalIndexChecker so that the read repair scans
             // are intercepted by the TTLAwareRegionObserver and only the rows that are not ttl-expired are returned.
             if (!SchemaUtil.isSystemTable(tableName)) {
-                if (!newDesc.hasCoprocessor(PhoenixTTLRegionObserver.class.getName())) {
+                if (!newDesc.hasCoprocessor(QueryConstants.PHOENIX_TTL_REGION_OBSERVER_CLASSNAME)) {
                     builder.addCoprocessor(
-                            PhoenixTTLRegionObserver.class.getName(), null, priority-2, null);
+                            QueryConstants.PHOENIX_TTL_REGION_OBSERVER_CLASSNAME, null, priority-2, null);
                 }
             }
             if (Arrays.equals(tableName, SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, props).getName())) {
-                if (!newDesc.hasCoprocessor(SystemCatalogRegionObserver.class.getName())) {
+                if (!newDesc.hasCoprocessor(QueryConstants.SYSTEM_CATALOG_REGION_OBSERVER_CLASSNAME)) {
                     builder.addCoprocessor(
-                            SystemCatalogRegionObserver.class.getName(), null, priority, null);
+                            QueryConstants.SYSTEM_CATALOG_REGION_OBSERVER_CLASSNAME, null, priority, null);
                 }
             }
 
@@ -1183,14 +1201,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (existingDesc == null){
             return false;
         }
-        boolean hasScanObserver = existingDesc.hasCoprocessor(ScanRegionObserver.class.getName());
+        boolean hasScanObserver = existingDesc.hasCoprocessor(QueryConstants.SCAN_REGION_OBSERVER_CLASSNAME);
         boolean hasUnAggObserver = existingDesc.hasCoprocessor(
-            UngroupedAggregateRegionObserver.class.getName());
+            QueryConstants.UNGROUPED_AGGREGATE_REGION_OBSERVER_CLASSNAME);
         boolean hasGroupedObserver = existingDesc.hasCoprocessor(
-            GroupedAggregateRegionObserver.class.getName());
-        boolean hasIndexObserver = existingDesc.hasCoprocessor(Indexer.class.getName())
-            || existingDesc.hasCoprocessor(IndexRegionObserver.class.getName())
-            || existingDesc.hasCoprocessor(GlobalIndexChecker.class.getName());
+            QueryConstants.GROUPED_AGGREGATE_REGION_OBSERVER_CLASSNAME);
+        boolean hasIndexObserver = existingDesc.hasCoprocessor(QueryConstants.INDEXER_CLASSNAME)
+            || existingDesc.hasCoprocessor(QueryConstants.INDEX_REGION_OBSERVER_CLASSNAME)
+            || existingDesc.hasCoprocessor(QueryConstants.GLOBAL_INDEX_CHECKER_CLASSNAME);
         return hasScanObserver && hasUnAggObserver && hasGroupedObserver && hasIndexObserver;
     }
 
@@ -1413,7 +1431,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
                 if (newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null && Boolean.TRUE.equals(
                         PBoolean.INSTANCE.toObject(newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
-                    newDesc.setRegionSplitPolicyClassName(IndexRegionSplitPolicy.class.getName());
+                    newDesc.setRegionSplitPolicyClassName(QueryConstants.INDEX_REGION_SPLIT_POLICY_CLASSNAME);
                 }
                 try {
                     if (splits == null) {
@@ -1464,7 +1482,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     for (Pair<byte[],Map<String,Object>> family: families) {
                         if ((Bytes.toString(family.getFirst())
                                 .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX))) {
-                            newDesc.setRegionSplitPolicyClassName(IndexRegionSplitPolicy.class.getName());
+                            newDesc.setRegionSplitPolicyClassName(QueryConstants.INDEX_REGION_SPLIT_POLICY_CLASSNAME);
                             break;
                         }
                     }
@@ -1558,7 +1576,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             final String actualSplitPolicy = tdBuilder.build()
                 .getRegionSplitPolicyClassName();
             final String targetSplitPolicy =
-                SystemTaskSplitPolicy.class.getName();
+                QueryConstants.SYSTEMTASKSPLITPOLICY_CLASSNAME;
             if (!targetSplitPolicy.equals(actualSplitPolicy)) {
                 if (StringUtils.isNotEmpty(actualSplitPolicy)) {
                     // Rare possibility. pre-4.16 create DDL query
@@ -3764,13 +3782,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     );
             metaConnection.createStatement().executeUpdate("ALTER TABLE " + 
                 PhoenixDatabaseMetaData.SYSTEM_FUNCTION + " SET " + 
-                    TableDescriptorBuilder.SPLIT_POLICY + "='" + SystemFunctionSplitPolicy.class.getName() + "',\n" +
+                    TableDescriptorBuilder.SPLIT_POLICY + "='" + QueryConstants.SYSTEMFUNCTIONSPLITPOLICY_CLASSNAME + "',\n" +
                     HConstants.VERSIONS + "= " + props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS) + ",\n" +
                     ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=" + props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS)
                     );
             metaConnection.createStatement().executeUpdate("ALTER TABLE " + 
                     PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " SET " + 
-                    TableDescriptorBuilder.SPLIT_POLICY + "='" + SystemStatsSplitPolicy.class.getName() +"'"
+                    TableDescriptorBuilder.SPLIT_POLICY + "='" + QueryConstants.SYSTEMSTATSSPLITPOLICY_CLASSNAME +"'"
                     );
         }
         if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
@@ -3835,13 +3853,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 tdBuilder = TableDescriptorBuilder.newBuilder(
                     admin.getDescriptor(sysCatPhysicalTableName));
                 if (!tdBuilder.build().hasCoprocessor(
-                        SystemCatalogRegionObserver.class.getName())) {
+                        QueryConstants.SYSTEM_CATALOG_REGION_OBSERVER_CLASSNAME)) {
                     int priority = props.getInt(
                         QueryServices.COPROCESSOR_PRIORITY_ATTRIB,
                         QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
                     tdBuilder.setCoprocessor(
                         CoprocessorDescriptorBuilder
-                            .newBuilder(SystemCatalogRegionObserver.class.getName())
+                            .newBuilder(QueryConstants.SYSTEM_CATALOG_REGION_OBSERVER_CLASSNAME)
                             .setPriority(priority)
                             .setProperties(Collections.emptyMap())
                             .build());
@@ -4244,12 +4262,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     isTableDescUpdated = true;
                 }
                 if (!tableDescriptorBuilder.build().hasCoprocessor(
-                        TaskMetaDataEndpoint.class.getName())) {
+                        QueryConstants.TASK_META_DATA_ENDPOINT_CLASSNAME)) {
                     int priority = props.getInt(
                         QueryServices.COPROCESSOR_PRIORITY_ATTRIB,
                         QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
                     tableDescriptorBuilder.addCoprocessor(
-                        TaskMetaDataEndpoint.class.getName(), null, priority,
+                        QueryConstants.TASK_META_DATA_ENDPOINT_CLASSNAME, null, priority,
                         null);
                     isTableDescUpdated=true;
                 }

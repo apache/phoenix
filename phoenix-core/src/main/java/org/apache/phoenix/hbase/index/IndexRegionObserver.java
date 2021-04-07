@@ -1208,22 +1208,5 @@ public class IndexRegionObserver extends CompatIndexRegionObserver implements Re
               "Somehow didn't complete the index update, but didn't return succesfully either!");
   }
 
-  /**
-   * Enable indexing on the given table
-   * @param descBuilder {@link TableDescriptor} for the table on which indexing should be enabled
- * @param builder class to use when building the index for this table
- * @param properties map of custom configuration options to make available to your
-   *          {@link IndexBuilder} on the server-side
- * @param priority TODO
-   * @throws IOException the Indexer coprocessor cannot be added
-   */
-  public static void enableIndexing(TableDescriptorBuilder descBuilder, Class<? extends IndexBuilder> builder,
-      Map<String, String> properties, int priority) throws IOException {
-    if (properties == null) {
-      properties = new HashMap<String, String>();
-    }
-    properties.put(Indexer.INDEX_BUILDER_CONF_KEY, builder.getName());
-     descBuilder.addCoprocessor(IndexRegionObserver.class.getName(), null, priority, properties);
-  }
 }
 

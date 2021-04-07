@@ -370,7 +370,7 @@ public class UpgradeUtil {
             while (rs.next()) {
                 if(!droppedLocalIndexes) {
                     TableDescriptor[] localIndexTables = admin.listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
-                    String localIndexSplitter = LocalIndexSplitter.class.getName();
+                    String localIndexSplitter = QueryConstants.LOCAL_INDEX_SPLITTER_CLASSNAME;
                     for (TableDescriptor table : localIndexTables) {
                         TableDescriptor dataTableDesc = admin.getDescriptor(TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(table.getTableName().getNameAsString())));
                         TableDescriptorBuilder dataTableDescBuilder = TableDescriptorBuilder.newBuilder(dataTableDesc);

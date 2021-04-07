@@ -21,6 +21,9 @@ package org.apache.phoenix.execute;
 import static org.apache.phoenix.util.ScanUtil.isPacingScannersPossible;
 import static org.apache.phoenix.util.ScanUtil.isRoundRobinPossible;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
@@ -30,6 +33,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -38,10 +42,10 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.execute.visitor.ByteCountVisitor;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.iterate.ChunkedResultIterator;
@@ -107,6 +111,29 @@ public class ScanPlan extends BaseQueryPlan {
         this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, allowPageFilter, null, dataPlan, rowOffset);
     }
     
+    public static void serializeScanRegionObserverIntoScan(Scan scan, int limit,
+            List<OrderByExpression> orderByExpressions, int estimatedRowSize) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream(); // TODO: size?
+        try {
+            DataOutputStream output = new DataOutputStream(stream);
+            WritableUtils.writeVInt(output, limit);
+            WritableUtils.writeVInt(output, estimatedRowSize);
+            WritableUtils.writeVInt(output, orderByExpressions.size());
+            for (OrderByExpression orderingCol : orderByExpressions) {
+                orderingCol.write(output);
+            }
+            scan.setAttribute(BaseScannerRegionObserver.TOPN, stream.toByteArray());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } finally {
+            try {
+                stream.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+    
     private ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, Integer offset,
             OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, Expression dynamicFilter, QueryPlan dataPlan, Optional<byte[]> rowOffset) throws SQLException {
         super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit,offset, orderBy, GroupBy.EMPTY_GROUP_BY,
@@ -115,7 +142,7 @@ public class ScanPlan extends BaseQueryPlan {
         this.allowPageFilter = allowPageFilter;
         boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
         if (isOrdered) { // TopN
-            ScanRegionObserver.serializeIntoScan(context.getScan(),
+            serializeScanRegionObserverIntoScan(context.getScan(),
                 limit == null ? -1 : QueryUtil.getOffsetLimit(limit, offset),
                 orderBy.getOrderByExpressions(), projector.getEstimatedRowByteSize());
             ScanUtil.setClientVersion(context.getScan(), MetaDataProtocol.PHOENIX_VERSION);

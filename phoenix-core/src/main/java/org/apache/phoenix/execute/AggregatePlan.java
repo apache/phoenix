@@ -18,12 +18,16 @@
 package org.apache.phoenix.execute;
 
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -31,13 +35,12 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
-import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.execute.visitor.AvgRowWidthVisitor;
 import org.apache.phoenix.execute.visitor.ByteCountVisitor;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.execute.visitor.RowCountVisitor;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.RowKeyExpression;
 import org.apache.phoenix.expression.aggregator.Aggregators;
@@ -67,6 +70,7 @@ import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -245,14 +249,46 @@ public class AggregatePlan extends BaseQueryPlan {
         // wrap any existing parallelIteratorFactory
         return new WrappingResultIteratorFactory(innerFactory, parallelIteratorFactory);
     }
+
+    public static void serializeGroupedAggregateRegionObserverIntoScan(Scan scan, String attribName,
+            List<Expression> groupByExpressions) {
+        ByteArrayOutputStream stream =
+                new ByteArrayOutputStream(Math.max(1, groupByExpressions.size() * 10));
+        try {
+            if (groupByExpressions.isEmpty()) { // FIXME ?
+                stream.write(QueryConstants.TRUE);
+            } else {
+                DataOutputStream output = new DataOutputStream(stream);
+                for (Expression expression : groupByExpressions) {
+                    WritableUtils.writeVInt(output, ExpressionType.valueOf(expression).ordinal());
+                    expression.write(output);
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e); // Impossible
+        } finally {
+            try {
+                stream.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        scan.setAttribute(attribName, stream.toByteArray());
+
+    }
     
+
+    public static void serializeUngroupedAggregateRegionObserverIntoScan(Scan scan) {
+        scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
+    }
+
     @Override
     protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
         if (groupBy.isEmpty()) {
-            UngroupedAggregateRegionObserver.serializeIntoScan(scan);
+            serializeUngroupedAggregateRegionObserverIntoScan(scan);
         } else {
             // Set attribute with serialized expressions for coprocessor
-            GroupedAggregateRegionObserver.serializeIntoScan(scan, groupBy.getScanAttribName(), groupBy.getKeyExpressions());
+            serializeGroupedAggregateRegionObserverIntoScan(scan, groupBy.getScanAttribName(), groupBy.getKeyExpressions());
             if (limit != null && orderBy.getOrderByExpressions().isEmpty() && having == null
                     && (  (   statement.isDistinct() && ! statement.isAggregate() )
                             || ( ! statement.isDistinct() && (   context.getAggregationManager().isEmpty()

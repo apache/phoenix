@@ -23,8 +23,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.ipc.DelegatingHBaseRpcController;
 import org.apache.hadoop.hbase.ipc.HBaseRpcController;
-import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.SchemaUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
@@ -56,7 +56,7 @@ class MetadataRpcController extends DelegatingHBaseRpcController {
 	public MetadataRpcController(HBaseRpcController delegate,
 			Configuration conf) {
 		super(delegate);
-		this.priority = PhoenixRpcSchedulerFactory.getMetadataPriority(conf);
+		this.priority = QueryServicesOptions.getMetadataPriority(conf);
 	}
 
 	@Override
