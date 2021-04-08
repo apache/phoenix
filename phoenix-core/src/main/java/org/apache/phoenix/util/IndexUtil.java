@@ -310,7 +310,7 @@ public class IndexUtil {
             TableDescriptor desc = connection.getQueryServices().getTableDescriptor(index.getBytes());
 
             if (desc != null) {
-                if (desc.hasCoprocessor(GlobalIndexChecker.class.getName())) {
+                if (desc.hasCoprocessor(QueryConstants.GLOBAL_INDEX_CHECKER_CLASSNAME)) {
                     result = true;
                 }
             }

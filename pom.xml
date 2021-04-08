@@ -49,7 +49,8 @@
     <module>phoenix-pherf</module>
     <module>phoenix-client-parent</module>
     <module>phoenix-client-parent/phoenix-client</module>
-    <!-- phoenix-client-embedded is added in profile "embedded" -->
+    <!-- phoenix-client-embedded and phoenix-client-byo-shaded-hbase 
+    are added in the corresponding profiles -->
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tools</module>
@@ -1729,6 +1730,17 @@
       </activation>
       <modules>
         <module>phoenix-client-parent/phoenix-client-embedded</module>
+      </modules>
+    </profile>
+    <profile>
+      <id>byo-shaded-hbase</id>
+      <activation>
+        <property>
+            <name>!skip.byo-shaded-hbase</name>
+        </property>
+      </activation>
+      <modules>
+        <module>phoenix-client-parent/phoenix-client-byo-shaded-hbase</module>
       </modules>
     </profile>
     <profile>

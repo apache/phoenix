@@ -17,8 +17,9 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
+
 import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.NavigableMap;
@@ -35,10 +36,8 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
-import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
@@ -46,8 +45,6 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 /**
  *
@@ -72,29 +69,6 @@ public class ScanRegionObserver extends BaseScannerRegionObserver implements Reg
     @Override
     public Optional<RegionObserver> getRegionObserver() {
       return Optional.of(this);
-    }
-
-    public static void serializeIntoScan(Scan scan, int limit,
-            List<OrderByExpression> orderByExpressions, int estimatedRowSize) {
-        ByteArrayOutputStream stream = new ByteArrayOutputStream(); // TODO: size?
-        try {
-            DataOutputStream output = new DataOutputStream(stream);
-            WritableUtils.writeVInt(output, limit);
-            WritableUtils.writeVInt(output, estimatedRowSize);
-            WritableUtils.writeVInt(output, orderByExpressions.size());
-            for (OrderByExpression orderingCol : orderByExpressions) {
-                orderingCol.write(output);
-            }
-            scan.setAttribute(BaseScannerRegionObserver.TOPN, stream.toByteArray());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        } finally {
-            try {
-                stream.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
     }
 
     @Override

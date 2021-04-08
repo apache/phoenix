@@ -65,14 +65,6 @@ public class NotAvailableTransactionProvider implements PhoenixTransactionProvid
     }
 
     @Override
-    public Class<? extends RegionObserver> getCoprocessor() {
-        throw new UnsupportedOperationException(message);
-    }
-
-    @Override
-    public Class<? extends RegionObserver> getGCCoprocessor() {return null;}
-
-    @Override
     public Provider getProvider() {
         return TransactionFactory.Provider.TEPHRA;
     }
@@ -84,6 +76,16 @@ public class NotAvailableTransactionProvider implements PhoenixTransactionProvid
 
     @Override
     public Put markPutAsCommitted(Put put, long timestamp, long commitTimestamp) {
+        throw new UnsupportedOperationException(message);
+    }
+
+    @Override
+    public String getCoprocessorClassName() {
+        throw new UnsupportedOperationException(message);
+    }
+
+    @Override
+    public String getGCCoprocessorClassName() {
         throw new UnsupportedOperationException(message);
     }
 }

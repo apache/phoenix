@@ -98,6 +98,7 @@ import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED;
+import static org.apache.phoenix.query.QueryServices.WAL_EDIT_CODEC_ATTRIB;
 
 import java.util.Map.Entry;
 
@@ -106,7 +107,6 @@ import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ClientRpcControllerFactory;
-import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
@@ -720,7 +720,7 @@ public class QueryServicesOptions {
     }
 
     public QueryServicesOptions setWALEditCodec(String walEditCodec) {
-        return set(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY, walEditCodec);
+        return set(WAL_EDIT_CODEC_ATTRIB, walEditCodec);
     }
 
     public QueryServicesOptions setStatsHistogramDepthBytes(long byteDepth) {
@@ -849,5 +849,13 @@ public class QueryServicesOptions {
     public QueryServicesOptions setSequenceCacheSize(long sequenceCacheSize) {
         config.setLong(SEQUENCE_CACHE_SIZE_ATTRIB, sequenceCacheSize);
         return this;
+    }
+
+    public static int getIndexPriority(Configuration conf) {
+        return conf.getInt(QueryServices.INDEX_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_PRIORITY);
+    }
+
+    public static int getMetadataPriority(Configuration conf) {
+        return conf.getInt(QueryServices.METADATA_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_METADATA_PRIORITY);
     }
 }
