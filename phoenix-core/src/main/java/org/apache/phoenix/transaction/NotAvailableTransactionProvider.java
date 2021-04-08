@@ -65,14 +65,6 @@ public class NotAvailableTransactionProvider implements PhoenixTransactionProvid
     }
 
     @Override
-    public Class<? extends RegionObserver> getCoprocessor() {
-        throw new UnsupportedOperationException(message);
-    }
-
-    @Override
-    public Class<? extends RegionObserver> getGCCoprocessor() {return null;}
-
-    @Override
     public Provider getProvider() {
         return TransactionFactory.Provider.TEPHRA;
     }

@@ -1595,8 +1595,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private static boolean hasTxCoprocessor(TableDescriptor descriptor) {
         for (TransactionFactory.Provider provider : TransactionFactory.Provider.available()) {
-            Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
-            if (coprocessorClass != null && descriptor.hasCoprocessor(coprocessorClass.getName())) {
+            String coprocessorClassName = provider.getTransactionProvider().getCoprocessorClassName();
+            if (coprocessorClassName != null && descriptor.hasCoprocessor(coprocessorClassName)) {
                 return true;
             }
         }
@@ -1604,8 +1604,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     private static boolean equalTxCoprocessor(TransactionFactory.Provider provider, TableDescriptor existingDesc, TableDescriptor newDesc) {
-        Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
-        return (coprocessorClass != null && existingDesc.hasCoprocessor(coprocessorClass.getName()) && newDesc.hasCoprocessor(coprocessorClass.getName()));
+        String coprocessorClassName = provider.getTransactionProvider().getCoprocessorClassName();
+        return (coprocessorClassName != null && existingDesc.hasCoprocessor(coprocessorClassName) && newDesc.hasCoprocessor(coprocessorClassName));
 }
 
     private void modifyTable(byte[] tableName, TableDescriptor newDesc, boolean shouldPoll) throws IOException,

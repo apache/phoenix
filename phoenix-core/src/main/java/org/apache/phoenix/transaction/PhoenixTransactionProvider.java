@@ -51,8 +51,6 @@ public interface PhoenixTransactionProvider {
 
     public PhoenixTransactionClient getTransactionClient(Configuration config, ConnectionInfo connectionInfo) throws SQLException;
     public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo, int port) throws  SQLException;
-    public Class<? extends RegionObserver> getCoprocessor();
-    public Class<? extends RegionObserver> getGCCoprocessor();
     public String getCoprocessorClassName();
     public String getGCCoprocessorClassName();
 

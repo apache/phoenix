@@ -23,7 +23,6 @@ import java.util.Arrays;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.omid.committable.CommitTable;
 import org.apache.omid.committable.InMemoryCommitTable;
 import org.apache.omid.transaction.HBaseOmidClientConfiguration;
@@ -35,8 +34,6 @@ import org.apache.omid.tso.TSOServerConfig;
 import org.apache.omid.tso.TSOServerConfig.WAIT_STRATEGY;
 import org.apache.omid.tso.client.OmidClientConfiguration;
 import org.apache.omid.tso.client.TSOClient;
-import org.apache.phoenix.coprocessor.OmidGCProcessor;
-import org.apache.phoenix.coprocessor.OmidTransactionalProcessor;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -188,16 +185,6 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
                 tso.awaitTerminated();
             }
         }
-    }
-
-    @Override
-    public Class<? extends RegionObserver> getCoprocessor() {
-        return OmidTransactionalProcessor.class;
-    }
-
-    @Override
-    public Class<? extends RegionObserver> getGCCoprocessor() {
-        return OmidGCProcessor.class;
     }
 
     @Override

@@ -188,14 +188,6 @@ public class TephraTransactionProvider implements PhoenixTransactionProvider {
         }
         
     }
-    
-    @Override
-    public Class<? extends RegionObserver> getCoprocessor() {
-        return TephraTransactionalProcessor.class;
-    }
-
-    @Override
-    public Class<? extends RegionObserver> getGCCoprocessor() {return null;}
 
     @Override
     public String getCoprocessorClassName() {
