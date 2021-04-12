@@ -18,9 +18,9 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -90,7 +90,7 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
                 IndexRegionObserver.UNVERIFIED_BYTES, true);
         // Now change physical data table
         createAndPointToNewPhysicalTable(conn, fullTableHName, true);
-        try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
                 .getAdmin()) {
             assertEquals(false, admin.tableExists(TableName.valueOf(fullTableHName)));
             assertEquals(false, admin.tableExists(TableName.valueOf(fullIndexHName)));
@@ -110,7 +110,7 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
         try (Connection conn = getConnection(propsNamespace)) {
             try (Connection conn2 = getConnection(propsNamespace)) {
                 test_bothTableAndIndexHaveDifferentNames(conn, conn2, schemaName, tableName, indexName);
-                try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
+                try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
                         .getAdmin()) {
                     conn2.setAutoCommit(true);
                     // Add row and check
@@ -132,7 +132,7 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
                     // Add a row and run IndexTool to check that the row is there on the other side
                     rs = conn.createStatement().executeQuery("SELECT * FROM " +  fullIndexName + " WHERE \":PK1\"='PK30'");
                     assertEquals(false, rs.next());
-                    try (HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableHName))) {
+                    try (Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableHName))) {
                         Put put = new Put(ByteUtil.concat(Bytes.toBytes("PK30")));
                         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
                                 QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
