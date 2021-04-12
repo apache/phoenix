@@ -1273,7 +1273,7 @@ public class PTableImpl implements PTable {
         }
 
         private void newMutations() {
-            Mutation put = this.hasOnDupKey ? new Increment(this.key) : new Put(this.key);
+            Mutation put = new Put(this.key);
             Delete delete = new Delete(this.key);
             if (isWALDisabled()) {
                 put.setDurability(Durability.SKIP_WAL);
