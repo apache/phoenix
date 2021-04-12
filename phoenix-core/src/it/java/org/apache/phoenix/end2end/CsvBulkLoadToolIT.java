@@ -40,7 +40,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
@@ -461,10 +461,10 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.execute(ddl);
         String newTableName = LogicalTableNameIT.NEW_TABLE_PREFIX + generateUniqueName();
         String fullNewTableName = SchemaUtil.getTableName(schemaName, newTableName);
-        try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+        try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
             String snapshotName = new StringBuilder(tableName).append("-Snapshot").toString();
             admin.snapshot(snapshotName, TableName.valueOf(fullTableName));
-            admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(fullNewTableName));
+            admin.cloneSnapshot(Bytes.toBytes(snapshotName), TableName.valueOf(fullNewTableName));
         }
         LogicalTableNameIT.renameAndDropPhysicalTable(conn, "NULL", schemaName, tableName, newTableName, false);
 

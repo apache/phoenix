@@ -59,7 +59,6 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -2441,8 +2440,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     }
 
     static void verifyRowsBeforeTTLExpiration(
-            com.google.common.collect.Table<String, String, Object> upsertedData,
-            com.google.common.collect.Table<String, String, Object> fetchedData) {
+            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> upsertedData,
+            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> fetchedData) {
 
         Set<String> upsertedRowKeys = upsertedData.rowKeySet();
         Set<String> fetchedRowKeys = fetchedData.rowKeySet();

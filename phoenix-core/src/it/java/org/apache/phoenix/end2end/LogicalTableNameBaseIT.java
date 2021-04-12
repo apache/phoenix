@@ -22,10 +22,8 @@ import org.apache.curator.shaded.com.google.common.collect.Lists;
 import org.apache.curator.shaded.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
@@ -58,6 +56,7 @@ import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.MAX_ROWS;
 import static org.apache.phoenix.query.QueryConstants.NAMESPACE_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -71,7 +70,7 @@ public class LogicalTableNameBaseIT extends BaseTest {
     static void initCluster(boolean isNamespaceMapped) throws Exception {
         Map<String, String> props = Maps.newConcurrentMap();
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
-        props.put(ScanInfoUtil.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60*1000)); // An hour
+        props.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60*1000)); // An hour
         if (isNamespaceMapped) {
             props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
         }
@@ -102,11 +101,11 @@ public class LogicalTableNameBaseIT extends BaseTest {
                 snapshotName =
                 new StringBuilder(tableName).append("-Snapshot").toString();
 
-        try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
                 .getAdmin()) {
 
             admin.snapshot(snapshotName, TableName.valueOf(fullTableHName));
-            admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(fullNewTableHName));
+            admin.cloneSnapshot(Bytes.toBytes(snapshotName), TableName.valueOf(fullNewTableHName));
             admin.deleteSnapshot(snapshotName);
             LogicalTableNameIT.renameAndDropPhysicalTable(conn, null, schemaName, tableName,
                     newTableName, isNamespaceEnabled);
@@ -129,12 +128,12 @@ public class LogicalTableNameBaseIT extends BaseTest {
         // Create another hbase table and add 1 more row
         String newTableName =  NEW_TABLE_PREFIX + tableName;
         String fullNewTableName = SchemaUtil.getTableName(schemaName, newTableName);
-        try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+        try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
             String snapshotName = new StringBuilder(fullTableName).append("-Snapshot").toString();
             admin.snapshot(snapshotName, TableName.valueOf(fullTableName));
-            admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(fullNewTableName));
+            admin.cloneSnapshot(Bytes.toBytes(snapshotName), TableName.valueOf(fullNewTableName));
             admin.deleteSnapshot(snapshotName);
-            try (HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableName))) {
+            try (Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableName))) {
                 Put put = new Put(ByteUtil.concat(Bytes.toBytes("PK3")));
                 put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
                         QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
@@ -181,13 +180,13 @@ public class LogicalTableNameBaseIT extends BaseTest {
             fullNewTableName = schemaName + NAMESPACE_SEPARATOR + newTableName;
             fullIndexTableHbaseName = schemaName + NAMESPACE_SEPARATOR + indexName;
         }
-        try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
                 .getAdmin()) {
             String snapshotName = new StringBuilder(indexName).append("-Snapshot").toString();
             admin.snapshot(snapshotName, TableName.valueOf(fullIndexTableHbaseName));
-            admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(fullNewTableName));
+            admin.cloneSnapshot(Bytes.toBytes(snapshotName), TableName.valueOf(fullNewTableName));
             admin.deleteSnapshot(snapshotName);
-            try (HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableName))) {
+            try (Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableName))) {
                 Put
                         put =
                         new Put(ByteUtil.concat(Bytes.toBytes("V13"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("PK3")));
@@ -240,13 +239,13 @@ public class LogicalTableNameBaseIT extends BaseTest {
             fullNewTableName = schemaName + NAMESPACE_SEPARATOR + newTableName;
             fullTableHbaseName = schemaName + NAMESPACE_SEPARATOR + tableName;
         }
-        try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
                 .getAdmin()) {
             String snapshotName = new StringBuilder(fullTableName).append("-Snapshot").toString();
             admin.snapshot(snapshotName, TableName.valueOf(fullTableHbaseName));
-            admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(fullNewTableName));
+            admin.cloneSnapshot(Bytes.toBytes(snapshotName), TableName.valueOf(fullNewTableName));
             admin.deleteSnapshot(snapshotName);
-            try (HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableName))) {
+            try (Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableName))) {
                 Put put = new Put(ByteUtil.concat(Bytes.toBytes("PK3")));
                 put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
                         QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
@@ -387,7 +386,7 @@ public class LogicalTableNameBaseIT extends BaseTest {
             dataWriter.setRowKeyColumns(rowKeyColumns);
             dataWriter.setTargetEntity(schemaBuilder.getEntityTenantViewName());
             dataWriter.upsertRows(1, numOfRows);
-            com.google.common.collect.Table<String, String, Object> upsertedData = dataWriter.getDataTable();;
+            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> upsertedData = dataWriter.getDataTable();;
 
             PhoenixTestBuilder.DataReader dataReader = new PhoenixTestBuilder.BasicDataReader();
             dataReader.setValidationColumns(columns);
@@ -397,7 +396,7 @@ public class LogicalTableNameBaseIT extends BaseTest {
             dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
             dataReader.setConnection(tenantConnection);
             dataReader.readRows();
-            com.google.common.collect.Table<String, String, Object> fetchedData
+            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> fetchedData
                     = dataReader.getDataTable();
             assertNotNull("Fetched data should not be null", fetchedData);
             ViewTTLIT.verifyRowsBeforeTTLExpiration(upsertedData, fetchedData);
