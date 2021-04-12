@@ -30,7 +30,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ClientUtil;
 
 
 /**
@@ -109,7 +109,7 @@ abstract public class BooleanExpressionFilter extends FilterBase implements Writ
             expression.readFields(input);
             expression.reset(); // Initializes expression tree for partial evaluation
         } catch (Throwable t) { // Catches incompatibilities during reading/writing and doesn't retry
-            ServerUtil.throwIOException("BooleanExpressionFilter failed during reading", t);
+            ClientUtil.throwIOException("BooleanExpressionFilter failed during reading", t);
         }
     }
 
@@ -119,7 +119,7 @@ abstract public class BooleanExpressionFilter extends FilterBase implements Writ
             WritableUtils.writeVInt(output, ExpressionType.valueOf(expression).ordinal());
             expression.write(output);
         } catch (Throwable t) { // Catches incompatibilities during reading/writing and doesn't retry
-            ServerUtil.throwIOException("BooleanExpressionFilter failed during writing", t);
+            ClientUtil.throwIOException("BooleanExpressionFilter failed during writing", t);
         }
     }
 

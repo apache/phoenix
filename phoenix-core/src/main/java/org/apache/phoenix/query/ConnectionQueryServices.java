@@ -50,7 +50,7 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.transaction.PhoenixTransactionClient;
-import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.transaction.TransactionFactory.Provider;
 
 
 public interface ConnectionQueryServices extends QueryServices, MetaDataMutated {
@@ -192,7 +192,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     public QueryLoggerDisruptor getQueryDisruptor();
     
-    public PhoenixTransactionClient initTransactionClient(TransactionFactory.Provider provider) throws SQLException;
+    public PhoenixTransactionClient initTransactionClient(Provider provider) throws SQLException;
     
     /**
      * Writes a cell to SYSTEM.MUTEX using checkAndPut to ensure only a single client can execute a
@@ -207,4 +207,5 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
      */
     public void deleteMutexCell(String tenantId, String schemaName, String tableName,
             String columnName, String familyName) throws SQLException;
+
 }

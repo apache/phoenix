@@ -42,8 +42,6 @@ import org.slf4j.LoggerFactory;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 
-import com.google.protobuf.InvalidProtocolBufferException;
-
 public class OmidTransactionContext implements PhoenixTransactionContext {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(OmidTransactionContext.class);

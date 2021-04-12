@@ -19,11 +19,13 @@ package org.apache.phoenix.util;
 
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.FWD_ROW_KEY_ORDER_BY;
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORDER_BY;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants.CUSTOM_ANNOTATIONS;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants.SCAN_ACTUAL_START_ROW;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants.SCAN_START_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
+import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
@@ -56,7 +58,7 @@ import org.apache.hadoop.io.WritableComparator;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -84,6 +86,7 @@ import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
@@ -130,23 +133,23 @@ public class ScanUtil {
     }
 
     public static void setLocalIndex(Scan scan) {
-        scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX, PDataType.TRUE_BYTES);
+        scan.setAttribute(BaseScannerRegionObserverConstants.LOCAL_INDEX, PDataType.TRUE_BYTES);
     }
 
     public static boolean isLocalIndex(Scan scan) {
-        return scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX) != null;
+        return scan.getAttribute(BaseScannerRegionObserverConstants.LOCAL_INDEX) != null;
     }
 
     public static boolean isNonAggregateScan(Scan scan) {
-        return scan.getAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY) != null;
+        return scan.getAttribute(BaseScannerRegionObserverConstants.NON_AGGREGATE_QUERY) != null;
     }
 
     // Designates a "simple scan", i.e. a scan that does not need to be scoped
     // to a single region.
     public static boolean isSimpleScan(Scan scan) {
         return  ScanUtil.isNonAggregateScan(scan) &&
-                scan.getAttribute(BaseScannerRegionObserver.TOPN) == null &&
-                scan.getAttribute(BaseScannerRegionObserver.SCAN_OFFSET) == null;
+                scan.getAttribute(BaseScannerRegionObserverConstants.TOPN) == null &&
+                scan.getAttribute(BaseScannerRegionObserverConstants.SCAN_OFFSET) == null;
     }
 
     // Use getTenantId and pass in column name to match against
@@ -650,16 +653,16 @@ public class ScanUtil {
     }
 
     public static boolean isReversed(Scan scan) {
-        return scan.getAttribute(BaseScannerRegionObserver.REVERSE_SCAN) != null;
+        return scan.getAttribute(BaseScannerRegionObserverConstants.REVERSE_SCAN) != null;
     }
     
     public static void setReversed(Scan scan) {
-        scan.setAttribute(BaseScannerRegionObserver.REVERSE_SCAN, PDataType.TRUE_BYTES);
+        scan.setAttribute(BaseScannerRegionObserverConstants.REVERSE_SCAN, PDataType.TRUE_BYTES);
         scan.setLoadColumnFamiliesOnDemand(false);
     }
 
     public static void unsetReversed(Scan scan) {
-        scan.setAttribute(BaseScannerRegionObserver.REVERSE_SCAN, PDataType.FALSE_BYTES);
+        scan.setAttribute(BaseScannerRegionObserverConstants.REVERSE_SCAN, PDataType.FALSE_BYTES);
         scan.setLoadColumnFamiliesOnDemand(true);
     }
 
@@ -812,7 +815,7 @@ public class ScanUtil {
     }
 
     public static boolean isAnalyzeTable(Scan scan) {
-        return scan.getAttribute((BaseScannerRegionObserver.ANALYZE_TABLE)) != null;
+        return scan.getAttribute((BaseScannerRegionObserverConstants.ANALYZE_TABLE)) != null;
     }
 
     public static boolean crossesPrefixBoundary(byte[] key, byte[] prefixBytes, int prefixLength) {
@@ -947,7 +950,7 @@ public class ScanUtil {
     }
 
     public static void addOffsetAttribute(Scan scan, Integer offset) {
-        scan.setAttribute(BaseScannerRegionObserver.SCAN_OFFSET, Bytes.toBytes(offset));
+        scan.setAttribute(BaseScannerRegionObserverConstants.SCAN_OFFSET, Bytes.toBytes(offset));
     }
     
     public static final boolean canQueryBeExecutedSerially(PTable table, OrderBy orderBy, StatementContext context) {
@@ -976,12 +979,12 @@ public class ScanUtil {
     }
 
     public static boolean isIndexRebuild(Scan scan) {
-        return scan.getAttribute((BaseScannerRegionObserver.REBUILD_INDEXES)) != null;
+        return scan.getAttribute((BaseScannerRegionObserverConstants.REBUILD_INDEXES)) != null;
     }
  
     public static int getClientVersion(Scan scan) {
         int clientVersion = UNKNOWN_CLIENT_VERSION;
-        byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
+        byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserverConstants.CLIENT_VERSION);
         if (clientVersionBytes != null) {
             clientVersion = Bytes.toInt(clientVersionBytes);
         }
@@ -989,7 +992,7 @@ public class ScanUtil {
     }
     
     public static void setClientVersion(Scan scan, int version) {
-        scan.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION, Bytes.toBytes(version));
+        scan.setAttribute(BaseScannerRegionObserverConstants.CLIENT_VERSION, Bytes.toBytes(version));
     }
 
     public static boolean isServerSideMaskingEnabled(PhoenixConnection phoenixConnection) {
@@ -1002,8 +1005,46 @@ public class ScanUtil {
                 ((isServerSideMaskingSet != null) && (Boolean.parseBoolean(isServerSideMaskingSet))));
     }
 
+    public static boolean getStatsForParallelizationProp(PhoenixConnection conn, PTable table) {
+        Boolean useStats = table.useStatsForParallelization();
+        if (useStats != null) {
+            return useStats;
+        }
+        /*
+         * For a view index, we use the property set on view. For indexes on base table, whether
+         * global or local, we use the property set on the base table. Null check needed when
+         * dropping local indexes.
+         */
+        PName tenantId = conn.getTenantId();
+        int retryCount = 0;
+        while (retryCount++<2) {
+            if (table.getType() == PTableType.INDEX && table.getParentName() != null) {
+                String parentTableName = table.getParentName().getString();
+                try {
+                    PTable parentTable =
+                            conn.getTable(new PTableKey(tenantId, parentTableName));
+                    useStats = parentTable.useStatsForParallelization();
+                    if (useStats != null) {
+                        return useStats;
+                    }
+                } catch (TableNotFoundException e) {
+                    // try looking up the table without the tenant id (for
+                    // global tables)
+                    if (tenantId != null) {
+                        tenantId = null;
+                    } else {
+                        LOGGER.warn("Unable to find parent table \"" + parentTableName + "\" of table \""
+                                        + table.getName().getString() + "\" to determine USE_STATS_FOR_PARALLELIZATION",e);
+                    }
+                }
+            }
+        }
+        return conn.getQueryServices().getConfiguration()
+                .getBoolean(USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION);
+    }
+
     public static long getPhoenixTTL(Scan scan) {
-        byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserver.PHOENIX_TTL);
+        byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL);
         if (phoenixTTL == null) {
             return 0L;
         }
@@ -1011,17 +1052,17 @@ public class ScanUtil {
     }
 
     public static boolean isMaskTTLExpiredRows(Scan scan) {
-        return scan.getAttribute(BaseScannerRegionObserver.MASK_PHOENIX_TTL_EXPIRED) != null &&
-                (Bytes.compareTo(scan.getAttribute(BaseScannerRegionObserver.MASK_PHOENIX_TTL_EXPIRED),
+        return scan.getAttribute(BaseScannerRegionObserverConstants.MASK_PHOENIX_TTL_EXPIRED) != null &&
+                (Bytes.compareTo(scan.getAttribute(BaseScannerRegionObserverConstants.MASK_PHOENIX_TTL_EXPIRED),
                         PDataType.TRUE_BYTES) == 0)
-                && scan.getAttribute(BaseScannerRegionObserver.PHOENIX_TTL) != null;
+                && scan.getAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL) != null;
     }
 
     public static boolean isDeleteTTLExpiredRows(Scan scan) {
-        return scan.getAttribute(BaseScannerRegionObserver.DELETE_PHOENIX_TTL_EXPIRED) != null && (
-                Bytes.compareTo(scan.getAttribute(BaseScannerRegionObserver.DELETE_PHOENIX_TTL_EXPIRED),
+        return scan.getAttribute(BaseScannerRegionObserverConstants.DELETE_PHOENIX_TTL_EXPIRED) != null && (
+                Bytes.compareTo(scan.getAttribute(BaseScannerRegionObserverConstants.DELETE_PHOENIX_TTL_EXPIRED),
                         PDataType.TRUE_BYTES) == 0)
-                && scan.getAttribute(BaseScannerRegionObserver.PHOENIX_TTL) != null;
+                && scan.getAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL) != null;
     }
 
     public static boolean isEmptyColumn(Cell cell, byte[] emptyCF, byte[] emptyCQ) {
@@ -1158,14 +1199,14 @@ public class ScanUtil {
             IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(indexTable), phoenixConnection);
             scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
         }
-        scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
-        scan.setAttribute(BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME, dataTable.getPhysicalName().getBytes());
+        scan.setAttribute(BaseScannerRegionObserverConstants.CHECK_VERIFY_COLUMN, TRUE_BYTES);
+        scan.setAttribute(BaseScannerRegionObserverConstants.PHYSICAL_DATA_TABLE_NAME, dataTable.getPhysicalName().getBytes());
         IndexMaintainer indexMaintainer = indexTable.getIndexMaintainer(dataTable, phoenixConnection);
         byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
         byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
-        scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
-        scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
-        if (scan.getAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS) == null) {
+        scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
+        scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
+        if (scan.getAttribute(BaseScannerRegionObserverConstants.VIEW_CONSTANTS) == null) {
             BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
         }
         addEmptyColumnToScan(scan, emptyCF, emptyCQ);
@@ -1213,14 +1254,14 @@ public class ScanUtil {
                     table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
                             QueryConstants.EMPTY_COLUMN_BYTES :
                             table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
-            scan.setAttribute(BaseScannerRegionObserver.PHOENIX_TTL_SCAN_TABLE_NAME,
+            scan.setAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL_SCAN_TABLE_NAME,
                     Bytes.toBytes(tableName));
-            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
-            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
-            scan.setAttribute(BaseScannerRegionObserver.PHOENIX_TTL,
+            scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
+            scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
+            scan.setAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL,
                     Bytes.toBytes(Long.valueOf(dataTable.getPhoenixTTL())));
             if (!ScanUtil.isDeleteTTLExpiredRows(scan)) {
-                scan.setAttribute(BaseScannerRegionObserver.MASK_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
+                scan.setAttribute(BaseScannerRegionObserverConstants.MASK_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
             }
             if (ScanUtil.isLocalIndex(scan)) {
                 byte[] actualStartRow = scan.getAttribute(SCAN_ACTUAL_START_ROW) != null ?
@@ -1313,7 +1354,7 @@ public class ScanUtil {
      */
     private static long getPageSizeMs(Scan scan, double factor) {
         long pageSizeMs = Long.MAX_VALUE;
-        byte[] pageSizeMsBytes = scan.getAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS);
+        byte[] pageSizeMsBytes = scan.getAttribute(BaseScannerRegionObserverConstants.SERVER_PAGE_SIZE_MS);
         if (pageSizeMsBytes != null) {
             pageSizeMs = Bytes.toLong(pageSizeMsBytes);
             pageSizeMs = (long) (pageSizeMs * factor);

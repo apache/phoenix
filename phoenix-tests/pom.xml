@@ -1,0 +1,609 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.phoenix</groupId>
+    <artifactId>phoenix</artifactId>
+    <version>5.2.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>phoenix-tests</artifactId>
+  <name>Phoenix Tests</name>
+  <description>Phoenix Unit and Integration tests</description>
+
+  <properties>
+    <top.dir>${project.basedir}/..</top.dir>
+  </properties>
+
+  <build>
+    <plugins>
+      <!-- Add the ant-generated sources to the source path -->
+     <plugin>
+       <groupId>org.apache.maven.plugins</groupId>
+       <artifactId>maven-site-plugin</artifactId>
+     </plugin>
+     <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>prepare-package
+            </phase>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+            <configuration>
+              <archive>
+                <manifest>
+                  <mainClass>org.apache.phoenix.util.GeneratePerformanceData</mainClass>
+                </manifest>
+              </archive>
+            </configuration>
+          </execution>
+        </executions>
+        <configuration>
+          <!-- Exclude these 2 packages, because their dependency _binary_ files 
+            include the sources, and Maven 2.2 appears to add them to the sources to compile, 
+            weird -->
+          <excludes>
+            <exclude>org/apache/jute/**</exclude>
+            <exclude>org/apache/zookeeper/**</exclude>
+            <exclude>**/*.jsp</exclude>
+            <exclude>log4j.properties</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+          <configuration>
+            <ignoredUnusedDeclaredDependencies>
+<!--               <ignoredUnusedDeclaredDependency> -->
+<!--                 org.apache.omid:omid-hbase-shims-hbase2.x -->
+<!--               </ignoredUnusedDeclaredDependency> -->
+
+<!--               <ignoredUnusedDeclaredDependency> -->
+<!--                 org.apache.omid:omid-hbase-common-hbase2.x:jar -->
+<!--               </ignoredUnusedDeclaredDependency> -->
+
+              <ignoredUnusedDeclaredDependency>
+                org.apache.omid:omid-hbase-commit-table-hbase2.x
+              </ignoredUnusedDeclaredDependency>
+              <ignoredUnusedDeclaredDependency>
+                org.apache.omid:omid-timestamp-storage-hbase2.x
+              </ignoredUnusedDeclaredDependency>
+<!--               <ignoredUnusedDeclaredDependency> -->
+<!--                 org.slf4j:slf4j-log4j12 -->
+<!--               </ignoredUnusedDeclaredDependency> -->
+            </ignoredUnusedDeclaredDependencies>
+            <ignoredUsedUndeclaredDependencies>
+<!--               <ignoredUsedUndeclaredDependency> -->
+<!--                 dnsjava:dnsjava -->
+<!--               </ignoredUsedUndeclaredDependency> -->
+            </ignoredUsedUndeclaredDependencies>
+          </configuration>
+        <executions>
+          <execution>
+            <!-- generates the file that will be used by the sandbox script in the dev env -->
+            <id>create-phoenix-generated-classpath</id>
+            <goals>
+              <goal>build-classpath</goal>
+            </goals>
+            <configuration>
+              <outputFile>${project.build.directory}/cached_classpath.txt</outputFile>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.rat</groupId>
+        <artifactId>apache-rat-plugin</artifactId>
+        <configuration>
+          <excludes>
+            <exclude>src/main/java/org/apache/phoenix/coprocessor/generated/*.java</exclude>
+            <exclude>src/main/resources/META-INF/services/java.sql.Driver</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <dependencies>
+        <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-core</artifactId>
+    </dependency>
+        <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-coprocessors</artifactId>
+    </dependency>
+
+    <!-- Hadoop dependencies -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-auth</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-yarn-api</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs-client</artifactId>
+    </dependency>
+
+    <!-- Hadoop test dependencies -->
+<!--     <dependency> -->
+<!--       <groupId>org.apache.hadoop</groupId> -->
+<!--       <artifactId>hadoop-minikdc</artifactId> -->
+<!--       <scope>test</scope> -->
+<!--     </dependency> -->
+<!--     <dependency> -->
+<!--       <groupId>org.apache.hadoop</groupId> -->
+<!--       <artifactId>hadoop-hdfs</artifactId> -->
+<!--       <type>test-jar</type> -->
+<!--       <classifier>tests</classifier> -->
+<!--       <scope>test</scope> -->
+<!--     </dependency> -->
+
+    <!-- HBase dependencies -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-metrics-api</artifactId>
+    </dependency>
+<!--     <dependency> -->
+<!--       <groupId>org.apache.hbase</groupId> -->
+<!--       <artifactId>hbase-metrics</artifactId> -->
+<!--     </dependency> -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-protocol</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-protocol-shaded</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-client</artifactId>
+    </dependency>
+<!--     <dependency> -->
+<!--       <groupId>org.apache.hbase</groupId> -->
+<!--       <artifactId>hbase-hadoop-compat</artifactId> -->
+<!--     </dependency> -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-hadoop2-compat</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-zookeeper</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.hbase.thirdparty</groupId>
+      <artifactId>hbase-shaded-miscellaneous</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase.thirdparty</groupId>
+      <artifactId>hbase-shaded-protobuf</artifactId>
+    </dependency>
+
+    <!-- HBase test dependencies -->
+<!--     <dependency> -->
+<!--       <groupId>org.apache.hbase</groupId> -->
+<!--       <artifactId>hbase-it</artifactId> -->
+<!--       <type>test-jar</type> -->
+<!--       <scope>test</scope> -->
+<!--       FIXME remove me, only for finding references -->
+<!--       <exclusions> -->
+<!--         <exclusion> -->
+<!--           <groupId>org.apache.hbase</groupId> -->
+<!--           <artifactId>hbase-server</artifactId> -->
+<!--         </exclusion> -->
+<!--       </exclusions> -->
+<!--     </dependency> -->
+<!--     <dependency> -->
+<!--       <groupId>org.apache.hbase</groupId> -->
+<!--       <artifactId>hbase-common</artifactId> -->
+<!--       <type>test-jar</type> -->
+<!--       <scope>test</scope> -->
+<!--     </dependency> -->
+<!--     <dependency> -->
+<!--       <groupId>org.apache.hbase</groupId> -->
+<!--       <artifactId>hbase-server</artifactId> -->
+<!--       <type>test-jar</type> -->
+<!--       <scope>test</scope> -->
+<!--     </dependency> -->
+
+    <!-- Transaction dependencies -->
+    <!-- Omid dependencies -->
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-hbase-client-hbase2.x</artifactId>
+    </dependency>
+    <!-- FIXME move to phoenix-server jar -->
+<!--     <dependency> -->
+<!--       <groupId>org.apache.omid</groupId> -->
+<!--       <artifactId>omid-hbase-coprocessor-hbase2.x</artifactId> -->
+<!--     </dependency> -->
+
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-hbase-shims-hbase2.x</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-tso-server-hbase2.x</artifactId>
+    </dependency>
+        <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-tso-server-hbase2.x</artifactId>
+      <type>test-jar</type>
+    </dependency>
+    
+    
+<!--     <dependency> -->
+<!--       <groupId>org.apache.omid</groupId> -->
+<!--       <artifactId>omid-hbase-common-hbase2.x</artifactId> -->
+<!--     </dependency> -->
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-timestamp-storage-hbase2.x</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-hbase-commit-table-hbase2.x</artifactId>
+    </dependency>
+<!--     <dependency> -->
+<!--       <groupId>org.apache.omid</groupId> -->
+<!--       <artifactId>omid-common</artifactId> -->
+<!--     </dependency> -->
+    
+    
+    
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-transaction-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-commit-table</artifactId>
+    </dependency>
+
+    
+        <!-- HBase compat dependency -->
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
+    </dependency>
+    
+    <dependency>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
+      <artifactId>phoenix-shaded-guava</artifactId>
+    </dependency>
+    
+
+
+
+<!--         HBase test dependencies -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-it</artifactId>
+      <type>test-jar</type>
+
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-common</artifactId>
+      <type>test-jar</type>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
+    </dependency>
+
+
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
+      <type>test-jar</type>
+    </dependency>
+    
+        <!-- Hadoop test dependencies -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-minikdc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs</artifactId>
+      <type>test-jar</type>
+      <classifier>tests</classifier>
+    </dependency>
+
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+    </dependency>
+        <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.hamcrest</groupId>
+      <artifactId>hamcrest-core</artifactId>
+    </dependency>
+    
+        <!-- Other dependencies -->
+<!--     <dependency> -->
+<!--       <groupId>org.antlr</groupId> -->
+<!--       <artifactId>antlr-runtime</artifactId> -->
+<!--     </dependency> -->
+    <dependency>
+      <groupId>com.google.inject</groupId>
+      <artifactId>guice</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>joda-time</groupId>
+      <artifactId>joda-time</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.github.stephenc.findbugs</groupId>
+      <artifactId>findbugs-annotations</artifactId>
+    </dependency>
+<!--     <dependency> -->
+<!--       <groupId>com.github.stephenc.jcip</groupId> -->
+<!--       <artifactId>jcip-annotations</artifactId> -->
+<!--     </dependency> -->
+    <dependency>
+      <groupId>com.google.code.findbugs</groupId>
+      <artifactId>jsr305</artifactId>
+    </dependency>
+<!--     <dependency> -->
+<!--       <groupId>org.iq80.snappy</groupId> -->
+<!--       <artifactId>snappy</artifactId> -->
+<!--     </dependency> -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+<!--     <dependency> -->
+<!--       <groupId>com.fasterxml.jackson.core</groupId> -->
+<!--       <artifactId>jackson-annotations</artifactId> -->
+<!--     </dependency> -->
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.htrace</groupId>
+      <artifactId>htrace-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
+      <artifactId>phoenix-shaded-commons-cli</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>commons-codec</groupId>
+      <artifactId>commons-codec</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>commons-collections</groupId>
+      <artifactId>commons-collections</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-csv</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-lang3</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-configuration2</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+    </dependency>
+<!--     <dependency> -->
+<!--       <groupId>com.clearspring.analytics</groupId> -->
+<!--       <artifactId>stream</artifactId> -->
+<!--     </dependency> -->
+<!--     <dependency> -->
+<!--       <groupId>com.salesforce.i18n</groupId> -->
+<!--       <artifactId>i18n-util</artifactId> -->
+<!--     </dependency> -->
+<!--     <dependency> -->
+<!--       <groupId>com.lmax</groupId> -->
+<!--       <artifactId>disruptor</artifactId> -->
+<!--     </dependency> -->
+<!--     <dependency> -->
+<!--       <groupId>org.apache.zookeeper</groupId> -->
+<!--       <artifactId>zookeeper</artifactId> -->
+<!--     </dependency> -->
+<!--     <dependency> -->
+<!--       <groupId>org.jruby.joni</groupId> -->
+<!--       <artifactId>joni</artifactId> -->
+<!--     </dependency> -->
+<!--     <dependency> -->
+<!--       <groupId> org.jruby.jcodings</groupId> -->
+<!--       <artifactId>jcodings</artifactId> -->
+<!--     </dependency> -->
+  </dependencies>
+
+<profiles>
+  <profile>
+    <id>phoenix-hbase-compat-2.3.0</id>
+    <!-- keep dependency plugin happy -->
+    <activation>
+      <property>
+        <name>hbase.profile</name>
+        <value>2.3</value>
+      </property>
+    </activation>
+    <properties>
+      <hbase.profile>2.3</hbase.profile>
+    </properties>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper-jute</artifactId>
+      </dependency>
+    </dependencies>
+  </profile>
+  <profile>
+    <id>phoenix-hbase-compat-2.4.0</id>
+    <!-- keep dependency plugin happy -->
+    <activation>
+      <property>
+        <name>hbase.profile</name>
+        <value>2.4.0</value>
+      </property>
+    </activation>
+    <properties>
+      <hbase.profile>2.4.0</hbase.profile>
+    </properties>
+<!--     <dependencies> -->
+<!--       <dependency> -->
+<!--         <groupId>org.apache.zookeeper</groupId> -->
+<!--         <artifactId>zookeeper-jute</artifactId> -->
+<!--       </dependency> -->
+<!--     </dependencies> -->
+  </profile>
+  <profile>
+    <id>phoenix-hbase-compat-2.4.1</id>
+    <!-- keep dependency plugin happy -->
+    <activation>
+      <property>
+        <name>hbase.profile</name>
+        <value>2.4</value>
+      </property>
+    </activation>
+    <properties>
+      <hbase.profile>2.4</hbase.profile>
+    </properties>
+<!--     <dependencies> -->
+<!--       <dependency> -->
+<!--         <groupId>org.apache.zookeeper</groupId> -->
+<!--         <artifactId>zookeeper-jute</artifactId> -->
+<!--       </dependency> -->
+<!--     </dependencies> -->
+  </profile>
+  <profile>
+    <id>phoenix-hbase-compat-2.4.1-default</id>
+    <!-- keep dependency plugin happy -->
+    <activation>
+      <property>
+        <name>!hbase.profile</name>
+      </property>
+    </activation>
+    <properties>
+      <hbase.profile>2.4</hbase.profile>
+    </properties>
+<!--     <dependencies> -->
+<!--       <dependency> -->
+<!--         <groupId>org.apache.zookeeper</groupId> -->
+<!--         <artifactId>zookeeper-jute</artifactId> -->
+<!--       </dependency> -->
+<!--     </dependencies> -->
+  </profile>
+  <profile>
+    <id>exclude-tephra</id>
+    <activation>
+      <property>
+        <name>without.tephra</name>
+      </property>
+    </activation>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.tephra</groupId>
+        <artifactId>tephra-api</artifactId>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.tephra</groupId>
+        <artifactId>tephra-core-shaded</artifactId>
+        <scope>provided</scope>
+      </dependency>
+<!--       <dependency> -->
+<!--         <groupId>org.apache.tephra</groupId> -->
+<!--         <artifactId>tephra-hbase-compat-2.0</artifactId> -->
+<!--         <classifier>shaded</classifier> -->
+<!--         <scope>provided</scope> -->
+<!--       </dependency> -->
+    </dependencies>
+  </profile>
+  <profile>
+    <id>include-tephra</id>
+    <activation>
+      <property>
+        <name>!without.tephra</name>
+      </property>
+    </activation>
+    <dependencies>
+<!--       <dependency> -->
+<!--         <groupId>org.apache.tephra</groupId> -->
+<!--         <artifactId>tephra-api</artifactId> -->
+<!--       </dependency> -->
+      <dependency>
+        <groupId>org.apache.tephra</groupId>
+        <artifactId>tephra-core-shaded</artifactId>
+      </dependency>
+<!--       <dependency> -->
+<!--         <groupId>org.apache.tephra</groupId> -->
+<!--         <artifactId>tephra-hbase-compat-2.0</artifactId> -->
+<!--         <classifier>shaded</classifier> -->
+<!--       </dependency> -->
+    </dependencies>
+  </profile>
+</profiles>
+</project>

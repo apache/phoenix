@@ -41,7 +41,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 import org.apache.phoenix.util.TupleUtil;
 import org.iq80.snappy.Snappy;
@@ -176,7 +176,7 @@ public class HashCacheClient  {
                 dataOut.close();
             }
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         } finally {
             iterator.close();
         }

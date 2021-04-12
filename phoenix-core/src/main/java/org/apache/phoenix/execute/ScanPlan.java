@@ -40,7 +40,7 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.execute.visitor.ByteCountVisitor;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
@@ -122,7 +122,7 @@ public class ScanPlan extends BaseQueryPlan {
             for (OrderByExpression orderingCol : orderByExpressions) {
                 orderingCol.write(output);
             }
-            scan.setAttribute(BaseScannerRegionObserver.TOPN, stream.toByteArray());
+            scan.setAttribute(BaseScannerRegionObserverConstants.TOPN, stream.toByteArray());
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -279,7 +279,7 @@ public class ScanPlan extends BaseQueryPlan {
     @Override
     protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
         // Set any scan attributes before creating the scanner, as it will be too late afterwards
-        scan.setAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY, QueryConstants.TRUE);
+        scan.setAttribute(BaseScannerRegionObserverConstants.NON_AGGREGATE_QUERY, QueryConstants.TRUE);
         ResultIterator scanner;
         TableRef tableRef = this.getTableRef();
         PTable table = tableRef.getTable();

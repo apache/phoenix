@@ -32,7 +32,7 @@ import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
@@ -176,7 +176,7 @@ public class SerialIterators extends BaseResultIterators {
             while (index < scans.size()) {
                 Scan currentScan = scans.get(index++);
                 if (remainingOffset != null) {
-                    currentScan.setAttribute(BaseScannerRegionObserver.SCAN_OFFSET, PInteger.INSTANCE.toBytes(remainingOffset));
+                    currentScan.setAttribute(BaseScannerRegionObserverConstants.SCAN_OFFSET, PInteger.INSTANCE.toBytes(remainingOffset));
                 }
                 ScanMetricsHolder scanMetricsHolder =
                         ScanMetricsHolder.getInstance(readMetrics, tableName, currentScan,

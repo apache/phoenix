@@ -17,10 +17,9 @@
 package org.apache.phoenix.hbase.index.metrics;
 
 import org.apache.hadoop.hbase.metrics.BaseSource;
-import org.apache.phoenix.hbase.index.Indexer;
 
 /**
- * Interface for metrics about {@link Indexer}.
+ * Interface for metrics about {@link org.apache.phoenix.hbase.index.Indexer}.
  */
 public interface MetricsIndexerSource extends BaseSource {
   // Metrics2 and JMX constants

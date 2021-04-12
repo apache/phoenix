@@ -36,7 +36,6 @@ import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.builder.FatalIndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.builder.IndexBuildingFailureException;
@@ -55,6 +54,10 @@ import org.apache.phoenix.thirdparty.com.google.common.primitives.Longs;
  */
 public class IndexManagementUtil {
 
+    // Copied here to avoid depending on phoenix-server
+    /** Configuration key for the class to use when encoding cells in the WAL */
+    public static final String WAL_CELL_CODEC_CLASS_KEY = "hbase.regionserver.wal.codec";
+    
     private IndexManagementUtil() {
         // private ctor for util classes
     }
@@ -78,7 +81,7 @@ public class IndexManagementUtil {
             return false;
         }
     if (INDEX_WAL_EDIT_CODEC_CLASS_NAME.equals(conf
-        .get(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY, null))) {
+        .get(WAL_CELL_CODEC_CLASS_KEY, null))) {
             // its installed, and it can handle compression and non-compression cases
             return true;
         }
@@ -104,7 +107,7 @@ public class IndexManagementUtil {
         if (indexLogReaderName.equals(conf.get(HLOG_READER_IMPL_KEY, indexLogReaderName))) {
             if (conf.getBoolean(HConstants.ENABLE_WAL_COMPRESSION, false)) { throw new IllegalStateException(
                     "WAL Compression is only supported with " + codecClass
-            + ". You can install in hbase-site.xml, under " + WALCellCodec.WAL_CELL_CODEC_CLASS_KEY);
+            + ". You can install in hbase-site.xml, under " + WAL_CELL_CODEC_CLASS_KEY);
       }
         } else {
             throw new IllegalStateException(codecClass + " is not installed, but "

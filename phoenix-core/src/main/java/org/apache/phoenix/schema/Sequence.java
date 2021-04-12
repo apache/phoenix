@@ -44,7 +44,7 @@ import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.coprocessor.SequenceRegionObserver;
+import org.apache.phoenix.coprocessor.SequenceRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -298,8 +298,8 @@ public class Sequence {
         byte[] key = this.key.getKey();
         Append append = new Append(key);
         byte[] opBuf = new byte[] {(byte)MetaOp.RETURN_SEQUENCE.ordinal()};
-        append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, opBuf);
-        append.setAttribute(SequenceRegionObserver.CURRENT_VALUE_ATTRIB, PLong.INSTANCE.toBytes(value.nextValue));
+        append.setAttribute(SequenceRegionObserverConstants.OPERATION_ATTRIB, opBuf);
+        append.setAttribute(SequenceRegionObserverConstants.CURRENT_VALUE_ATTRIB, PLong.INSTANCE.toBytes(value.nextValue));
         Map<byte[], List<Cell>> familyMap = append.getFamilyCellMap();
         familyMap.put(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, Arrays.<Cell>asList(
         		PhoenixKeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, value.timestamp, PLong.INSTANCE.toBytes(value.currentValue)),
@@ -360,7 +360,7 @@ public class Sequence {
         // are returned with their current value
         try {
             inc.setTimeRange(MetaDataProtocol.MIN_TABLE_TIMESTAMP, timestamp);
-            inc.setAttribute(SequenceRegionObserver.NUM_TO_ALLOCATE, Bytes.toBytes(numToAllocate));
+            inc.setAttribute(SequenceRegionObserverConstants.NUM_TO_ALLOCATE, Bytes.toBytes(numToAllocate));
         } catch (IOException e) {
             throw new RuntimeException(e); // Impossible
         }
@@ -556,9 +556,9 @@ public class Sequence {
     public Append createSequence(long startWith, long incrementBy, long cacheSize, long timestamp, long minValue, long maxValue, boolean cycle) {
         byte[] key = this.key.getKey();
         Append append = new Append(key);
-        append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, new byte[] {(byte)MetaOp.CREATE_SEQUENCE.ordinal()});
+        append.setAttribute(SequenceRegionObserverConstants.OPERATION_ATTRIB, new byte[] {(byte)MetaOp.CREATE_SEQUENCE.ordinal()});
         if (timestamp != HConstants.LATEST_TIMESTAMP) {
-            append.setAttribute(SequenceRegionObserver.MAX_TIMERANGE_ATTRIB, Bytes.toBytes(timestamp));
+            append.setAttribute(SequenceRegionObserverConstants.MAX_TIMERANGE_ATTRIB, Bytes.toBytes(timestamp));
         }
         Map<byte[], List<Cell>> familyMap = append.getFamilyCellMap();
         byte[] startWithBuf = PLong.INSTANCE.toBytes(startWith);
@@ -595,9 +595,9 @@ public class Sequence {
     public Append dropSequence(long timestamp) {
         byte[] key =  this.key.getKey();
         Append append = new Append(key);
-        append.setAttribute(SequenceRegionObserver.OPERATION_ATTRIB, new byte[] {(byte)MetaOp.DROP_SEQUENCE.ordinal()});
+        append.setAttribute(SequenceRegionObserverConstants.OPERATION_ATTRIB, new byte[] {(byte)MetaOp.DROP_SEQUENCE.ordinal()});
         if (timestamp != HConstants.LATEST_TIMESTAMP) {
-            append.setAttribute(SequenceRegionObserver.MAX_TIMERANGE_ATTRIB, Bytes.toBytes(timestamp));
+            append.setAttribute(SequenceRegionObserverConstants.MAX_TIMERANGE_ATTRIB, Bytes.toBytes(timestamp));
         }
         Map<byte[], List<Cell>> familyMap = append.getFamilyCellMap();
         familyMap.put(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES, Arrays.<Cell>asList(

@@ -80,40 +80,40 @@ public class TransactionUtil {
     }
     
     // we resolve transactional tables at the txn read pointer
-	public static long getResolvedTimestamp(PhoenixConnection connection, boolean isTransactional, long defaultResolvedTimestamp) {
-		MutationState mutationState = connection.getMutationState();
-		Long scn = connection.getSCN();
-	    return scn != null ?  scn : (isTransactional && mutationState.isTransactionStarted()) ? convertToMilliseconds(mutationState.getInitialWritePointer()) : defaultResolvedTimestamp;
-	}
+    public static long getResolvedTimestamp(PhoenixConnection connection, boolean isTransactional, long defaultResolvedTimestamp) {
+        MutationState mutationState = connection.getMutationState();
+        Long scn = connection.getSCN();
+        return scn != null ?  scn : (isTransactional && mutationState.isTransactionStarted()) ? convertToMilliseconds(mutationState.getInitialWritePointer()) : defaultResolvedTimestamp;
+    }
 
-	public static long getResolvedTime(PhoenixConnection connection, MetaDataMutationResult result) {
-		PTable table = result.getTable();
-		boolean isTransactional = table!=null && table.isTransactional();
-		return getResolvedTimestamp(connection, isTransactional, result.getMutationTime());
-	}
+    public static long getResolvedTime(PhoenixConnection connection, MetaDataMutationResult result) {
+        PTable table = result.getTable();
+        boolean isTransactional = table!=null && table.isTransactional();
+        return getResolvedTimestamp(connection, isTransactional, result.getMutationTime());
+    }
 
-	public static long getResolvedTimestamp(PhoenixConnection connection, MetaDataMutationResult result) {
-		PTable table = result.getTable();
-		MutationState mutationState = connection.getMutationState();
-		boolean txInProgress = table != null && table.isTransactional() && mutationState.isTransactionStarted();
-		return  txInProgress ? convertToMilliseconds(mutationState.getInitialWritePointer()) : result.getMutationTime();
-	}
+    public static long getResolvedTimestamp(PhoenixConnection connection, MetaDataMutationResult result) {
+        PTable table = result.getTable();
+        MutationState mutationState = connection.getMutationState();
+        boolean txInProgress = table != null && table.isTransactional() && mutationState.isTransactionStarted();
+        return  txInProgress ? convertToMilliseconds(mutationState.getInitialWritePointer()) : result.getMutationTime();
+    }
 
-	public static Long getTableTimestamp(PhoenixConnection connection, boolean transactional, TransactionFactory.Provider provider) throws SQLException {
-		Long timestamp = null;
-		if (!transactional) {
-			return timestamp;
-		}
-		MutationState mutationState = connection.getMutationState();
-		if (!mutationState.isTransactionStarted()) {
-			mutationState.startTransaction(provider);
-		}
-		timestamp = convertToMilliseconds(mutationState.getInitialWritePointer());
-		return timestamp;
-	}
-	
+    public static Long getTableTimestamp(PhoenixConnection connection, boolean transactional, TransactionFactory.Provider provider) throws SQLException {
+        Long timestamp = null;
+        if (!transactional) {
+            return timestamp;
+        }
+        MutationState mutationState = connection.getMutationState();
+        if (!mutationState.isTransactionStarted()) {
+            mutationState.startTransaction(provider);
+        }
+        timestamp = convertToMilliseconds(mutationState.getInitialWritePointer());
+        return timestamp;
+    }
+    
     // Convert HBase Delete into Put so that it can be undone if transaction is rolled back
-	public static Mutation convertIfDelete(Mutation mutation) throws IOException {
+    public static Mutation convertIfDelete(Mutation mutation) throws IOException {
         if (mutation instanceof Delete) {
             Put deleteMarker = null;
             for (Map.Entry<byte[],List<Cell>> entry : mutation.getFamilyCellMap().entrySet()) {
@@ -152,5 +152,5 @@ public class TransactionUtil {
             }
         }
         return mutation;
-	}
+    }
 }

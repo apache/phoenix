@@ -58,7 +58,7 @@ import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ClientUtil;
 
 public class ScanningResultIterator implements ResultIterator {
     private final ResultScanner scanner;
@@ -167,7 +167,7 @@ public class ScanningResultIterator implements ResultIterator {
             // Need to create a new one if holding on to it (i.e. OrderedResultIterator)
             return new ResultTuple(result);
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         }
     }
 

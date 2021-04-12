@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.iterate;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants.SCAN_ACTUAL_START_ROW;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.CLOSED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.LOCK_NOT_ACQUIRED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.NOT_RENEWED;
@@ -46,7 +46,7 @@ import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.MutationState;
@@ -62,7 +62,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ClientUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -151,7 +151,7 @@ public class TableResultIterator implements ResultIterator {
                 pageSizeMs = (long) (plan.getContext().getConnection().getQueryServices().getProps()
                         .getLong(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT) * 0.5);
             }
-            scan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS, Bytes.toBytes(Long.valueOf(pageSizeMs)));
+            scan.setAttribute(BaseScannerRegionObserverConstants.SERVER_PAGE_SIZE_MS, Bytes.toBytes(Long.valueOf(pageSizeMs)));
         }
     }
 
@@ -167,7 +167,7 @@ public class TableResultIterator implements ResultIterator {
                     scanIterator = UNINITIALIZED_SCANNER;
                     htable.close();
                 } catch (IOException e) {
-                    throw ServerUtil.parseServerException(e);
+                    throw ClientUtil.parseServerException(e);
                 }
             }
         } finally {
@@ -189,7 +189,7 @@ public class TableResultIterator implements ResultIterator {
                 }
             } catch (SQLException e) {
                 try {
-                    throw ServerUtil.parseServerException(e);
+                    throw ClientUtil.parseServerException(e);
                 } catch(HashJoinCacheNotFoundException e1) {
                     if(ScanUtil.isNonAggregateScan(scan) && plan.getContext().getAggregationManager().isEmpty()) {
                         // For non aggregate queries if we get stale region boundary exception we can
@@ -225,7 +225,7 @@ public class TableResultIterator implements ResultIterator {
                             this.scanIterator = ((BaseQueryPlan) plan).iterator(caches, scanGrouper, newScan);
 
                         } catch (Exception ex) {
-                            throw ServerUtil.parseServerException(ex);
+                            throw ClientUtil.parseServerException(ex);
                         }
                         lastTuple = scanIterator.next();
                     } else {
@@ -252,7 +252,7 @@ public class TableResultIterator implements ResultIterator {
                             new ScanningResultIterator(htable.getScanner(scan), scan, scanMetricsHolder);
                 } catch (IOException e) {
                     Closeables.closeQuietly(htable);
-                    throw ServerUtil.parseServerException(e);
+                    throw ClientUtil.parseServerException(e);
                 }
             }
         } finally {

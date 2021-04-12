@@ -27,7 +27,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -80,7 +80,7 @@ public class PostDDLCompiler {
     public PostDDLCompiler(PhoenixConnection connection, Scan scan) {
         this.connection = connection;
         this.scan = scan;
-        scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
+        scan.setAttribute(BaseScannerRegionObserverConstants.UNGROUPED_AGG, QueryConstants.TRUE);
     }
 
     public MutationPlan compile(final List<TableRef> tableRefs, final byte[] emptyCF, final List<byte[]> projectCFs, final List<PColumn> deleteList,
@@ -198,14 +198,14 @@ public class PostDDLCompiler {
                     }
                     ScanUtil.setTimeRange(scan, scan.getTimeRange().getMin(), ts);
                     if (emptyCF != null) {
-                        scan.setAttribute(BaseScannerRegionObserver.EMPTY_CF, emptyCF);
-                        scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER, EncodedColumnsUtil.getEmptyKeyValueInfo(tableRef.getTable()).getFirst());
+                        scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_CF, emptyCF);
+                        scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER, EncodedColumnsUtil.getEmptyKeyValueInfo(tableRef.getTable()).getFirst());
                     }
                     ServerCache cache = null;
                     try {
                         if (deleteList != null) {
                             if (deleteList.isEmpty()) {
-                                scan.setAttribute(BaseScannerRegionObserver.DELETE_AGG, QueryConstants.TRUE);
+                                scan.setAttribute(BaseScannerRegionObserverConstants.DELETE_AGG, QueryConstants.TRUE);
                                 // In the case of a row deletion, add index metadata so mutable secondary indexing works
                                 /* TODO: we currently manually run a scan to delete the index data here
                                 ImmutableBytesWritable ptr = context.getTempPtr();
@@ -227,8 +227,8 @@ public class PostDDLCompiler {
                                 if (emptyCF == null) {
                                     scan.addColumn(column.getFamilyName().getBytes(), cq);
                                 }
-                                scan.setAttribute(BaseScannerRegionObserver.DELETE_CF, column.getFamilyName().getBytes());
-                                scan.setAttribute(BaseScannerRegionObserver.DELETE_CQ, cq);
+                                scan.setAttribute(BaseScannerRegionObserverConstants.DELETE_CF, column.getFamilyName().getBytes());
+                                scan.setAttribute(BaseScannerRegionObserverConstants.DELETE_CQ, cq);
                             }
                         }
                         List<byte[]> columnFamilies = Lists.newArrayListWithExpectedSize(tableRef.getTable().getColumnFamilies().size());

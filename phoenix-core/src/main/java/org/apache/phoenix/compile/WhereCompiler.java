@@ -34,7 +34,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.AndExpression;
@@ -291,11 +291,11 @@ public class WhereCompiler {
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
-                scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER, stream.toByteArray());
+                scan.setAttribute(BaseScannerRegionObserverConstants.LOCAL_INDEX_FILTER, stream.toByteArray());
 
                 // this is needed just for ExplainTable, since de-serializing an expression does not restore
                 // its display properties, and that cannot be changed, due to backwards compatibility
-                scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER_STR, Bytes.toBytes(whereClause.toString()));
+                scan.setAttribute(BaseScannerRegionObserverConstants.LOCAL_INDEX_FILTER_STR, Bytes.toBytes(whereClause.toString()));
             }
         } else if (whereClause != null && !ExpressionUtil.evaluatesToTrue(whereClause)) {
             Filter filter = null;

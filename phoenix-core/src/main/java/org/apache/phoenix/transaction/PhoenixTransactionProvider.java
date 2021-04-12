@@ -22,7 +22,6 @@ import java.sql.SQLException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
@@ -50,7 +49,6 @@ public interface PhoenixTransactionProvider {
     public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) throws SQLException;
 
     public PhoenixTransactionClient getTransactionClient(Configuration config, ConnectionInfo connectionInfo) throws SQLException;
-    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connectionInfo, int port) throws  SQLException;
     public String getCoprocessorClassName();
     public String getGCCoprocessorClassName();
 

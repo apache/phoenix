@@ -112,7 +112,7 @@ import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableRefFactory;
 import org.apache.phoenix.trace.util.Tracing;
-import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.transaction.TransactionFactory.Provider;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 
@@ -274,7 +274,7 @@ public class QueryServicesOptions {
     // We'll also need this for transactions to work correctly
     public static final boolean DEFAULT_AUTO_COMMIT = false;
     public static final boolean DEFAULT_TABLE_ISTRANSACTIONAL = false;
-    public static final String DEFAULT_TRANSACTION_PROVIDER = TransactionFactory.Provider.getDefault().name();
+    public static final String DEFAULT_TRANSACTION_PROVIDER = Provider.getDefault().name();
     public static final boolean DEFAULT_TRANSACTIONS_ENABLED = false;
     public static final boolean DEFAULT_IS_GLOBAL_METRICS_ENABLED = true;
     public static final String DEFAULT_CLIENT_METRICS_TAG = "FAT_CLIENT";
@@ -372,6 +372,12 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_LONG_VIEW_INDEX_ENABLED = false;
 
     public static final boolean DEFAULT_PENDING_MUTATIONS_DDL_THROW = false;
+
+    //Duplicated from CompatBaseScannerRegionObserver to break dependency on hbase-server
+    public static final int DEFAULT_PHOENIX_MAX_LOOKBACK_AGE = 0;
+
+    
+    
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
@@ -858,4 +864,12 @@ public class QueryServicesOptions {
     public static int getMetadataPriority(Configuration conf) {
         return conf.getInt(QueryServices.METADATA_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_METADATA_PRIORITY);
     }
+
+    //Duplicated from CompatBaseScannerRegionObserver
+    public static long getMaxLookbackInMillis(Configuration conf){
+        //config param is in seconds, switch to millis
+        return conf.getLong(QueryServices.PHOENIX_MAX_LOOKBACK_AGE_ATTRIB,
+            DEFAULT_PHOENIX_MAX_LOOKBACK_AGE) * 1000;
+    }
+
 }

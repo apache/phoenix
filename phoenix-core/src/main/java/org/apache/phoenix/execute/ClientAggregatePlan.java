@@ -36,7 +36,7 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.execute.visitor.AvgRowWidthVisitor;
 import org.apache.phoenix.execute.visitor.ByteCountVisitor;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
@@ -96,7 +96,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         // aggregators. We use the Configuration directly here to avoid the expense of creating
         // another one.
         this.serverAggregators = ServerAggregators.deserialize(context.getScan()
-                        .getAttribute(BaseScannerRegionObserver.AGGREGATORS), context.getConnection().getQueryServices().getConfiguration(), null);
+                        .getAttribute(BaseScannerRegionObserverConstants.AGGREGATORS), context.getConnection().getQueryServices().getConfiguration(), null);
 
         // Extract hash aggregate hint, if any.
         HintNode hints = statement.getHint();

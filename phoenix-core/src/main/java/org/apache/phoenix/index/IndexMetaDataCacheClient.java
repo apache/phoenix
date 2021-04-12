@@ -28,7 +28,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ScanRanges;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.join.MaxServerCacheSizeExceededException;
@@ -136,13 +136,13 @@ public class IndexMetaDataCacheClient {
             mutation.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
             if (attribValue != null) {
                 mutation.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, attribValue);
-                mutation.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION,
+                mutation.setAttribute(BaseScannerRegionObserverConstants.CLIENT_VERSION,
                         Bytes.toBytes(MetaDataProtocol.PHOENIX_VERSION));
                 if (txState.length > 0) {
-                    mutation.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+                    mutation.setAttribute(BaseScannerRegionObserverConstants.TX_STATE, txState);
                 }
             } else if (!hasIndexMetaData && txState.length > 0) {
-                mutation.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+                mutation.setAttribute(BaseScannerRegionObserverConstants.TX_STATE, txState);
             }
         }
         return cache;

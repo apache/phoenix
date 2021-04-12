@@ -194,9 +194,9 @@ public class QueryCompiler {
         if (scn == null) {
             return;
         }
-        long maxLookBackAgeInMillis =
-            CompatBaseScannerRegionObserver.getMaxLookbackInMillis(conn.getQueryServices().
-            getConfiguration());
+        long maxLookBackAgeInMillis = conn.getQueryServices().getConfiguration().
+                getLong(QueryServices.PHOENIX_MAX_LOOKBACK_AGE_ATTRIB,
+                        QueryServicesOptions.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE) * 1000;
         long now = EnvironmentEdgeManager.currentTimeMillis();
         if (maxLookBackAgeInMillis > 0 && now - maxLookBackAgeInMillis > scn){
             throw new SQLExceptionInfo.Builder(

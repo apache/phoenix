@@ -29,13 +29,12 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnNameTrackingExpressionCompiler;
-import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
+import org.apache.phoenix.coprocessor.MetaDataEndpointImplConstants;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.TableInfo;
 import org.apache.phoenix.coprocessor.WhereConstantParser;
@@ -91,116 +90,9 @@ public class ViewUtil {
 
     private static final Logger logger = LoggerFactory.getLogger(ViewUtil.class);
 
-    /**
-     * Find all the descendant views of a given table or view in a depth-first fashion.
-     * Note that apart from scanning the {@code parent->child } links, we also validate each view
-     * by trying to resolve it.
-     * Use {@link ViewUtil#findAllRelatives(Table, byte[], byte[], byte[], LinkType,
-     * TableViewFinderResult)} if you want to find other links and don't care about orphan results.
-     *
-     * @param sysCatOrsysChildLink Table corresponding to either SYSTEM.CATALOG or SYSTEM.CHILD_LINK
-     * @param serverSideConfig server-side configuration
-     * @param tenantId tenantId of the view (null if it is a table or global view)
-     * @param schemaName schema name of the table/view
-     * @param tableOrViewName name of the table/view
-     * @param clientTimeStamp client timestamp
-     * @param findJustOneLegitimateChildView if true, we are only interested in knowing if there is
-     *                                       at least one legitimate child view, so we return early.
-     *                                       If false, we want to find all legitimate child views
-     *                                       and all orphan views (views that no longer exist)
-     *                                       stemming from this table/view and all of its legitimate
-     *                                       child views.
-     *
-     * @return a Pair where the first element is a list of all legitimate child views (or just 1
-     * child view in case findJustOneLegitimateChildView is true) and where the second element is
-     * a list of all orphan views stemming from this table/view and all of its legitimate child
-     * views (in case findJustOneLegitimateChildView is true, this list will be incomplete since we
-     * are not interested in it anyhow)
-     *
-     * @throws IOException thrown if there is an error scanning SYSTEM.CHILD_LINK or SYSTEM.CATALOG
-     * @throws SQLException thrown if there is an error getting a connection to the server or an
-     * error retrieving the PTable for a child view
-     */
-    public static Pair<List<PTable>, List<TableInfo>> findAllDescendantViews(
-            Table sysCatOrsysChildLink, Configuration serverSideConfig, byte[] tenantId,
-            byte[] schemaName, byte[] tableOrViewName, long clientTimeStamp,
-            boolean findJustOneLegitimateChildView)
-            throws IOException, SQLException {
-        List<PTable> legitimateChildViews = new ArrayList<>();
-        List<TableInfo> orphanChildViews = new ArrayList<>();
 
-        findAllDescendantViews(sysCatOrsysChildLink, serverSideConfig, tenantId, schemaName,
-                tableOrViewName, clientTimeStamp, legitimateChildViews, orphanChildViews,
-                findJustOneLegitimateChildView);
-        return new Pair<>(legitimateChildViews, orphanChildViews);
-    }
 
-    private static void findAllDescendantViews(Table sysCatOrsysChildLink,
-            Configuration serverSideConfig, byte[] parentTenantId, byte[] parentSchemaName,
-            byte[] parentTableOrViewName, long clientTimeStamp, List<PTable> legitimateChildViews,
-            List<TableInfo> orphanChildViews, boolean findJustOneLegitimateChildView)
-            throws IOException, SQLException {
-        TableViewFinderResult currentResult =
-                findImmediateRelatedViews(sysCatOrsysChildLink, parentTenantId, parentSchemaName,
-                        parentTableOrViewName, LinkType.CHILD_TABLE, clientTimeStamp);
-        for (TableInfo viewInfo : currentResult.getLinks()) {
-            byte[] viewTenantId = viewInfo.getTenantId();
-            byte[] viewSchemaName = viewInfo.getSchemaName();
-            byte[] viewName = viewInfo.getTableName();
-            PTable view;
-            Properties props = new Properties();
-            if (viewTenantId != null) {
-                props.setProperty(TENANT_ID_ATTRIB, Bytes.toString(viewTenantId));
-            }
-            if (clientTimeStamp != HConstants.LATEST_TIMESTAMP) {
-                props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(clientTimeStamp));
-            }
-            try (PhoenixConnection connection =
-                    QueryUtil.getConnectionOnServer(props, serverSideConfig)
-                            .unwrap(PhoenixConnection.class)) {
-                try {
-                    view = PhoenixRuntime.getTableNoCache(connection,
-                            SchemaUtil.getTableName(viewSchemaName, viewName));
-                } catch (TableNotFoundException ex) {
-                    logger.error("Found an orphan parent->child link keyed by this parent."
-                            + " Parent Tenant Id: '" + Bytes.toString(parentTenantId)
-                            + "'. Parent Schema Name: '" + Bytes.toString(parentSchemaName)
-                            + "'. Parent Table/View Name: '" + Bytes.toString(parentTableOrViewName)
-                            + "'. The child view which could not be resolved has ViewInfo: '"
-                            + viewInfo + "'.", ex);
-                    orphanChildViews.add(viewInfo);
-                    // Prune orphan branches
-                    continue;
-                }
-
-                if (isLegitimateChildView(view, parentSchemaName, parentTableOrViewName)) {
-                    legitimateChildViews.add(view);
-                    // return early since we're only interested in knowing if there is at least one
-                    // valid child view
-                    if (findJustOneLegitimateChildView) {
-                        break;
-                    }
-                    // Note that we only explore this branch if the current view is a legitimate
-                    // child view, else we ignore it and move on to the next potential child view
-                    findAllDescendantViews(sysCatOrsysChildLink, serverSideConfig,
-                            viewInfo.getTenantId(), viewInfo.getSchemaName(),
-                            viewInfo.getTableName(), clientTimeStamp, legitimateChildViews,
-                            orphanChildViews, findJustOneLegitimateChildView);
-                } else {
-                    logger.error("Found an orphan parent->child link keyed by this parent."
-                            + " Parent Tenant Id: '" + Bytes.toString(parentTenantId)
-                            + "'. Parent Schema Name: '" + Bytes.toString(parentSchemaName)
-                            + "'. Parent Table/View Name: '" + Bytes.toString(parentTableOrViewName)
-                            + "'. There currently exists a legitimate view of the same name which"
-                            + " is not a descendant of this table/view. View Info: '" + viewInfo
-                            + "'. Ignoring this view and not counting it as a child view.");
-                    // Prune unrelated view branches left around due to orphan parent->child links
-                }
-            }
-        }
-    }
-
-    private static boolean isLegitimateChildView(PTable view, byte[] parentSchemaName,
+    protected static boolean isLegitimateChildView(PTable view, byte[] parentSchemaName,
             byte[] parentTableOrViewName) {
         return view != null && view.getParentSchemaName() != null &&
                 view.getParentTableName() != null &&
@@ -208,93 +100,7 @@ public class ViewUtil {
                         Arrays.equals(view.getParentTableName().getBytes(), parentTableOrViewName));
     }
 
-    /**
-     * Returns relatives in a breadth-first fashion. Note that this is not resilient to orphan
-     * linking rows and we also do not try to resolve any of the views to ensure they are valid.
-     * Use {@link ViewUtil#findAllDescendantViews(Table, Configuration, byte[], byte[], byte[],
-     * long, boolean)} if you are only interested in {@link LinkType#CHILD_TABLE} and need to be
-     * resilient to orphan linking rows.
-     *
-     * @param sysCatOrsysChildLink Table corresponding to either SYSTEM.CATALOG or SYSTEM.CHILD_LINK
-     * @param tenantId tenantId of the key (null if it is a table or global view)
-     * @param schema schema name to use in the key
-     * @param table table/view name to use in the key
-     * @param linkType link type
-     * @param result containing all linked entities
-     *
-     * @throws IOException thrown if there is an error scanning SYSTEM.CHILD_LINK or SYSTEM.CATALOG
-     */
-    public static void findAllRelatives(Table sysCatOrsysChildLink, byte[] tenantId, byte[] schema,
-            byte[] table, PTable.LinkType linkType, TableViewFinderResult result)
-            throws IOException {
-        findAllRelatives(sysCatOrsysChildLink, tenantId, schema, table, linkType,
-                HConstants.LATEST_TIMESTAMP, result);
-    }
 
-    private static void findAllRelatives(Table sysCatOrsysChildLink, byte[] tenantId, byte[] schema,
-            byte[] table, PTable.LinkType linkType, long timestamp, TableViewFinderResult result)
-            throws IOException {
-        TableViewFinderResult currentResult = findImmediateRelatedViews(sysCatOrsysChildLink,
-                tenantId, schema, table, linkType, timestamp);
-        result.addResult(currentResult);
-        for (TableInfo viewInfo : currentResult.getLinks()) {
-            findAllRelatives(sysCatOrsysChildLink, viewInfo.getTenantId(), viewInfo.getSchemaName(),
-                    viewInfo.getTableName(), linkType, timestamp, result);
-        }
-    }
-
-    /**
-     * Runs a scan on SYSTEM.CATALOG or SYSTEM.CHILD_LINK to get the immediate related tables/views.
-     */
-    private static TableViewFinderResult findImmediateRelatedViews(Table sysCatOrsysChildLink,
-            byte[] tenantId, byte[] schema, byte[] table, PTable.LinkType linkType, long timestamp)
-            throws IOException {
-        if (linkType==PTable.LinkType.INDEX_TABLE || linkType==PTable.LinkType.EXCLUDED_COLUMN) {
-            throw new IllegalArgumentException("findAllRelatives does not support link type "
-                    + linkType);
-        }
-        byte[] key = SchemaUtil.getTableKey(tenantId, schema, table);
-		Scan scan = MetaDataUtil.newTableRowsScan(key, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                timestamp);
-        SingleColumnValueFilter linkFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES,
-                LINK_TYPE_BYTES, CompareFilter.CompareOp.EQUAL,
-                linkType.getSerializedValueAsByteArray());
-        linkFilter.setFilterIfMissing(true);
-        scan.setFilter(linkFilter);
-        scan.addColumn(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
-        if (linkType==PTable.LinkType.PARENT_TABLE)
-            scan.addColumn(TABLE_FAMILY_BYTES, PARENT_TENANT_ID_BYTES);
-        if (linkType==PTable.LinkType.PHYSICAL_TABLE)
-            scan.addColumn(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
-        List<TableInfo> tableInfoList = Lists.newArrayList();
-        try (ResultScanner scanner = sysCatOrsysChildLink.getScanner(scan))  {
-            for (Result result = scanner.next(); (result != null); result = scanner.next()) {
-                byte[][] rowKeyMetaData = new byte[5][];
-                byte[] viewTenantId = null;
-                getVarChars(result.getRow(), 5, rowKeyMetaData);
-                if (linkType==PTable.LinkType.PARENT_TABLE) {
-                    viewTenantId = result.getValue(TABLE_FAMILY_BYTES, PARENT_TENANT_ID_BYTES);
-                } else if (linkType==PTable.LinkType.CHILD_TABLE) {
-                    viewTenantId = rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
-                } else if (linkType==PTable.LinkType.VIEW_INDEX_PARENT_TABLE) {
-                    viewTenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
-                } 
-                else if (linkType==PTable.LinkType.PHYSICAL_TABLE &&
-                        result.getValue(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES)!=null) {
-                    // do not links from indexes to their physical table
-                    continue;
-                }
-                byte[] viewSchemaName = SchemaUtil.getSchemaNameFromFullName(
-                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
-                        .getBytes(StandardCharsets.UTF_8);
-                byte[] viewName = SchemaUtil.getTableNameFromFullName(
-                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
-                        .getBytes(StandardCharsets.UTF_8);
-                tableInfoList.add(new TableInfo(viewTenantId, viewSchemaName, viewName));
-            }
-            return new TableViewFinderResult(tableInfoList);
-        } 
-    }
     
     /**
      * Check metadata to find if a given table/view has any immediate child views. Note that this
@@ -334,105 +140,6 @@ public class ViewUtil {
         }
     }
 
-    /**
-     * Attempt to drop an orphan child view i.e. a child view for which we see a
-     * {@code parent->child } entry
-     * in SYSTEM.CHILD_LINK/SYSTEM.CATALOG (as a child) but for whom the parent no longer exists.
-     * @param env Region Coprocessor environment
-     * @param tenantIdBytes tenantId of the parent
-     * @param schemaName schema of the parent
-     * @param tableOrViewName parent table/view name
-     * @param sysCatOrSysChildLink SYSTEM.CATALOG or SYSTEM.CHILD_LINK which is used to find the
-     *                             {@code parent->child } linking rows
-     * @throws IOException thrown if there is an error scanning SYSTEM.CHILD_LINK or SYSTEM.CATALOG
-     * @throws SQLException thrown if there is an error getting a connection to the server or
-     * an error retrieving the PTable for a child view
-     */
-    public static void dropChildViews(RegionCoprocessorEnvironment env, byte[] tenantIdBytes,
-            byte[] schemaName, byte[] tableOrViewName, byte[] sysCatOrSysChildLink)
-            throws IOException, SQLException {
-        Table hTable = null;
-        try {
-            hTable = ServerUtil.getHTableForCoprocessorScan(env, SchemaUtil.getPhysicalTableName(
-                            sysCatOrSysChildLink, env.getConfiguration()));
-        } catch (Exception e){
-            logger.error("ServerUtil.getHTableForCoprocessorScan error!", e);
-        }
-        // if the SYSTEM.CATALOG or SYSTEM.CHILD_LINK doesn't exist just return
-        if (hTable==null) {
-            return;
-        }
-
-        TableViewFinderResult childViewsResult;
-        try {
-            childViewsResult = findImmediateRelatedViews(
-                    hTable,
-                    tenantIdBytes,
-                    schemaName,
-                    tableOrViewName,
-                    LinkType.CHILD_TABLE,
-                    HConstants.LATEST_TIMESTAMP);
-        } finally {
-            hTable.close();
-        }
-
-        for (TableInfo viewInfo : childViewsResult.getLinks()) {
-            byte[] viewTenantId = viewInfo.getTenantId();
-            byte[] viewSchemaName = viewInfo.getSchemaName();
-            byte[] viewName = viewInfo.getTableName();
-            if (logger.isDebugEnabled()) {
-                logger.debug("dropChildViews : " + Bytes.toString(schemaName) + "."
-                        + Bytes.toString(tableOrViewName) + " -> "
-                        + Bytes.toString(viewSchemaName) + "." + Bytes.toString(viewName)
-                        + "with tenant id :" + Bytes.toString(viewTenantId));
-            }
-            Properties props = new Properties();
-            PTable view = null;
-            if (viewTenantId != null && viewTenantId.length != 0)
-                props.setProperty(TENANT_ID_ATTRIB, Bytes.toString(viewTenantId));
-            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(props,
-                    env.getConfiguration()).unwrap(PhoenixConnection.class)) {
-                try {
-                    // Ensure that the view to be dropped has some ancestor that no longer exists
-                    // (and thus will throw a TableNotFoundException). Otherwise, if we are looking
-                    // at an orphan parent->child link, then the view might actually be a legitimate
-                    // child view on another table/view and we should obviously not drop it
-                    view = PhoenixRuntime.getTableNoCache(connection,
-                            SchemaUtil.getTableName(viewSchemaName, viewName));
-                } catch (TableNotFoundException expected) {
-                    // Expected for an orphan view since some ancestor was dropped earlier
-                    logger.info("Found an expected orphan parent->child link keyed by the parent."
-                            + " Parent Tenant Id: '" + Bytes.toString(tenantIdBytes)
-                            + "'. Parent Schema Name: '" + Bytes.toString(schemaName)
-                            + "'. Parent Table/View Name: '" + Bytes.toString(tableOrViewName)
-                            + "'. Will attempt to drop this child view with ViewInfo: '"
-                            + viewInfo + "'.");
-                }
-                if (view != null) {
-                    logger.error("Found an orphan parent->child link keyed by this parent or"
-                            + " its descendant. Parent Tenant Id: '" + Bytes.toString(tenantIdBytes)
-                            + "'. Parent Schema Name: '" + Bytes.toString(schemaName)
-                            + "'. Parent Table/View Name: '" + Bytes.toString(tableOrViewName)
-                            + "'. There currently exists a legitimate view of the same name whose"
-                            + " parent hierarchy exists. View Info: '" + viewInfo
-                            + "'. Ignoring this view and not attempting to drop it.");
-                    continue;
-                }
-
-                MetaDataClient client = new MetaDataClient(connection);
-                org.apache.phoenix.parse.TableName viewTableName =
-                        org.apache.phoenix.parse.TableName.create(Bytes.toString(viewSchemaName),
-                                Bytes.toString(viewName));
-                try {
-                    client.dropTable(new DropTableStatement(viewTableName, PTableType.VIEW, true,
-                            true, true));
-                } catch (TableNotFoundException e) {
-                    logger.info("Ignoring view " + viewTableName
-                            + " as it has already been dropped");
-                }
-            }
-        }
-    }
 
 
     /**
@@ -884,21 +591,112 @@ public class ViewUtil {
                         PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY_BYTES,
                         extendedCellBuilder,
                         parentUpdateCacheFreqBytes,
-                        MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
+                        MetaDataEndpointImplConstants.VIEW_MODIFIED_PROPERTY_BYTES);
                 MetaDataUtil.conditionallyAddTagsToPutCells((Put)m,
                         PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION_BYTES,
                         extendedCellBuilder,
                         parentUseStatsForParallelizationBytes,
-                        MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
+                        MetaDataEndpointImplConstants.VIEW_MODIFIED_PROPERTY_BYTES);
                 MetaDataUtil.conditionallyAddTagsToPutCells((Put)m,
                         PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES,
                         extendedCellBuilder,
                         parentPhoenixTTLBytes,
-                        MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
+                        MetaDataEndpointImplConstants.VIEW_MODIFIED_PROPERTY_BYTES);
             }
 
         }
+    }
+    
+    
+    private static void findAllRelatives(Table sysCatOrsysChildLink, byte[] tenantId, byte[] schema,
+            byte[] table, PTable.LinkType linkType, long timestamp, TableViewFinderResult result)
+            throws IOException {
+        TableViewFinderResult currentResult = findImmediateRelatedViews(sysCatOrsysChildLink,
+                tenantId, schema, table, linkType, timestamp);
+        result.addResult(currentResult);
+        for (TableInfo viewInfo : currentResult.getLinks()) {
+            findAllRelatives(sysCatOrsysChildLink, viewInfo.getTenantId(), viewInfo.getSchemaName(),
+                    viewInfo.getTableName(), linkType, timestamp, result);
+        }
+    }
+    
+
+    
+    /**
+     * Returns relatives in a breadth-first fashion. Note that this is not resilient to orphan
+     * linking rows and we also do not try to resolve any of the views to ensure they are valid.
+     * Use {@link ViewUtil#findAllDescendantViews(Table, Configuration, byte[], byte[], byte[],
+     * long, boolean)} if you are only interested in {@link LinkType#CHILD_TABLE} and need to be
+     * resilient to orphan linking rows.
+     *
+     * @param sysCatOrsysChildLink Table corresponding to either SYSTEM.CATALOG or SYSTEM.CHILD_LINK
+     * @param tenantId tenantId of the key (null if it is a table or global view)
+     * @param schema schema name to use in the key
+     * @param table table/view name to use in the key
+     * @param linkType link type
+     * @param result containing all linked entities
+     *
+     * @throws IOException thrown if there is an error scanning SYSTEM.CHILD_LINK or SYSTEM.CATALOG
+     */
+    public static void findAllRelatives(Table sysCatOrsysChildLink, byte[] tenantId, byte[] schema,
+            byte[] table, PTable.LinkType linkType, TableViewFinderResult result)
+            throws IOException {
+        findAllRelatives(sysCatOrsysChildLink, tenantId, schema, table, linkType,
+                HConstants.LATEST_TIMESTAMP, result);
+    }
+
+    /**
+     * Runs a scan on SYSTEM.CATALOG or SYSTEM.CHILD_LINK to get the immediate related tables/views.
+     */
+    protected static TableViewFinderResult findImmediateRelatedViews(Table sysCatOrsysChildLink,
+            byte[] tenantId, byte[] schema, byte[] table, PTable.LinkType linkType, long timestamp)
+            throws IOException {
+        if (linkType==PTable.LinkType.INDEX_TABLE || linkType==PTable.LinkType.EXCLUDED_COLUMN) {
+            throw new IllegalArgumentException("findAllRelatives does not support link type "
+                    + linkType);
+        }
+        byte[] key = SchemaUtil.getTableKey(tenantId, schema, table);
+        Scan scan = MetaDataUtil.newTableRowsScan(key, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                timestamp);
+        SingleColumnValueFilter linkFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES,
+                LINK_TYPE_BYTES, CompareFilter.CompareOp.EQUAL,
+                linkType.getSerializedValueAsByteArray());
+        linkFilter.setFilterIfMissing(true);
+        scan.setFilter(linkFilter);
+        scan.addColumn(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
+        if (linkType==PTable.LinkType.PARENT_TABLE)
+            scan.addColumn(TABLE_FAMILY_BYTES, PARENT_TENANT_ID_BYTES);
+        if (linkType==PTable.LinkType.PHYSICAL_TABLE)
+            scan.addColumn(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
+        List<TableInfo> tableInfoList = Lists.newArrayList();
+        try (ResultScanner scanner = sysCatOrsysChildLink.getScanner(scan))  {
+            for (Result result = scanner.next(); (result != null); result = scanner.next()) {
+                byte[][] rowKeyMetaData = new byte[5][];
+                byte[] viewTenantId = null;
+                getVarChars(result.getRow(), 5, rowKeyMetaData);
+                if (linkType==PTable.LinkType.PARENT_TABLE) {
+                    viewTenantId = result.getValue(TABLE_FAMILY_BYTES, PARENT_TENANT_ID_BYTES);
+                } else if (linkType==PTable.LinkType.CHILD_TABLE) {
+                    viewTenantId = rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
+                } else if (linkType==PTable.LinkType.VIEW_INDEX_PARENT_TABLE) {
+                    viewTenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
+                } 
+                else if (linkType==PTable.LinkType.PHYSICAL_TABLE &&
+                        result.getValue(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES)!=null) {
+                    // do not links from indexes to their physical table
+                    continue;
+                }
+                byte[] viewSchemaName = SchemaUtil.getSchemaNameFromFullName(
+                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
+                        .getBytes(StandardCharsets.UTF_8);
+                byte[] viewName = SchemaUtil.getTableNameFromFullName(
+                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
+                        .getBytes(StandardCharsets.UTF_8);
+                tableInfoList.add(new TableInfo(viewTenantId, viewSchemaName, viewName));
+            }
+            return new TableViewFinderResult(tableInfoList);
+        } 
     }
 }

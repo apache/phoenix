@@ -20,10 +20,9 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.List;
 
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ClientUtil;
 
 
 /**
@@ -62,7 +61,7 @@ public class ConcatResultIterator implements PeekingResultIterator {
                 resultIterators.close();
             }
         } catch (Exception e) {
-           toThrow = ServerUtil.parseServerException(e);
+           toThrow = ClientUtil.parseServerException(e);
         } finally {
             try {
                 if (iterators != null) {
@@ -72,9 +71,9 @@ public class ConcatResultIterator implements PeekingResultIterator {
                             iterator.close();
                         } catch (Exception e) {
                             if (toThrow == null) {
-                                toThrow = ServerUtil.parseServerException(e);
+                                toThrow = ClientUtil.parseServerException(e);
                             } else {
-                                toThrow.setNextException(ServerUtil.parseServerException(e));
+                                toThrow.setNextException(ClientUtil.parseServerException(e));
                             }
                         }
                     }

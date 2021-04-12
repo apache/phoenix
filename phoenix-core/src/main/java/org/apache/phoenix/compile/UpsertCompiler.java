@@ -45,9 +45,9 @@ import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
+import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserverConstants;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -61,7 +61,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.index.PhoenixIndexBuilder;
+import org.apache.phoenix.index.PhoenixIndexBuilderStatic;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -793,8 +793,8 @@ public class UpsertCompiler {
                      */
                     final StatementContext context = queryPlan.getContext();
                     final Scan scan = context.getScan();
-                    scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE, UngroupedAggregateRegionObserver.serialize(projectedTable));
-                    scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS, UngroupedAggregateRegionObserver.serialize(projectedExpressions));
+                    scan.setAttribute(BaseScannerRegionObserverConstants.UPSERT_SELECT_TABLE, UngroupedAggregateRegionObserverConstants.serialize(projectedTable));
+                    scan.setAttribute(BaseScannerRegionObserverConstants.UPSERT_SELECT_EXPRS, UngroupedAggregateRegionObserverConstants.serialize(projectedExpressions));
                     // Ignore order by - it has no impact
                     final QueryPlan aggPlan = new AggregatePlan(context, select, statementContext.getCurrentTable(), aggProjector, null,null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null, originalQueryPlan);
                     return new ServerUpsertSelectMutationPlan(queryPlan, tableRef, originalQueryPlan, context, connection, scan, aggPlan, aggProjector, maxSize, maxSizeBytes);
@@ -871,7 +871,7 @@ public class UpsertCompiler {
                 .build().buildException();
             }
             if (onDupKeyPairs.isEmpty()) { // ON DUPLICATE KEY IGNORE
-                onDupKeyBytesToBe = PhoenixIndexBuilder.serializeOnDupKeyIgnore();
+                onDupKeyBytesToBe = PhoenixIndexBuilderStatic.serializeOnDupKeyIgnore();
             } else {                       // ON DUPLICATE KEY UPDATE;
                 int position = table.getBucketNum() == null ? 0 : 1;
                 UpdateColumnCompiler compiler = new UpdateColumnCompiler(context);
@@ -925,7 +925,7 @@ public class UpsertCompiler {
                 }
                 PTable onDupKeyTable = PTableImpl.builderWithColumns(table, updateColumns)
                         .build();
-                onDupKeyBytesToBe = PhoenixIndexBuilder.serializeOnDupKeyUpdate(onDupKeyTable, updateExpressions);
+                onDupKeyBytesToBe = PhoenixIndexBuilderStatic.serializeOnDupKeyUpdate(onDupKeyTable, updateExpressions);
             }
         }
         final byte[] onDupKeyBytes = onDupKeyBytesToBe;
@@ -1114,7 +1114,7 @@ public class UpsertCompiler {
             ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
             if (aggPlan.getTableRef().getTable().isTransactional() 
                     || (table.getType() == PTableType.INDEX && table.isTransactional())) {
-                scan.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+                scan.setAttribute(BaseScannerRegionObserverConstants.TX_STATE, txState);
             }
             if (ptr.getLength() > 0) {
                 byte[] uuidValue = ServerCacheClient.generateId();

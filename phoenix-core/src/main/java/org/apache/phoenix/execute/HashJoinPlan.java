@@ -89,7 +89,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ClientUtil;
 
 public class HashJoinPlan extends DelegateQueryPlan {
     private static final Logger LOGGER = LoggerFactory.getLogger(HashJoinPlan.class);
@@ -269,7 +269,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
             peeking.peek();
         } catch (Exception e) {
             try {
-                throw ServerUtil.parseServerException(e);
+                throw ClientUtil.parseServerException(e);
             } catch (HashJoinCacheNotFoundException e2) {
                 Long cacheId = e2.getCacheId();
                 if (delegate.getContext().getRetryingPersistentCache(cacheId)) {

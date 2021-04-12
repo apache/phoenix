@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.execute;
 
-import static org.apache.phoenix.coprocessor.ScanRegionObserver.WILDCARD_SCAN_INCLUDES_DYNAMIC_COLUMNS;
-import static org.apache.phoenix.coprocessor.ScanRegionObserver.DYN_COLS_METADATA_CELL_QUALIFIER;
+import static org.apache.phoenix.coprocessor.ScanRegionObserverConstants.WILDCARD_SCAN_INCLUDES_DYNAMIC_COLUMNS;
+import static org.apache.phoenix.coprocessor.ScanRegionObserverConstants.DYN_COLS_METADATA_CELL_QUALIFIER;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_QUALIFIER;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;

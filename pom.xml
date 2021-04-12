@@ -46,6 +46,7 @@
     <module>phoenix-hbase-compat-2.2.5</module>
     <module>phoenix-hbase-compat-2.1.6</module>
     <module>phoenix-core</module>
+    <module>phoenix-coprocessors</module>
     <module>phoenix-pherf</module>
     <module>phoenix-client-parent</module>
     <module>phoenix-client-parent/phoenix-client</module>
@@ -53,8 +54,9 @@
     are added in the corresponding profiles -->
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
-    <module>phoenix-tools</module>
+<!--     <module>phoenix-tools</module> -->
     <module>phoenix-tracing-webapp</module>
+    <module>phoenix-tests</module>
   </modules>
 
   <repositories>
@@ -358,28 +360,28 @@
         <plugin>
           <artifactId>maven-dependency-plugin</artifactId>
           <configuration>
-              <ignoredUnusedDeclaredDependencies>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.omid:omid-hbase-shims-hbase2.x
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.omid:omid-hbase-common-hbase2.x:jar
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.omid:omid-hbase-commit-table-hbase2.x
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.omid:omid-timestamp-storage-hbase2.x
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.slf4j:slf4j-log4j12
-                </ignoredUnusedDeclaredDependency>
-              </ignoredUnusedDeclaredDependencies>
-              <ignoredUsedUndeclaredDependencies>
-                <ignoredUsedUndeclaredDependency>
-                  dnsjava:dnsjava
-                </ignoredUsedUndeclaredDependency>
-              </ignoredUsedUndeclaredDependencies>
+<!--               <ignoredUnusedDeclaredDependencies> -->
+<!--                 <ignoredUnusedDeclaredDependency> -->
+<!--                   org.apache.omid:omid-hbase-shims-hbase2.x -->
+<!--                 </ignoredUnusedDeclaredDependency> -->
+<!--                 <ignoredUnusedDeclaredDependency> -->
+<!--                   org.apache.omid:omid-hbase-common-hbase2.x:jar -->
+<!--                 </ignoredUnusedDeclaredDependency> -->
+<!--                 <ignoredUnusedDeclaredDependency> -->
+<!--                   org.apache.omid:omid-hbase-commit-table-hbase2.x -->
+<!--                 </ignoredUnusedDeclaredDependency> -->
+<!--                 <ignoredUnusedDeclaredDependency> -->
+<!--                   org.apache.omid:omid-timestamp-storage-hbase2.x -->
+<!--                 </ignoredUnusedDeclaredDependency> -->
+<!--                 <ignoredUnusedDeclaredDependency> -->
+<!--                   org.slf4j:slf4j-log4j12 -->
+<!--                 </ignoredUnusedDeclaredDependency> -->
+<!--               </ignoredUnusedDeclaredDependencies> -->
+<!--               <ignoredUsedUndeclaredDependencies> -->
+<!--                 <ignoredUsedUndeclaredDependency> -->
+<!--                   dnsjava:dnsjava -->
+<!--                 </ignoredUsedUndeclaredDependency> -->
+<!--               </ignoredUsedUndeclaredDependencies> -->
             </configuration>
           <executions>
             <execution>
@@ -613,6 +615,17 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-core</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-coprocessors</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-tests</artifactId>
+        <type>test-jar</type>
         <version>${project.version}</version>
       </dependency>
       <dependency>

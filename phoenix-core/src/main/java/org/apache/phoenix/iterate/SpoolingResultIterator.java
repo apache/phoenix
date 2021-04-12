@@ -52,7 +52,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ResultUtil;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.TupleUtil;
 
 /**
@@ -166,7 +166,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
             }
             success = true;
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         } finally {
             try {
                 scanner.close();
@@ -331,7 +331,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                 init();
                 return next;
             } catch (IOException e) {
-                throw ServerUtil.parseServerException(e);
+                throw ClientUtil.parseServerException(e);
             }
         }
 
@@ -343,7 +343,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                 advance();
                 return current;
             } catch (IOException e) {
-                throw ServerUtil.parseServerException(e);
+                throw ClientUtil.parseServerException(e);
             }
         }
 
@@ -354,7 +354,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                     reachedEnd();
                 }
             } catch (IOException e) {
-                throw ServerUtil.parseServerException(e);
+                throw ClientUtil.parseServerException(e);
             }
         }
 

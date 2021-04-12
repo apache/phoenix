@@ -367,6 +367,9 @@ public interface QueryServices extends SQLCloseable {
 
     public static final String PENDING_MUTATIONS_DDL_THROW_ATTRIB = "phoenix.pending.mutations.before.ddl.throw";
 
+    //Duplicated from CompatBaseScannerRegionObserver to break dependency on hbase-server
+    public static final String PHOENIX_MAX_LOOKBACK_AGE_ATTRIB = "phoenix.max.lookback.age.seconds";
+
     /**
      * Parameter to indicate the source of operation attribute.
      * It can include metadata about the customer, service, etc.

@@ -19,8 +19,6 @@
 package org.apache.phoenix.coprocessor.metrics;
 
 import org.apache.hadoop.hbase.metrics.BaseSource;
-import org.apache.hadoop.metrics2.lib.MutableFastCounter;
-import org.apache.phoenix.hbase.index.Indexer;
 
 /**
  * Interface for metrics about {@link org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver}.

@@ -24,7 +24,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.aggregator.ClientAggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
@@ -95,7 +95,7 @@ public class AggregationManager {
         Collections.sort(aggFuncs, SingleAggregateFunction.SCHEMA_COMPARATOR);
 
         int minNullableIndex = getMinNullableIndex(aggFuncs,groupBy.isEmpty());
-        context.getScan().setAttribute(BaseScannerRegionObserver.AGGREGATORS, ServerAggregators.serialize(aggFuncs, minNullableIndex));
+        context.getScan().setAttribute(BaseScannerRegionObserverConstants.AGGREGATORS, ServerAggregators.serialize(aggFuncs, minNullableIndex));
         ClientAggregators clientAggregators = new ClientAggregators(aggFuncs, minNullableIndex);
         context.getAggregationManager().setAggregators(clientAggregators);
     }

@@ -34,7 +34,7 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.execute.visitor.AvgRowWidthVisitor;
 import org.apache.phoenix.execute.visitor.ByteCountVisitor;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
@@ -279,7 +279,7 @@ public class AggregatePlan extends BaseQueryPlan {
     
 
     public static void serializeUngroupedAggregateRegionObserverIntoScan(Scan scan) {
-        scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
+        scan.setAttribute(BaseScannerRegionObserverConstants.UNGROUPED_AGG, QueryConstants.TRUE);
     }
 
     @Override
@@ -292,7 +292,7 @@ public class AggregatePlan extends BaseQueryPlan {
             if (limit != null && orderBy.getOrderByExpressions().isEmpty() && having == null
                     && (  (   statement.isDistinct() && ! statement.isAggregate() )
                             || ( ! statement.isDistinct() && (   context.getAggregationManager().isEmpty()
-                                                              || BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS.equals(groupBy.getScanAttribName()) ) ) ) ) {
+                                                              || BaseScannerRegionObserverConstants.KEY_ORDERED_GROUP_BY_EXPRESSIONS.equals(groupBy.getScanAttribName()) ) ) ) ) {
                 /*
                  * Optimization to early exit from the scan for a GROUP BY or DISTINCT with a LIMIT.
                  * We may exit early according to the LIMIT specified if the query has:
@@ -314,7 +314,7 @@ public class AggregatePlan extends BaseQueryPlan {
                  *    order, so we can early exit, even when aggregate functions are used, as
                  *    the rows in the group are contiguous.
                  */
-                scan.setAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT,
+                scan.setAttribute(BaseScannerRegionObserverConstants.GROUP_BY_LIMIT,
                         PInteger.INSTANCE.toBytes(limit + (offset == null ? 0 : offset)));
             }
         }

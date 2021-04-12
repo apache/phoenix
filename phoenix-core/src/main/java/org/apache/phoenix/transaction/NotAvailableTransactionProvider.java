@@ -22,7 +22,6 @@ import java.sql.SQLException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
@@ -56,11 +55,6 @@ public class NotAvailableTransactionProvider implements PhoenixTransactionProvid
 
     @Override
     public PhoenixTransactionClient getTransactionClient(Configuration config, ConnectionInfo connectionInfo) {
-        throw new UnsupportedOperationException(message);
-    }
-
-    @Override
-    public PhoenixTransactionService getTransactionService(Configuration config, ConnectionInfo connInfo, int port) {
         throw new UnsupportedOperationException(message);
     }
 

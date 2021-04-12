@@ -144,15 +144,11 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
-import org.apache.hadoop.hbase.coprocessor.MultiRowMutationEndpoint;
-import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
-import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.BloomType;
-import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.ByteStringer;
@@ -162,21 +158,10 @@ import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.compile.MutationPlan;
-import org.apache.phoenix.coprocessor.ChildLinkMetaDataEndpoint;
-import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
-import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessor.SequenceRegionObserverConstants;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
-import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
-import org.apache.phoenix.coprocessor.ScanRegionObserver;
-import org.apache.phoenix.coprocessor.SequenceRegionObserver;
-import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
-import org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver;
-import org.apache.phoenix.coprocessor.SystemCatalogRegionObserver;
-import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
-import org.apache.phoenix.coprocessor.TaskRegionObserver;
-import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos.ChildLinkMetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
@@ -208,17 +193,11 @@ import org.apache.phoenix.exception.UpgradeInProgressException;
 import org.apache.phoenix.exception.UpgradeNotRequiredException;
 import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
-import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
-import org.apache.phoenix.hbase.index.Indexer;
-import org.apache.phoenix.hbase.index.builder.IndexBuilder;
-import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
+import org.apache.phoenix.hbase.index.IndexRegionObserverConstants;
+import org.apache.phoenix.hbase.index.IndexerStatic;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
-import org.apache.phoenix.index.GlobalIndexChecker;
-import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
-import org.apache.phoenix.index.PhoenixTransactionalIndexer;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -255,9 +234,6 @@ import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.SystemFunctionSplitPolicy;
-import org.apache.phoenix.schema.SystemStatsSplitPolicy;
-import org.apache.phoenix.schema.SystemTaskSplitPolicy;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableProperty;
@@ -278,9 +254,11 @@ import org.apache.phoenix.transaction.PhoenixTransactionProvider;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -291,7 +269,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TimeKeeper;
 import org.apache.phoenix.util.UpgradeUtil;
@@ -365,7 +342,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     // List of queues instead of a single queue to provide reduced contention via lock striping
     private final List<LinkedBlockingQueue<WeakReference<PhoenixConnection>>> connectionQueues;
     private ScheduledExecutorService renewLeaseExecutor;
-    private PhoenixTransactionClient[] txClients = new PhoenixTransactionClient[TransactionFactory.Provider.values().length];;
+    private PhoenixTransactionClient[] txClients = new PhoenixTransactionClient[Provider.values().length];;
     /*
      * We can have multiple instances of ConnectionQueryServices. By making the thread factory
      * static, renew lease thread names will be unique across them.
@@ -605,9 +582,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                 } catch (IOException e) {
                     if (sqlE == null) {
-                        sqlE = ServerUtil.parseServerException(e);
+                        sqlE = ClientUtil.parseServerException(e);
                     } else {
-                        sqlE.setNextException(ServerUtil.parseServerException(e));
+                        sqlE.setNextException(ClientUtil.parseServerException(e));
                     }
                 } finally {
                     try {
@@ -979,23 +956,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return false;
     }
 
-    /**
-     * Enable indexing on the given table
-     * @param descBuilder {@link TableDescriptor} for the table on which indexing should be enabled
-   * @param builder class to use when building the index for this table
-   * @param properties map of custom configuration options to make available to your
-     *          {@link IndexBuilder} on the server-side
-   * @param priority TODO
-     * @throws IOException the Indexer coprocessor cannot be added
-     */
-    public static void enableIndexing(TableDescriptorBuilder descBuilder, Class<? extends IndexBuilder> builder,
-        Map<String, String> properties, int priority) throws IOException {
-      if (properties == null) {
-        properties = new HashMap<String, String>();
-      }
-      properties.put(Indexer.INDEX_BUILDER_CONF_KEY, builder.getName());
-      descBuilder.addCoprocessor(QueryConstants.INDEX_REGION_OBSERVER_CLASSNAME, null, priority, properties);
-    }
 
     private void addCoprocessors(byte[] tableName, TableDescriptorBuilder builder,
                                  PTableType tableType, Map<String,Object> tableProps,
@@ -1081,8 +1041,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             }
                             if (!newDesc.hasCoprocessor(QueryConstants.INDEX_REGION_OBSERVER_CLASSNAME)) {
                                 Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
-                                opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
-                                enableIndexing(builder, PhoenixIndexBuilder.class, opts, priority);
+                                opts.put(IndexUtil.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
+                                IndexRegionObserverConstants.enableIndexing(builder, IndexUtil.PHOENIX_INDEX_BUILDER_CLASSNAME, opts, priority);
                             }
                         } else {
                             if (newDesc.hasCoprocessor(QueryConstants.INDEX_REGION_OBSERVER_CLASSNAME)) {
@@ -1090,8 +1050,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             }
                             if (!newDesc.hasCoprocessor(QueryConstants.INDEXER_CLASSNAME)) {
                                 Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
-                                opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
-                                Indexer.enableIndexing(builder, PhoenixIndexBuilder.class, opts, priority);
+                                opts.put(IndexUtil.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
+                                IndexerStatic.enableIndexing(builder, IndexUtil.PHOENIX_INDEX_BUILDER_CLASSNAME, opts, priority);
                             }
                         }
                     }
@@ -1186,7 +1146,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
 
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         }
     }
 
@@ -1309,7 +1269,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 createdNamespace = true;
             }
         } catch (IOException e) {
-            sqlE = ServerUtil.parseServerException(e);
+            sqlE = ClientUtil.parseServerException(e);
         } finally {
             if (sqlE != null) { throw sqlE; }
         }
@@ -1534,7 +1494,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
 
         } catch (IOException e) {
-            sqlE = ServerUtil.parseServerException(e);
+            sqlE = ClientUtil.parseServerException(e);
         } catch (InterruptedException e) {
             // restore the interrupt status
             Thread.currentThread().interrupt();
@@ -1667,7 +1627,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 }
                             });
             } catch (Throwable t) {
-                throw ServerUtil.parseServerException(t);
+                throw ClientUtil.parseServerException(t);
             }
             for (Map.Entry<byte[],GetVersionResponse> result : results.entrySet()) {
                 // This is the "phoenix.jar" is in-place, but server is out-of-sync with client case.
@@ -1761,7 +1721,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             MetaDataResponse result = results.values().iterator().next();
             return MetaDataMutationResult.constructFromProto(result);
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         } catch (Throwable t) {
             throw new SQLException(t);
         }
@@ -1810,7 +1770,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         } catch (Throwable t) {
             throw new SQLException(t);
         }
@@ -1861,7 +1821,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // Ignore, as we may never have created a view index table
             }
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         }
         return wasDeleted;
     }
@@ -1895,7 +1855,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // Ignore, as we may never have created a view index table
             }
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         }
         return wasDeleted;
     }
@@ -2197,7 +2157,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
 
         } catch (IOException e) {
-            sqlE = ServerUtil.parseServerException(e);
+            sqlE = ClientUtil.parseServerException(e);
         } finally {
             if (sqlE != null) {
                 throw sqlE;
@@ -2502,7 +2462,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // Ignore, as we may never have created a local index
             }
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         }
     }
 
@@ -2538,7 +2498,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 modifyTable(descriptor.getTableName().getName(), descriptor, pollingNeeded);
             } catch (IOException e) {
-                sqlE = ServerUtil.parseServerException(e);
+                sqlE = ClientUtil.parseServerException(e);
             } catch (InterruptedException e) {
                 // restore the interrupt status
                 Thread.currentThread().interrupt();
@@ -3310,7 +3270,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                         // This exception is only possible if SYSTEM namespace mapping is enabled and SYSTEM namespace is missing
                                         // It implies that SYSTEM tables are not created and hence we shouldn't provide a connection
                                         AccessDeniedException ade = new AccessDeniedException("Insufficient permissions to create SYSTEM namespace and SYSTEM Tables");
-                                        initializationException = ServerUtil.parseServerException(ade);
+                                        initializationException = ClientUtil.parseServerException(ade);
                                     } else {
                                         initializationException = e;
                                     }
@@ -4545,7 +4505,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 return checkAndPut;
             }
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         }
     }
 
@@ -4579,7 +4539,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 LOGGER.debug(processName + " released mutex for "+ msg);
             }
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         }
     }
 
@@ -4820,7 +4780,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             return unfreedBytes;
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         } catch (Throwable e) {
             // wrap all other exceptions in a SQLException
             throw new SQLException(e);
@@ -4921,7 +4881,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 Result result = htable.append(append);
                 return sequence.createSequence(result, minValue, maxValue, cycle);
             } catch (IOException e) {
-                throw ServerUtil.parseServerException(e);
+                throw ClientUtil.parseServerException(e);
             } finally {
                 Closeables.closeQuietly(htable);
             }
@@ -4948,7 +4908,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 Result result = htable.append(append);
                 return sequence.dropSequence(result);
             } catch (IOException e) {
-                throw ServerUtil.parseServerException(e);
+                throw ClientUtil.parseServerException(e);
             } finally {
                 Closeables.closeQuietly(htable);
             }
@@ -5044,7 +5004,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 hTable.batch(incrementBatch, resultObjects);
             } catch (IOException e) {
-                sqlE = ServerUtil.parseServerException(e);
+                sqlE = ClientUtil.parseServerException(e);
             } catch (InterruptedException e) {
                 // restore the interrupt status
                 Thread.currentThread().interrupt();
@@ -5055,9 +5015,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     hTable.close();
                 } catch (IOException e) {
                     if (sqlE == null) {
-                        sqlE = ServerUtil.parseServerException(e);
+                        sqlE = ClientUtil.parseServerException(e);
                     } else {
-                        sqlE.setNextException(ServerUtil.parseServerException(e));
+                        sqlE.setNextException(ClientUtil.parseServerException(e));
                     }
                 }
                 if (sqlE != null) {
@@ -5068,7 +5028,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 Sequence sequence = toIncrementList.get(i);
                 Result result = (Result)resultObjects[i];
                 try {
-                    long numToAllocate = Bytes.toLong(incrementBatch.get(i).getAttribute(SequenceRegionObserver.NUM_TO_ALLOCATE));
+                    long numToAllocate = Bytes.toLong(incrementBatch.get(i).getAttribute(SequenceRegionObserverConstants.NUM_TO_ALLOCATE));
                     values[indexes[i]] = sequence.incrementValue(result, op, numToAllocate);
                 } catch (SQLException e) {
                     exceptions[indexes[i]] = e;
@@ -5109,7 +5069,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                 });
             } catch (IOException e) {
-                throw ServerUtil.parseServerException(e);
+                throw ClientUtil.parseServerException(e);
             } catch (Throwable e) {
                 sqlE = new SQLException(e);
             } finally {
@@ -5117,16 +5077,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     htable.close();
                 } catch (IOException e) {
                     if (sqlE == null) {
-                        sqlE = ServerUtil.parseServerException(e);
+                        sqlE = ClientUtil.parseServerException(e);
                     } else {
-                        sqlE.setNextException(ServerUtil.parseServerException(e));
+                        sqlE.setNextException(ClientUtil.parseServerException(e));
                     }
                 } finally {
                     if (sqlE != null) { throw sqlE; }
                 }
             }
         } catch (Exception e) {
-            throw new SQLException(ServerUtil.parseServerException(e));
+            throw new SQLException(ClientUtil.parseServerException(e));
         }
     }
 
@@ -5168,7 +5128,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 hTable.batch(mutations, resultObjects);
             } catch (IOException e){
-                sqlE = ServerUtil.parseServerException(e);
+                sqlE = ClientUtil.parseServerException(e);
             } catch (InterruptedException e){
                 // restore the interrupt status
                 Thread.currentThread().interrupt();
@@ -5179,9 +5139,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     hTable.close();
                 } catch (IOException e) {
                     if (sqlE == null) {
-                        sqlE = ServerUtil.parseServerException(e);
+                        sqlE = ClientUtil.parseServerException(e);
                     } else {
-                        sqlE.setNextException(ServerUtil.parseServerException(e));
+                        sqlE.setNextException(ClientUtil.parseServerException(e));
                     }
                 }
                 if (sqlE != null) {
@@ -5220,7 +5180,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             hTable.batch(mutations, null);
         } catch (IOException e) {
-            sqlE = ServerUtil.parseServerException(e);
+            sqlE = ClientUtil.parseServerException(e);
         } catch (InterruptedException e) {
             // restore the interrupt status
             Thread.currentThread().interrupt();
@@ -5231,9 +5191,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 hTable.close();
             } catch (IOException e) {
                 if (sqlE == null) {
-                    sqlE = ServerUtil.parseServerException(e);
+                    sqlE = ClientUtil.parseServerException(e);
                 } else {
-                    sqlE.setNextException(ServerUtil.parseServerException(e));
+                    sqlE.setNextException(ClientUtil.parseServerException(e));
                 }
             }
             if (sqlE != null) {
@@ -5360,7 +5320,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             return tableStatsCache.get(key);
         } catch (ExecutionException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         }
     }
 
@@ -5732,7 +5692,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 admin.deleteNamespace(schemaName);
             }
         } catch (IOException e) {
-            sqlE = ServerUtil.parseServerException(e);
+            sqlE = ClientUtil.parseServerException(e);
         } finally {
             if (sqlE != null) { throw sqlE; }
         }
@@ -5776,9 +5736,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public synchronized PhoenixTransactionClient initTransactionClient(Provider provider) throws SQLException {
-        PhoenixTransactionClient client = txClients[provider.ordinal()];
+        PhoenixTransactionClient client = txClients[provider.getCode() - 1];
         if (client == null) {
-            client = txClients[provider.ordinal()] = provider.getTransactionProvider().getTransactionClient(config, connectionInfo);
+            client = txClients[provider.getCode() -1] = provider.getTransactionProvider().getTransactionClient(config, connectionInfo);
         }
         return client;
     }

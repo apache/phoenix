@@ -18,7 +18,7 @@
 
 package org.apache.phoenix.iterate;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants.SCAN_START_ROW_SUFFIX;
 
 import java.sql.SQLException;
 import java.util.List;

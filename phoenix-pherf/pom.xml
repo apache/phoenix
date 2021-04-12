@@ -96,13 +96,19 @@
 
   <dependencies>
     <dependency>
-      <groupId>org.apache.phoenix.thirdparty</groupId>
-      <artifactId>phoenix-shaded-guava</artifactId>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-core</artifactId>
+    </dependency>
+
+    <!-- FIXME should be phoenix.mapreduce -->
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-coprocessors</artifactId>
     </dependency>
 
     <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-core</artifactId>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
+      <artifactId>phoenix-shaded-guava</artifactId>
     </dependency>
 
     <dependency>
@@ -170,7 +176,7 @@
     <!-- Test Dependencies -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-core</artifactId>
+      <artifactId>phoenix-tests</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>

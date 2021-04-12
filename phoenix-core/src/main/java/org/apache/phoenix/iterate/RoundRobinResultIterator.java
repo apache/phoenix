@@ -34,7 +34,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ClientUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -128,7 +128,7 @@ public class RoundRobinResultIterator implements ResultIterator {
                 resultIterators.close();
             }
         } catch (Exception e) {
-            toThrow = ServerUtil.parseServerException(e);
+            toThrow = ClientUtil.parseServerException(e);
         } finally {
             try {
                 if (openIterators.size() > 0) {
@@ -137,9 +137,9 @@ public class RoundRobinResultIterator implements ResultIterator {
                             itr.close();
                         } catch (Exception e) {
                             if (toThrow == null) {
-                                toThrow = ServerUtil.parseServerException(e);
+                                toThrow = ClientUtil.parseServerException(e);
                             } else {
-                                toThrow.setNextException(ServerUtil.parseServerException(e));
+                                toThrow.setNextException(ClientUtil.parseServerException(e));
                             }
                         }
                     }
@@ -263,7 +263,7 @@ public class RoundRobinResultIterator implements ResultIterator {
         } catch (SQLException e) {
             toThrow = e;
         } catch (Exception e) {
-            toThrow = ServerUtil.parseServerException(e);
+            toThrow = ClientUtil.parseServerException(e);
         } finally {
             try {
                 if (!success) {
@@ -271,9 +271,9 @@ public class RoundRobinResultIterator implements ResultIterator {
                         close();
                     } catch (Exception e) {
                         if (toThrow == null) {
-                            toThrow = ServerUtil.parseServerException(e);
+                            toThrow = ClientUtil.parseServerException(e);
                         } else {
-                            toThrow.setNextException(ServerUtil.parseServerException(e));
+                            toThrow.setNextException(ClientUtil.parseServerException(e));
                         }
                     }
                 }

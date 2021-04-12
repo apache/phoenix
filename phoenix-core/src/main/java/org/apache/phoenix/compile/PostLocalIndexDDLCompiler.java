@@ -23,7 +23,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -78,7 +78,7 @@ public class PostLocalIndexDDLCompiler {
             // rows per region as a result. The value of the attribute will be our persisted
             // index maintainers.
             // Define the LOCAL_INDEX_BUILD as a new static in BaseScannerRegionObserver
-            scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD_PROTO, ByteUtil.copyKeyBytesIfNecessary(ptr));
+            scan.setAttribute(BaseScannerRegionObserverConstants.LOCAL_INDEX_BUILD_PROTO, ByteUtil.copyKeyBytesIfNecessary(ptr));
             // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
             // However, in this case, we need to project all of the data columns that contribute to the index.
             IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable, connection);
@@ -90,7 +90,7 @@ public class PostLocalIndexDDLCompiler {
                 }
             }
             if (dataTable.isTransactional()) {
-                scan.setAttribute(BaseScannerRegionObserver.TX_STATE, connection.getMutationState().encodeTransaction());
+                scan.setAttribute(BaseScannerRegionObserverConstants.TX_STATE, connection.getMutationState().encodeTransaction());
             }
 
             // Go through MutationPlan abstraction so that we can create local indexes

@@ -105,10 +105,9 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
-import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
+import org.apache.phoenix.coprocessor.MetaDataEndpointImplConstants;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
@@ -220,7 +219,7 @@ public class UpgradeUtil {
             admin.createTable(desc);
             copyTable(conn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, tableName);
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         }
     }
     
@@ -235,7 +234,7 @@ public class UpgradeUtil {
             admin.disableTable(tableName);
             admin.deleteTable(tableName);
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         }
     }
 
@@ -288,7 +287,7 @@ public class UpgradeUtil {
         } catch (SQLException e) {
             throw e;
         } catch (Exception e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         } finally {
             try {
                 if (scanner != null) scanner.close();
@@ -779,7 +778,7 @@ public class UpgradeUtil {
                         success = true;
                         return true;
                     } catch (InterruptedException e) {
-                        throw ServerUtil.parseServerException(e);
+                        throw ClientUtil.parseServerException(e);
                     } finally {
                         try {
                             scanner.close();
@@ -807,7 +806,7 @@ public class UpgradeUtil {
                         }
                     }
                 } catch (IOException e) {
-                    throw ServerUtil.parseServerException(e);
+                    throw ClientUtil.parseServerException(e);
                 } finally {
                     try {
                         seqTable.close();
@@ -818,7 +817,7 @@ public class UpgradeUtil {
             }
             return false;
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         } finally {
             try {
                 sysTable.close();
@@ -1869,7 +1868,7 @@ public class UpgradeUtil {
                     " (" + PhoenixDatabaseMetaData.TENANT_ID + "," +
                            PhoenixDatabaseMetaData.TABLE_SCHEM + "," +
                            PhoenixDatabaseMetaData.TABLE_NAME + "," +
-                           MetaDataEndpointImpl.ROW_KEY_ORDER_OPTIMIZABLE + " BOOLEAN"
+                           MetaDataEndpointImplConstants.ROW_KEY_ORDER_OPTIMIZABLE + " BOOLEAN"
                    + ") VALUES (" +
                            "'" + (theTenantId == null ? StringUtil.EMPTY_STRING : theTenantId) + "'," +
                            "'" + (theSchemaName == null ? StringUtil.EMPTY_STRING : theSchemaName) + "'," +
@@ -2041,7 +2040,7 @@ public class UpgradeUtil {
     public static void addRowKeyOrderOptimizableCell(List<Mutation> tableMetadata, byte[] tableHeaderRowKey, long clientTimeStamp) {
         Put put = new Put(tableHeaderRowKey, clientTimeStamp);
         put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                MetaDataEndpointImpl.ROW_KEY_ORDER_OPTIMIZABLE_BYTES, PBoolean.INSTANCE.toBytes(true));
+            MetaDataEndpointImplConstants.ROW_KEY_ORDER_OPTIMIZABLE_BYTES, PBoolean.INSTANCE.toBytes(true));
         tableMetadata.add(put);
     }
 

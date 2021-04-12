@@ -38,7 +38,7 @@ import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.parse.HintNode;
@@ -191,7 +191,7 @@ public abstract class ExplainTable {
         if (whereFilter != null) {
             whereFilterStr = whereFilter.toString();
         } else {
-            byte[] expBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER_STR);
+            byte[] expBytes = scan.getAttribute(BaseScannerRegionObserverConstants.LOCAL_INDEX_FILTER_STR);
             if (expBytes != null) {
                 whereFilterStr = Bytes.toString(expBytes);
             }
@@ -239,7 +239,7 @@ public abstract class ExplainTable {
             if (pageFilter != null) {
                 limit = pageFilter.getPageSize();
             } else {
-                byte[] limitBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_LIMIT);
+                byte[] limitBytes = scan.getAttribute(BaseScannerRegionObserverConstants.LOCAL_INDEX_LIMIT);
                 if (limitBytes != null) {
                     limit = Bytes.toLong(limitBytes);
                 }
@@ -256,12 +256,12 @@ public abstract class ExplainTable {
             }
         }
         Integer groupByLimit = null;
-        byte[] groupByLimitBytes = scan.getAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT);
+        byte[] groupByLimitBytes = scan.getAttribute(BaseScannerRegionObserverConstants.GROUP_BY_LIMIT);
         if (groupByLimitBytes != null) {
             groupByLimit = (Integer) PInteger.INSTANCE.toObject(groupByLimitBytes);
         }
         groupBy.explain(planSteps, groupByLimit, explainPlanAttributesBuilder);
-        if (scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX) != null) {
+        if (scan.getAttribute(BaseScannerRegionObserverConstants.SPECIFIC_ARRAY_INDEX) != null) {
             planSteps.add("    SERVER ARRAY ELEMENT PROJECTION");
             if (explainPlanAttributesBuilder != null) {
                 explainPlanAttributesBuilder.setServerArrayElementProjection(true);

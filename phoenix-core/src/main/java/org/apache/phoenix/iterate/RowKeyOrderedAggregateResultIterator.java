@@ -32,7 +32,7 @@ import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ClientUtil;
 
 
 /**
@@ -73,7 +73,7 @@ public class RowKeyOrderedAggregateResultIterator extends LookAheadResultIterato
                 resultIterators.close();
             }
         } catch (Exception e) {
-           toThrow = ServerUtil.parseServerException(e);
+           toThrow = ClientUtil.parseServerException(e);
         } finally {
             try {
                 if (iterators != null) {
@@ -83,9 +83,9 @@ public class RowKeyOrderedAggregateResultIterator extends LookAheadResultIterato
                             iterator.close();
                         } catch (Exception e) {
                             if (toThrow == null) {
-                                toThrow = ServerUtil.parseServerException(e);
+                                toThrow = ClientUtil.parseServerException(e);
                             } else {
-                                toThrow.setNextException(ServerUtil.parseServerException(e));
+                                toThrow.setNextException(ClientUtil.parseServerException(e));
                             }
                         }
                     }
