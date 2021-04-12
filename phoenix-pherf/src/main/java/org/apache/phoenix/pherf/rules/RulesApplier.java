@@ -18,8 +18,9 @@
 
 package org.apache.phoenix.pherf.rules;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.math3.random.RandomDataGenerator;
 import org.apache.phoenix.pherf.PherfConstants;
@@ -34,14 +35,12 @@ import org.joda.time.format.DateTimeFormatter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class RulesApplier {
     private static final Logger LOGGER = LoggerFactory.getLogger(RulesApplier.class);
-    private static final AtomicLong COUNTER = new AtomicLong(0);
 
     // Used to bail out of random distribution if it takes too long
     // This should never happen when distributions add up to 100
@@ -51,14 +50,39 @@ public class RulesApplier {
     private final Random rndVal;
     private final RandomDataGenerator randomDataGenerator;
 
+    private final DataModel dataModel;
     private final XMLConfigParser parser;
     private final List<Map> modelList;
     private final Map<String, Column> columnMap;
     private String cachedScenarioOverrideName;
     private Map<DataTypeMapping, List> scenarioOverrideMap;
 
-    private Map<Column,RuleBasedDataGenerator> columnRuleBasedDataGeneratorMap = new HashMap<>();
+    private ConcurrentHashMap<String,RuleBasedDataGenerator> columnRuleBasedDataGeneratorMap = new ConcurrentHashMap<>();
 
+    // Since rules are only relevant for a given data model,
+    // added a constructor to support a single data model => RulesApplier(DataModel model)
+
+    // We should deprecate the RulesApplier(XMLConfigParser parser) constructor,
+    // since a parser can have multiple data models (all the models found on the classpath)
+    // it implies that the rules apply to all the data models the parser holds
+    // which can be confusing to the user of this class.
+    //
+
+    public RulesApplier(DataModel model) {
+        this(model, EnvironmentEdgeManager.currentTimeMillis());
+    }
+
+    public RulesApplier(DataModel model, long seed) {
+        this.parser = null;
+        this.dataModel = model;
+        this.modelList = new ArrayList<Map>();
+        this.columnMap = new HashMap<String, Column>();
+        this.rndNull = new Random(seed);
+        this.rndVal = new Random(seed);
+        this.randomDataGenerator = new RandomDataGenerator();
+        this.cachedScenarioOverrideName = null;
+        populateModelList();
+    }
 
     public RulesApplier(XMLConfigParser parser) {
         this(parser, EnvironmentEdgeManager.currentTimeMillis());
@@ -66,6 +90,7 @@ public class RulesApplier {
 
     public RulesApplier(XMLConfigParser parser, long seed) {
         this.parser = parser;
+        this.dataModel = null;
         this.modelList = new ArrayList<Map>();
         this.columnMap = new HashMap<String, Column>();
         this.rndNull = new Random(seed);
@@ -116,10 +141,10 @@ public class RulesApplier {
     public DataValue getDataForRule(Scenario scenario, Column phxMetaColumn) throws Exception {
         // TODO Make a Set of Rules that have already been applied so that so we don't generate for every value
     	
-        List<Scenario> scenarios = parser.getScenarios();
+        List<Scenario> scenarios = dataModel != null ? dataModel.getScenarios() : parser.getScenarios();
         DataValue value = null;
         if (scenarios.contains(scenario)) {
-            LOGGER.debug("We found a correct Scenario");
+            LOGGER.debug("We found a correct Scenario" + scenario.getName());
             
             Map<DataTypeMapping, List> overrideRuleMap = this.getCachedScenarioOverrides(scenario);
             
@@ -140,16 +165,16 @@ public class RulesApplier {
             List<Column> ruleList = ruleMap.get(phxMetaColumn.getType());
 
             // Make sure Column from Phoenix Metadata matches a rule column
-            if (ruleList.contains(phxMetaColumn)) {
+            if (ruleList != null && ruleList.contains(phxMetaColumn)) {
                 // Generate some random data based on this rule
                 LOGGER.debug("We found a correct column rule");
                 Column columnRule = getColumnForRule(ruleList, phxMetaColumn);
 
                 value = getDataValue(columnRule);
             } else {
-                LOGGER.warn("Attempted to apply rule to data, but could not find a rule to match type:"
-                                + phxMetaColumn.getType()
-                );
+                LOGGER.warn(String.format("Attempted to apply rule to data, "
+                        + "but could not find a rule to match type %s on %s",
+                        phxMetaColumn.getType(), phxMetaColumn.getName()));
             }
 
         }
@@ -163,7 +188,7 @@ public class RulesApplier {
      * @param column {@link org.apache.phoenix.pherf.configuration.Column} Column rule to get data for
      * @return {@link org.apache.phoenix.pherf.rules.DataValue} {@code Container Type --> Value mapping }
      */
-    public DataValue getDataValue(Column column) throws Exception{
+    public DataValue getDataValue(Column column) throws Exception {
         DataValue data = null;
         String prefix = "";
         int length = column.getLength();
@@ -190,15 +215,14 @@ public class RulesApplier {
             case VARBINARY:
             case CHAR:
                 // Use the specified data values from configs if they exist
-                if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
+                if (DataSequence.SEQUENTIAL.equals(column.getDataSequence())) {
+                    RuleBasedDataGenerator generator = getRuleBasedDataGeneratorForColumn(column);
+                    data = generator.getDataValue();
+                } else if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
                     data = pickDataValueFromList(dataValues);
                 } else {
                     Preconditions.checkArgument(length > 0, "length needs to be > 0");
-                    if (column.getDataSequence() == DataSequence.SEQUENTIAL) {
-                        data = getSequentialVarcharDataValue(column);
-                    } else {
-                        data = getRandomDataValue(column);
-                    }
+                    data = getRandomDataValue(column);
                 }
                 break;
             case VARCHAR_ARRAY:
@@ -269,6 +293,9 @@ public class RulesApplier {
                     data = pickDataValueFromList(dataValues);
                     // Check if date has right format or not
                     data.setValue(checkDatePattern(data.getValue()));
+                } else if(DataSequence.SEQUENTIAL.equals(column.getDataSequence())) {
+                    RuleBasedDataGenerator generator = getRuleBasedDataGeneratorForColumn(column);
+                    data = generator.getDataValue();
                 } else if (column.getUseCurrentDate() != true){
                     int minYear = (int) column.getMinValue();
                     int maxYear = (int) column.getMaxValue();
@@ -422,9 +449,18 @@ public class RulesApplier {
         if (!modelList.isEmpty()) {
             return;
         }
-        
-        // Support for multiple models, but rules are only relevant each model
-        for (DataModel model : parser.getDataModels()) {
+
+        // Since rules are only relevant for a given data model,
+        // added a constructor to support a single data model => RulesApplier(DataModel model)
+
+        // We should deprecate the RulesApplier(XMLConfigParser parser) constructor,
+        // since a parser can have multiple data models (all the models found on the classpath)
+        // it implies that the rules apply to all the data models the parser holds
+        // which can be confusing to the user of this class.
+
+        List<DataModel> models = dataModel != null ?
+                Lists.newArrayList(dataModel) : parser.getDataModels();
+        for (DataModel model : models) {
 
             // Step 1
             final Map<DataTypeMapping, List> ruleMap = new HashMap<DataTypeMapping, List>();
@@ -500,28 +536,6 @@ public class RulesApplier {
        	return ruleAppliedColumn;
     }
 
-    /**
-     * Add a numerically increasing counter onto the and of a random string.
-     * Incremented counter should be thread safe.
-     *
-     * @param column {@link org.apache.phoenix.pherf.configuration.Column}
-     * @return {@link org.apache.phoenix.pherf.rules.DataValue}
-     */
-    private DataValue getSequentialVarcharDataValue(Column column) {
-        DataValue data = null;
-        long inc = COUNTER.getAndIncrement();
-        String strInc = String.valueOf(inc);
-        int paddedLength = column.getLengthExcludingPrefix();
-        String strInc1 = StringUtils.leftPad(strInc, paddedLength, "0");
-        String strInc2 = StringUtils.right(strInc1, column.getLengthExcludingPrefix());
-        String varchar = (column.getPrefix() != null) ? column.getPrefix() + strInc2:
-                strInc2;
-
-        // Truncate string back down if it exceeds length
-        varchar = StringUtils.left(varchar,column.getLength());
-        data = new DataValue(column.getType(), varchar);
-        return data;
-    }
 
     private DataValue getRandomDataValue(Column column) {
         String varchar = RandomStringUtils.randomAlphanumeric(column.getLength());
@@ -533,11 +547,39 @@ public class RulesApplier {
     }
 
     private RuleBasedDataGenerator getRuleBasedDataGeneratorForColumn(Column column) {
-        RuleBasedDataGenerator generator = columnRuleBasedDataGeneratorMap.get(column);
+        RuleBasedDataGenerator generator = columnRuleBasedDataGeneratorMap.get(column.getName());
         if(generator == null) {
-            //For now we only have one of these, likely this should replace all all the methods
-            generator = new SequentialIntegerDataGenerator(column);
-            columnRuleBasedDataGeneratorMap.put(column,generator);
+            //For now we only have couple of these, likely this should replace for all the methods
+            switch (column.getType()) {
+            case VARCHAR:
+            case VARBINARY:
+            case CHAR:
+                if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
+                    generator = new SequentialListDataGenerator(column);
+                } else {
+                    generator = new SequentialVarcharDataGenerator(column);
+                }
+                break;
+            case DATE:
+            case TIMESTAMP:
+                generator = new SequentialDateDataGenerator(column);
+                break;
+            case BIGINT:
+            case INTEGER:
+            case TINYINT:
+            case UNSIGNED_LONG:
+                generator = new SequentialIntegerDataGenerator(column);
+                    break;
+            default:
+                throw new IllegalArgumentException(
+                        String.format("No rule based generator supported for column type %s on %s",
+                                column.getType(), column.getName()));
+            }
+            RuleBasedDataGenerator oldGenerator = columnRuleBasedDataGeneratorMap.putIfAbsent(column.getName(),generator);
+            if (oldGenerator != null) {
+                // Another thread succeeded in registering their generator first, so let's use that.
+                generator = oldGenerator;
+            }
         }
         return generator;
     }

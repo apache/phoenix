@@ -15,7 +15,7 @@
   -- See the License for the specific language governing permissions and
   -- limitations under the License.
 */
-CREATE TABLE IF NOT EXISTS PHERF.TEST_MULTI_TENANT_TABLE (
+CREATE TABLE IF NOT EXISTS PHERF.TEST_BASE_TABLE (
     TENANT_ID CHAR(15) NOT NULL,
     IDENTIFIER CHAR(3) NOT NULL,
     ID CHAR(15) NOT NULL,

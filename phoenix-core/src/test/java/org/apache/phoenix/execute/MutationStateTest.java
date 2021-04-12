@@ -17,23 +17,7 @@
  */
 package org.apache.phoenix.execute;
 
-import static org.apache.phoenix.execute.MutationState.joinSortedIntArrays;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.when;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Properties;
-
+import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
@@ -42,8 +26,12 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.execute.MutationState.MultiRowMutationState;
+import org.apache.phoenix.execute.MutationState.RowMutationState;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PUnsignedInt;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -52,7 +40,26 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import com.google.common.collect.ImmutableList;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+
+import static org.apache.phoenix.execute.MutationState.joinSortedIntArrays;
+import static org.apache.phoenix.query.BaseTest.generateUniqueName;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 public class MutationStateTest {
 
@@ -208,6 +215,68 @@ public class MutationStateTest {
 
             pConnSpy.createStatement().execute("create table MUTATION_TEST1"
                     + "( id1 UNSIGNED_INT not null primary key," + "appId1 VARCHAR)");
+        }
+    }
+
+    @Test
+    public void testOnDupAndUpsertInSameCommitBatch() throws Exception {
+        String dataTable1 = generateUniqueName();
+        String dataTable2 = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(String.format(
+                "create table %s (id1 UNSIGNED_INT not null primary key, appId1 VARCHAR)", dataTable1));
+            conn.createStatement().execute(String.format(
+                "create table %s (id2 UNSIGNED_INT not null primary key, appId2 VARCHAR)", dataTable2));
+
+            conn.createStatement().execute(String.format(
+                "upsert into %s(id1,appId1) values(111,'app1')", dataTable1));
+            conn.createStatement().execute(String.format(
+                "upsert into %s(id1,appId1) values(111, 'app1') ON DUPLICATE KEY UPDATE appId1 = null", dataTable1));
+            conn.createStatement().execute(String.format(
+                "upsert into %s(id2,appId2) values(222,'app2')", dataTable2));
+            conn.createStatement().execute(String.format(
+                "upsert into %s(id2,appId2) values(222,'app2') ON DUPLICATE KEY UPDATE appId2 = null", dataTable2));
+
+            final PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            MutationState state = pconn.getMutationState();
+            assertEquals(2, state.getNumRows());
+
+            int actualPairs = 0;
+            Iterator<Pair<byte[], List<Mutation>>> mutations = state.toMutations();
+            while (mutations.hasNext()) {
+                Pair<byte[], List<Mutation>> nextTable = mutations.next();
+                ++actualPairs;
+                assertEquals(1, nextTable.getSecond().size());
+            }
+            // we have 2 tables and each table has 2 mutation batches
+            // so we should get 4 <table name, [mutations]> pairs
+            assertEquals(4, actualPairs);
+
+            List<Map<TableRef, MultiRowMutationState>> commitBatches = state.createCommitBatches();
+            assertEquals(2, commitBatches.size());
+            // first commit batch should only contain regular upserts
+            verifyCommitBatch(commitBatches.get(0), false, 2, 1);
+            verifyCommitBatch(commitBatches.get(1), true, 2, 1);
+        }
+    }
+
+    private void verifyCommitBatch(Map<TableRef, MultiRowMutationState> commitBatch, boolean conditional,
+        int numberOfBatches, int rowsPerBatch) {
+        // one for each table
+        assertEquals(numberOfBatches, commitBatch.size());
+        for (Map.Entry<TableRef, MultiRowMutationState> entry : commitBatch.entrySet()) {
+            TableRef tableRef = entry.getKey();
+            MultiRowMutationState batch = entry.getValue();
+            assertEquals(rowsPerBatch, batch.size());
+            for (Map.Entry<ImmutableBytesPtr, RowMutationState> row : batch.entrySet()) {
+                ImmutableBytesPtr key = row.getKey();
+                RowMutationState rowMutationState = row.getValue();
+                if (conditional == true) {
+                    assertNotNull(rowMutationState.getOnDupKeyBytes());
+                } else {
+                    assertNull(rowMutationState.getOnDupKeyBytes());
+                }
+            }
         }
     }
 }

@@ -321,6 +321,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String TRANSACTION_PROVIDER = "TRANSACTION_PROVIDER";
     public static final byte[] TRANSACTION_PROVIDER_BYTES = Bytes.toBytes(TRANSACTION_PROVIDER);
 
+    public static final String PHYSICAL_TABLE_NAME = "PHYSICAL_TABLE_NAME";
+    public static final byte[] PHYSICAL_TABLE_NAME_BYTES = Bytes.toBytes(PHYSICAL_TABLE_NAME);
+
     public static final String UPDATE_CACHE_FREQUENCY = "UPDATE_CACHE_FREQUENCY";
     public static final byte[] UPDATE_CACHE_FREQUENCY_BYTES = Bytes.toBytes(UPDATE_CACHE_FREQUENCY);
 
