@@ -81,6 +81,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
@@ -367,6 +368,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
   public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
           MiniBatchOperationInProgress<Mutation> miniBatchOp) throws Throwable {
 
+    // Need to add cell tags to Delete Marker before we do any index processing
+    // since we add tags to tables which doesn't have indexes also.
+    IndexUtil.setDeleteAttributes(miniBatchOp);
       // first group all the updates for a single row into a single update to be processed
       Map<ImmutableBytesPtr, MultiMutation> mutationsMap =
               new HashMap<ImmutableBytesPtr, MultiMutation>();

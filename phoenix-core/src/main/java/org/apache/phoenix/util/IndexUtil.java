@@ -39,6 +39,15 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.hadoop.hbase.ArrayBackedTag;
+import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.PhoenixTagType;
+import org.apache.hadoop.hbase.PrivateCellUtil;
+import org.apache.hadoop.hbase.RawCell;
+import org.apache.hadoop.hbase.Tag;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.hadoop.hbase.Cell;
@@ -815,6 +824,49 @@ public class IndexUtil {
             return cell.getTimestamp();
         } catch (SQLException e) {
             throw new IOException(e);
+        }
+    }
+
+    /**
+     * Set Cell Tags to delete markers with source of operation attribute.
+     * @param miniBatchOp
+     * @throws IOException
+     */
+    public static void setDeleteAttributes(MiniBatchOperationInProgress<Mutation> miniBatchOp)
+            throws IOException {
+        for (int i = 0; i < miniBatchOp.size(); i++) {
+            Mutation m = miniBatchOp.getOperation(i);
+            if (!(m instanceof Delete)) {
+                // Ignore if it is not Delete type.
+                continue;
+            }
+            byte[] sourceOpAttr = m.getAttribute(QueryServices.SOURCE_OPERATION_ATTRIB);
+            if (sourceOpAttr == null) {
+                continue;
+            }
+            Tag sourceOpTag = new ArrayBackedTag(PhoenixTagType.SOURCE_OPERATION_TAG_TYPE,
+                    sourceOpAttr);
+            List<Cell> updatedCells = new ArrayList<>();
+            for (CellScanner cellScanner = m.cellScanner(); cellScanner.advance();) {
+                Cell cell = cellScanner.current();
+                RawCell rawCell = (RawCell)cell;
+                List<Tag> tags = new ArrayList<>();
+                Iterator<Tag> tagsIterator = rawCell.getTags();
+                while (tagsIterator.hasNext()) {
+                    tags.add(tagsIterator.next());
+                }
+                tags.add(sourceOpTag);
+                // TODO: PrivateCellUtil's IA is Private. HBASE-25328 adds a builder method
+                // TODO: for creating Tag which will be LP with IA.coproc
+                Cell updatedCell = PrivateCellUtil.createCell(cell, tags);
+                updatedCells.add(updatedCell);
+            }
+            m.getFamilyCellMap().clear();
+            // Clear and add new Cells to the Mutation.
+            for (Cell cell : updatedCells) {
+                Delete d = (Delete) m;
+                d.addDeleteMarker(cell);
+            }
         }
     }
 
