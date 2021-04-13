@@ -93,11 +93,11 @@
         <scenario tableName="PHERF.EVT_1" name="EVT_11">
             <loadProfile>
                 <batchSize>1</batchSize>
-                <numOperations>10</numOperations>
+                <numOperations>100</numOperations>
                 <!-- Case 1 : Upsert Operation test -->
-                <tenantDistribution id="tg1" weight="100" numTenants="1"></tenantDistribution>
-                <tenantDistribution id="tg2" weight="0" numTenants="0"></tenantDistribution>
-                <tenantDistribution id="tg3" weight="0" numTenants="0"></tenantDistribution>
+                <tenantDistribution id="tg1" weight="50" numTenants="1"></tenantDistribution>
+                <tenantDistribution id="tg2" weight="40" numTenants="9"></tenantDistribution>
+                <tenantDistribution id="tg3" weight="10" numTenants="10"></tenantDistribution>
                 <opDistribution id="upsertOp" weight="20"></opDistribution>
                 <opDistribution id="queryOp1" weight="20"></opDistribution>
                 <opDistribution id="queryOp2" weight="20"></opDistribution>
@@ -159,11 +159,11 @@
         <scenario tableName="PHERF.EVT_2" name="EVT_21">
             <loadProfile>
                 <batchSize>1</batchSize>
-                <numOperations>10</numOperations>
+                <numOperations>100</numOperations>
                 <!-- Case 1 : Upsert Operation test -->
-                <tenantDistribution id="tg1" weight="100" numTenants="1"></tenantDistribution>
-                <tenantDistribution id="tg2" weight="0" numTenants="0"></tenantDistribution>
-                <tenantDistribution id="tg3" weight="0" numTenants="0"></tenantDistribution>
+                <tenantDistribution id="tg1" weight="50" numTenants="1"></tenantDistribution>
+                <tenantDistribution id="tg2" weight="40" numTenants="9"></tenantDistribution>
+                <tenantDistribution id="tg3" weight="10" numTenants="10"></tenantDistribution>
                 <opDistribution id="upsertOp" weight="20"></opDistribution>
                 <opDistribution id="queryOp1" weight="20"></opDistribution>
                 <opDistribution id="queryOp2" weight="20"></opDistribution>
