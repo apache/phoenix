@@ -586,10 +586,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                                     cf == null ? dataTable.getColumnForColumnQualifier(null, cq)
                                             : dataTable.getColumnFamily(cf)
                                                     .getPColumnForColumnQualifier(cq);
-                            if (dataColumn == null &&
-                                    Bytes.compareTo(cf, dataEmptyKeyValueCF) == 0 &&
-                                    Bytes.compareTo(cq, EncodedColumnsUtil.getEmptyKeyValueInfo(dataEncodingScheme).getFirst()) == 0) {
-                                return null;
+                            if (dataColumn == null) {
+                                if (Bytes.compareTo(cf, dataEmptyKeyValueCF) == 0
+                                        && Bytes.compareTo(cq, EncodedColumnsUtil.getEmptyKeyValueInfo(dataEncodingScheme).getFirst()) == 0) {
+                                    return null;
+                                } else {
+                                    throw new ColumnNotFoundException(dataTable.getSchemaName().getString(),
+                                            dataTable.getTableName().getString(), Bytes.toString(cf), Bytes.toString(cq));
+                                }
                             } else {
                                 indexedColumnsInfo.add(new Pair<>(dataColumn.getFamilyName()
                                         .getString(), dataColumn.getName().getString()));

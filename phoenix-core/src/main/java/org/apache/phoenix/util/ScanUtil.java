@@ -1065,21 +1065,6 @@ public class ScanUtil {
         return false;
     }
 
-    private static boolean containsColumn(Scan scan, byte[] cf, byte[] cq) {
-        Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
-        if (familyMap == null || familyMap.isEmpty()) {
-            return false;
-        }
-        if (!familyMap.containsKey(cf)) {
-            return false;
-        }
-        NavigableSet<byte[]> set = familyMap.get(cf);
-        if (set == null || set.isEmpty()) {
-            return false;
-        }
-        return set.contains(cq);
-    }
-
     private static boolean addEmptyColumnToFilter(Scan scan, byte[] emptyCF, byte[] emptyCQ, Filter filter,  boolean addedEmptyColumn) {
         if (filter instanceof EncodedQualifiersColumnProjectionFilter) {
             ((EncodedQualifiersColumnProjectionFilter) filter).addTrackedColumn(ENCODED_EMPTY_COLUMN_NAME);
@@ -1141,35 +1126,6 @@ public class ScanUtil {
         }
     }
 
-    public static void adjustScanFilersForEmptyColumn(Scan scan, PTable table, PhoenixConnection phoenixConnection) throws SQLException {
-        Filter filter = scan.getFilter();
-        if (filter == null) {
-            return;
-        }
-        if (table.getType() != PTableType.TABLE) {
-            return;
-        }
-        String schemaName = table.getSchemaName().getString();
-        String tableName = table.getTableName().getString();
-        try {
-            PhoenixRuntime.getTable(phoenixConnection, SchemaUtil.getTableName(schemaName, tableName));
-        } catch (TableNotFoundException e) {
-            // This index table must be being deleted. No need to set the scan attributes
-            return;
-        }
-        byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
-        byte[] emptyCQ = table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
-                        QueryConstants.EMPTY_COLUMN_BYTES :
-                        table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
-        if (containsColumn(scan, emptyCF, emptyCQ)) {
-            if (filter instanceof FilterList) {
-                addEmptyColumnToFilterList(scan, emptyCF, emptyCQ, (FilterList) filter, false);
-            } else {
-                addEmptyColumnToFilter(scan, emptyCF, emptyCQ, filter, false);
-            }
-        }
-    }
-
     public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table, PhoenixConnection phoenixConnection) throws SQLException {
         if (table.isTransactional() || table.getType() != PTableType.INDEX) {
             return;
@@ -1212,7 +1168,6 @@ public class ScanUtil {
         if (scan.getAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS) == null) {
             BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
         }
-        addEmptyColumnToScan(scan, emptyCF, emptyCQ);
     }
 
     public static void setScanAttributesForPhoenixTTL(Scan scan, PTable table,
@@ -1275,8 +1230,32 @@ public class ScanUtil {
                         HConstants.EMPTY_BYTE_ARRAY,
                         scan.getStartRow(), scan.getStopRow());
             }
-            addEmptyColumnToScan(scan, emptyColumnFamilyName, emptyColumnName);
         }
+    }
+
+    public static void setScanAttributesForClient(Scan scan, PTable table,
+                                                  PhoenixConnection phoenixConnection) throws SQLException {
+        setScanAttributesForIndexReadRepair(scan, table, phoenixConnection);
+        setScanAttributesForPhoenixTTL(scan, table, phoenixConnection);
+        byte[] emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME);
+        byte[] emptyCQ = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME);
+        if (emptyCF != null && emptyCQ != null) {
+            addEmptyColumnToScan(scan, emptyCF, emptyCQ);
+        }
+        if (phoenixConnection.getQueryServices().getProps().getBoolean(
+                QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB,
+                QueryServicesOptions.DEFAULT_PHOENIX_SERVER_PAGING_ENABLED)) {
+            long pageSizeMs = phoenixConnection.getQueryServices().getProps()
+                    .getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
+            if (pageSizeMs == -1) {
+                // Use the half of the HBase RPC timeout value as the the server page size to make sure that the HBase
+                // region server will be able to send a heartbeat message to the client before the client times out
+                pageSizeMs = (long) (phoenixConnection.getQueryServices().getProps()
+                        .getLong(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT) * 0.5);
+            }
+            scan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS, Bytes.toBytes(Long.valueOf(pageSizeMs)));
+        }
+
     }
 
     public static void getDummyResult(byte[] rowKey, List<Cell> result) {
