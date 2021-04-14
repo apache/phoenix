@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.curator.shaded.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.mapreduce.Counters;
@@ -47,6 +46,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.INVALID_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.VALID_ROW_COUNT;
 import static org.apache.phoenix.util.MetaDataUtil.VIEW_INDEX_TABLE_PREFIX;
