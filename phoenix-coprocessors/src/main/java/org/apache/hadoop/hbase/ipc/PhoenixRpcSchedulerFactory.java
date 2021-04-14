@@ -28,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.util.IndexUtil;
 
 /**
  * Factory to create a {@link PhoenixRpcScheduler}. In this package so we can access the
@@ -53,7 +54,7 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
         }
 
         // get the index priority configs
-        int indexPriority = getIndexPriority(conf);
+        int indexPriority = IndexUtil.getIndexPriority(conf);
         validatePriority(indexPriority);
         // get the metadata priority configs
         int metadataPriority = getMetadataPriority(conf);
@@ -82,9 +83,6 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
         			+ HConstants.NORMAL_QOS +" to " + HConstants.HIGH_QOS ); 
     }
 
-    public static int getIndexPriority(Configuration conf) {
-        return conf.getInt(QueryServices.INDEX_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_PRIORITY);
-    }
     
     public static int getMetadataPriority(Configuration conf) {
         return conf.getInt(QueryServices.METADATA_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_METADATA_PRIORITY);

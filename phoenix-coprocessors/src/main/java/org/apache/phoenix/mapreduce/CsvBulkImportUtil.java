@@ -22,7 +22,7 @@ import java.util.Base64;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixToolsUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 
@@ -64,7 +64,7 @@ public class CsvBulkImportUtil {
      */
     public static void configurePreUpsertProcessor(Configuration conf,
             Class<? extends ImportPreUpsertKeyValueProcessor> processorClass) {
-        conf.setClass(PhoenixConfigurationUtil.UPSERT_HOOK_CLASS_CONFKEY, processorClass,
+        conf.setClass(PhoenixToolsUtil.UPSERT_HOOK_CLASS_CONFKEY, processorClass,
                 ImportPreUpsertKeyValueProcessor.class);
     }
 

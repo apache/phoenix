@@ -23,6 +23,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixToolsUtil;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -70,16 +71,16 @@ public class PhoenixServerBuildIndexInputFormatIT  extends ParallelStatsDisabled
             assertTableSource(conf, conn);
 
             // use index table as source
-            PhoenixConfigurationUtil.setIndexToolSourceTable(conf, SourceTable.INDEX_TABLE_SOURCE);
+            PhoenixToolsUtil.setIndexToolSourceTable(conf, SourceTable.INDEX_TABLE_SOURCE);
             assertTableSource(conf, conn);
 
             PhoenixConfigurationUtil.setIndexToolDataTableName(conf, viewFullName);
             PhoenixConfigurationUtil.setIndexToolIndexTableName(conf, viewIndexFullName);
-            PhoenixConfigurationUtil.setIndexToolSourceTable(conf, SourceTable.DATA_TABLE_SOURCE);
+            PhoenixToolsUtil.setIndexToolSourceTable(conf, SourceTable.DATA_TABLE_SOURCE);
 
             assertTableSource(conf, conn);
 
-            PhoenixConfigurationUtil.setIndexToolSourceTable(conf, SourceTable.INDEX_TABLE_SOURCE);
+            PhoenixToolsUtil.setIndexToolSourceTable(conf, SourceTable.INDEX_TABLE_SOURCE);
             assertTableSource(conf, conn);
         }
     }
@@ -87,7 +88,7 @@ public class PhoenixServerBuildIndexInputFormatIT  extends ParallelStatsDisabled
     private void assertTableSource(Configuration conf, Connection conn) throws Exception {
         String dataTableFullName = PhoenixConfigurationUtil.getIndexToolDataTableName(conf);
         String indexTableFullName = PhoenixConfigurationUtil.getIndexToolIndexTableName(conf);
-        SourceTable sourceTable = PhoenixConfigurationUtil.getIndexToolSourceTable(conf);
+        SourceTable sourceTable = PhoenixToolsUtil.getIndexToolSourceTable(conf);
         boolean fromIndex = sourceTable.equals(SourceTable.INDEX_TABLE_SOURCE);
         PTable pDataTable = PhoenixRuntime.getTable(conn, dataTableFullName);
         PTable pIndexTable = PhoenixRuntime.getTable(conn, indexTableFullName);

@@ -42,7 +42,7 @@ import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBui
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ClientUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -154,7 +154,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
             new ScanningResultIterator(new SnapshotScanner(configuration, fs, restoreDir, htd, hri, scan),
                 scan, scanMetricsHolder);
       } catch (Throwable e) {
-        throw ServerUtil.parseServerException(e);
+        throw ClientUtil.parseServerException(e);
       }
     }
     return true;
@@ -190,7 +190,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
         fs.delete(this.restoreDir, true);
       }
     } catch (IOException e) {
-      throw ServerUtil.parseServerException(e);
+      throw ClientUtil.parseServerException(e);
     } finally {
       scanIterator = UNINITIALIZED_SCANNER;
     }

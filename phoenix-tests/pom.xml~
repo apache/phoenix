@@ -128,37 +128,37 @@
       <!-- Run with -Dmaven.test.skip.exec=true to build -tests.jar without running 
         tests (this is needed for upstream projects whose tests need this jar simply for 
         compilation) -->
-<!--       <plugin> -->
-<!--         <groupId>org.apache.maven.plugins</groupId> -->
-<!--         <artifactId>maven-jar-plugin</artifactId> -->
-<!--         <executions> -->
-<!--           <execution> -->
-<!--             <phase>prepare-package -->
-<!--             </phase> -->
-<!--             <goals> -->
-<!--               <goal>test-jar</goal> -->
-<!--             </goals> -->
-<!--             <configuration> -->
-<!--               <archive> -->
-<!--                 <manifest> -->
-<!--                   <mainClass>org.apache.phoenix.util.GeneratePerformanceData</mainClass> -->
-<!--                 </manifest> -->
-<!--               </archive> -->
-<!--             </configuration> -->
-<!--           </execution> -->
-<!--         </executions> -->
-<!--         <configuration> -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>prepare-package
+            </phase>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+            <configuration>
+              <archive>
+                <manifest>
+                  <mainClass>org.apache.phoenix.util.GeneratePerformanceData</mainClass>
+                </manifest>
+              </archive>
+            </configuration>
+          </execution>
+        </executions>
+        <configuration>
           <!-- Exclude these 2 packages, because their dependency _binary_ files 
             include the sources, and Maven 2.2 appears to add them to the sources to compile, 
             weird -->
-<!--           <excludes> -->
-<!--             <exclude>org/apache/jute/**</exclude> -->
-<!--             <exclude>org/apache/zookeeper/**</exclude> -->
-<!--             <exclude>**/*.jsp</exclude> -->
-<!--             <exclude>log4j.properties</exclude> -->
-<!--           </excludes> -->
-<!--         </configuration> -->
-<!--       </plugin> -->
+          <excludes>
+            <exclude>org/apache/jute/**</exclude>
+            <exclude>org/apache/zookeeper/**</exclude>
+            <exclude>**/*.jsp</exclude>
+            <exclude>log4j.properties</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
       <!-- Setup eclipse -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -172,41 +172,11 @@
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
-          <configuration>
-            <ignoredUnusedDeclaredDependencies>
-<!--               <ignoredUnusedDeclaredDependency> -->
-<!--                 org.apache.omid:omid-hbase-shims-hbase2.x -->
-<!--               </ignoredUnusedDeclaredDependency> -->
-
-              <ignoredUnusedDeclaredDependency>
-                org.apache.omid:omid-hbase-common-hbase2.x:jar
-              </ignoredUnusedDeclaredDependency>
-
-              <ignoredUnusedDeclaredDependency>
-                org.apache.tephra:tephra-hbase-compat-2.0
-              </ignoredUnusedDeclaredDependency>
-
-              <ignoredUnusedDeclaredDependency>
-                org.apache.hadoop:hadoop-auth
-              </ignoredUnusedDeclaredDependency>
-
-<!--               <ignoredUnusedDeclaredDependency> -->
-<!--                 org.apache.omid:omid-hbase-commit-table-hbase2.x -->
-<!--               </ignoredUnusedDeclaredDependency> -->
-<!--               <ignoredUnusedDeclaredDependency> -->
-<!--                 org.apache.omid:omid-timestamp-storage-hbase2.x -->
-<!--               </ignoredUnusedDeclaredDependency> -->
-<!--               <ignoredUnusedDeclaredDependency> -->
-<!--                 org.slf4j:slf4j-log4j12 -->
-<!--               </ignoredUnusedDeclaredDependency> -->
-            </ignoredUnusedDeclaredDependencies>
-            <ignoredUsedUndeclaredDependencies>
-<!--               <ignoredUsedUndeclaredDependency> -->
-<!--                 dnsjava:dnsjava -->
-<!--               </ignoredUsedUndeclaredDependency> -->
-            </ignoredUsedUndeclaredDependencies>
-          </configuration>
         <executions>
           <execution>
             <!-- generates the file that will be used by the sandbox script in the dev env -->
@@ -270,39 +240,37 @@
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
     </dependency>
-
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-auth</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-yarn-api</artifactId>
+    </dependency>
 
-<!--     <dependency> -->
-<!--       <groupId>org.apache.hadoop</groupId> -->
-<!--       <artifactId>hadoop-yarn-api</artifactId> -->
-<!--     </dependency> -->
-
-<!--     <dependency> -->
-<!--       <groupId>org.apache.hadoop</groupId> -->
-<!--       <artifactId>hadoop-mapreduce-client-core</artifactId> -->
-<!--     </dependency> -->
-<!--     <dependency> -->
-<!--       <groupId>org.apache.hadoop</groupId> -->
-<!--       <artifactId>hadoop-hdfs-client</artifactId> -->
-<!--     </dependency> -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs-client</artifactId>
+    </dependency>
 
     <!-- Hadoop test dependencies -->
-<!--     <dependency> -->
-<!--       <groupId>org.apache.hadoop</groupId> -->
-<!--       <artifactId>hadoop-minikdc</artifactId> -->
-<!--       <scope>test</scope> -->
-<!--     </dependency> -->
-<!--     <dependency> -->
-<!--       <groupId>org.apache.hadoop</groupId> -->
-<!--       <artifactId>hadoop-hdfs</artifactId> -->
-<!--       <type>test-jar</type> -->
-<!--       <classifier>tests</classifier> -->
-<!--       <scope>test</scope> -->
-<!--     </dependency> -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-minikdc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs</artifactId>
+      <type>test-jar</type>
+      <classifier>tests</classifier>
+      <scope>test</scope>
+    </dependency>
 
     <!-- HBase dependencies -->
     <dependency>
@@ -311,23 +279,31 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-mapreduce</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-metrics-api</artifactId>
     </dependency>
-<!--     <dependency> -->
-<!--       <groupId>org.apache.hbase</groupId> -->
-<!--       <artifactId>hbase-metrics</artifactId> -->
-<!--     </dependency> -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-metrics</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-protocol</artifactId>
     </dependency>
-<!--     <dependency> -->
-<!--       <groupId>org.apache.hbase</groupId> -->
-<!--       <artifactId>hbase-protocol-shaded</artifactId> -->
-<!--     </dependency> -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-protocol-shaded</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
@@ -337,46 +313,39 @@
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-hadoop2-compat</artifactId>
     </dependency>
-<!--     <dependency> -->
-<!--       <groupId>org.apache.hbase</groupId> -->
-<!--       <artifactId>hbase-zookeeper</artifactId> -->
-<!--     </dependency> -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-zookeeper</artifactId>
+    </dependency>
 
-<!--     <dependency> -->
-<!--       <groupId>org.apache.hbase.thirdparty</groupId> -->
-<!--       <artifactId>hbase-shaded-miscellaneous</artifactId> -->
-<!--     </dependency> -->
-<!--     <dependency> -->
-<!--       <groupId>org.apache.hbase.thirdparty</groupId> -->
-<!--       <artifactId>hbase-shaded-protobuf</artifactId> -->
-<!--     </dependency> -->
+    <dependency>
+      <groupId>org.apache.hbase.thirdparty</groupId>
+      <artifactId>hbase-shaded-miscellaneous</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase.thirdparty</groupId>
+      <artifactId>hbase-shaded-protobuf</artifactId>
+    </dependency>
 
     <!-- HBase test dependencies -->
-<!--     <dependency> -->
-<!--       <groupId>org.apache.hbase</groupId> -->
-<!--       <artifactId>hbase-it</artifactId> -->
-<!--       <type>test-jar</type> -->
-<!--       <scope>test</scope> -->
-<!--       FIXME remove me, only for finding references -->
-<!--       <exclusions> -->
-<!--         <exclusion> -->
-<!--           <groupId>org.apache.hbase</groupId> -->
-<!--           <artifactId>hbase-server</artifactId> -->
-<!--         </exclusion> -->
-<!--       </exclusions> -->
-<!--     </dependency> -->
-<!--     <dependency> -->
-<!--       <groupId>org.apache.hbase</groupId> -->
-<!--       <artifactId>hbase-common</artifactId> -->
-<!--       <type>test-jar</type> -->
-<!--       <scope>test</scope> -->
-<!--     </dependency> -->
-<!--     <dependency> -->
-<!--       <groupId>org.apache.hbase</groupId> -->
-<!--       <artifactId>hbase-server</artifactId> -->
-<!--       <type>test-jar</type> -->
-<!--       <scope>test</scope> -->
-<!--     </dependency> -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-it</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-common</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
 
     <!-- Transaction dependencies -->
     <!-- Omid dependencies -->
@@ -384,32 +353,30 @@
       <groupId>org.apache.omid</groupId>
       <artifactId>omid-hbase-client-hbase2.x</artifactId>
     </dependency>
-    <!-- FIXME move to phoenix-server jar -->
-<!--     <dependency> -->
-<!--       <groupId>org.apache.omid</groupId> -->
-<!--       <artifactId>omid-hbase-coprocessor-hbase2.x</artifactId> -->
-<!--     </dependency> -->
-
-<!--     <dependency> -->
-<!--       <groupId>org.apache.omid</groupId> -->
-<!--       <artifactId>omid-hbase-shims-hbase2.x</artifactId> -->
-<!--     </dependency> -->
-<!--     <dependency> -->
-<!--       <groupId>org.apache.omid</groupId> -->
-<!--       <artifactId>omid-tso-server-hbase2.x</artifactId> -->
-<!--     </dependency> -->
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-hbase-coprocessor-hbase2.x</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-hbase-shims-hbase2.x</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-tso-server-hbase2.x</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
       <artifactId>omid-hbase-common-hbase2.x</artifactId>
     </dependency>
-<!--     <dependency> -->
-<!--       <groupId>org.apache.omid</groupId> -->
-<!--       <artifactId>omid-timestamp-storage-hbase2.x</artifactId> -->
-<!--     </dependency> -->
-<!--     <dependency> -->
-<!--       <groupId>org.apache.omid</groupId> -->
-<!--       <artifactId>omid-hbase-commit-table-hbase2.x</artifactId> -->
-<!--     </dependency> -->
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-timestamp-storage-hbase2.x</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-hbase-commit-table-hbase2.x</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
       <artifactId>omid-transaction-client</artifactId>
@@ -423,16 +390,22 @@
       <artifactId>omid-common</artifactId>
     </dependency>
 
+    <!-- Omid test dependencies -->
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-tso-server-hbase2.x</artifactId>
+      <type>test-jar</type>
+    </dependency>
 
     <!-- Other dependencies -->
     <dependency>
       <groupId>org.antlr</groupId>
       <artifactId>antlr-runtime</artifactId>
     </dependency>
-<!--     <dependency> -->
-<!--       <groupId>com.google.inject</groupId> -->
-<!--       <artifactId>guice</artifactId> -->
-<!--     </dependency> -->
+    <dependency>
+      <groupId>com.google.inject</groupId>
+      <artifactId>guice</artifactId>
+    </dependency>
     <dependency>
       <groupId>joda-time</groupId>
       <artifactId>joda-time</artifactId>
@@ -453,18 +426,18 @@
       <groupId>org.iq80.snappy</groupId>
       <artifactId>snappy</artifactId>
     </dependency>
-<!--     <dependency> -->
-<!--       <groupId>com.fasterxml.jackson.core</groupId> -->
-<!--       <artifactId>jackson-core</artifactId> -->
-<!--     </dependency> -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-core</artifactId>
+    </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
     </dependency>
-<!--     <dependency> -->
-<!--       <groupId>com.fasterxml.jackson.core</groupId> -->
-<!--       <artifactId>jackson-annotations</artifactId> -->
-<!--     </dependency> -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-annotations</artifactId>
+    </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
@@ -517,10 +490,14 @@
       <groupId>com.lmax</groupId>
       <artifactId>disruptor</artifactId>
     </dependency>
-<!--     <dependency> -->
-<!--       <groupId>org.apache.zookeeper</groupId> -->
-<!--       <artifactId>zookeeper</artifactId> -->
-<!--     </dependency> -->
+    <dependency>
+      <groupId>org.apache.zookeeper</groupId>
+      <artifactId>zookeeper</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.thrift</groupId>
+      <artifactId>libthrift</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.jruby.joni</groupId>
       <artifactId>joni</artifactId>
@@ -531,21 +508,21 @@
     </dependency>
 
     <!-- Other test dependencies -->
-<!--     <dependency> -->
-<!--       <groupId>junit</groupId> -->
-<!--       <artifactId>junit</artifactId> -->
-<!--       <scope>test</scope> -->
-<!--     </dependency> -->
-<!--     <dependency> -->
-<!--       <groupId>org.mockito</groupId> -->
-<!--       <artifactId>mockito-core</artifactId> -->
-<!--       <scope>test</scope> -->
-<!--     </dependency> -->
-<!--     <dependency> -->
-<!--       <groupId>org.hamcrest</groupId> -->
-<!--       <artifactId>hamcrest-core</artifactId> -->
-<!--       <scope>test</scope> -->
-<!--     </dependency> -->
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.hamcrest</groupId>
+      <artifactId>hamcrest-core</artifactId>
+      <scope>test</scope>
+    </dependency>
 
   </dependencies>
 
@@ -574,6 +551,11 @@
         <classifier>shaded</classifier>
         <scope>provided</scope>
       </dependency>
+      <dependency>
+        <groupId>org.apache.thrift</groupId>
+        <artifactId>libthrift</artifactId>
+        <scope>provided</scope>
+      </dependency>
     </dependencies>
   </profile>
   <profile>
@@ -596,6 +578,85 @@
         <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-hbase-compat-2.0</artifactId>
         <classifier>shaded</classifier>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.thrift</groupId>
+        <artifactId>libthrift</artifactId>
+      </dependency>
+    </dependencies>
+  </profile>
+  <profile>
+    <id>phoenix-hbase-compat-2.3.0</id>
+    <!-- keep dependency plugin happy -->
+    <activation>
+      <property>
+        <name>hbase.profile</name>
+        <value>2.3</value>
+      </property>
+    </activation>
+    <properties>
+      <hbase.profile>2.3</hbase.profile>
+    </properties>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper-jute</artifactId>
+      </dependency>
+    </dependencies>
+  </profile>
+  <profile>
+    <id>phoenix-hbase-compat-2.4.0</id>
+    <!-- keep dependency plugin happy -->
+    <activation>
+      <property>
+        <name>hbase.profile</name>
+        <value>2.4.0</value>
+      </property>
+    </activation>
+    <properties>
+      <hbase.profile>2.4.0</hbase.profile>
+    </properties>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper-jute</artifactId>
+      </dependency>
+    </dependencies>
+  </profile>
+  <profile>
+    <id>phoenix-hbase-compat-2.4.1</id>
+    <!-- keep dependency plugin happy -->
+    <activation>
+      <property>
+        <name>hbase.profile</name>
+        <value>2.4</value>
+      </property>
+    </activation>
+    <properties>
+      <hbase.profile>2.4</hbase.profile>
+    </properties>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper-jute</artifactId>
+      </dependency>
+    </dependencies>
+  </profile>
+  <profile>
+    <id>phoenix-hbase-compat-2.4.1-default</id>
+    <!-- keep dependency plugin happy -->
+    <activation>
+      <property>
+        <name>!hbase.profile</name>
+      </property>
+    </activation>
+    <properties>
+      <hbase.profile>2.4</hbase.profile>
+    </properties>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper-jute</artifactId>
       </dependency>
     </dependencies>
   </profile>

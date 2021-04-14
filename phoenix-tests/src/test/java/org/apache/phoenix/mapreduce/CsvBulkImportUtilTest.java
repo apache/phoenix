@@ -29,6 +29,7 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixToolsUtil;
 import org.junit.Test;
 
 public class CsvBulkImportUtilTest {
@@ -67,7 +68,7 @@ public class CsvBulkImportUtilTest {
     public void testConfigurePreUpsertProcessor() {
         Configuration conf = new Configuration();
         CsvBulkImportUtil.configurePreUpsertProcessor(conf, MockProcessor.class);
-        ImportPreUpsertKeyValueProcessor processor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
+        ImportPreUpsertKeyValueProcessor processor = PhoenixToolsUtil.loadPreUpsertProcessor(conf);
         assertEquals(MockProcessor.class, processor.getClass());
     }
 

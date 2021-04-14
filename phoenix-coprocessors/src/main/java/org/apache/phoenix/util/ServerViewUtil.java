@@ -193,10 +193,10 @@ public class ServerViewUtil extends ViewUtil {
             throws IOException, SQLException {
         Table hTable = null;
         try {
-            hTable = ServerUtil.getHTableForCoprocessorScan(env, SchemaUtil.getPhysicalTableName(
+            hTable = env.getConnection().getTable(SchemaUtil.getPhysicalTableName(
                             sysCatOrSysChildLink, env.getConfiguration()));
         } catch (Exception e){
-            logger.error("ServerUtil.getHTableForCoprocessorScan error!", e);
+            logger.error("SchemaUtil.getPhysicalTableName error!", e);
         }
         // if the SYSTEM.CATALOG or SYSTEM.CHILD_LINK doesn't exist just return
         if (hTable==null) {

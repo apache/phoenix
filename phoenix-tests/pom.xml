@@ -141,6 +141,12 @@
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-coprocessors</artifactId>
     </dependency>
+            <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-mapreduce</artifactId>
+    </dependency>
+    
+    
 
     <!-- Hadoop dependencies -->
     <dependency>

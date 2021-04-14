@@ -24,7 +24,7 @@ import org.apache.hadoop.hbase.Cell;
 /**
  * A listener hook to process KeyValues that are being written to HFiles for bulk import.
  * Implementing this interface and configuring it via the {@link
- * org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil#UPSERT_HOOK_CLASS_CONFKEY}
+ * org.apache.phoenix.mapreduce.util.PhoenixToolsTil#UPSERT_HOOK_CLASS_CONFKEY}
  * configuration key.
  * 
  * The intention of such a hook is to allow coproccessor-style operations to be peformed on

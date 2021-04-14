@@ -73,7 +73,7 @@ import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ClientUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -290,7 +290,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         firstTuple = tuple;
       }
     } catch (Throwable t) {
-      ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
+        ClientUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
       return null;
     } finally {
       region.closeRegionOperation();
@@ -313,7 +313,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
           tuple = iterator.next();
           return !isFilterDone();
         } catch (Throwable t) {
-          ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
+            ClientUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
           return false;
         }
       }
@@ -328,7 +328,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
               iterator.close();
             }
           } catch (SQLException e) {
-            ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), e);
+              ClientUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), e);
           }
         }
       }
@@ -358,7 +358,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       long actualSize = iterator.getByteSize();
       chunk.resize(actualSize);
     } catch (Throwable t) {
-      ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
+        ClientUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
       return null;
     } finally {
       region.closeRegionOperation();
@@ -387,7 +387,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
           tuple = iterator.next();
           return !isFilterDone();
         } catch (Throwable t) {
-          ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
+            ClientUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
           return false;
         }
       }
@@ -402,7 +402,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
               iterator.close();
             }
           } catch (SQLException e) {
-            ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), e);
+              ClientUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), e);
           } finally {
             chunk.close();
           }

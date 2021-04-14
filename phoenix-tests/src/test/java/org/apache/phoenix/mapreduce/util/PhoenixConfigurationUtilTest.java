@@ -319,15 +319,15 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
         final Configuration conf = new Configuration();
 
         // by default source is data table
-        SourceTable sourceTable = PhoenixConfigurationUtil.getIndexToolSourceTable(conf);
+        SourceTable sourceTable = PhoenixToolsUtil.getIndexToolSourceTable(conf);
         Assert.assertEquals(sourceTable, SourceTable.DATA_TABLE_SOURCE);
 
-        PhoenixConfigurationUtil.setIndexToolSourceTable(conf, SourceTable.INDEX_TABLE_SOURCE);
-        sourceTable = PhoenixConfigurationUtil.getIndexToolSourceTable(conf);
+        PhoenixToolsUtil.setIndexToolSourceTable(conf, SourceTable.INDEX_TABLE_SOURCE);
+        sourceTable = PhoenixToolsUtil.getIndexToolSourceTable(conf);
         Assert.assertEquals(sourceTable, SourceTable.INDEX_TABLE_SOURCE);
 
-        PhoenixConfigurationUtil.setIndexToolSourceTable(conf, SourceTable.DATA_TABLE_SOURCE);
-        sourceTable = PhoenixConfigurationUtil.getIndexToolSourceTable(conf);
+        PhoenixToolsUtil.setIndexToolSourceTable(conf, SourceTable.DATA_TABLE_SOURCE);
+        sourceTable = PhoenixToolsUtil.getIndexToolSourceTable(conf);
         Assert.assertEquals(sourceTable, SourceTable.DATA_TABLE_SOURCE);
     }
 }

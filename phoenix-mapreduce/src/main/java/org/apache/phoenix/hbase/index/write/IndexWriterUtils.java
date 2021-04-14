@@ -26,13 +26,10 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
-import org.apache.phoenix.util.ServerUtil.ConnectionType;
+import org.apache.phoenix.util.MapReduceUtil.ConnectionFactory;
+import org.apache.phoenix.util.MapReduceUtil.ConnectionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

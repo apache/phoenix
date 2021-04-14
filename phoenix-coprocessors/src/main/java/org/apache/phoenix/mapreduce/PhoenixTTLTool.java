@@ -260,7 +260,7 @@ public class PhoenixTTLTool extends Configured implements Tool {
 
     public void configureJob() throws Exception {
         this.job = Job.getInstance(getConf(),getJobName());
-        PhoenixMapReduceUtil.setInput(job, this);
+        setInput(job, this);
 
         job.setJarByClass(PhoenixTTLTool.class);
         job.setMapperClass(PhoenixTTLDeleteJobMapper.class);
@@ -272,6 +272,21 @@ public class PhoenixTTLTool extends Configured implements Tool {
 
         TableMapReduceUtil.addDependencyJars(job);
         LOGGER.info("PhoenixTTLTool is running for " + job.getJobName());
+    }
+
+    /**
+     *
+     * @param job MR job instance
+     * @param tool PhoenixTtlTool for Phoenix TTL deletion MR job
+     */
+    public static void setInput(final Job job, PhoenixTTLTool tool) {
+        Configuration configuration = job.getConfiguration();
+        job.setInputFormatClass(PhoenixMultiViewInputFormat.class);
+        tool.setPhoenixTTLJobInputConfig(configuration);
+        PhoenixConfigurationUtil.setSchemaType(configuration,
+                PhoenixConfigurationUtil.SchemaType.QUERY);
+        PhoenixConfigurationUtil.setMultiInputMapperSplitSize(configuration, tool.getSplitSize());
+        PhoenixConfigurationUtil.setMultiViewQueryMoreSplitSize(configuration, tool.getBatchSize());
     }
 
     public int runJob() {

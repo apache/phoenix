@@ -66,11 +66,10 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PrefixByteDecoder;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
 
 import com.google.protobuf.ServiceException;
-import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
-import org.apache.phoenix.util.ServerUtil.ConnectionType;
+import org.apache.phoenix.util.MapReduceUtil.ConnectionFactory;
+import org.apache.phoenix.util.MapReduceUtil.ConnectionType;
 
 /**
  * Wrapper to access the statistics table SYSTEM.STATS using the HTable.
@@ -102,12 +101,11 @@ public class StatisticsWriter implements Closeable {
             throws IOException {
         Configuration configuration = env.getConfiguration();
         long newClientTimeStamp = determineClientTimeStamp(configuration, clientTimeStamp);
-        Table statsWriterTable = ConnectionFactory.getConnection(ConnectionType.DEFAULT_SERVER_CONNECTION, env).getTable(
+        Table statsTable = ConnectionFactory.getConnection(ConnectionType.DEFAULT_SERVER_CONNECTION, env).getTable(
                 SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, env.getConfiguration()));
-        Table statsReaderTable = ServerUtil.getHTableForCoprocessorScan(env, statsWriterTable);
-        StatisticsWriter statsTable = new StatisticsWriter(statsReaderTable, statsWriterTable, tableName,
+        StatisticsWriter statsWriter = new StatisticsWriter(statsTable, statsTable, tableName,
                 newClientTimeStamp);
-        return statsTable;
+        return statsWriter;
     }
 
     // Provides a means of clients controlling their timestamps to not use current time

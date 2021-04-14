@@ -34,6 +34,7 @@ import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.index.SourceTargetColumnNames.DataSourceColNames;
 import org.apache.phoenix.mapreduce.index.SourceTargetColumnNames.IndexSourceColNames;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixToolsUtil;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -271,7 +272,7 @@ public class IndexScrutinyTableOutput {
             final PTable pdataTable = PhoenixRuntime.getTable(conn, qDataTable);
             final String qIndexTable = PhoenixConfigurationUtil.getScrutinyIndexTableName(conf);
             final PTable pindexTable = PhoenixRuntime.getTable(conn, qIndexTable);
-            SourceTable sourceTable = PhoenixConfigurationUtil.getScrutinySourceTable(conf);
+            SourceTable sourceTable = PhoenixToolsUtil.getScrutinySourceTable(conf);
             long scrutinyExecuteTime =
                     PhoenixConfigurationUtil.getScrutinyExecuteTimestamp(conf);
             SourceTargetColumnNames columnNames =

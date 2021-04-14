@@ -33,7 +33,7 @@ import org.apache.phoenix.schema.tuple.PositionBasedMultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.EncodedColumnsUtil;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ClientUtil;
 
 import static org.apache.phoenix.util.ScanUtil.isDummy;
 
@@ -76,7 +76,7 @@ public class RegionScannerResultIterator extends BaseResultIterator {
                 tuple.setKeyValues(results);
                 return tuple;
             } catch (IOException e) {
-                throw ServerUtil.parseServerException(e);
+                throw ClientUtil.parseServerException(e);
             }
         }
     }

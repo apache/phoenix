@@ -2287,8 +2287,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
             if (pTableType == PTableType.TABLE || pTableType == PTableType.VIEW) {
                 // check to see if the table has any child views
-                try (Table hTable = ServerUtil.getHTableForCoprocessorScan(env,
-                        getSystemTableForChildLinks(clientVersion, env.getConfiguration()))) {
+                try (Table hTable = env.getConnection().getTable(
+                            getSystemTableForChildLinks(clientVersion, env.getConfiguration()))) {
                     // This call needs to be done before acquiring the row lock on the header row
                     // for the table/view being dropped, otherwise the calls to resolve its child
                     // views via PhoenixRuntime.getTableNoCache() will deadlock since this call
@@ -2502,8 +2502,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             return null;
         }
         MetaDataResponse.Builder builder = MetaDataResponse.newBuilder();
-        try (Table hTable =
-                ServerUtil.getHTableForCoprocessorScan(env,
+        try (Table hTable = env.getConnection().getTable(
                     SchemaUtil.getPhysicalTableName(systemTableName, env.getConfiguration()))) {
             hTable.batch(remoteMutations, null);
         } catch (Throwable t) {
@@ -2683,7 +2682,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         boolean isMutationAllowed = true;
         boolean isSchemaMutationAllowed = true;
         if (expectedType == PTableType.TABLE || expectedType == PTableType.VIEW) {
-            try (Table hTable = ServerUtil.getHTableForCoprocessorScan(env,
+            try (Table hTable = env.getConnection().getTable(
                     getSystemTableForChildLinks(clientVersion, env.getConfiguration()))) {
                 childViews.addAll(findAllDescendantViews(hTable, env.getConfiguration(),
                         tenantId, schemaName, tableOrViewName, clientTimeStamp, false)

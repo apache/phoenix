@@ -63,6 +63,7 @@ import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -1163,7 +1164,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                     org.apache.hadoop.hbase.TableName.valueOf(fullIndexeName));
             val = indexTable.getValue("PRIORITY");
             assertNotNull("PRIORITY is not set for table:" + indexTable, val);
-            assertTrue(Integer.parseInt(val) >= PhoenixRpcSchedulerFactory.getIndexPriority(config));
+            assertTrue(Integer.parseInt(val) >= IndexUtil.getIndexPriority(config));
         }
     }
 

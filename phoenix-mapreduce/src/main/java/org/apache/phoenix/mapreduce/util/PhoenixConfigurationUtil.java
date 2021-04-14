@@ -18,8 +18,6 @@
 package org.apache.phoenix.mapreduce.util;
 
 import static org.apache.commons.lang3.StringUtils.isNotEmpty;
-import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -38,29 +36,16 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
-import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.mapreduce.FormatToBytesWritableMapper;
-import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
-import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
-import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
-import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
-import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * A utility class to set properties on the {#link Configuration} instance.
@@ -108,8 +93,7 @@ public final class PhoenixConfigurationUtil {
     
     public static final String TX_PROVIDER = "phoenix.mr.txprovider";
 
-    /** Configuration key for the class name of an ImportPreUpsertKeyValueProcessor */
-    public static final String UPSERT_HOOK_CLASS_CONFKEY = "phoenix.mapreduce.import.kvprocessor";
+
 
     public static final String MAPREDUCE_INPUT_CLUSTER_QUORUM = "phoenix.mapreduce.input.cluster.quorum";
     
@@ -127,9 +111,6 @@ public final class PhoenixConfigurationUtil {
 
     public static final String INDEX_TOOL_INDEX_TABLE_NAME = "phoenix.mr.index_tool.index.table.name";
 
-    public static final String INDEX_TOOL_SOURCE_TABLE = "phoenix.mr.index_tool.source.table";
-
-    public static final String SCRUTINY_SOURCE_TABLE = "phoenix.mr.scrutiny.source.table";
 
     public static final String SCRUTINY_BATCH_SIZE = "phoenix.mr.scrutiny.batch.size";
 
@@ -138,7 +119,6 @@ public final class PhoenixConfigurationUtil {
 
     public static final boolean DEFAULT_SCRUTINY_OUTPUT_INVALID_ROWS = false;
 
-    public static final String SCRUTINY_OUTPUT_FORMAT = "phoenix.mr.scrutiny.output.format";
 
     public static final String SCRUTINY_EXECUTE_TIMESTAMP = "phoenix.mr.scrutiny.execute.timestamp";
 
@@ -152,11 +132,6 @@ public final class PhoenixConfigurationUtil {
     public static final String VERIFY_INDEX = "phoenix.mr.index.verifyIndex";
 
     public static final String ONLY_VERIFY_INDEX = "phoenix.mr.index.onlyVerifyIndex";
-
-    public static final String INDEX_VERIFY_TYPE = "phoenix.mr.index.IndexVerifyType";
-
-    public static final String DISABLE_LOGGING_TYPE = "phoenix.mr.index" +
-        ".IndexDisableLoggingType";
 
     // Generate splits based on scans from stats, or just from region splits
     public static final String MAPREDUCE_SPLIT_BY_STATS = "phoenix.mapreduce.split.by.stats";
@@ -627,19 +602,6 @@ public final class PhoenixConfigurationUtil {
         //In order to have phoenix working on a secured cluster
         TableMapReduceUtil.initCredentials(job);
     }
-    
-    public static ImportPreUpsertKeyValueProcessor loadPreUpsertProcessor(Configuration conf) {
-        Class<? extends ImportPreUpsertKeyValueProcessor> processorClass = null;
-        try {
-            processorClass = conf.getClass(
-                    UPSERT_HOOK_CLASS_CONFKEY, FormatToBytesWritableMapper.DefaultImportPreUpsertKeyValueProcessor.class,
-                    ImportPreUpsertKeyValueProcessor.class);
-        } catch (Exception e) {
-            throw new IllegalStateException("Couldn't load upsert hook class", e);
-        }
-    
-        return ReflectionUtils.newInstance(processorClass, conf);
-    }
 
     public static byte[] getIndexMaintainers(final Configuration configuration){
         Preconditions.checkNotNull(configuration);
@@ -667,17 +629,6 @@ public final class PhoenixConfigurationUtil {
     public static void setOnlyVerifyIndex(Configuration configuration, boolean verify) {
         Preconditions.checkNotNull(configuration);
         configuration.setBoolean(ONLY_VERIFY_INDEX, verify);
-    }
-
-    public static void setIndexVerifyType(Configuration configuration, IndexTool.IndexVerifyType verifyType) {
-        Preconditions.checkNotNull(configuration);
-        configuration.set(INDEX_VERIFY_TYPE, verifyType.getValue());
-    }
-
-    public static void setDisableLoggingVerifyType(Configuration configuration,
-                                                   IndexTool.IndexDisableLoggingType disableLoggingType) {
-        Preconditions.checkNotNull(configuration);
-        configuration.set(DISABLE_LOGGING_TYPE, disableLoggingType.getValue());
     }
 
     public static String getScrutinyDataTableName(Configuration configuration) {
@@ -712,11 +663,6 @@ public final class PhoenixConfigurationUtil {
         configuration.set(SCRUTINY_INDEX_TABLE_NAME, qIndexTableName);
     }
 
-    public static SourceTable getScrutinySourceTable(Configuration configuration) {
-        Preconditions.checkNotNull(configuration);
-        return SourceTable.valueOf(configuration.get(SCRUTINY_SOURCE_TABLE));
-    }
-
     public static void setIndexToolIndexTableName(Configuration configuration, String qIndexTableName) {
         Preconditions.checkNotNull(configuration);
         Preconditions.checkNotNull(qIndexTableName);
@@ -728,25 +674,6 @@ public final class PhoenixConfigurationUtil {
         return configuration.get(INDEX_TOOL_INDEX_TABLE_NAME);
     }
 
-    public static void setIndexToolSourceTable(Configuration configuration,
-            IndexScrutinyTool.SourceTable sourceTable) {
-        Preconditions.checkNotNull(configuration);
-        Preconditions.checkNotNull(sourceTable);
-        configuration.set(INDEX_TOOL_SOURCE_TABLE, sourceTable.name());
-    }
-
-    public static IndexScrutinyTool.SourceTable getIndexToolSourceTable(Configuration configuration) {
-        Preconditions.checkNotNull(configuration);
-        return IndexScrutinyTool.SourceTable.valueOf(configuration.get(INDEX_TOOL_SOURCE_TABLE,
-            IndexScrutinyTool.SourceTable.DATA_TABLE_SOURCE.name()));
-    }
-
-    public static void setScrutinySourceTable(Configuration configuration,
-            SourceTable sourceTable) {
-        Preconditions.checkNotNull(configuration);
-        Preconditions.checkNotNull(sourceTable);
-        configuration.set(SCRUTINY_SOURCE_TABLE, sourceTable.name());
-    }
 
     public static boolean getScrutinyOutputInvalidRows(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
@@ -768,19 +695,6 @@ public final class PhoenixConfigurationUtil {
     public static void setScrutinyBatchSize(Configuration configuration, long batchSize) {
         Preconditions.checkNotNull(configuration);
         configuration.setLong(SCRUTINY_BATCH_SIZE, batchSize);
-    }
-
-    public static OutputFormat getScrutinyOutputFormat(Configuration configuration) {
-        Preconditions.checkNotNull(configuration);
-        return OutputFormat
-                .valueOf(configuration.get(SCRUTINY_OUTPUT_FORMAT, OutputFormat.FILE.name()));
-    }
-
-    public static void setScrutinyOutputFormat(Configuration configuration,
-            OutputFormat outputFormat) {
-        Preconditions.checkNotNull(configuration);
-        Preconditions.checkNotNull(outputFormat);
-        configuration.set(SCRUTINY_OUTPUT_FORMAT, outputFormat.name());
     }
 
     public static long getScrutinyExecuteTimestamp(Configuration configuration) {
@@ -826,18 +740,6 @@ public final class PhoenixConfigurationUtil {
     public static boolean getOnlyVerifyIndex(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.getBoolean(ONLY_VERIFY_INDEX, false);
-    }
-
-    public static IndexTool.IndexVerifyType getIndexVerifyType(Configuration configuration) {
-        Preconditions.checkNotNull(configuration);
-        String value = configuration.get(INDEX_VERIFY_TYPE, IndexTool.IndexVerifyType.NONE.getValue());
-        return IndexTool.IndexVerifyType.fromValue(value);
-    }
-
-    public static IndexTool.IndexVerifyType getDisableLoggingVerifyType(Configuration configuration) {
-        Preconditions.checkNotNull(configuration);
-        String value = configuration.get(DISABLE_LOGGING_TYPE, IndexTool.IndexVerifyType.NONE.getValue());
-        return IndexTool.IndexVerifyType.fromValue(value);
     }
 
     public static boolean getSplitByStats(final Configuration configuration) {

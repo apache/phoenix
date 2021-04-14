@@ -91,6 +91,7 @@ import org.apache.phoenix.mapreduce.util.ColumnInfoToStringEncoderDecoder;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixToolsUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
@@ -714,12 +715,12 @@ public class IndexTool extends Configured implements Tool {
 
             PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, dataTableWithSchema);
             PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
-            PhoenixConfigurationUtil.setIndexToolSourceTable(configuration, sourceTable);
+            PhoenixToolsUtil.setIndexToolSourceTable(configuration, sourceTable);
             if (startTime != null) {
                 PhoenixConfigurationUtil.setIndexToolStartTime(configuration, startTime);
             }
-            PhoenixConfigurationUtil.setIndexVerifyType(configuration, indexVerifyType);
-            PhoenixConfigurationUtil.setDisableLoggingVerifyType(configuration, disableLoggingType);
+            PhoenixToolsUtil.setIndexVerifyType(configuration, indexVerifyType);
+            PhoenixToolsUtil.setDisableLoggingVerifyType(configuration, disableLoggingType);
             String physicalIndexTable = pIndexTable.getPhysicalName().getString();
 
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, physicalIndexTable);

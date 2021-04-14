@@ -23,94 +23,27 @@ import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER
 import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER_RPC_RETRIES_NUMBER;
 
 import java.io.IOException;
-import java.sql.SQLException;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
-import java.util.concurrent.Future;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.NotServingRegionException;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
-import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.Region.RowLock;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
-import org.apache.phoenix.exception.PhoenixIOException;
-import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
-import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ServerUtil extends MapReduceUtil {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ServerUtil.class);
+public class MapReduceUtil extends ClientUtil {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(MapReduceUtil.class);
     
-
-    private static final String FORMAT_FOR_TIMESTAMP = ",serverTimestamp=%d,";
-
-    public static DoNotRetryIOException wrapInDoNotRetryIOException(String msg, Throwable t, long timestamp) {
-        if (msg == null) {
-            msg = "";
-        }
-        if (t instanceof SQLException) {
-            msg = t.getMessage() + " " + msg;
-        }
-        msg += String.format(FORMAT_FOR_TIMESTAMP, timestamp);
-        return new DoNotRetryIOException(msg, t);
-    }
-    
-    public static boolean readyToCommit(int rowCount, long mutationSize, int maxBatchSize, long maxBatchSizeBytes) {
-        return maxBatchSize > 0 && rowCount >= maxBatchSize
-                || (maxBatchSizeBytes > 0 && mutationSize >= maxBatchSizeBytes);
-    }
-    
-    public static boolean isKeyInRegion(byte[] key, Region region) {
-        byte[] startKey = region.getRegionInfo().getStartKey();
-        byte[] endKey = region.getRegionInfo().getEndKey();
-        return (Bytes.compareTo(startKey, key) <= 0
-                && (Bytes.compareTo(HConstants.LAST_ROW, endKey) == 0 || Bytes.compareTo(key,
-                    endKey) < 0));
-    }
-
-    public static RowLock acquireLock(Region region, byte[] key, List<RowLock> locks)
-            throws IOException {
-        RowLock rowLock = region.getRowLock(key, false);
-        if (rowLock == null) {
-            throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
-        }
-        if (locks != null) {
-            locks.add(rowLock);
-        }
-        return rowLock;
-    }
-
-    public static void releaseRowLocks(List<RowLock> rowLocks) {
-        if (rowLocks != null) {
-            for (RowLock rowLock : rowLocks) {
-                rowLock.release();
-            }
-            rowLocks.clear();
-        }
-    }
-
     public static enum ConnectionType {
         COMPACTION_CONNECTION,
         INDEX_WRITER_CONNECTION,
@@ -225,5 +158,4 @@ public class ServerUtil extends MapReduceUtil {
         return clonedConf;
 
     }
-
 }

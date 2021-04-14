@@ -54,6 +54,7 @@ import org.apache.phoenix.mapreduce.CsvBulkImportUtil;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixToolsUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -257,7 +258,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
             }
             PhoenixConfigurationUtil.setScrutinyDataTable(configuration, qDataTable);
             PhoenixConfigurationUtil.setScrutinyIndexTable(configuration, qIndexTable);
-            PhoenixConfigurationUtil.setScrutinySourceTable(configuration, sourceTable);
+            PhoenixToolsUtil.setScrutinySourceTable(configuration, sourceTable);
             PhoenixConfigurationUtil.setScrutinyOutputInvalidRows(configuration, outputInvalidRows);
             PhoenixConfigurationUtil.setScrutinyOutputMax(configuration, outputMaxRows);
 
@@ -287,7 +288,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
                         Hint.NO_INDEX, true);
             LOGGER.info("Query used on source table to feed the mapper: " + selectQuery);
 
-            PhoenixConfigurationUtil.setScrutinyOutputFormat(configuration, outputFormat);
+            PhoenixToolsUtil.setScrutinyOutputFormat(configuration, outputFormat);
             // if outputting to table, setup the upsert to the output table
             if (outputInvalidRows && OutputFormat.TABLE.equals(outputFormat)) {
                 String upsertStmt =

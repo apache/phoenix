@@ -22,7 +22,7 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixToolsUtil;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PIntegerArray;
 import org.apache.phoenix.schema.types.PUnsignedInt;
@@ -69,10 +69,10 @@ public class FormatToBytesWritableMapperTest {
     @Test
     public void testLoadPreUpdateProcessor() {
         Configuration conf = new Configuration();
-        conf.setClass(PhoenixConfigurationUtil.UPSERT_HOOK_CLASS_CONFKEY, MockUpsertProcessor.class,
+        conf.setClass(PhoenixToolsUtil.UPSERT_HOOK_CLASS_CONFKEY, MockUpsertProcessor.class,
                 ImportPreUpsertKeyValueProcessor.class);
 
-        ImportPreUpsertKeyValueProcessor processor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
+        ImportPreUpsertKeyValueProcessor processor = PhoenixToolsUtil.loadPreUpsertProcessor(conf);
         assertEquals(MockUpsertProcessor.class, processor.getClass());
     }
 
@@ -80,7 +80,7 @@ public class FormatToBytesWritableMapperTest {
     public void testLoadPreUpdateProcessor_NotConfigured() {
 
         Configuration conf = new Configuration();
-        ImportPreUpsertKeyValueProcessor processor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
+        ImportPreUpsertKeyValueProcessor processor = PhoenixToolsUtil.loadPreUpsertProcessor(conf);
 
         assertEquals(FormatToBytesWritableMapper.DefaultImportPreUpsertKeyValueProcessor.class,
                 processor.getClass());
@@ -89,9 +89,9 @@ public class FormatToBytesWritableMapperTest {
     @Test(expected=IllegalStateException.class)
     public void testLoadPreUpdateProcessor_ClassNotFound() {
         Configuration conf = new Configuration();
-        conf.set(PhoenixConfigurationUtil.UPSERT_HOOK_CLASS_CONFKEY, "MyUndefinedClass");
+        conf.set(PhoenixToolsUtil.UPSERT_HOOK_CLASS_CONFKEY, "MyUndefinedClass");
 
-        PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
+        PhoenixToolsUtil.loadPreUpsertProcessor(conf);
     }
 
     static class MockUpsertProcessor implements ImportPreUpsertKeyValueProcessor {

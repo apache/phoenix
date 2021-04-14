@@ -51,6 +51,7 @@ import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.OutputFormat;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixToolsUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PTable;
@@ -118,7 +119,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             batchSize = PhoenixConfigurationUtil.getScrutinyBatchSize(configuration);
             outputInvalidRows =
                     PhoenixConfigurationUtil.getScrutinyOutputInvalidRows(configuration);
-            outputFormat = PhoenixConfigurationUtil.getScrutinyOutputFormat(configuration);
+            outputFormat = PhoenixToolsUtil.getScrutinyOutputFormat(configuration);
             executeTimestamp = PhoenixConfigurationUtil.getScrutinyExecuteTimestamp(configuration);
             // get the index table and column names
             String qDataTable = PhoenixConfigurationUtil.getScrutinyDataTableName(configuration);
@@ -129,7 +130,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             // set the target table based on whether we're running the MR over the data or index
             // table
             SourceTable sourceTable =
-                    PhoenixConfigurationUtil.getScrutinySourceTable(configuration);
+                    PhoenixToolsUtil.getScrutinySourceTable(configuration);
             SourceTargetColumnNames columnNames =
                     SourceTable.DATA_TABLE_SOURCE.equals(sourceTable)
                             ? new SourceTargetColumnNames.DataSourceColNames(pdataTable,

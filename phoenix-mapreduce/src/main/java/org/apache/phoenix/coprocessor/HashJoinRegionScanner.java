@@ -55,7 +55,7 @@ import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.TupleUtil;
 
 import static org.apache.phoenix.util.ScanUtil.getDummyResult;
@@ -319,7 +319,7 @@ public class HashJoinRegionScanner implements RegionScanner {
 
             return nextInQueue(result);
         } catch (Throwable t) {
-            ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
+            ClientUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
             return false; // impossible
         }
     }

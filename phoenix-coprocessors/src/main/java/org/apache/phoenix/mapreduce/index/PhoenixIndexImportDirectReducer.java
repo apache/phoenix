@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
 
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID;
 
-import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexVerifyType;
+import static org.apache.phoenix.mapreduce.util.PhoenixToolsUtil.getIndexVerifyType;
 
 /**
  * Reducer class that does only one task and that is to update the index state of the table.

@@ -25,10 +25,9 @@ import java.util.Properties;
 import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * Utility class to return a {@link Connection} .
@@ -113,5 +112,4 @@ public class ConnectionUtil {
         Preconditions.checkNotNull(quorum);
         return DriverManager.getConnection(QueryUtil.getUrl(quorum, clientPort, znodeParent), props);
     }
-
 }

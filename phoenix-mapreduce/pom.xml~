@@ -34,10 +34,6 @@
             <groupId>org.apache.phoenix</groupId>
             <artifactId>phoenix-core</artifactId>
         </dependency>
-        <dependency>
-            <groupId>org.apache.phoenix</groupId>
-            <artifactId>phoenix-mapreduce</artifactId>
-        </dependency>
             <dependency>
       <groupId>org.apache.phoenix.thirdparty</groupId>
       <artifactId>phoenix-shaded-commons-cli</artifactId>

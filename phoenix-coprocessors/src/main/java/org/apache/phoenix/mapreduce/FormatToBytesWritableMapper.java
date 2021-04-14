@@ -44,7 +44,7 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixToolsUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -56,7 +56,6 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpsertExecutor;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.IndexRegionObserverConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -151,7 +150,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
         upsertListener = new MapperUpsertListener<RECORD>(
                 context, conf.getBoolean(IGNORE_INVALID_ROW_CONFKEY, true));
         upsertExecutor = buildUpsertExecutor(conf);
-        preUpdateProcessor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
+        preUpdateProcessor = PhoenixToolsUtil.loadPreUpsertProcessor(conf);
     }
 
     @Override

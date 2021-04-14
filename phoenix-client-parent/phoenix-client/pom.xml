@@ -66,9 +66,12 @@
   <dependencies>
     <!-- These must not be moved to phoenix-client-parent, see PHOENIX-6377 -->
     <!-- Depend on all other internal projects -->
+
+    <!-- Depending on phoenix-coprocessors, for backwards compatibility, where users expect to
+    be able to execute MR jobs with client JAR -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-core</artifactId>
+      <artifactId>phoenix-coprocessors</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
