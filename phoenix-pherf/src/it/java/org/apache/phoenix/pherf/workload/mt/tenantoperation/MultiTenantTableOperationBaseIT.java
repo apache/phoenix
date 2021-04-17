@@ -19,6 +19,7 @@
 
 package org.apache.phoenix.pherf.workload.mt.tenantoperation;
 
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.XMLConfigParserTest;
@@ -27,6 +28,7 @@ import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.junit.BeforeClass;
+import org.junit.experimental.categories.Category;
 
 import java.net.URL;
 import java.nio.file.Path;
@@ -38,6 +40,7 @@ import java.util.Properties;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class MultiTenantTableOperationBaseIT extends ParallelStatsDisabledIT {
 
     protected static final String matcherScenario = ".*scenario/.*test_tbl_workload.*xml";

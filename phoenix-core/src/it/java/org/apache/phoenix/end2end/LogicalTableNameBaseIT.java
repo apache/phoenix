@@ -17,9 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.curator.shaded.com.google.common.base.Joiner;
-import org.apache.curator.shaded.com.google.common.collect.Lists;
-import org.apache.curator.shaded.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
@@ -38,6 +35,10 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
+
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
