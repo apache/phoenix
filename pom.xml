@@ -1530,19 +1530,18 @@
     <profile>
       <!-- must be identical to phoenix-hbase-compat-2.4.1 profile -->
       <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
-      <id>phoenix-hbase-compat-2.3.0-default</id>
+      <id>phoenix-hbase-compat-2.4.1-default</id>
       <activation>
         <property>
           <name>!hbase.profile</name>
         </property>
       </activation>
       <properties>
-        <hbase.profile>2.3</hbase.profile>
-        <hbase.compat.version>2.3.0</hbase.compat.version>
-        <hbase.version>${hbase-2.3.runtime.version}</hbase.version>
-        <hbase.thirdparty.version>3.3.0</hbase.thirdparty.version>
+        <hbase.profile>2.4</hbase.profile>
+        <hbase.compat.version>2.4.1</hbase.compat.version>
+        <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
+        <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
         <zookeeper.version>3.5.7</zookeeper.version>
-        <hadoop.version>3.1.3</hadoop.version>
       </properties>
     </profile>
     <profile>
