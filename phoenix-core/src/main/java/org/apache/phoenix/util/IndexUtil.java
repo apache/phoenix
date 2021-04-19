@@ -829,8 +829,8 @@ public class IndexUtil {
 
     /**
      * Set Cell Tags to delete markers with source of operation attribute.
-     * @param miniBatchOp
-     * @throws IOException
+     * @param miniBatchOp miniBatchOp
+     * @throws IOException IOException
      */
     public static void setDeleteAttributes(
             MiniBatchOperationInProgress<Mutation> miniBatchOp)
@@ -852,7 +852,7 @@ public class IndexUtil {
             for (CellScanner cellScanner = m.cellScanner();
                  cellScanner.advance();) {
                 Cell cell = cellScanner.current();
-                RawCell rawCell = (RawCell)cell;
+                RawCell rawCell = (RawCell) cell;
                 List<Tag> tags = new ArrayList<>();
                 Iterator<Tag> tagsIterator = rawCell.getTags();
                 while (tagsIterator.hasNext()) {
