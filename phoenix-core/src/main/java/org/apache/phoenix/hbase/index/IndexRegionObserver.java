@@ -30,14 +30,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.hadoop.hbase.ArrayBackedTag;
-import org.apache.hadoop.hbase.CellScanner;
-import org.apache.hadoop.hbase.PhoenixTagType;
-import org.apache.hadoop.hbase.PrivateCellUtil;
-import org.apache.hadoop.hbase.RawCell;
-import org.apache.hadoop.hbase.Tag;
-import org.apache.hadoop.hbase.TagUtil;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -734,7 +726,7 @@ public class IndexRegionObserver extends CompatIndexRegionObserver implements Re
         scan.setFilter(skipScanFilter);
         try (RegionScanner scanner = c.getEnvironment().getRegion().getScanner(scan)) {
             boolean more = true;
-            while(more) {
+            while (more) {
                 List<Cell> cells = new ArrayList<Cell>();
                 more = scanner.next(cells);
                 if (cells.isEmpty()) {

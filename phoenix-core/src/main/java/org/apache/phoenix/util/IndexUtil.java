@@ -832,7 +832,8 @@ public class IndexUtil {
      * @param miniBatchOp
      * @throws IOException
      */
-    public static void setDeleteAttributes(MiniBatchOperationInProgress<Mutation> miniBatchOp)
+    public static void setDeleteAttributes(
+            MiniBatchOperationInProgress<Mutation> miniBatchOp)
             throws IOException {
         for (int i = 0; i < miniBatchOp.size(); i++) {
             Mutation m = miniBatchOp.getOperation(i);
@@ -840,14 +841,16 @@ public class IndexUtil {
                 // Ignore if it is not Delete type.
                 continue;
             }
-            byte[] sourceOpAttr = m.getAttribute(QueryServices.SOURCE_OPERATION_ATTRIB);
+            byte[] sourceOpAttr =
+                    m.getAttribute(QueryServices.SOURCE_OPERATION_ATTRIB);
             if (sourceOpAttr == null) {
                 continue;
             }
-            Tag sourceOpTag = new ArrayBackedTag(PhoenixTagType.SOURCE_OPERATION_TAG_TYPE,
-                    sourceOpAttr);
+            Tag sourceOpTag = new ArrayBackedTag(
+                    PhoenixTagType.SOURCE_OPERATION_TAG_TYPE, sourceOpAttr);
             List<Cell> updatedCells = new ArrayList<>();
-            for (CellScanner cellScanner = m.cellScanner(); cellScanner.advance();) {
+            for (CellScanner cellScanner = m.cellScanner();
+                 cellScanner.advance();) {
                 Cell cell = cellScanner.current();
                 RawCell rawCell = (RawCell)cell;
                 List<Tag> tags = new ArrayList<>();
@@ -856,8 +859,9 @@ public class IndexUtil {
                     tags.add(tagsIterator.next());
                 }
                 tags.add(sourceOpTag);
-                // TODO: PrivateCellUtil's IA is Private. HBASE-25328 adds a builder method
-                // TODO: for creating Tag which will be LP with IA.coproc
+                // TODO: PrivateCellUtil's IA is Private.
+                // HBASE-25328 adds a builder methodfor creating Tag which
+                // will be LP with IA.coproc
                 Cell updatedCell = PrivateCellUtil.createCell(cell, tags);
                 updatedCells.add(updatedCell);
             }
@@ -869,5 +873,4 @@ public class IndexUtil {
             }
         }
     }
-
 }

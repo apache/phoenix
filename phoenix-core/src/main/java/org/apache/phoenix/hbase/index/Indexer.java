@@ -376,7 +376,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
               new HashMap<ImmutableBytesPtr, MultiMutation>();
           
       Durability defaultDurability = Durability.SYNC_WAL;
-      if(c.getEnvironment().getRegion() != null) {
+      if (c.getEnvironment().getRegion() != null) {
           defaultDurability = c.getEnvironment().getRegion().getTableDescriptor().getDurability();
           defaultDurability = (defaultDurability == Durability.USE_DEFAULT) ? 
                   Durability.SYNC_WAL : defaultDurability;
@@ -516,7 +516,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
           byte[] tableName = c.getEnvironment().getRegion().getTableDescriptor().getTableName().getName();
           Iterator<Pair<Mutation, byte[]>> indexUpdatesItr = indexUpdates.iterator();
           List<Mutation> localUpdates = new ArrayList<Mutation>(indexUpdates.size());
-          while(indexUpdatesItr.hasNext()) {
+          while (indexUpdatesItr.hasNext()) {
               Pair<Mutation, byte[]> next = indexUpdatesItr.next();
               if (Bytes.compareTo(next.getSecond(), tableName) == 0) {
                   localUpdates.add(next.getFirst());
