@@ -1,33 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  Licensed to the Apache Software Foundation (ASF) under one or more
-  contributor license agreements.  See the NOTICE file distributed with
-  this work for additional information regarding copyright ownership.
-  The ASF licenses this file to You under the Apache License, Version 2.0
-  (the "License"); you may not use this file except in compliance with
-  the License.  You may obtain a copy of the License at
-
-      http://www.apache.org/licenses/LICENSE-2.0
-
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
--->
+<!-- Licensed to the Apache Software Foundation (ASF) under one or more contributor 
+  license agreements. See the NOTICE file distributed with this work for additional 
+  information regarding copyright ownership. The ASF licenses this file to 
+  you under the Apache License, Version 2.0 (the "License"); you may not use 
+  this file except in compliance with the License. You may obtain a copy of 
+  the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required 
+  by applicable law or agreed to in writing, software distributed under the 
+  License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS 
+  OF ANY KIND, either express or implied. See the License for the specific 
+  language governing permissions and limitations under the License. -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
   <parent>
+    <artifactId>phoenix</artifactId>
     <groupId>org.apache.phoenix</groupId>
-    <artifactId>phoenix-client-parent</artifactId>
     <version>5.2.0-SNAPSHOT</version>
   </parent>
+  <modelVersion>4.0.0</modelVersion>
 
-  <artifactId>phoenix-client-byo-shaded-hbase-${hbase.suffix}</artifactId>
-  <name>Phoenix Client BYO Shaded HBase</name>
-  <description>Phoenix client that depends on the shaded HBase client JAR</description>
+  <artifactId>phoenix-mapreduce-for-shaded-hbase</artifactId>
+  <name>Phoenix Mapreduce for hbase-mapreduce-shaded</name>
+  <description>Phoenix Mapreduce that depends on the shaded HBase libraries</description>
   <packaging>jar</packaging>
 
   <build>
@@ -37,7 +31,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <executions>
           <execution>
-            <id>embedded-shaded</id>
+            <id>shaded</id>
             <phase>package</phase>
             <goals>
               <goal>shade</goal>
@@ -47,19 +41,18 @@
               <shadeTestJar>false</shadeTestJar>
               <createSourcesJar>true</createSourcesJar>
               <dependencyReducedPomLocation>${basedir}/target/pom.xml</dependencyReducedPomLocation>
-              <artifactSet>
-                <includes>
-                  <include>*:*</include>
-                </includes>
-                <excludes>
-                  <exclude>org.apache.phoenix:phoenix-client</exclude>
-                  <exclude>xom:xom</exclude>
-                </excludes>
-              </artifactSet>
+<!--               <artifactSet> -->
+<!--                 <includes> -->
+<!--                   <include>*:*</include> -->
+<!--                 </includes> -->
+<!--                 <excludes> -->
+<!--                   <exclude>org.apache.phoenix:phoenix-client</exclude> -->
+<!--                   <exclude>xom:xom</exclude> -->
+<!--                 </excludes> -->
+<!--               </artifactSet> -->
               <relocations>
-              <!-- Keep phoenix-client-byo-shaded-hadoop in sync with this -->
-              <!-- We cannot use the more elegant shading rules in -client and -server, but it SHOULD
-              be equivalent, except for the changes for hbase-shaded-client compatibility  -->
+                <!-- Keep in sync with phoenix-client-byo-shaded-hadoop -->
+
                 <relocation>
                   <pattern>org/antlr/</pattern>
                   <shadedPattern>${shaded.package}.org.antlr</shadedPattern>
@@ -308,7 +301,6 @@
                   <pattern>tables/</pattern>
                   <shadedPattern>${shaded.package}.tables.</shadedPattern>
                 </relocation>
-
                 <!-- Phoenix specific relocations end -->
               </relocations>
             </configuration>
@@ -323,31 +315,20 @@
     <!-- Depend on all other internal projects -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-core</artifactId>
-      <exclusions>
-        <!-- We get logging from hbase-shaded-client -->
-        <exclusion>
-          <groupId>org.slf4j</groupId>
-          <artifactId>slf4j-log4j12</artifactId>
-        </exclusion>
-        <!-- We are going to use the HBase shaded protobuf libs instead -->
-        <!-- Isn't this redundant ? -->
-        <exclusion>
-          <groupId>com.google.protobuf</groupId>
-          <artifactId>protobuf-java</artifactId>
-        </exclusion>
-      </exclusions>
+      <artifactId>phoenix-mapreduce</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
-      <optional>false</optional>
+      <artifactId>phoenix-core</artifactId>
+      <scope>provided</scope>
     </dependency>
-    <dependency>
-      <groupId>sqlline</groupId>
-      <artifactId>sqlline</artifactId>
-      <scope>runtime</scope>
-    </dependency>
+    
+    <!-- We are HBase version independent. Add the compat module separately  -->
+<!--     <dependency> -->
+<!--       <groupId>org.apache.phoenix</groupId> -->
+<!--       <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId> -->
+<!--       <optional>false</optional> -->
+<!--     </dependency> -->
     
     <!-- hbase-shaded-client requires htrace-core4 -->
     <!-- FIXME is shading in dependencies that hbase-shaded-client left out a good idea ? -->

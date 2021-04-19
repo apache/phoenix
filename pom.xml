@@ -53,6 +53,7 @@
     <module>phoenix-client-parent/phoenix-client</module>
     <!-- phoenix-client-embedded and phoenix-client-byo-shaded-hbase 
     are added in the corresponding profiles -->
+    <module>phoenix-mapreduce-for-shaded-hbase</module>
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
 <!--     <module>phoenix-tools</module> -->
@@ -99,6 +100,10 @@
     <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
     <hbase-2.4.runtime.version>2.4.2</hbase-2.4.runtime.version>
 
+    <!-- Shaded package names -->
+    <shaded.package>org.apache.phoenix.shaded</shaded.package>
+    <hbase.shaded.package>org.apache.hadoop.hbase.shaded</hbase.shaded.package>
+    
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
     <antlr-output.dir>target/generated-sources/antlr3</antlr-output.dir>

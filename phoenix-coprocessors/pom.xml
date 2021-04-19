@@ -18,73 +18,74 @@
   under the License.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <parent>
-        <artifactId>phoenix</artifactId>
-        <groupId>org.apache.phoenix</groupId>
-        <version>5.2.0-SNAPSHOT</version>
-    </parent>
-    <modelVersion>4.0.0</modelVersion>
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <parent>
+    <artifactId>phoenix</artifactId>
+    <groupId>org.apache.phoenix</groupId>
+    <version>5.2.0-SNAPSHOT</version>
+  </parent>
+  <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>phoenix-coprocessors</artifactId>
+  <artifactId>phoenix-coprocessors</artifactId>
+  <name>Phoenix Coprocessors</name>
+  <description>Phoenix HBase Server Side Library </description>
 
-    <dependencies>
-        <dependency>
-            <groupId>org.apache.phoenix</groupId>
-            <artifactId>phoenix-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.phoenix</groupId>
-            <artifactId>phoenix-mapreduce</artifactId>
-        </dependency>
-            <dependency>
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-mapreduce</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.phoenix.thirdparty</groupId>
       <artifactId>phoenix-shaded-commons-cli</artifactId>
-    </dependency>    
-            <dependency>
-          <groupId>org.apache.phoenix.thirdparty</groupId>
-          <artifactId>phoenix-shaded-guava</artifactId>
-        </dependency>   
-            <!-- HBase compat dependency -->
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
+      <artifactId>phoenix-shaded-guava</artifactId>
+    </dependency>
+
+    <!-- HBase compat dependency -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
       <optional>true</optional>
     </dependency>
 
-        
-        <!-- HBase dependencies -->
-        
+    <!-- HBase dependencies -->
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-common</artifactId>
-    </dependency>       
+    </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-client</artifactId>
-    </dependency>   
-        <dependency>
+    </dependency>
+    <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-server</artifactId>
-    </dependency>   
-        <dependency>
+    </dependency>
+    <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-zookeeper</artifactId>
     </dependency>
-            <dependency>
+    <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-mapreduce</artifactId>
     </dependency>
-         <dependency>
+    <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-protocol</artifactId>
     </dependency>
-        <dependency>
+    <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-protocol-shaded</artifactId>
     </dependency>
-        <dependency>
+    <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-metrics</artifactId>
     </dependency>
@@ -93,54 +94,52 @@
       <artifactId>hbase-metrics-api</artifactId>
     </dependency>
 
-
-
-            <!-- Omid dependencies -->
+    <!-- Omid dependencies -->
     <dependency>
       <groupId>org.apache.omid</groupId>
       <artifactId>omid-hbase-coprocessor-hbase2.x</artifactId>
     </dependency>
-        <dependency>
+    <dependency>
       <groupId>org.apache.omid</groupId>
       <artifactId>omid-hbase-shims-hbase2.x</artifactId>
     </dependency>
-        <dependency>
+    <dependency>
       <groupId>org.apache.omid</groupId>
       <artifactId>omid-commit-table</artifactId>
     </dependency>
-    
-    
+
     <!-- Hadoop dependencies -->
-    
-        <dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-common</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-mapreduce-client-core</artifactId>
     </dependency>
-        <dependency>
+    <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-yarn-api</artifactId>
     </dependency>
-    
-    <!--  misc dependencies -->
+
+    <!-- misc dependencies -->
+    <dependency>
+      <groupId>org.apache.zookeeper</groupId>
+      <artifactId>zookeeper</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.apache.htrace</groupId>
       <artifactId>htrace-core</artifactId>
     </dependency>
-            <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-common</artifactId>
-        </dependency>
-
     <dependency>
       <groupId>com.github.stephenc.findbugs</groupId>
       <artifactId>findbugs-annotations</artifactId>
     </dependency>
-    
-        <dependency>
+    <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
     </dependency>
-        <dependency>
+    <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-core</artifactId>
     </dependency>
@@ -148,21 +147,19 @@
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-annotations</artifactId>
     </dependency>
-        <dependency>
+    <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
     </dependency>
- 
-        <dependency>
+    <dependency>
       <groupId>com.google.inject</groupId>
       <artifactId>guice</artifactId>
     </dependency>
-    
-        <dependency>
+    <dependency>
       <groupId>com.google.code.findbugs</groupId>
       <artifactId>jsr305</artifactId>
     </dependency>
-        <dependency>
+    <dependency>
       <groupId>commons-codec</groupId>
       <artifactId>commons-codec</artifactId>
     </dependency>
@@ -170,21 +167,13 @@
       <groupId>joda-time</groupId>
       <artifactId>joda-time</artifactId>
     </dependency>
-
-    
     <dependency>
       <groupId>org.antlr</groupId>
       <artifactId>antlr-runtime</artifactId>
-    </dependency>        
+    </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-csv</artifactId>
-    </dependency>        
-     
-
-    <dependency>
-      <groupId>org.apache.zookeeper</groupId>
-      <artifactId>zookeeper</artifactId>
     </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>
@@ -194,220 +183,178 @@
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-lang3</artifactId>
     </dependency>
-    
-    
-       
-    <!--
-        <dependency>
-            <groupId>org.apache.hbase</groupId>
-            <artifactId>hbase-common</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.hbase</groupId>
-            <artifactId>hbase-client</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-common</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.phoenix.thirdparty</groupId>
-          <artifactId>phoenix-shaded-guava</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.phoenix.thirdparty</groupId>
-            <artifactId>phoenix-shaded-commons-cli</artifactId>
-        </dependency>
 
-        <dependency>
-            <groupId>org.apache.phoenix</groupId>
-            <artifactId>phoenix-core</artifactId>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.phoenix</groupId>
-            <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
-            <optional>false</optional>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.hbase</groupId>
-            <artifactId>hbase-it</artifactId>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-        </dependency>
-        -->
-    </dependencies>
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>build-helper-maven-plugin</artifactId>
-            </plugin>
-            <plugin>
-                <artifactId>maven-dependency-plugin</artifactId>
-                  <configuration>
-                    <ignoredUnusedDeclaredDependencies>
-                        <ignoredUnusedDeclaredDependency>
-                            org.apache.hbase:hbase-it
-                        </ignoredUnusedDeclaredDependency>
-                        <ignoredUnusedDeclaredDependency>
-                            org.apache.phoenix:phoenix-hbase-compat-${hbase.compat.version}
-                        </ignoredUnusedDeclaredDependency>
-                    </ignoredUnusedDeclaredDependencies>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
+  </dependencies>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <configuration>
+          <ignoreNonCompile>true</ignoreNonCompile>
+<!--           <ignoredUnusedDeclaredDependencies> -->
+<!--             <ignoredUnusedDeclaredDependency> -->
+<!--               org.apache.hbase:hbase-it -->
+<!--             </ignoredUnusedDeclaredDependency> -->
+<!--             <ignoredUnusedDeclaredDependency> -->
+<!--               org.apache.phoenix:phoenix-hbase-compat-${hbase.compat.version} -->
+<!--             </ignoredUnusedDeclaredDependency> -->
+<!--           </ignoredUnusedDeclaredDependencies> -->
+        </configuration>
+        <executions>
+          <execution>
+            <!-- generates the file that will be used by the sandbox script 
+              in the dev env -->
+            <id>create-phoenix-generated-classpath</id>
+            <goals>
+              <goal>build-classpath</goal>
+            </goals>
+            <configuration>
+              <outputFile>${project.build.directory}/cached_classpath.txt</outputFile>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 
-<profiles>
-  <profile>
-    <id>exclude-tephra</id>
-    <activation>
-      <property>
-        <name>without.tephra</name>
-      </property>
-    </activation>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-api</artifactId>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-core-shaded</artifactId>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-hbase-compat-2.0</artifactId>
-        <classifier>shaded</classifier>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.thrift</groupId>
-        <artifactId>libthrift</artifactId>
-        <scope>provided</scope>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>include-tephra</id>
-    <activation>
-      <property>
-        <name>!without.tephra</name>
-      </property>
-    </activation>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-api</artifactId>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-core-shaded</artifactId>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-hbase-compat-2.0</artifactId>
-        <classifier>shaded</classifier>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.thrift</groupId>
-        <artifactId>libthrift</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.3.0</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.3</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.3</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.4.0</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.4.0</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.4.0</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.4.1</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.4</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.4</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.4.1-default</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>!hbase.profile</name>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.4</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-</profiles>
+  <profiles>
+    <profile>
+      <id>exclude-tephra</id>
+      <activation>
+        <property>
+          <name>without.tephra</name>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.tephra</groupId>
+          <artifactId>tephra-api</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.tephra</groupId>
+          <artifactId>tephra-core-shaded</artifactId>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.tephra</groupId>
+          <artifactId>tephra-hbase-compat-2.0</artifactId>
+          <classifier>shaded</classifier>
+          <scope>provided</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.thrift</groupId>
+          <artifactId>libthrift</artifactId>
+          <scope>provided</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>include-tephra</id>
+      <activation>
+        <property>
+          <name>!without.tephra</name>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.tephra</groupId>
+          <artifactId>tephra-api</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.tephra</groupId>
+          <artifactId>tephra-core-shaded</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.tephra</groupId>
+          <artifactId>tephra-hbase-compat-2.0</artifactId>
+          <classifier>shaded</classifier>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.thrift</groupId>
+          <artifactId>libthrift</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-2.3.0</id>
+      <!-- keep dependency plugin happy -->
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.3</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.3</hbase.profile>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper-jute</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-2.4.0</id>
+      <!-- keep dependency plugin happy -->
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.4.0</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.4.0</hbase.profile>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper-jute</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-2.4.1</id>
+      <!-- keep dependency plugin happy -->
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.4</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.4</hbase.profile>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper-jute</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-2.4.1-default</id>
+      <!-- keep dependency plugin happy -->
+      <activation>
+        <property>
+          <name>!hbase.profile</name>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.4</hbase.profile>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper-jute</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
 
 </project>
