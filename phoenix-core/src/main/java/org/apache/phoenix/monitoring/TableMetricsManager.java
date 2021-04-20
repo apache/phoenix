@@ -54,9 +54,6 @@ public class TableMetricsManager {
     private static volatile QueryServicesOptions options = null;
 
     public TableMetricsManager(QueryServicesOptions ops) {
-        if (tableMetricsManager != null) {
-            throw new RuntimeException("Creating of this object is not allowed.");
-        }
         options = ops;
         isTableLevelMetricsEnabled = options.isTableLevelMetricsEnabled();
         LOGGER.info(String.format("Phoenix Table metrics enabled status: %s",
