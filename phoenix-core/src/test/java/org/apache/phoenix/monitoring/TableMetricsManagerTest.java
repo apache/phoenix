@@ -19,11 +19,7 @@
 package org.apache.phoenix.monitoring;
 
 import com.google.common.collect.Lists;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-
-import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.List;
@@ -33,7 +29,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-import org.mockito.Mockito;
 
 import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.countRowsScannedCounter;
 import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.deleteMutationByesCounter;

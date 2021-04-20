@@ -27,9 +27,18 @@ import org.apache.phoenix.query.QueryServicesOptions;
 
 import java.util.Map;
 
+/**
+ * This class implements the JMX based default Metric publishing
+ * of Metrics to JMX end point.
+ */
 public class JmxMetricProvider implements MetricPublisherSupplierFactory {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(JmxMetricProvider.class);
+    private static final String metricsName = "PHOENIX-TableLevel";
+    private static final String metricsDesc = "Phoenix Client Metrics";
+    private static final String metricsjmxConetext = "phoenixTableLevel";
+    private static final String metricsContext = "Phoenix,sub=CLIENT";
+
     private MetricRegistry metricRegistry;
 
     @Override public void registerMetricProvider() {
@@ -42,12 +51,11 @@ public class JmxMetricProvider implements MetricPublisherSupplierFactory {
 
     }
 
-    private  MetricRegistry createMetricRegistry() {
+    private MetricRegistry createMetricRegistry() {
         LOGGER.info("Creating Metric Registry for Phoenix Table Level Metrics");
-        MetricRegistryInfo
-                registryInfo =
-                new MetricRegistryInfo("PHOENIX-TableLevel", "Phoenix Client Metrics",
-                        "phoenixTableLevel", "Phoenix,sub=CLIENT", true);
+        MetricRegistryInfo registryInfo =
+                new MetricRegistryInfo(metricsName, metricsDesc,
+                        metricsjmxConetext, metricsContext, true);
         return MetricRegistries.global().create(registryInfo);
     }
 
@@ -77,7 +85,11 @@ public class JmxMetricProvider implements MetricPublisherSupplierFactory {
     }
 
     @Override public void unRegisterMetrics(TableClientMetrics tInstance) {
-
+        for (Map.Entry<MetricType, PhoenixTableMetric> entry : tInstance.getMetricRegistry()
+                .entrySet()) {
+            metricRegistry
+                    .remove(getMetricNameFromMetricType(entry.getKey(), tInstance.getTableName()));
+        }
     }
 
 }

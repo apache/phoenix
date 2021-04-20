@@ -28,7 +28,6 @@ import org.apache.phoenix.schema.types.PLong;
 public enum MetricType {
 
 	NO_OP_METRIC("no", "No op metric",LogLevel.OFF, PLong.INSTANCE),
-	// mutation (write) related metrics
     MUTATION_BATCH_SIZE("ms", "Number of mutations in the batch",LogLevel.OFF, PLong.INSTANCE),
     MUTATION_BYTES("mb", "Size of mutations in bytes",LogLevel.OFF, PLong.INSTANCE),
     MUTATION_COMMIT_TIME("mt", "Time it took to commit a batch of mutations",LogLevel.OFF, PLong.INSTANCE),

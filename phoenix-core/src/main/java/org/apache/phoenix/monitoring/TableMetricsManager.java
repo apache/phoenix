@@ -44,16 +44,19 @@ import org.slf4j.LoggerFactory;
 public class TableMetricsManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TableMetricsManager.class);
-    private static boolean isTableLevelMetricsEnabled;
-    private static boolean isMetricPublisherEnabled;
     private static final Set<String> allowedListOfTableNames = new HashSet<>();
-    private static ConcurrentMap<String, TableClientMetrics> tableClientMetricsMapping = null;
+    private static volatile boolean isTableLevelMetricsEnabled;
+    private static volatile boolean isMetricPublisherEnabled;
+    private static volatile ConcurrentMap<String, TableClientMetrics> tableClientMetricsMapping = null;
     // Singleton object
-    protected static TableMetricsManager tableMetricsManager = null;
-    private static MetricPublisherSupplierFactory mPublisher = null;
-    private static QueryServicesOptions options = null;
+    private static volatile TableMetricsManager tableMetricsManager = null;
+    private static volatile MetricPublisherSupplierFactory mPublisher = null;
+    private static volatile QueryServicesOptions options = null;
 
     public TableMetricsManager(QueryServicesOptions ops) {
+        if (tableMetricsManager != null) {
+            throw new RuntimeException("Creating of this object is not allowed.");
+        }
         options = ops;
         isTableLevelMetricsEnabled = options.isTableLevelMetricsEnabled();
         LOGGER.info(String.format("Phoenix Table metrics enabled status: %s",
@@ -72,10 +75,7 @@ public class TableMetricsManager {
     }
 
     public TableMetricsManager() {
-    }
 
-    @VisibleForTesting public static void setInstance(TableMetricsManager metricsManager) {
-        tableMetricsManager = metricsManager;
     }
 
     /**
@@ -85,15 +85,17 @@ public class TableMetricsManager {
      */
     private static TableMetricsManager getInstance() {
 
-        if (tableMetricsManager == null) {
+        TableMetricsManager localRef = tableMetricsManager;
+        if (localRef == null) {
             synchronized (TableMetricsManager.class) {
-                if (tableMetricsManager == null) {
+                if (localRef == null) {
                     QueryServicesOptions options = QueryServicesOptions.withDefaults();
                     if (!options.isTableLevelMetricsEnabled()) {
-                        tableMetricsManager = NoOpTableMetricsManager.noOpsTableMetricManager;
-                        return tableMetricsManager;
+                        localRef = tableMetricsManager =
+                                        NoOpTableMetricsManager.noOpsTableMetricManager;
+                        return localRef;
                     }
-                    tableMetricsManager = new TableMetricsManager(options);
+                    localRef = tableMetricsManager = new TableMetricsManager(options);
                     LOGGER.info("Phoenix Table metrics created object for metrics manager");
                     if (isMetricPublisherEnabled) {
                         String className = options.getMetricPublisherClass();
@@ -118,8 +120,60 @@ public class TableMetricsManager {
                 }
             }
         }
-        return tableMetricsManager;
+        return localRef;
     }
+
+    @VisibleForTesting public static void setInstance(TableMetricsManager metricsManager) {
+        tableMetricsManager = metricsManager;
+    }
+
+    public static void updateMetricsMethod(String tableName, MetricType type, long value) {
+        try {
+            TableMetricsManager.getInstance().updateMetrics(tableName, type, value);
+        } catch (Exception e) {
+            LOGGER.error("Failed updating Phoenix table level metrics", e);
+        }
+    }
+
+    public static void pushMetricsFromConnInstanceMethod(Map<String, Map<MetricType, Long>> map) {
+        try {
+            TableMetricsManager.getInstance().pushMetricsFromConnInstance(map);
+        } catch (Exception e) {
+            LOGGER.error("Failed pushing Phoenix table level metrics", e);
+        }
+    }
+
+    public static Map<String, List<PhoenixTableMetric>> getTableMetricsMethod() {
+        try {
+            return TableMetricsManager.getInstance().getTableLevelMetrics();
+        } catch (Exception e) {
+            LOGGER.error("Failed retrieving table level Metrics", e);
+        }
+        return null;
+    }
+
+    public static void clearTableLevelMetricsMethod() {
+        try {
+            TableMetricsManager.getInstance().clearTableLevelMetrics();
+        } catch (Exception e) {
+            LOGGER.error("Failed resetting table level Metrics", e);
+        }
+    }
+
+    @VisibleForTesting public static Long getMetricValue(String tableName, MetricType type) {
+        TableClientMetrics tableMetrics = getInstance().getTableClientMetrics(tableName);
+        if (tableMetrics == null) {
+            return null;
+        }
+        for (PhoenixTableMetric metric : tableMetrics.getMetricMap()) {
+            if (metric.getMetricType() == type) {
+                return metric.getValue();
+            }
+        }
+        return null;
+    }
+
+    // static methods to push, update or retrieve TableLevel Metrics.
 
     /**
      * This function is provided as hook to publish the tableLevel Metrics to
@@ -195,7 +249,7 @@ public class TableMetricsManager {
                     LOGGER.info(String.format("Phoenix Table metrics creating object for table: %s",
                             tableName));
                     tInstance = new TableClientMetrics(tableName);
-                    if (isMetricPublisherEnabled) {
+                    if (isMetricPublisherEnabled && mPublisher != null) {
                         mPublisher.registerMetrics(tInstance);
                     }
                     tableClientMetricsMapping.put(tableName, tInstance);
@@ -233,55 +287,7 @@ public class TableMetricsManager {
         LOGGER.info("Phoenix Table metrics clearing complete");
     }
 
-    // static methods to push, update or retrieve TableLevel Metrics.
-
-    public static void updateMetricsMethod(String tableName, MetricType type, long value) {
-        try {
-            TableMetricsManager.getInstance().updateMetrics(tableName, type, value);
-        } catch (Exception e) {
-            LOGGER.error("Failed updating Phoenix table level metrics", e);
-        }
-    }
-
-    public static void pushMetricsFromConnInstanceMethod(Map<String, Map<MetricType, Long>> map) {
-        try {
-            TableMetricsManager.getInstance().pushMetricsFromConnInstance(map);
-        } catch (Exception e) {
-            LOGGER.error("Failed pushing Phoenix table level metrics", e);
-        }
-    }
-
-    public static Map<String, List<PhoenixTableMetric>> getTableMetricsMethod() {
-        try {
-            return TableMetricsManager.getInstance().getTableLevelMetrics();
-        } catch (Exception e) {
-            LOGGER.error("Failed retrieving table level Metrics", e);
-        }
-        return null;
-    }
-
-    public static void clearTableLevelMetricsMethod() {
-        try {
-            TableMetricsManager.getInstance().clearTableLevelMetrics();
-        } catch (Exception e) {
-            LOGGER.error("Failed resetting table level Metrics", e);
-        }
-    }
-
     public void clear() {
         TableMetricsManager.clearTableLevelMetricsMethod();
-    }
-
-    @VisibleForTesting public static Long getMetricValue(String tableName, MetricType type) {
-        TableClientMetrics tableMetrics = getInstance().getTableClientMetrics(tableName);
-        if (tableMetrics == null) {
-            return null;
-        }
-        for (PhoenixTableMetric metric : tableMetrics.getMetricMap()) {
-            if (metric.getMetricType() == type) {
-                return metric.getValue();
-            }
-        }
-        return null;
     }
 }

@@ -21,10 +21,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.metrics.Gauge;
-import org.apache.hadoop.hbase.metrics.MetricRegistry;
-
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BYTES;
@@ -127,7 +123,7 @@ public class TableClientMetrics {
                 SELECT_AGGREGATE_SUCCESS_SQL_COUNTER), TABLE_SELECT_AGGREGATE_FAILURE_SQL_COUNTER(
                 SELECT_AGGREGATE_FAILURE_SQL_COUNTER);
 
-        private MetricType metricType;
+        private final MetricType metricType;
         private PhoenixTableMetric metric;
 
         TableMetrics(MetricType metricType) {
@@ -136,7 +132,7 @@ public class TableClientMetrics {
     }
 
     private final String tableName;
-    private Map<MetricType, PhoenixTableMetric> metricRegister;
+    private final Map<MetricType, PhoenixTableMetric> metricRegister;
 
     public TableClientMetrics(final String tableName) {
         this.tableName = tableName;

@@ -952,19 +952,19 @@ public class MutationState implements SQLCloseable {
 
     static MutationBytes  calculateMutationSize(List<Mutation> mutations,  boolean updateGlobalClientMetrics ) {
         long byteSize = 0;
-        long temp;
+        long tempSize;
         long deleteSize = 0, deleteCounter = 0;
         long upsertsize = 0, upsertCounter = 0;
         if (GlobalClientMetrics.isMetricsEnabled()) {
             for (Mutation mutation : mutations) {
-                temp  = KeyValueUtil.calculateMutationDiskSize(mutation);
-                byteSize += temp;
+                tempSize  = KeyValueUtil.calculateMutationDiskSize(mutation);
+                byteSize += tempSize;
                 if(mutation instanceof Delete ) {
-                    deleteSize += temp;
+                    deleteSize += tempSize;
                     deleteCounter++;
                     allUpsertsMutations = false;
                 }else if(mutation instanceof Put) {
-                    upsertsize += temp;
+                    upsertsize += tempSize;
                     upsertCounter++;
                     allDeletesMutations = false;
                 } else {
@@ -1475,6 +1475,7 @@ public class MutationState implements SQLCloseable {
                     committedMutationsMetric.combineMetric(failureMutationMetrics);
                     mutationMetricQueue.addMetricsForTable(htableNameStr, committedMutationsMetric);
 
+                    // updated only for all upsertMutations or all DeleteMutations
                     if (allUpsertsMutations ^ allDeletesMutations) {
                         //success cases are updated for both cases autoCommit=true and conn.commit explicit
                         if(areAllBatchesSuccessful){
@@ -1601,9 +1602,6 @@ public class MutationState implements SQLCloseable {
                     uncommittedMutationBytesObject.getTotalMutationBytes();
         }
 
-        // TODO: For V1, we don't expect mixed upserts and deletes so this is fine,
-        //  but we may need to support it later, at which point we should segregate upsert
-        //  mutation time vs delete mutation time
         if (committedTotalMutationBytes > 0) {
             upsertMutationCommitTime =
                     (long)Math.floor((double)(committedUpsertMutationBytes * mutationCommitTime)/

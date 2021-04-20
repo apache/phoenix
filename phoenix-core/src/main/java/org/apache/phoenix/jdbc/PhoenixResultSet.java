@@ -49,6 +49,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.google.common.base.Strings;
 import com.google.common.primitives.Bytes;
 import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.commons.lang.ArrayUtils;
@@ -216,11 +217,13 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
             statement.getResultSets().remove(this);
             overAllQueryMetrics.endQuery();
             overAllQueryMetrics.stopResultSetWatch();
-            if (context.getCurrentTable() != null &&
-                    context.getCurrentTable().getTable() != null) {
+            if (context.getCurrentTable() != null && context.getCurrentTable().getTable() != null
+                    && !Strings.isNullOrEmpty(
+                    context.getCurrentTable().getTable().getPhysicalName().getString())) {
                 boolean isPointLookup = context.getScanRanges().isPointLookup();
-                String tableName = context.getCurrentTable().getTable()
-                        .getPhysicalName().toString();
+                String
+                        tableName =
+                        context.getCurrentTable().getTable().getPhysicalName().toString();
                 updateTableLevelReadMetrics(tableName, isPointLookup);
             }
             if (!queryLogger.isSynced()) {
