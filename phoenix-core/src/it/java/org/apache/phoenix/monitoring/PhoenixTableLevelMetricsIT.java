@@ -217,13 +217,10 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
         }
         assertFalse(getPhoenixTableClientMetrics().isEmpty());
         assertFalse(getPhoenixTableClientMetrics().get(tableName).isEmpty());
-        final long
-                expectedTimeToFetchAllRecordsRsNext =
+        final long expectedTimeToFetchAllRecordsRsNext =
                 rs == null ? 0 : getOverAllReadRequestMetricInfo(rs).get(RESULT_SET_TIME_MS);
-        final long
-                expectedScanBytes =
-                rs == null || rs.isBeforeFirst() ?
-                        0 :
+        final long expectedScanBytes =
+                rs == null || rs.isBeforeFirst() ? 0 :
                         getRequestReadMetricInfo(rs).get(tableName).get(SCAN_BYTES);
         final long expectedSqlCounter = expectedSqlSuccessCt + expectedSqlFailureCt;
 
