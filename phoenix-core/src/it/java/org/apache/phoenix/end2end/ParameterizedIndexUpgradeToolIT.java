@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.end2end.index.IndexCoprocIT;
+import org.apache.phoenix.end2end.index.IndexTestUtil;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.index.GlobalIndexChecker;
@@ -398,7 +399,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
                         indexDesc.hasCoprocessor(IndexRegionObserver.class.getName()));
                     Assert.assertFalse("Found Indexer on " + table,
                         indexDesc.hasCoprocessor(Indexer.class.getName()));
-                    IndexCoprocIT.assertCoprocConfig(indexDesc, IndexRegionObserver.class.getName(),
+                    IndexTestUtil.assertCoprocConfig(indexDesc, IndexRegionObserver.class.getName(),
                         IndexCoprocIT.INDEX_REGION_OBSERVER_CONFIG);
                 }
             }
@@ -409,7 +410,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
                 HTableDescriptor indexDesc = admin.getTableDescriptor(TableName.valueOf(index));
                 Assert.assertTrue("Couldn't find GlobalIndexChecker on " + index,
                     indexDesc.hasCoprocessor(GlobalIndexChecker.class.getName()));
-                IndexCoprocIT.assertCoprocConfig(indexDesc, GlobalIndexChecker.class.getName(),
+                IndexTestUtil.assertCoprocConfig(indexDesc, GlobalIndexChecker.class.getName(),
                     IndexCoprocIT.GLOBAL_INDEX_CHECKER_CONFIG);
             }
         }
@@ -439,7 +440,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
                     indexDesc.hasCoprocessor(Indexer.class.getName()));
                 Assert.assertFalse("Found IndexRegionObserver on " + table,
                     indexDesc.hasCoprocessor(IndexRegionObserver.class.getName()));
-                IndexCoprocIT.assertCoprocConfig(indexDesc, Indexer.class.getName(),
+                IndexTestUtil.assertCoprocConfig(indexDesc, Indexer.class.getName(),
                     IndexCoprocIT.INDEXER_CONFIG);
             }
         }
