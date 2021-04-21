@@ -121,7 +121,7 @@
     <htrace.version>3.1.0-incubating</htrace.version>
     <collections.version>3.2.2</collections.version>
     <jodatime.version>2.10.5</jodatime.version>
-    <joni.version>2.1.2</joni.version>
+    <joni.version>2.1.31</joni.version>
     <tephra.version>0.16.0</tephra.version>
     <omid.version>1.0.2</omid.version>
     <stream.version>2.9.5</stream.version>
@@ -129,7 +129,7 @@
     <guice.version>4.0</guice.version>
     <zookeeper.version>3.4.14</zookeeper.version>
     <curator.version>4.0.0</curator.version>
-    <jcodings.version>1.0.18</jcodings.version>
+    <jcodings.version>1.0.55</jcodings.version>
     <thrift.version>0.9.3-1</thrift.version>
     <!-- Test Dependencies -->
     <mockito.version>1.10.19</mockito.version>
