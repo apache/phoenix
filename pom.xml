@@ -124,7 +124,7 @@
     <collections.version>3.2.2</collections.version>
     <!-- Do not change jodatime.version until HBASE-15199 is fixed -->
     <jodatime.version>1.6</jodatime.version>
-    <joni.version>2.1.2</joni.version>
+    <joni.version>2.1.31</joni.version>
     <avatica.version>1.12.0</avatica.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
     <tephra.version>0.16.0</tephra.version>
@@ -135,6 +135,7 @@
     <stream.version>2.9.5</stream.version>
     <i18n-util.version>1.0.4</i18n-util.version>
     <servlet.api.version>3.1.0</servlet.api.version>
+    <jcodings.version>1.0.55</jcodings.version>
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
     <junit.version>4.13</junit.version>
@@ -1118,6 +1119,16 @@
         <groupId>com.lmax</groupId>
         <artifactId>disruptor</artifactId>
         <version>${disruptor.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.jruby.joni</groupId>
+        <artifactId>joni</artifactId>
+        <version>${joni.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.jruby.jcodings</groupId>
+        <artifactId>jcodings</artifactId>
+        <version>${jcodings.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
