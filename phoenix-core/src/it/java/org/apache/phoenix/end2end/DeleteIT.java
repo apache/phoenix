@@ -44,12 +44,15 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.PhoenixTagType;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.Tag;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.DeleteCompiler;
 import org.apache.phoenix.compile.MutationPlan;
+import org.apache.phoenix.end2end.index.IndexTestUtil;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.SQLParser;
@@ -976,7 +979,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         // Add tag "customer-delete" to delete marker.
         props.setProperty(ConnectionQueryServices.SOURCE_OPERATION_ATTRIB, tagValue);
 
-        createAndUpsertTable(tableName, indexName, props);
+        createAndUpsertTable(tableName, indexName, props, false);
         // Make sure that the plan creates is of ClientSelectDeleteMutationPlan
         verifyDeletePlan(delete, DeleteCompiler.ClientSelectDeleteMutationPlan.class, props);
         executeDelete(delete, props, 1);
@@ -1001,7 +1004,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(ConnectionQueryServices.SOURCE_OPERATION_ATTRIB, tagValue);
 
-        createAndUpsertTable(tableName, indexName, props);
+        createAndUpsertTable(tableName, indexName, props, false);
         // Make sure that the plan creates is of ServerSelectDeleteMutationPlan
         verifyDeletePlan(delete, DeleteCompiler.ServerSelectDeleteMutationPlan.class, props);
         executeDelete(delete, props, 2);
@@ -1027,7 +1030,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         props.setProperty(ConnectionQueryServices.SOURCE_OPERATION_ATTRIB, tagValue);
         // Don't create index table. We will use MultiRowDeleteMutationPlan
         // if there is no index present for a table.
-        createAndUpsertTable(tableName, null, props);
+        createAndUpsertTable(tableName, null, props, false);
         // Make sure that the plan creates is of MultiRowDeleteMutationPlan
         verifyDeletePlan(delete, DeleteCompiler.MultiRowDeleteMutationPlan.class, props);
         executeDelete(delete, props, 1);
@@ -1052,8 +1055,8 @@ public class DeleteIT extends ParallelStatsDisabledIT {
             assertEquals(plan.getClass(), planClass);
         }
     }
-    private void createAndUpsertTable(String tableName, String indexName, Properties props)
-            throws SQLException {
+    private void createAndUpsertTable(String tableName, String indexName, Properties props,
+            boolean useOldCoproc) throws Exception {
         String ddl = "CREATE TABLE " + tableName +
                 " (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)";
         try(Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -1063,6 +1066,10 @@ public class DeleteIT extends ParallelStatsDisabledIT {
                 if (indexName != null) {
                     String indexDdl1 = "CREATE INDEX " + indexName + " ON " + tableName + "(v1,v2)";
                     statement.execute(indexDdl1);
+                }
+                if (useOldCoproc) {
+                    Admin admin = ((PhoenixConnection) conn).getQueryServices().getAdmin();
+                    IndexTestUtil.downgradeCoprocs(tableName, indexName, admin);
                 }
                 statement.execute(
                         "upsert into " + tableName + " values (1, 'foo', 'foo1')");
@@ -1118,5 +1125,24 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         } else {
             assertEquals(0, tags.size());
         }
+    }
+
+    /*
+        Test whether source of operation tags are added to Delete mutations if we are using
+        old index coproc.
+    */
+    @Test
+    public void testDeleteTagsWithOldIndexCoproc() throws Exception {
+        String tableName = generateUniqueName();
+        String tagValue = "customer-delete";
+        String delete = "DELETE FROM " + tableName + " WHERE k = 1";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(ConnectionQueryServices.SOURCE_OPERATION_ATTRIB, tagValue);
+        // The new table will always have new index coproc. Downgrade it to use older one.
+        createAndUpsertTable(tableName, null, props, true);
+        executeDelete(delete, props, 1);
+        String startRowKeyForBaseTable = "1";
+        // Make sure that Delete Marker has cell tag for base table.
+        checkTagPresentInDeleteMarker(tableName, startRowKeyForBaseTable, true, tagValue);
     }
 }
