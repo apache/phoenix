@@ -270,7 +270,11 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 return null;
             }
             Cell cell = cellList.get(0);
-            return (KeyValue) cell;
+            return new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
+                    cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
+                    cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
+                    cell.getTimestamp(), KeyValue.Type.codeToType(cell.getTypeByte()),
+                    cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
         }
         @Override
         public byte[] getRowKey() {

@@ -127,7 +127,7 @@ public class PhoenixRowTimestampFunction extends ScalarFunction {
 
     @Override
     public Determinism getDeterminism() {
-        return Determinism.ALWAYS;
+        return Determinism.PER_ROW;
     }
 
 }

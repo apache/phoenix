@@ -228,8 +228,22 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             // Write a time range query to get the last row with val2 ='bc'
             query = "SELECT  val1, val2, PHOENIX_ROW_TIMESTAMP() from " + dataTableName + " WHERE val1 = 'bc' AND " +
                     "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after.toString() + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
+            // Verify that we will read from the index table
             assertExplainPlan(conn, query, dataTableName, indexTableName);
             rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("bc", rs.getString(1));
+            assertEquals("ccc", rs.getString(2));
+            assertTrue(rs.getTimestamp(3).after(after));
+            assertFalse(rs.next());
+            // Verify that we can execute the same query without using the index
+            String noIndexQuery = "SELECT /*+ NO_INDEX */ val1, val2, PHOENIX_ROW_TIMESTAMP() from " + dataTableName + " WHERE val1 = 'bc' AND " +
+                    "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after.toString() + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
+            // Verify that we will read from the data table
+            rs = conn.createStatement().executeQuery("EXPLAIN " + noIndexQuery);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(explainPlan.contains("FULL SCAN OVER " + dataTableName));
+            rs = conn.createStatement().executeQuery(noIndexQuery);
             assertTrue(rs.next());
             assertEquals("bc", rs.getString(1));
             assertEquals("ccc", rs.getString(2));
@@ -245,6 +259,7 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
             IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
             // Make sure that we can repair the unverified row
             query = "SELECT  val1, val2, PHOENIX_ROW_TIMESTAMP()  from " + dataTableName + " WHERE val1 = 'de'";
+            // Verify that we will read from the index table
             assertExplainPlan(conn, query, dataTableName, indexTableName);
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
