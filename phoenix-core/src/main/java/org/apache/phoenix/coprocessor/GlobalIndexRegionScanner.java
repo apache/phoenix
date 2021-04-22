@@ -263,7 +263,19 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             valuePtr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
             return valuePtr;
         }
-
+        @Override
+        public KeyValue getLatestKeyValue(ColumnReference ref, long ts) {
+            List<Cell> cellList = put.get(ref.getFamily(), ref.getQualifier());
+            if (cellList == null || cellList.isEmpty()) {
+                return null;
+            }
+            Cell cell = cellList.get(0);
+            return new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
+                    cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
+                    cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
+                    cell.getTimestamp(), KeyValue.Type.codeToType(cell.getTypeByte()),
+                    cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+        }
         @Override
         public byte[] getRowKey() {
             return put.getRow();
@@ -274,7 +286,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     public static byte[] getIndexRowKey(IndexMaintainer indexMaintainer, final Put dataRow) {
         ValueGetter valueGetter = new SimpleValueGetter(dataRow);
         return indexMaintainer.buildRowKey(valueGetter, new ImmutableBytesWritable(dataRow.getRow()),
-                null, null, HConstants.LATEST_TIMESTAMP);
+                null, null, getMaxTimestamp(dataRow));
     }
 
     public static long getMaxTimestamp(Mutation m) {
@@ -1188,7 +1200,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         if (indexPut == null) {
             // No covered column. Just prepare an index row with the empty column
             byte[] indexRowKey = indexMaintainer.buildRowKey(mergedRowVG, rowKeyPtr,
-                    null, null, HConstants.LATEST_TIMESTAMP);
+                    null, null, ts);
             indexPut = new Put(indexRowKey);
         } else {
             removeEmptyColumn(indexPut, indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),

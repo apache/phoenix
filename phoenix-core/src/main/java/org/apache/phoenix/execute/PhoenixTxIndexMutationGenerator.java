@@ -49,6 +49,7 @@ import org.apache.phoenix.cache.IndexMetaDataCache;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.hbase.index.AbstractValueGetter;
 import org.apache.phoenix.hbase.index.MultiMutation;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
@@ -462,7 +463,7 @@ public class PhoenixTxIndexMutationGenerator {
                 throws IOException {
             // TODO: creating these objects over and over again is wasteful
             ColumnTracker tracker = new ColumnTracker(indexedColumns);
-            ValueGetter getter = new ValueGetter() {
+            ValueGetter getter = new AbstractValueGetter() {
 
                 @Override
                 public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) throws IOException {
