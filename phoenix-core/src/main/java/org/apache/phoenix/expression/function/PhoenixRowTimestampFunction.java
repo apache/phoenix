@@ -20,6 +20,7 @@ package org.apache.phoenix.expression.function;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -28,7 +29,9 @@ import org.apache.phoenix.parse.PhoenixRowTimestampParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PTimestamp;
 
+import java.sql.Timestamp;
 import java.util.Date;
 import java.util.List;
 
@@ -89,7 +92,7 @@ public class PhoenixRowTimestampFunction extends ScalarFunction {
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
 
-        if (tuple == null || tuple.size() == 0) {
+        if (tuple == null) {
             return false;
         }
 

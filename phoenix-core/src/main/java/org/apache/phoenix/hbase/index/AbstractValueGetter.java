@@ -25,21 +25,21 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 
-public interface ValueGetter {
-  public static final ImmutableBytesWritable HIDDEN_BY_DELETE = new ImmutableBytesWritable(new byte[0]);
-  /**
-   * Get the most recent (largest timestamp) for the given column reference
-   * @param ref to match against an underlying key value. Uses the passed object to match the
-   *          keyValue via {@link ColumnReference#matches}
- * @param ts time stamp at which mutations will be issued
-   * @return the stored value for the given {@link ColumnReference}, <tt>null</tt> if no value is
-   *         present, or {@link ValueGetter#HIDDEN_BY_DELETE} if no value is present and the ref
-   *         will be shadowed by a delete marker.
-   * @throws IOException if there is an error accessing the underlying data storage
-   */
-  public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) throws IOException;
-  public KeyValue getLatestKeyValue(ColumnReference ref, long ts) throws IOException;
-  
-  public byte[] getRowKey();
-
-}
+public abstract class AbstractValueGetter implements ValueGetter{
+    @Override
+    public KeyValue getLatestKeyValue(ColumnReference ref, long ts) throws IOException {
+        ImmutableBytesWritable value = getLatestValue(ref, ts);
+        byte[] rowKey = getRowKey();
+        int valueOffset = 0;
+        int valueLength = 0;
+        byte[] valueBytes = HConstants.EMPTY_BYTE_ARRAY;
+        if (value != null) {
+            valueBytes = value.get();
+            valueOffset = value.getOffset();
+            valueLength = value.getLength();
+        }
+        return new KeyValue(rowKey, 0, rowKey.length, ref.getFamily(), 0, ref.getFamily().length,
+                ref.getQualifier(), 0, ref.getQualifier().length, ts, KeyValue.Type.Put,
+                valueBytes, valueOffset, valueLength);
+    }
+ }

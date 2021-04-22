@@ -39,6 +39,7 @@ import java.util.UUID;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.hbase.index.AbstractValueGetter;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
@@ -1075,7 +1076,8 @@ public class IndexTool extends Configured implements Tool {
             while (rs.next()) {
                 rs.getCurrentRow().getKey(dataRowKeyPtr);
                 // regionStart/EndKey only needed for local indexes, so we pass null
-                byte[] indexRowKey = maintainer.buildRowKey(getter, dataRowKeyPtr, null, null, HConstants.LATEST_TIMESTAMP);
+                byte[] indexRowKey = maintainer.buildRowKey(getter, dataRowKeyPtr, null, null,
+                        rs.getCurrentRow().getValue(0).getTimestamp());
                 histo.addValue(indexRowKey);
             }
             List<Bucket> buckets = histo.computeBuckets();
@@ -1110,7 +1112,7 @@ public class IndexTool extends Configured implements Tool {
         for (String dataCol : dataColNames) {
             rsIndex.put(SchemaUtil.getEscapedFullColumnName(dataCol), i++);
         }
-        return new ValueGetter() {
+        return new AbstractValueGetter() {
             final ImmutableBytesWritable valuePtr = new ImmutableBytesWritable();
             final ImmutableBytesWritable rowKeyPtr = new ImmutableBytesWritable();
 
