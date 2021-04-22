@@ -49,6 +49,7 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.MutationState.MultiRowMutationState;
 import org.apache.phoenix.execute.MutationState.RowMutationState;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.hbase.index.AbstractValueGetter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -170,7 +171,7 @@ public class DeleteCompiler {
         try (final PhoenixResultSet rs = new PhoenixResultSet(iterator, projector, context)) {
             ValueGetter getter = null;
             if (!otherTableRefs.isEmpty()) {
-                getter = new ValueGetter() {
+                getter = new AbstractValueGetter() {
                     final ImmutableBytesWritable valuePtr = new ImmutableBytesWritable();
                     final ImmutableBytesWritable rowKeyPtr = new ImmutableBytesWritable();
     
@@ -247,10 +248,10 @@ public class DeleteCompiler {
                     if (table.getType() == PTableType.INDEX) {
                         otherRowKeyPtr.set(scannedIndexMaintainer.buildDataRowKey(rowKeyPtr, viewConstants));
                         if (otherTable.getType() == PTableType.INDEX) {
-                            otherRowKeyPtr.set(maintainers[i].buildRowKey(getter, otherRowKeyPtr, null, null, HConstants.LATEST_TIMESTAMP));
+                            otherRowKeyPtr.set(maintainers[i].buildRowKey(getter, otherRowKeyPtr, null, null, rs.getCurrentRow().getValue(0).getTimestamp()));
                         }
                     } else {
-                        otherRowKeyPtr.set(maintainers[i].buildRowKey(getter, rowKeyPtr, null, null, HConstants.LATEST_TIMESTAMP));
+                        otherRowKeyPtr.set(maintainers[i].buildRowKey(getter, rowKeyPtr, null, null, rs.getCurrentRow().getValue(0).getTimestamp()));
                     }
                     otherMutations.get(i).put(otherRowKeyPtr, new RowMutationState(PRow.DELETE_MARKER, 0, statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO, null));
                 }

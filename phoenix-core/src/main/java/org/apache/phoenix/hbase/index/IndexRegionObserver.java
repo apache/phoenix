@@ -765,7 +765,7 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
                     if (indexPut == null) {
                         // No covered column. Just prepare an index row with the empty column
                         byte[] indexRowKey = indexMaintainer.buildRowKey(nextDataRowVG, rowKeyPtr,
-                                null, null, HConstants.LATEST_TIMESTAMP);
+                                null, null, ts);
                         indexPut = new Put(indexRowKey);
                     } else {
                         removeEmptyColumn(indexPut, indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
@@ -779,7 +779,7 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
                     if (currentDataRowState != null) {
                         ValueGetter currentDataRowVG = new GlobalIndexRegionScanner.SimpleValueGetter(currentDataRowState);
                         byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
-                                null, null, HConstants.LATEST_TIMESTAMP);
+                                null, null, ts);
                         if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
                             Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
                                     IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
@@ -790,7 +790,7 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
                 } else if (currentDataRowState != null) {
                     ValueGetter currentDataRowVG = new GlobalIndexRegionScanner.SimpleValueGetter(currentDataRowState);
                     byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
-                            null, null, HConstants.LATEST_TIMESTAMP);
+                            null, null, ts);
                     Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
                             IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
                     context.indexUpdates.put(hTableInterfaceReference,
