@@ -57,6 +57,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
@@ -138,21 +139,7 @@ public class TableResultIterator implements ResultIterator {
         this.caches = caches;
         this.retry=plan.getContext().getConnection().getQueryServices().getProps()
                 .getInt(QueryConstants.HASH_JOIN_CACHE_RETRIES, QueryConstants.DEFAULT_HASH_JOIN_CACHE_RETRIES);
-        ScanUtil.setScanAttributesForIndexReadRepair(scan, table, plan.getContext().getConnection());
-        ScanUtil.setScanAttributesForPhoenixTTL(scan, table, plan.getContext().getConnection());
-        if (plan.getContext().getConnection().getQueryServices().getProps().getBoolean(
-                QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB,
-                QueryServicesOptions.DEFAULT_PHOENIX_SERVER_PAGING_ENABLED)) {
-            long pageSizeMs = plan.getContext().getConnection().getQueryServices().getProps()
-                    .getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
-            if (pageSizeMs == -1) {
-                // Use the half of the HBase RPC timeout value as the the server page size to make sure that the HBase
-                // region server will be able to send a heartbeat message to the client before the client times out
-                pageSizeMs = (long) (plan.getContext().getConnection().getQueryServices().getProps()
-                        .getLong(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT) * 0.5);
-            }
-            scan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS, Bytes.toBytes(Long.valueOf(pageSizeMs)));
-        }
+        ScanUtil.setScanAttributesForClient(scan, table, plan.getContext().getConnection());
     }
 
     @Override

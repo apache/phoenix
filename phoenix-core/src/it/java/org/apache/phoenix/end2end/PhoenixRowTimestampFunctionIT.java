@@ -493,4 +493,23 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
             }
         }
     }
+
+    @Test
+    public void testPhoenixRowTimestampWithWildcard() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            conn.createStatement().execute("create table " + dataTableName +
+                    " (pk1 integer not null primary key, x.v1 float, y.v2 float, z.v3 float)" + this.tableDDLOptions);
+            conn.createStatement().execute("upsert into " + dataTableName + " values(rand() * 100000000, rand(), rand(), rand())");
+            conn.commit();
+            ResultSet rs = conn.createStatement().executeQuery("SELECT v1 from " + dataTableName);
+            assertTrue(rs.next());
+            float v1 = rs.getFloat(1);
+            rs = conn.createStatement().executeQuery("SELECT * from " + dataTableName + " order by phoenix_row_timestamp()");
+            assertTrue(rs.next());
+            System.out.println(v1);
+            assertTrue(v1 == rs.getFloat(2));
+        }
+    }
+
 }
