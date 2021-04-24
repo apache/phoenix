@@ -80,7 +80,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
   private static TableName systemCatalogTableName =
       TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
   private static TableName systemChildLinkTableName =
-    TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_TABLE);
+    TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME);
 
   @BeforeClass
   public static synchronized void setup() throws Exception {

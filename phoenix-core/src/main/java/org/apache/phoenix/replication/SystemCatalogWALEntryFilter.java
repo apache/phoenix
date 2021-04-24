@@ -44,16 +44,18 @@ public class SystemCatalogWALEntryFilter implements
    * about cell filter for certain WALEdits.
    */
   private boolean skipCellFilter;
+  // Column value for parent child link
   private static final byte[] CHILD_TABLE_BYTES =
     new byte[]{PTable.LinkType.CHILD_TABLE.getSerializedValue()};
-  private final int NUM_COLUMNS_PRIMARY_KEY = 5;
+  // Number of columns in the primary key of system child link table
+  private static final int NUM_COLUMNS_PRIMARY_KEY = 5;
 
   @Override
   public WAL.Entry filter(WAL.Entry entry) {
     // We use the WALCellFilter to filter the cells from entry, WALEntryFilter
-    // should not block anything
-    // if the WAL.Entry's table isn't System.Catalog or System.Child_Link,
-    // it auto-passes this filter
+    // should not block anything.
+    // If the WAL.Entry's table isn't System.Catalog or System.Child_Link,
+    // it auto-passes this filter.
     skipCellFilter =
       !(SchemaUtil.isMetaTable(entry.getKey().getTableName().getName())
       || SchemaUtil.isChildLinkTable(entry.getKey().getTableName().getName()));
@@ -67,18 +69,18 @@ public class SystemCatalogWALEntryFilter implements
     }
 
     if (SchemaUtil.isMetaTable(entry.getKey().getTableName().getName())) {
-      return doesKeyHaveLeadingSeparatorByte(cell) ? cell : null;
+      return isTenantIdLeadingInKey(cell) ? cell : null;
     } else {
       return isTenantRowCellSystemChildLink(cell) ? cell : null;
     }
   }
 
   /**
-   * does the cell key have leading separator byte
+   * Does the cell key have leading tenant Id.
    * @param cell hbase cell
-   * @return true if the cell has leading separator byte
+   * @return true if the cell has leading tenant Id in key
    */
-  private boolean doesKeyHaveLeadingSeparatorByte(final Cell cell) {
+  private boolean isTenantIdLeadingInKey(final Cell cell) {
     // rows in system.catalog or system child that aren't tenant-owned
     // will have a leading separator byte
     return cell.getRowArray()[cell.getRowOffset()]
@@ -95,7 +97,7 @@ public class SystemCatalogWALEntryFilter implements
    * @return true if the cell is tenant owned
    */
   private boolean isTenantRowCellSystemChildLink(final Cell cell) {
-    boolean isTenantRowCell = doesKeyHaveLeadingSeparatorByte(cell);
+    boolean isTenantRowCell = isTenantIdLeadingInKey(cell);
 
     ImmutableBytesWritable key = new ImmutableBytesWritable(
       cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
