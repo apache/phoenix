@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 4.16.1 - Unreleased (as of 2021-03-26)
+## Release 4.16.1 - Unreleased (as of 2021-04-24)
 
 
 
@@ -26,6 +26,8 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-6435](https://issues.apache.org/jira/browse/PHOENIX-6435) | Fix ViewTTLIT test flapper |  Blocker | . |
+| [PHOENIX-6434](https://issues.apache.org/jira/browse/PHOENIX-6434) | Secondary Indexes on PHOENIX\_ROW\_TIMESTAMP() |  Major | . |
 | [PHOENIX-6409](https://issues.apache.org/jira/browse/PHOENIX-6409) | Include local index uncovered columns merge in explain plan. |  Minor | . |
 | [PHOENIX-6385](https://issues.apache.org/jira/browse/PHOENIX-6385) | Not to use Scan#setSmall for HBase 2.x versions |  Major | . |
 | [PHOENIX-6402](https://issues.apache.org/jira/browse/PHOENIX-6402) | Allow using local indexes with uncovered columns in the WHERE clause |  Blocker | . |
@@ -39,6 +41,7 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-6348](https://issues.apache.org/jira/browse/PHOENIX-6348) | java.lang.NoClassDefFoundError: when running with hbase-1.6 |  Blocker | . |
 | [PHOENIX-6424](https://issues.apache.org/jira/browse/PHOENIX-6424) | SELECT cf1.\* FAILS with a WHERE clause including cf2. |  Major | . |
 | [PHOENIX-6421](https://issues.apache.org/jira/browse/PHOENIX-6421) | Selecting an indexed array value from an uncovered column with local index returns NULL |  Major | . |
 | [PHOENIX-6423](https://issues.apache.org/jira/browse/PHOENIX-6423) | Wildcard queries fail with mixed default and explicit column families. |  Critical | . |
@@ -52,6 +55,13 @@
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
 | [PHOENIX-6408](https://issues.apache.org/jira/browse/PHOENIX-6408) | LIMIT on local index query with uncovered columns in the WHERE returns wrong result. |  Major | . |
+
+
+### OTHER:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-6436](https://issues.apache.org/jira/browse/PHOENIX-6436) | OrderedResultIterator overestimates memory requirements. |  Major | . |
 
 
 
