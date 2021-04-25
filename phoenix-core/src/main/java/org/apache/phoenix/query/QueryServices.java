@@ -309,9 +309,11 @@ public interface QueryServices extends SQLCloseable {
     public static final String WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB =
             "phoenix.query.wildcard.dynamicColumns";
     public static final String LOG_LEVEL = "phoenix.log.level";
+    public static final String AUDIT_LOG_LEVEL = "phoenix.audit.log.level";
     public static final String LOG_BUFFER_SIZE = "phoenix.log.buffer.size";
     public static final String LOG_BUFFER_WAIT_STRATEGY = "phoenix.log.wait.strategy";
     public static final String LOG_SAMPLE_RATE = "phoenix.log.sample.rate";
+    public static final String LOG_HANDLER_COUNT = "phoenix.log.handler.count";
 
 	public static final String SYSTEM_CATALOG_SPLITTABLE = "phoenix.system.catalog.splittable";
 

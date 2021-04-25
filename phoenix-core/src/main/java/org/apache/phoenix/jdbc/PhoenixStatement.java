@@ -379,12 +379,37 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
         }
     }
-    
-    protected int executeMutation(final CompilableStatement stmt) throws SQLException {
-      return executeMutation(stmt, true);
+
+    public String getTargetForAudit(CompilableStatement stmt) {
+        String target = null;
+        try {
+            if (stmt instanceof ExecutableUpsertStatement) {
+                return ((ExecutableUpsertStatement) stmt).getTable().getName().toString();
+            } else if (stmt instanceof ExecutableDeleteStatement) {
+                return ((ExecutableDeleteStatement) stmt).getTable().getName().toString();
+            } else if (stmt instanceof ExecutableCreateTableStatement) {
+                target = ((ExecutableCreateTableStatement)stmt).getTableName().toString();
+            } else if (stmt instanceof ExecutableDropTableStatement) {
+                target = ((ExecutableDropTableStatement)stmt).getTableName().toString();
+            } else if (stmt instanceof ExecutableAddColumnStatement) {
+                target = ((ExecutableAddColumnStatement)stmt).getTable().getName().toString();
+            } else if (stmt instanceof ExecutableCreateSchemaStatement) {
+                return ((ExecutableCreateSchemaStatement) stmt).getSchemaName();
+            } else if (stmt instanceof ExecutableDropSchemaStatement) {
+                target = ((ExecutableDropSchemaStatement)stmt).getSchemaName();
+            }
+        } catch (Exception e) {
+            target = stmt.getClass().getName();
+        }
+        return target;
     }
 
-    private int executeMutation(final CompilableStatement stmt, final boolean doRetryOnMetaNotFoundError) throws SQLException {
+
+    protected int executeMutation(final CompilableStatement stmt, final QueryLogger queryLogger) throws SQLException {
+        return executeMutation(stmt, true, queryLogger);
+    }
+
+    private int executeMutation(final CompilableStatement stmt, final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger) throws SQLException {
 	 if (connection.isReadOnly()) {
             throw new SQLExceptionInfo.Builder(
                 SQLExceptionCode.READ_ONLY_CONNECTION).
@@ -425,6 +450,13 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                 setLastUpdateCount(lastUpdateCount);
                                 setLastUpdateOperation(stmt.getOperation());
                                 connection.incrementStatementExecutionCounter();
+                                if(queryLogger.isAuditLoggingEnabled()) {
+                                    queryLogger.log(QueryLogInfo.TABLE_NAME_I, getTargetForAudit(stmt));
+                                    queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.COMPLETED.toString());
+                                    queryLogger.log(QueryLogInfo.NO_OF_RESULTS_ITERATED_I, lastUpdateCount);
+                                    queryLogger.syncAudit(null, null);
+                                }
+
                                 return lastUpdateCount;
                             }
                             //Force update cache and retry if meta not found error occurs
@@ -435,7 +467,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                     }
                                     if (new MetaDataClient(connection).updateCache(connection.getTenantId(),
                                         e.getSchemaName(), e.getTableName(), true).wasUpdated()) {
-                                        return executeMutation(stmt, false);
+                                        return executeMutation(stmt, false, queryLogger);
                                     }
                                 }
                                 throw e;
@@ -451,6 +483,12 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     }, PhoenixContextExecutor.inContext(),
                         Tracing.withTracing(connection, this.toString()));
         } catch (Exception e) {
+            if(queryLogger.isAuditLoggingEnabled()) {
+                queryLogger.log(QueryLogInfo.TABLE_NAME_I, getTargetForAudit(stmt));
+                queryLogger.log(QueryLogInfo.EXCEPTION_TRACE_I, Throwables.getStackTraceAsString(e));
+                queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.FAILED.toString());
+                queryLogger.syncAudit(null, null);
+            }
             Throwables.propagateIfInstanceOf(e, SQLException.class);
             Throwables.propagate(e);
             throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
@@ -1855,25 +1893,39 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         return compileMutation(stmt, sql);
     }
 
+    public boolean checkIgnoreQueryAudit(CompilableStatement stmt) {
+        boolean needIgnore = false;
+        TableName tableName = null;
+        if (stmt instanceof ExecutableSelectStatement) {
+            TableNode from = ((ExecutableSelectStatement)stmt).getFrom();
+            if(from instanceof NamedTableNode) {
+                tableName = ((NamedTableNode)from).getName();
+            }
+        } else if (stmt instanceof ExecutableUpsertStatement) {
+            tableName = ((ExecutableUpsertStatement)stmt).getTable().getName();
+        } else if (stmt instanceof ExecutableDeleteStatement) {
+            tableName = ((ExecutableDeleteStatement)stmt).getTable().getName();
+        } else if (stmt instanceof ExecutableAddColumnStatement) {
+            tableName = ((ExecutableAddColumnStatement)stmt).getTable().getName();
+        }
+
+        if (tableName != null && PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA
+                .equals(tableName.getSchemaName())) {
+            needIgnore = true;
+        }
+
+        return needIgnore;
+    }
+
     public QueryLogger createQueryLogger(CompilableStatement stmt, String sql) throws SQLException {
-        if (connection.getLogLevel() == LogLevel.OFF) {
+        if (connection.getLogLevel() == LogLevel.OFF &&
+                connection.getAuditLogLevel() == LogLevel.OFF) {
             return QueryLogger.NO_OP_INSTANCE;
         }
 
-        boolean isSystemTable = false;
-        if(stmt instanceof ExecutableSelectStatement) {
-            TableNode from = ((ExecutableSelectStatement)stmt).getFrom();
-            if(from instanceof NamedTableNode) {
-                String schemaName = ((NamedTableNode)from).getName().getSchemaName();
-                if(schemaName == null) {
-                    schemaName=connection.getSchema();
-                }
-                if (PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(schemaName)) {
-                    isSystemTable = true;
-                }
-            }
-        }
-        QueryLogger queryLogger = QueryLogger.getInstance(connection,isSystemTable);
+        boolean isSystemTable = checkIgnoreQueryAudit(stmt);
+
+        QueryLogger queryLogger = QueryLogger.getInstance(connection, isSystemTable);
         QueryLoggerUtil.logInitialDetails(queryLogger, connection.getTenantId(),
                 connection.getQueryServices(), sql, getParameters());
         return queryLogger;
@@ -1890,7 +1942,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         if (stmt.getOperation().isMutation()) {
             throw new ExecuteQueryNotApplicableException(sql);
         }
-        return executeQuery(stmt,createQueryLogger(stmt,sql));
+        return executeQuery(stmt, createQueryLogger(stmt, sql));
     }
 
     @Override
@@ -1903,7 +1955,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
             .build().buildException();
         }
-        int updateCount = executeMutation(stmt);
+        int updateCount = executeMutation(stmt, createQueryLogger(stmt, sql));
         flushIfNecessary();
         return updateCount;
     }
@@ -1922,12 +1974,12 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
                 .build().buildException();
             }
-            executeMutation(stmt);
+            executeMutation(stmt, createQueryLogger(stmt, sql));
             flushIfNecessary();
             return false;
         }
         
-        executeQuery(stmt,createQueryLogger(stmt,sql));
+        executeQuery(stmt, createQueryLogger(stmt, sql));
         return true;
     }
 
