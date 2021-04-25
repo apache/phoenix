@@ -43,15 +43,15 @@ public class QueryLogger {
     private boolean isSynced;
     private static final Logger LOGGER = LoggerFactory.getLogger(QueryLogger.class);
     
-    private QueryLogger(PhoenixConnection connection) {
+    protected QueryLogger(PhoenixConnection connection) {
         this.queryId = UUID.randomUUID().toString();
         this.queryDisruptor = connection.getQueryServices().getQueryDisruptor();
         logLevel = connection.getLogLevel();
         log(QueryLogInfo.QUERY_ID_I, queryId);
         log(QueryLogInfo.START_TIME_I, EnvironmentEdgeManager.currentTimeMillis());
     }
-    
-    private QueryLogger() {
+
+    protected QueryLogger() {
         logLevel = LogLevel.OFF;
     }
     
@@ -155,6 +155,10 @@ public class QueryLogger {
     
 
     public void sync(Map<String, Map<MetricType, Long>> readMetrics, Map<MetricType, Long> overAllMetrics) {
+        syncBase(readMetrics, overAllMetrics, logLevel);
+    }
+
+    public void syncBase(Map<String, Map<MetricType, Long>> readMetrics, Map<MetricType, Long> overAllMetrics, LogLevel logLevel) {
         if (!isSynced) {
             isSynced = true;
             final RingBufferEventTranslator translator = getCachedTranslator();

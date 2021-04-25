@@ -17,36 +17,29 @@
  */
 package org.apache.phoenix.log;
 
-import java.sql.SQLException;
-
+import com.lmax.disruptor.LifecycleAware;
+import com.lmax.disruptor.WorkHandler;
 import org.apache.hadoop.conf.Configuration;
 
-import com.lmax.disruptor.LifecycleAware;
-import com.lmax.disruptor.Sequence;
-import com.lmax.disruptor.SequenceReportingEventHandler;
+
+public class QueryLogDetailsWorkHandler implements WorkHandler<RingBufferEvent>, LifecycleAware {
 
 
-public class QueryLogDetailsEventHandler implements SequenceReportingEventHandler<RingBufferEvent>, LifecycleAware {
-    private Sequence sequenceCallback;
     private LogWriter logWriter;
 
-    public QueryLogDetailsEventHandler(Configuration configuration) throws SQLException{
+    public QueryLogDetailsWorkHandler(Configuration configuration) {
         this.logWriter = new TableLogWriter(configuration);
-    }
-    
-    @Override
-    public void setSequenceCallback(final Sequence sequenceCallback) {
-        this.sequenceCallback = sequenceCallback;
     }
 
     @Override
-    public void onEvent(final RingBufferEvent event, final long sequence, final boolean endOfBatch) throws Exception {
-        logWriter.write(event);
-        event.clear();
+    public void onEvent(RingBufferEvent ringBufferEvent) throws Exception {
+        logWriter.write(ringBufferEvent);
+        ringBufferEvent.clear();
     }
 
     @Override
     public void onStart() {
+
     }
 
     @Override
@@ -59,5 +52,4 @@ public class QueryLogDetailsEventHandler implements SequenceReportingEventHandle
             //Ignore
         }
     }
-
 }
