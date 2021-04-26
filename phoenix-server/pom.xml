@@ -111,15 +111,19 @@
                          This does *not* exclude transitive dependencies for these. To exclude an entire "tree"
                          of dependencies, we need to mark those as "provided" dependencies below. -->
                     <excludes>
-                        <exclude>junit:junit</exclude>
-                        <exclude>org.hamcrest:hamcrest-core</exclude>
                         <exclude>jline:jline</exclude>
                         <exclude>org.eclipse.jetty:*</exclude>
-                        <exclude>org.apache.phoenix:phoenix-server</exclude>
-                        <exclude>sqlline:sqlline</exclude>
                         <exclude>log4j:log4j</exclude>
                         <exclude>org.slf4j:slf4j-api</exclude>
                         <exclude>org.slf4j:slf4j-log4j12</exclude>
+
+                        <!-- These are transitive dependencies of dependencies that we set to
+                        provided, that shade plugin will cheerfully include otherwise
+                        these are not set as provided dependencies, as we do not want define
+                        versions for them -->
+                        <exclude>com.google.guava:guava</exclude>
+                        <exclude>org.checkerframework:checker-qual</exclude>
+                        <exclude>org.codehaus.mojo:animal-sniffer-annotations</exclude>
                     </excludes>
                 </artifactSet>
                 <filters>
@@ -189,7 +193,7 @@
                         <shadedPattern>${shaded.package}.org.apache.commons-collections4</shadedPattern>
                     </relocation>
                     <relocation>
-                        <pattern>org.jboss.netty:netty</pattern>
+                        <pattern>org.jboss.netty</pattern>
                         <shadedPattern>${shaded.package}.org.jboss.netty:netty</shadedPattern>
                     </relocation>
                     <relocation>
@@ -401,6 +405,9 @@
       <artifactId>hadoop-hdfs-client</artifactId>
       <scope>provided</scope>
     </dependency>
+
+    <!-- These are transitive dependencies of the above, which shade plugin would still include 
+    for some reason -->
     <dependency>
       <groupId>org.apache.zookeeper</groupId>
       <artifactId>zookeeper</artifactId>
@@ -411,6 +418,22 @@
       <artifactId>protobuf-java</artifactId>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-client</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-framework</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-recipes</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
   </dependencies>
   <profiles>
     <profile>
