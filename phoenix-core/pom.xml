@@ -547,7 +547,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-hbase-compat-2.0</artifactId>
+        <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
         <classifier>shaded</classifier>
         <scope>provided</scope>
       </dependency>
@@ -576,7 +576,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-hbase-compat-2.0</artifactId>
+        <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
         <classifier>shaded</classifier>
       </dependency>
       <dependency>
