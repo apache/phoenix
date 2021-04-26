@@ -36,8 +36,8 @@ import org.apache.phoenix.util.StringUtil;
 
 /**
  * 
- * Implementation of the LENGTH(<string>) build-in function. <string> is the string
- * of characters we want to find the length of. If <string> is NULL or empty, null
+ * Implementation of the {@code LENGTH(<string>) } build-in function. {@code <string> } is the string
+ * of characters we want to find the length of. If {@code <string> } is NULL or empty, null
  * is returned.
  * 
  * 

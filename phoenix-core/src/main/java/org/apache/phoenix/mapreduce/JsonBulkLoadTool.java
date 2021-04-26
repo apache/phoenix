@@ -20,7 +20,7 @@ package org.apache.phoenix.mapreduce;
 import java.sql.SQLException;
 import java.util.List;
 
-import org.apache.commons.cli.CommandLine;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.ToolRunner;

@@ -40,7 +40,7 @@ import javax.annotation.Nullable;
 
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 
 /**

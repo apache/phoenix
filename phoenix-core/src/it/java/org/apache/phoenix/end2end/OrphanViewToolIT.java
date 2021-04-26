@@ -24,6 +24,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
@@ -38,13 +39,15 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.mapreduce.OrphanViewTool;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -53,7 +56,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @RunWith(Parameterized.class)
-public class OrphanViewToolIT extends ParallelStatsDisabledIT {
+public class OrphanViewToolIT extends BaseOwnClusterIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(OrphanViewToolIT.class);
 
     private final boolean isMultiTenant;
@@ -126,14 +129,21 @@ public class OrphanViewToolIT extends ParallelStatsDisabledIT {
         return Arrays.asList(false, true);
     }
 
+    @BeforeClass
+    public static synchronized void doSetup() throws Exception {
+        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+    }
+
     @AfterClass
-    public static synchronized void cleanUp() {
+    public static synchronized void cleanUp() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
         for (int i = OrphanViewTool.VIEW; i < OrphanViewTool.ORPHAN_TYPE_COUNT; i++) {
             File file = new File(filePath + OrphanViewTool.fileName[i]);
             if (file.exists()) {
                 file.delete();
             }
         }
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     private String generateDDL(String format) {

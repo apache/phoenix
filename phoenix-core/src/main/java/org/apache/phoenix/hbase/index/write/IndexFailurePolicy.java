@@ -24,7 +24,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * Handle failures to write to the index tables.
@@ -34,9 +34,9 @@ public interface IndexFailurePolicy extends Stoppable {
 
   /**
    * Handle the failure of the attempted index updates
-   * @param attempted map of index table -> mutations to apply
+   * @param attempted map of index {@code table -> mutations } to apply
    * @param cause reason why there was a failure
- * @throws IOException 
+   * @throws IOException 
    */
   public void
       handleFailure(Multimap<HTableInterfaceReference, Mutation> attempted, Exception cause) throws IOException;

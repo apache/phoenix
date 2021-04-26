@@ -24,7 +24,7 @@ import java.util.Set;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 
-import com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 
 
 /**
@@ -58,7 +58,7 @@ public class HintNode {
         */
        NO_INDEX,
        /**
-       * Hint of the form INDEX(<table_name> <index_name>...)
+       * Hint of the form {@code INDEX(<table_name> <index_name>...) }
        * to suggest usage of the index if possible. The first
        * usable index in the list of indexes will be choosen.
        * Table and index names may be surrounded by double quotes

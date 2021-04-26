@@ -260,8 +260,10 @@ public enum TableProperty {
                 } else if ("NONE".equalsIgnoreCase(strValue)) {
                     return PHOENIX_TTL_NOT_DEFINED;
                 }
-            } else {
-                return value == null ? null : ((Number) value).longValue();
+            } else if (value != null) {
+                long valueInSeconds = ((Number) value).longValue();
+                // Value is specified in seconds, so convert it to ms.
+                return valueInSeconds * 1000;
             }
             return value;
         }
@@ -269,6 +271,34 @@ public enum TableProperty {
         @Override
         public Object getPTableValue(PTable table) {
             return table.getPhoenixTTL();
+        }
+    },
+
+    CHANGE_DETECTION_ENABLED(PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED, true, true, true) {
+        /**
+         * CHANGE_DETECTION_ENABLED is a boolean that can take TRUE or FALSE
+         */
+        @Override
+        public Object getValue(Object value) {
+            if (value == null) {
+                return null;
+            } else if (value instanceof Boolean) {
+                return value;
+            } else {
+                throw new IllegalArgumentException("CHANGE_DETECTION_ENABLED property can only be" +
+                    " either true or false");
+            }
+        }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.isChangeDetectionEnabled();
+        }
+    },
+
+    PHYSICAL_TABLE_NAME(PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false, false) {
+        @Override public Object getPTableValue(PTable table) {
+            return table.getPhysicalName(true);
         }
     }
     ;

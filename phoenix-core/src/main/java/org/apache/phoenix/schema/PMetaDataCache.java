@@ -25,9 +25,9 @@ import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.util.TimeKeeper;
 
-import com.google.common.collect.Maps;
-import com.google.common.collect.MinMaxPriorityQueue;
-import com.google.common.primitives.Longs;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.MinMaxPriorityQueue;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Longs;
 
 class PMetaDataCache implements Cloneable {
     private static final int MIN_REMOVAL_SIZE = 3;

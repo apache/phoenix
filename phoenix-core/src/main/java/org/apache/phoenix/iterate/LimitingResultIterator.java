@@ -20,6 +20,8 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
@@ -50,12 +52,20 @@ public class LimitingResultIterator extends DelegateResultIterator {
     @Override
     public void explain(List<String> planSteps) {
         super.explain(planSteps);
-            planSteps.add("CLIENT " + limit + " ROW LIMIT");
+        planSteps.add("CLIENT " + limit + " ROW LIMIT");
     }
 
-	@Override
-	public String toString() {
-		return "LimitingResultIterator [rowCount=" + rowCount + ", limit="
-				+ limit + "]";
-	}
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        super.explain(planSteps, explainPlanAttributesBuilder);
+        explainPlanAttributesBuilder.setClientRowLimit(limit);
+        planSteps.add("CLIENT " + limit + " ROW LIMIT");
+    }
+
+    @Override
+    public String toString() {
+        return "LimitingResultIterator [rowCount=" + rowCount + ", limit="
+            + limit + "]";
+    }
 }

@@ -17,31 +17,30 @@
  */
 
 pipeline {
-    agent {
-        label 'Hadoop'
-    }
+    agent none
 
     options {
-        buildDiscarder(logRotator(daysToKeepStr: '30'))
-        timeout(time: 6, unit: 'HOURS')
+        buildDiscarder(logRotator(daysToKeepStr: '15', artifactDaysToKeepStr: '5'))
         timestamps()
     }
 
     stages {
         stage('MatrixBuild') {
             matrix {
-                agent any
+
+                agent {
+                    dockerfile {
+                        dir 'dev/docker'
+                        filename 'Dockerfile.multibranch'
+                        label 'Hadoop'
+                    }
+                }
 
                 axes {
                     axis {
                         name 'HBASE_PROFILE'
-                        values '2.1', '2.2', '2.3'
+                        values '2.1', '2.2', '2.3', '2.4'
                     }
-                }
-
-                tools {
-                    maven "Maven (latest)"
-                    jdk "JDK 1.8 (latest)"
                 }
 
                 environment {
@@ -51,13 +50,11 @@ pipeline {
                 stages {
 
                     stage('RebuildHBase') {
-                        environment {
-                            HBASE_VERSION = sh(returnStdout: true, script: "mvn help:evaluate -Dhbase.profile=${HBASE_PROFILE} -Dartifact=org.apache.phoenix:phoenix-core -Dexpression=hbase.version -q -DforceStdout").trim()
+                        options {
+                            timeout(time: 30, unit: 'MINUTES')
                         }
-                        when {
-                            not {
-                                environment name: 'HBASE_PROFILE', value: '2.1'
-                            }
+                        environment {
+                            HBASE_VERSION = sh(returnStdout: true, script: "mvn help:evaluate -Dexpression=hbase-${HBASE_PROFILE}.runtime.version -q -DforceStdout").trim()
                         }
                         steps {
                             sh "dev/rebuild_hbase.sh ${HBASE_VERSION}"
@@ -65,19 +62,31 @@ pipeline {
                     }
 
                     stage('BuildAndTest') {
+                        options {
+                            timeout(time: 5, unit: 'HOURS')
+                        }
                         steps {
-                            sh "mvn clean verify -Dhbase.profile=${HBASE_PROFILE} -B"
+                            dir("HBASE_${HBASE_PROFILE}") {
+                                checkout scm
+                                sh """#!/bin/bash
+                                    ulimit -a
+                                    mvn clean verify -Dskip.embedded -Dhbase.profile=${HBASE_PROFILE} -B
+                                """
+                            }
                         }
                         post {
                             always {
-                               junit '**/target/surefire-reports/TEST-*.xml'
-                               junit '**/target/failsafe-reports/TEST-*.xml'
+                                sh "find HBASE_${HBASE_PROFILE}/ -name \\*.txt -exec gzip {} \\;"
+                                archiveArtifacts artifacts: "HBASE_${HBASE_PROFILE}/**/target/surefire-reports/*.txt.gz,**/target/failsafe-reports/*.txt.gz,**/target/surefire-reports/*.dumpstream,**/target/failsafe-reports/*.dumpstream,**/target/surefire-reports/*.dump,**/target/failsafe-reports/*.dump"
+                                junit "HBASE_${HBASE_PROFILE}/**/target/surefire-reports/TEST-*.xml"
+                                junit "HBASE_${HBASE_PROFILE}/**/target/failsafe-reports/TEST-*.xml"
                             }
                         }
                     }
                 }
 
                 post {
+
                     always {
                         emailext(
                             subject: "Apache-Phoenix | ${BRANCH_NAME} | HBase ${HBASE_PROFILE} | Build ${BUILD_DISPLAY_NAME} ${currentBuild.currentResult}",
@@ -95,6 +104,10 @@ pipeline {
 <hr/>
 """
                        )
+                    }
+
+                    cleanup {
+                        deleteDir()
                     }
                 }
             }

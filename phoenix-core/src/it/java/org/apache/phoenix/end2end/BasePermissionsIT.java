@@ -16,8 +16,8 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Throwables;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
 import org.apache.hadoop.conf.Configuration;
@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.security.access.AccessController;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.UserPermission;
 import org.apache.hadoop.hbase.shaded.protobuf.ResponseConverter;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -51,6 +52,7 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -81,6 +83,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeFalse;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -149,6 +152,11 @@ public abstract class BasePermissionsIT extends BaseTest {
     BasePermissionsIT(final boolean isNamespaceMapped) throws Exception {
         this.isNamespaceMapped = isNamespaceMapped;
         this.tableName = generateUniqueName();
+    }
+
+    @BeforeClass
+    public static synchronized void skipHBase21() {
+        assumeFalse(VersionInfo.getVersion().startsWith("2.1"));
     }
 
     static void initCluster(boolean isNamespaceMapped) throws Exception {
@@ -959,7 +967,7 @@ public abstract class BasePermissionsIT extends BaseTest {
             // NS is disabled, CQSI tries creating SYSCAT, Two cases here
             // 1. First client ever --> Gets ADE, runs client server compatibility check again and gets TableNotFoundException since SYSCAT doesn't exist
             // 2. Any other client --> Gets ADE, runs client server compatibility check again and gets AccessDeniedException since it doesn't have EXEC perms
-            verifyDenied(getConnectionAction(), TableNotFoundException.class, regularUser1);
+            verifyDenied(getConnectionAction(), org.apache.hadoop.hbase.TableNotFoundException.class, regularUser1);
         }
 
         // Phoenix Client caches connection per user
@@ -1002,6 +1010,67 @@ public abstract class BasePermissionsIT extends BaseTest {
     @Test
     public void testReadPermsOnTableIndexAndView() throws Exception {
         grantSystemTableAccess(superUser1, regularUser1, regularUser2, unprivilegedUser);
+
+        // Create new schema and grant CREATE permissions to a user
+        if(isNamespaceMapped) {
+            verifyAllowed(createSchema(schemaName), superUser1);
+            verifyAllowed(grantPermissions("C", regularUser1, schemaName, true), superUser1);
+        } else {
+            verifyAllowed(grantPermissions("C", regularUser1, surroundWithDoubleQuotes(QueryConstants.HBASE_DEFAULT_SCHEMA_NAME), true), superUser1);
+        }
+
+        // Create new table. Create indexes, views and view indexes on top of it. Verify the contents by querying it
+        verifyAllowed(createTable(fullTableName), regularUser1);
+        verifyAllowed(readTable(fullTableName), regularUser1);
+        verifyAllowed(createIndex(idx1TableName, fullTableName), regularUser1);
+        verifyAllowed(createIndex(idx2TableName, fullTableName), regularUser1);
+        verifyAllowed(createLocalIndex(localIdx1TableName, fullTableName), regularUser1);
+        verifyAllowed(createView(view1TableName, fullTableName), regularUser1);
+        verifyAllowed(createIndex(idx3TableName, view1TableName), regularUser1);
+
+        // RegularUser2 doesn't have any permissions. It can get a PhoenixConnection
+        // However it cannot query table, indexes or views without READ perms
+        verifyAllowed(getConnectionAction(), regularUser2);
+        verifyDenied(readTable(fullTableName), AccessDeniedException.class, regularUser2);
+        verifyDenied(readTable(fullTableName, idx1TableName), AccessDeniedException.class, regularUser2);
+        verifyDenied(readTable(view1TableName), AccessDeniedException.class, regularUser2);
+        verifyDenied(readTableWithoutVerification(schemaName + "." + idx1TableName), AccessDeniedException.class, regularUser2);
+
+        // Grant READ permissions to RegularUser2 on the table
+        // Permissions should propagate automatically to relevant physical tables such as global index and view index.
+        verifyAllowed(grantPermissions("RX", regularUser2, fullTableName, false), regularUser1);
+        // Granting permissions directly to index tables should fail
+        verifyDenied(grantPermissions("W", regularUser2, schemaName + "." + idx1TableName, false), AccessDeniedException.class, regularUser1);
+        // Granting permissions directly to views should fail. We expect TableNotFoundException since VIEWS are not physical tables
+        verifyDenied(grantPermissions("W", regularUser2, schemaName + "." + view1TableName, false), TableNotFoundException.class, regularUser1);
+
+        // Verify that all other access are successful now
+        verifyAllowed(readTable(fullTableName), regularUser2);
+        verifyAllowed(readTable(fullTableName, idx1TableName), regularUser2);
+        verifyAllowed(readTable(fullTableName, idx2TableName), regularUser2);
+        verifyAllowed(readTable(fullTableName, localIdx1TableName), regularUser2);
+        verifyAllowed(readTableWithoutVerification(schemaName + "." + idx1TableName), regularUser2);
+        verifyAllowed(readTable(view1TableName), regularUser2);
+        verifyAllowed(readMultiTenantTableWithIndex(view1TableName), regularUser2);
+
+        // Revoke READ permissions to RegularUser2 on the table
+        // Permissions should propagate automatically to relevant physical tables such as global index and view index.
+        verifyAllowed(revokePermissions(regularUser2, fullTableName, false), regularUser1);
+        // READ query should fail now
+        verifyDenied(readTable(fullTableName), AccessDeniedException.class, regularUser2);
+        verifyDenied(readTableWithoutVerification(schemaName + "." + idx1TableName), AccessDeniedException.class, regularUser2);
+    }
+
+    /**
+     * Test to verify READ permissions on table, indexes and views
+     * Tests automatic grant revoke of permissions per user on a table
+     */
+    @Test
+    public void testReadPermsOnTableIndexAndViewOnLowerCaseSchema() throws Exception {
+        grantSystemTableAccess(superUser1, regularUser1, regularUser2, unprivilegedUser);
+
+        schemaName = "\"" + schemaName.toLowerCase() + "\"";
+        fullTableName = schemaName + "." + tableName;
 
         // Create new schema and grant CREATE permissions to a user
         if(isNamespaceMapped) {

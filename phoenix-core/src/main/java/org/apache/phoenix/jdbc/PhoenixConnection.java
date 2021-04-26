@@ -17,8 +17,9 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static java.util.Collections.emptyMap;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER;
 
@@ -53,6 +54,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -120,12 +122,12 @@ import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.VarBinaryFormatter;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Objects;
-import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableMap.Builder;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap.Builder;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * 
@@ -171,6 +173,14 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private boolean isRunningUpgrade;
     private LogLevel logLevel;
     private Double logSamplingRate;
+    private String sourceOfOperation;
+
+    private Object queueCreationLock = new Object(); // lock for the lazy init path of childConnections structure
+    private ConcurrentLinkedQueue<PhoenixConnection> childConnections = null;
+
+    //For now just the copy constructor paths will have this as true as I don't want to change the
+    //public interfaces.
+    private final boolean isInternalConnection;
 
     static {
         Tracing.addTraceMetricsSource();
@@ -188,7 +198,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this(connection.getQueryServices(), connection.getURL(), connection
                 .getClientInfo(), connection.metaData, connection
                 .getMutationState(), isDescRowKeyOrderUpgrade,
-                isRunningUpgrade, connection.buildingIndex);
+                isRunningUpgrade, connection.buildingIndex, true);
         this.isAutoCommit = connection.isAutoCommit;
         this.isAutoFlush = connection.isAutoFlush;
         this.sampler = connection.sampler;
@@ -205,7 +215,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this(connection.getQueryServices(), connection.getURL(), connection
                 .getClientInfo(), connection.getMetaDataCache(), mutationState,
                 connection.isDescVarLengthRowKeyUpgrade(), connection
-                .isRunningUpgrade(), connection.buildingIndex);
+                .isRunningUpgrade(), connection.buildingIndex, true);
     }
 
     public PhoenixConnection(PhoenixConnection connection, long scn)
@@ -216,7 +226,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 	public PhoenixConnection(PhoenixConnection connection, Properties props) throws SQLException {
         this(connection.getQueryServices(), connection.getURL(), props, connection.metaData, connection
                 .getMutationState(), connection.isDescVarLengthRowKeyUpgrade(),
-                connection.isRunningUpgrade(), connection.buildingIndex);
+                connection.isRunningUpgrade(), connection.buildingIndex, true);
         this.isAutoCommit = connection.isAutoCommit;
         this.isAutoFlush = connection.isAutoFlush;
         this.sampler = connection.sampler;
@@ -225,7 +235,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     public PhoenixConnection(ConnectionQueryServices services, String url,
             Properties info, PMetaData metaData) throws SQLException {
-        this(services, url, info, metaData, null, false, false, false);
+        this(services, url, info, metaData, null, false, false, false, false);
     }
 
     public PhoenixConnection(PhoenixConnection connection,
@@ -233,16 +243,17 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                     throws SQLException {
         this(services, connection.url, info, connection.metaData, null,
                 connection.isDescVarLengthRowKeyUpgrade(), connection
-                .isRunningUpgrade(), connection.buildingIndex);
+                .isRunningUpgrade(), connection.buildingIndex, true);
     }
 
     private PhoenixConnection(ConnectionQueryServices services, String url,
             Properties info, PMetaData metaData, MutationState mutationState,
             boolean isDescVarLengthRowKeyUpgrade, boolean isRunningUpgrade,
-            boolean buildingIndex) throws SQLException {
+            boolean buildingIndex, boolean isInternalConnection) throws SQLException {
         GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.increment();
         this.url = url;
         this.isDescVarLengthRowKeyUpgrade = isDescVarLengthRowKeyUpgrade;
+        this.isInternalConnection = isInternalConnection;
 
         // Filter user provided properties based on property policy, if
         // provided and QueryServices.PROPERTY_POLICY_PROVIDER_ENABLED is true
@@ -328,7 +339,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         int maxSize = this.services.getProps().getInt(
                 QueryServices.MAX_MUTATION_SIZE_ATTRIB,
                 QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        int maxSizeBytes = this.services.getProps().getInt(
+        long maxSizeBytes = this.services.getProps().getLong(
                 QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
                 QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         String timeZoneID = this.services.getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
@@ -388,7 +399,13 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         
         this.logSamplingRate = Double.parseDouble(this.services.getProps().get(QueryServices.LOG_SAMPLE_RATE,
                 QueryServicesOptions.DEFAULT_LOG_SAMPLE_RATE));
-        GLOBAL_OPEN_PHOENIX_CONNECTIONS.increment();
+        if(isInternalConnection) {
+            GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS.increment();
+        } else {
+            GLOBAL_OPEN_PHOENIX_CONNECTIONS.increment();
+        }
+        this.sourceOfOperation =
+                this.services.getProps().get(QueryServices.SOURCE_OPERATION_ATTRIB, null);
     }
 
     private static void checkScn(Long scnParam) throws SQLException {
@@ -439,6 +456,50 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                     .getString());
         }
         return result.build();
+    }
+
+    public boolean isInternalConnection() {
+        return isInternalConnection;
+    }
+
+    /**
+     * This method, and *only* this method is thread safe
+     * @param connection
+     */
+    public void addChildConnection(PhoenixConnection connection) {
+        //double check for performance
+        if(childConnections == null) {
+            synchronized (queueCreationLock) {
+                if (childConnections == null) {
+                    childConnections = new ConcurrentLinkedQueue<>();
+                }
+            }
+        }
+        childConnections.add(connection);
+    }
+
+    /**
+     * Method to remove child connection from childConnections Queue
+     *
+     * @param connection
+     */
+    public void removeChildConnection(PhoenixConnection connection) {
+        if (childConnections != null) {
+            childConnections.remove(connection);
+        }
+    }
+
+    /**
+     * Method to fetch child connections count from childConnections Queue
+     *
+     * @return int count
+     */
+    @VisibleForTesting
+    public int getChildConnectionsCount() {
+        if (childConnections != null) {
+            return childConnections.size();
+        }
+        return 0;
     }
 
     public Sampler<?> getSampler() {
@@ -589,7 +650,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         return metaData.getTableRef(key);
     }
 
-    protected MutationState newMutationState(int maxSize, int maxSizeBytes) {
+    protected MutationState newMutationState(int maxSize, long maxSizeBytes) {
         return new MutationState(maxSize, maxSizeBytes, this);
     }
 
@@ -655,13 +716,22 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                     traceScope.close();
                 }
                 closeStatements();
+                synchronized (queueCreationLock) {
+                    if (childConnections != null) {
+                        SQLCloseables.closeAllQuietly(childConnections);
+                    }
+                }
             } finally {
                 services.removeConnection(this);
             }
             
         } finally {
             isClosed = true;
-            GLOBAL_OPEN_PHOENIX_CONNECTIONS.decrement();
+            if(isInternalConnection()){
+                GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS.decrement();
+            } else {
+                GLOBAL_OPEN_PHOENIX_CONNECTIONS.decrement();
+            }
         }
     }
 
@@ -1293,4 +1363,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         return this.logSamplingRate;
     }
 
+    /**
+     *
+     * @return source of operation
+     */
+    public String getSourceOfOperation() {
+        return sourceOfOperation;
+    }
 }

@@ -37,8 +37,8 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil.BytesComparator;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 

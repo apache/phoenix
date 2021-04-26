@@ -19,7 +19,7 @@ package org.apache.phoenix.util;
 
 import org.apache.commons.collections.IteratorUtils;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 import java.util.Iterator;
 import java.util.List;

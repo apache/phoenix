@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.iterate;
 
-import static com.google.common.base.Preconditions.checkArgument;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 
 import java.sql.SQLException;
@@ -28,6 +28,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -36,8 +38,8 @@ import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Throwables;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 
 /**
  * ResultIterator that keeps track of the number of records fetched by each {@link PeekingResultIterator} making sure it
@@ -112,6 +114,7 @@ public class RoundRobinResultIterator implements ResultIterator {
                 index = (index + 1) % size;
             }
         }
+        close();
         return null;
     }
 
@@ -151,6 +154,14 @@ public class RoundRobinResultIterator implements ResultIterator {
     public void explain(List<String> planSteps) {
         if (resultIterators != null) {
             resultIterators.explain(planSteps);
+        }
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        if (resultIterators != null) {
+            resultIterators.explain(planSteps, explainPlanAttributesBuilder);
         }
     }
 
@@ -281,7 +292,7 @@ public class RoundRobinResultIterator implements ResultIterator {
      * keeps track of the tuple the {@link PeekingResultIterator} read in the previous next() call before it ran out of
      * underlying scanner cache.
      */
-    private class RoundRobinIterator implements PeekingResultIterator {
+    private static class RoundRobinIterator implements PeekingResultIterator {
 
         private PeekingResultIterator delegate;
         private Tuple tuple;
@@ -312,6 +323,12 @@ public class RoundRobinResultIterator implements ResultIterator {
         @Override
         public void explain(List<String> planSteps) {
             delegate.explain(planSteps);
+        }
+
+        @Override
+        public void explain(List<String> planSteps,
+                ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+            delegate.explain(planSteps, explainPlanAttributesBuilder);
         }
 
         @Override

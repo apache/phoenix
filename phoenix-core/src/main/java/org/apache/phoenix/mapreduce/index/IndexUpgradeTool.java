@@ -17,16 +17,16 @@
  */
 package org.apache.phoenix.mapreduce.index;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Strings;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
-import org.apache.commons.cli.PosixParser;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.HelpFormatter;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.PosixParser;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
@@ -502,8 +502,8 @@ public class IndexUpgradeTool extends Configured implements Tool {
             LOGGER.severe("Revert of the "+operation +" failed in error handling, "
                     + "re-enabling tables and then throwing runtime exception");
             LOGGER.severe("Confirm the state for "+getSubListString(tableList, dataTableFullName));
-            try {
-                enableTable(queryServices.getAdmin(), dataTableFullName, indexes);
+            try (Admin admin = queryServices.getAdmin()) {
+                enableTable(admin, dataTableFullName, indexes);
             } catch (Exception ex) {
                 throw new RuntimeException("Error re-enabling tables after rollback failure. " +
                     "Original exception that caused the rollback: [" + e.toString() + " " + "]", ex);
@@ -843,7 +843,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
                         tenantId);
                 for (String viewIndex : viewIndexes) {
                     IndexInfo indexInfo = new IndexInfo(schemaName, viewName,
-                            tenantId == null ? GLOBAL_INDEX_ID : tenantId, viewIndex);
+                        tenantId == null ? GLOBAL_INDEX_ID : tenantId, viewIndex);
                     indexInfos.put(viewIndex, indexInfo);
                 }
             }
@@ -891,7 +891,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
                     " AND TENANT_ID = \'" + tenantId + "\'" : " AND TENANT_ID IS NULL");
     }
 
-    private class IndexInfo {
+    private static class IndexInfo {
         final private String schemaName;
         final private String baseTable;
         final private String tenantId;

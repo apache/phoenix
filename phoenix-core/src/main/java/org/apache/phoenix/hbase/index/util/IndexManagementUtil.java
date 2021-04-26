@@ -47,8 +47,8 @@ import org.apache.phoenix.hbase.index.scanner.ScannerBuilder.CoveredDeleteScanne
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Lists;
-import com.google.common.primitives.Longs;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Longs;
 
 /**
  * Utility class to help manage indexes
@@ -191,7 +191,7 @@ public class IndexManagementUtil {
      * Propagate the given failure as a generic {@link IOException}, if it isn't already
      * 
      * @param e
-     *            reason indexing failed. If ,tt>null</tt>, throws a {@link NullPointerException}, which should unload
+     *            reason indexing failed. If ,<tt>null</tt>, throws a {@link NullPointerException}, which should unload
      *            the coprocessor.
      */
     public static void rethrowIndexingException(Throwable e) throws IOException {

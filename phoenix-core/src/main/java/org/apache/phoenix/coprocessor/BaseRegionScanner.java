@@ -22,6 +22,8 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 
@@ -57,5 +59,9 @@ public abstract class BaseRegionScanner extends DelegateRegionScanner {
     @Override
     public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
         throw new IOException("NextRaw with scannerContext should not be called in Phoenix environment");
+    }
+
+    public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
+        return ((BaseRegionScanner)delegate).getNewRegionScanner(scan);
     }
 }

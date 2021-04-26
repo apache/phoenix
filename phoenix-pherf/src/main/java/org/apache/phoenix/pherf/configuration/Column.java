@@ -23,6 +23,7 @@ import org.apache.phoenix.pherf.rules.DataValue;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlElementWrapper;
 import java.util.List;
+import java.util.Objects;
 
 public class Column {
 	private String name;
@@ -53,6 +54,11 @@ public class Column {
         this();
         this.type = column.type;
         this.mutate(column);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(this.type);
     }
 
     /**

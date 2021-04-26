@@ -172,8 +172,8 @@ public class MonitorManager implements Workload {
     /**
      * This method should really only be used for testing
      *
-     * @return List < {@link org.apache.phoenix.pherf.result.Result} >
-     * @throws IOException
+     * @return {@code List < org.apache.phoenix.pherf.result.Result > }
+     * @throws Exception
      */
     public synchronized List<Result> readResults() throws Exception {
         ResultHandler handler = null;

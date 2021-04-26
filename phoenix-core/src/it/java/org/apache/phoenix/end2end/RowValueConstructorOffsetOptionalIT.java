@@ -79,12 +79,12 @@ public class RowValueConstructorOffsetOptionalIT extends ParallelStatsDisabledIT
     private int NUMBER_OF_TENANT_VIEWS = 5;
 
     @BeforeClass
-    public static void init() throws SQLException {
+    public static synchronized void init() throws SQLException {
         conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
     }
 
     @AfterClass
-    public static void cleanup() {
+    public static synchronized void cleanup() {
         try {
             if (conn != null) {
                 conn.close();

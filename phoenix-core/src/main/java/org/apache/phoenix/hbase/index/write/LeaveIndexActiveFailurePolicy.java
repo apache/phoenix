@@ -25,7 +25,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.util.ServerUtil;
 
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * 

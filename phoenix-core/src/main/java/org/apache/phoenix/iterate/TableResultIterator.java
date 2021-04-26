@@ -36,13 +36,17 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.AbstractClientScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.MutationState;
@@ -50,18 +54,20 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 
 /**
@@ -133,7 +139,7 @@ public class TableResultIterator implements ResultIterator {
         this.caches = caches;
         this.retry=plan.getContext().getConnection().getQueryServices().getProps()
                 .getInt(QueryConstants.HASH_JOIN_CACHE_RETRIES, QueryConstants.DEFAULT_HASH_JOIN_CACHE_RETRIES);
-        IndexUtil.setScanAttributesForIndexReadRepair(scan, table, plan.getContext().getConnection());
+        ScanUtil.setScanAttributesForClient(scan, table, plan.getContext().getConnection());
     }
 
     @Override
@@ -291,6 +297,12 @@ public class TableResultIterator implements ResultIterator {
     @Override
     public void explain(List<String> planSteps) {
         scanIterator.explain(planSteps);
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        scanIterator.explain(planSteps, explainPlanAttributesBuilder);
     }
 
 }

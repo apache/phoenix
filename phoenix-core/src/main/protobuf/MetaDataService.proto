@@ -1,0 +1,240 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+option java_package = "org.apache.phoenix.coprocessor.generated";
+option java_outer_classname = "MetaDataProtos";
+option java_generic_services = true;
+option java_generate_equals_and_hash = true;
+option optimize_for = SPEED;
+
+import "PTable.proto";
+import "PFunction.proto";
+import "PSchema.proto";
+
+enum MutationCode {
+  TABLE_ALREADY_EXISTS = 0;
+  TABLE_NOT_FOUND = 1;
+  COLUMN_NOT_FOUND = 2;
+  COLUMN_ALREADY_EXISTS = 3;
+  CONCURRENT_TABLE_MUTATION = 4;
+  TABLE_NOT_IN_REGION = 5;
+  NEWER_TABLE_FOUND = 6;
+  UNALLOWED_TABLE_MUTATION = 7;
+  NO_PK_COLUMNS = 8;
+  PARENT_TABLE_NOT_FOUND = 9;
+  FUNCTION_ALREADY_EXISTS = 10;
+  FUNCTION_NOT_FOUND = 11;
+  NEWER_FUNCTION_FOUND = 12;
+  FUNCTION_NOT_IN_REGION = 13;
+  SCHEMA_ALREADY_EXISTS = 14;
+  NEWER_SCHEMA_FOUND = 15;
+  SCHEMA_NOT_FOUND = 16;
+  SCHEMA_NOT_IN_REGION = 17;
+  TABLES_EXIST_ON_SCHEMA = 18;
+  UNALLOWED_SCHEMA_MUTATION = 19;
+  AUTO_PARTITION_SEQUENCE_NOT_FOUND = 20;
+  CANNOT_COERCE_AUTO_PARTITION_ID = 21;
+  TOO_MANY_INDEXES = 22;
+  UNABLE_TO_CREATE_CHILD_LINK = 23;
+  UNABLE_TO_UPDATE_PARENT_TABLE = 24;
+  UNABLE_TO_DELETE_CHILD_LINK = 25;
+  UNABLE_TO_UPSERT_TASK = 26;
+};
+
+message SharedTableState {
+  optional bytes tenantId = 1;
+  required bytes schemaName = 2;
+  required bytes tableName = 3;
+  repeated PColumn columns = 4;
+  repeated bytes physicalNames = 5;
+  required int64 viewIndexId = 6;
+  optional int32 viewIndexIdType = 7 [default = 5];
+}
+
+message MetaDataResponse {
+  optional MutationCode returnCode = 1;
+  optional int64 mutationTime = 2;
+  optional PTable table = 3;
+  repeated bytes tablesToDelete = 4;
+  optional bytes columnName = 5;
+  optional bytes familyName = 6;
+  optional bytes functionName = 7;
+  repeated PFunction function = 8;
+  repeated SharedTableState sharedTablesToDelete = 9;
+  optional PSchema schema = 10;
+  optional int64 autoPartitionNum = 11;
+  optional int64 viewIndexId = 12;
+  optional int32 viewIndexIdType = 13 [default = 5];
+}
+
+message GetTableRequest {
+  required bytes tenantId = 1;
+  required bytes schemaName = 2;
+  required bytes tableName = 3;
+  required int64 tableTimestamp = 4;
+  required int64 clientTimestamp = 5;
+  optional int32 clientVersion = 6;
+}
+
+message GetFunctionsRequest {
+  required bytes tenantId = 1;
+  repeated bytes functionNames = 2;
+  repeated int64 functionTimestamps = 3;
+  required int64 clientTimestamp = 4;
+  optional int32 clientVersion = 5;
+}
+
+message GetSchemaRequest {
+  required string schemaName = 1;
+  required int64 clientTimestamp = 2;
+  required int32 clientVersion = 3;
+}
+
+// each byte array represents a MutationProto instance
+message CreateTableRequest {
+  repeated bytes tableMetadataMutations = 1;
+  optional int32 clientVersion = 2;
+  optional bool allocateIndexId = 3;
+  optional PTable parentTable = 4;
+}
+
+// each byte array represents a MutationProto instance
+message CreateFunctionRequest {
+  repeated bytes tableMetadataMutations = 1;
+  required bool temporary = 2;
+  optional bool replace = 3;
+  optional int32 clientVersion = 4;
+}
+
+message CreateSchemaRequest {
+  repeated bytes tableMetadataMutations = 1;
+  required string schemaName = 2;
+  required int32 clientVersion = 3;
+}
+
+message DropTableRequest {
+  repeated bytes tableMetadataMutations = 1;
+  required string tableType = 2;
+  optional bool cascade = 3;
+  optional int32 clientVersion = 4;
+}
+
+message DropSchemaRequest {
+  repeated bytes schemaMetadataMutations = 1;
+  required string schemaName = 2;
+  required int32 clientVersion = 3;
+}
+
+message AddColumnRequest {
+  repeated bytes tableMetadataMutations = 1;
+  optional int32 clientVersion = 2;
+  optional PTable parentTable = 3;
+  optional bool addingColumns = 4;
+}
+
+message DropColumnRequest {
+  repeated bytes tableMetadataMutations = 1;
+  optional int32 clientVersion = 2;
+  optional PTable parentTable = 3;
+}
+
+message DropFunctionRequest {
+  repeated bytes tableMetadataMutations = 1;
+  optional bool ifExists = 2;
+  optional int32 clientVersion = 3;
+}
+
+message UpdateIndexStateRequest {
+  repeated bytes tableMetadataMutations = 1;
+  optional int32 clientVersion = 2;
+}
+
+message ClearCacheRequest {
+  optional int32 clientVersion = 1;
+}
+
+message ClearCacheResponse {
+  optional int64 unfreedBytes = 1;
+}
+
+message GetVersionRequest {
+  optional int32 clientVersion = 1;
+}
+
+message GetVersionResponse {
+  required int64 version = 1;
+  optional int64 systemCatalogTimestamp = 2;
+}
+
+message ClearTableFromCacheRequest {
+  required bytes tenantId = 1;
+  required bytes schemaName = 2;
+  required bytes tableName = 3;
+  required int64 clientTimestamp = 4;
+  optional int32 clientVersion = 5;
+}
+
+message ClearTableFromCacheResponse {
+}
+
+service MetaDataService {
+  rpc getTable(GetTableRequest)
+      returns (MetaDataResponse);
+
+  rpc getFunctions(GetFunctionsRequest)
+      returns (MetaDataResponse);
+
+  rpc getSchema(GetSchemaRequest)
+      returns (MetaDataResponse);
+
+  rpc createTable(CreateTableRequest)
+      returns (MetaDataResponse);
+
+  rpc createFunction(CreateFunctionRequest)
+      returns (MetaDataResponse);
+
+  rpc createSchema(CreateSchemaRequest)
+      returns (MetaDataResponse);
+
+  rpc dropTable(DropTableRequest)
+      returns (MetaDataResponse);
+
+  rpc dropSchema(DropSchemaRequest)
+      returns (MetaDataResponse);
+
+  rpc dropFunction(DropFunctionRequest)
+      returns (MetaDataResponse);
+
+  rpc addColumn(AddColumnRequest)
+      returns (MetaDataResponse);
+
+  rpc dropColumn(DropColumnRequest)
+      returns (MetaDataResponse);
+
+  rpc updateIndexState(UpdateIndexStateRequest)
+      returns (MetaDataResponse);
+
+  rpc clearCache(ClearCacheRequest)
+      returns (ClearCacheResponse);
+
+  rpc getVersion(GetVersionRequest)
+      returns (GetVersionResponse);
+
+  rpc clearTableFromCache(ClearTableFromCacheRequest)
+      returns (ClearTableFromCacheResponse);
+}

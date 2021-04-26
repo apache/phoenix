@@ -53,6 +53,7 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
@@ -60,12 +61,14 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
+import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.Assert;
 import org.junit.Test;
 
 
@@ -87,6 +90,136 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         PhoenixStatement pstatement = statement.unwrap(PhoenixStatement.class);
         List<KeyRange> splits = pstatement.getQueryPlan().getSplits();
         assertTrue(splits.size() > 0);
+    }
+
+    @Test
+    public void testCreateAlterTableWithDuplicateColumn() throws Exception {
+        Properties props = new Properties();
+        int failureCount = 0;
+        int expectedExecCount = 0;
+        String tableName = generateUniqueName();
+        String viewName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            try {
+                // Case 1 - Adding a column as "Default_CF.Column" in
+                // CREATE TABLE query where "Column" is same as single PK Column
+                conn.createStatement().execute(String.format("CREATE TABLE %s"
+                        + " (name VARCHAR NOT NULL PRIMARY KEY, city VARCHAR,"
+                        + " name1 VARCHAR, name VARCHAR)", tableName));
+                fail("Should have failed with ColumnAlreadyExistsException");
+            } catch (ColumnAlreadyExistsException e) {
+                // expected
+                failureCount++;
+            }
+            try {
+                // Case 2 - Adding a column as "Default_CF.Column" in CREATE
+                // TABLE query where "Default_CF.Column" already exists as non-Pk column
+                conn.createStatement().execute(String.format("CREATE TABLE %s"
+                        + " (name VARCHAR NOT NULL PRIMARY KEY, city VARCHAR,"
+                        + " name1 VARCHAR, name1 VARCHAR)", tableName));
+                fail("Should have failed with ColumnAlreadyExistsException");
+            } catch (ColumnAlreadyExistsException e) {
+                // expected
+                failureCount++;
+            }
+            try {
+                // Case 3 - Adding a column as "Default_CF.Column" in CREATE
+                // TABLE query where "Column" is same as single PK Column.
+                // The only diff from Case 1 is that both PK Column and
+                // "Default_CF.Column" are of different DataType
+                conn.createStatement().execute(String.format("CREATE TABLE %s"
+                        + " (key1 VARCHAR NOT NULL PRIMARY KEY, city VARCHAR,"
+                        + " name1 VARCHAR, key1 INTEGER)", tableName));
+                fail("Should have failed with ColumnAlreadyExistsException");
+            } catch (ColumnAlreadyExistsException e) {
+                // expected
+                failureCount++;
+            }
+            try {
+                // Case 4 - Adding a column as "Default_CF.Column" in
+                // CREATE TABLE query where "Column" is same as one of the
+                // PK Column from Composite PK Columns
+                conn.createStatement().execute(String.format("CREATE TABLE %s"
+                        + " (name VARCHAR NOT NULL, name1 VARCHAR NOT NULL,"
+                        + " name2 VARCHAR, name VARCHAR"
+                        + " CONSTRAINT PK PRIMARY KEY(name, name1))", tableName));
+                fail("Should have failed with ColumnAlreadyExistsException");
+            } catch (ColumnAlreadyExistsException e) {
+                // expected
+                failureCount++;
+            }
+            try {
+                // Case 5 - Adding a column as "Default_CF.Column" in
+                // CREATE VIEW query where "Column" is same as one of the
+                // PK Column from Composite PK Columns derived from parent table
+                conn.createStatement().execute(String.format("CREATE TABLE %s"
+                        + " (name VARCHAR NOT NULL, name1 VARCHAR NOT NULL,"
+                        + " name2 VARCHAR, name3 VARCHAR"
+                        + " CONSTRAINT PK PRIMARY KEY(name, name1))", tableName));
+                expectedExecCount++;
+                conn.createStatement().execute(String.format("CREATE VIEW %s"
+                        + " (name1 CHAR(5)) AS SELECT * FROM %s", viewName, tableName));
+                fail("Should have failed with ColumnAlreadyExistsException");
+            } catch (ColumnAlreadyExistsException e) {
+                // expected
+                failureCount++;
+            }
+            try {
+                // Case 6 - Adding a column as "Default_CF.Column" in
+                // ALTER TABLE query where "Column" is same as one of the
+                // PK Column from Composite PK Columns
+                conn.createStatement().execute(
+                        String.format("DROP TABLE %s", tableName));
+                conn.createStatement().execute(String.format("CREATE TABLE %s"
+                        + " (name VARCHAR NOT NULL, name1 VARCHAR NOT NULL,"
+                        + " name2 VARCHAR, name3 VARCHAR"
+                        + " CONSTRAINT PK PRIMARY KEY(name, name1))", tableName));
+                expectedExecCount++;
+                conn.createStatement().execute(
+                        String.format("ALTER TABLE %s ADD name1 INTEGER", tableName));
+                fail("Should have failed with ColumnAlreadyExistsException");
+            } catch (ColumnAlreadyExistsException e) {
+                // expected
+                failureCount++;
+            }
+            try {
+                // Case 7 - Adding a column as "Default_CF.Column" in
+                // ALTER TABLE query where "Column" is same as single PK Column
+                conn.createStatement().execute(
+                        String.format("DROP TABLE %s", tableName));
+                conn.createStatement().execute(String.format("CREATE TABLE %s"
+                        + " (name VARCHAR NOT NULL PRIMARY KEY, city VARCHAR,"
+                        + " name1 VARCHAR, name2 VARCHAR)", tableName));
+                expectedExecCount++;
+                conn.createStatement().execute(
+                        String.format("ALTER TABLE %s ADD name VARCHAR", tableName));
+                fail("Should have failed with ColumnAlreadyExistsException");
+            } catch (ColumnAlreadyExistsException e) {
+                // expected
+                failureCount++;
+            }
+            assertEquals(7, failureCount);
+            assertEquals(3, expectedExecCount);
+
+            conn.createStatement().execute(
+                    String.format("DROP TABLE %s", tableName));
+            // Case 8 - Adding a column as "Non_Default_CF.Column" in
+            // CREATE TABLE query where "Column" is same as single PK Column
+            // Hence, we allow creating such column
+            conn.createStatement().execute(String.format("CREATE TABLE %s"
+                    + " (name VARCHAR NOT NULL PRIMARY KEY, city VARCHAR,"
+                    + " name1 VARCHAR, a.name VARCHAR)", tableName));
+            conn.createStatement().execute(
+                    String.format("DROP TABLE %s", tableName));
+            // Case 9 - Adding a column as "Non_Default_CF.Column" in
+            // ALTER TABLE query where "Column" is same as single PK Column
+            // Hence, we allow creating such column
+            conn.createStatement().execute(String.format("CREATE TABLE %s"
+                    + " (name VARCHAR NOT NULL PRIMARY KEY, city VARCHAR,"
+                    + " name1 VARCHAR, name2 VARCHAR)", tableName));
+            conn.createStatement().execute(
+                    String.format("ALTER TABLE %s ADD a.name VARCHAR", tableName));
+        }
     }
 
     @Test
@@ -623,6 +756,96 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testCreateIndexWithDifferentStorageAndEncoding() throws Exception {
+        verifyIndexSchemeChange(false, false);
+        verifyIndexSchemeChange(false, true);
+        verifyIndexSchemeChange(true, false);
+        verifyIndexSchemeChange(true, true);
+
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        String createTableDDL = "create IMMUTABLE TABLE " + tableName + "(id char(1) NOT NULL, col1 char(1), col2 char(1) "
+                + "CONSTRAINT NAME_PK PRIMARY KEY (id)) IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS";
+        String createIndexDDL = "create INDEX " + indexName + " ON " + tableName + " (col1) INCLUDE (col2) IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN";
+
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(createTableDDL);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS,
+                    ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS, tableName, conn);
+
+            boolean failed = false;
+            try {
+                conn.createStatement().execute(createIndexDDL);
+            } catch (SQLException e) {
+                assertEquals(e.getErrorCode(), SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE.getErrorCode());
+                failed = true;
+            }
+            assertEquals(true, failed);
+        }
+    }
+
+    private void verifyIndexSchemeChange(boolean immutable, boolean multiTenant) throws Exception{
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        String nonEncodedOneCellPerColumnTable = generateUniqueName();
+        String createTableDDL;
+        String createIndexDDL;
+
+        String createTableBaseDDL = "create " + (immutable? " IMMUTABLE ":"") + " TABLE %s ("
+                + " id char(1) NOT NULL," + " col1 integer NOT NULL,"
+                + " col2 bigint NOT NULL,"
+                + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=" + (multiTenant? "true,":"false,");
+
+        String createIndexBaseDDL = "create index %s ON %s (col1) INCLUDE (col2) ";
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            createTableDDL = String.format(createTableBaseDDL, nonEncodedOneCellPerColumnTable);
+            createTableDDL += "IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=0";
+            conn.createStatement().execute(createTableDDL);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.NON_ENCODED_QUALIFIERS,
+                    ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+                    nonEncodedOneCellPerColumnTable, conn);
+
+            String idxName = "IDX_" + generateUniqueName();
+            // Don't specify anything to see if it inherits from parent
+            createIndexDDL = String.format(createIndexBaseDDL, idxName, nonEncodedOneCellPerColumnTable);
+            conn.createStatement().execute(createIndexDDL);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.NON_ENCODED_QUALIFIERS,
+                    ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+                    idxName, conn);
+
+            idxName = "IDX_" + generateUniqueName();
+            createIndexDDL = String.format(createIndexBaseDDL, idxName, nonEncodedOneCellPerColumnTable);
+            createIndexDDL += "IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS";
+            conn.createStatement().execute(createIndexDDL);
+            // Check if it sets the encoding to 2
+            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS,
+                    ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
+                    idxName, conn);
+
+            idxName = "IDX_" + generateUniqueName();
+            createIndexDDL = String.format(createIndexBaseDDL, idxName, nonEncodedOneCellPerColumnTable);
+            createIndexDDL += "IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=3";
+            conn.createStatement().execute(createIndexDDL);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.THREE_BYTE_QUALIFIERS,
+                    ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
+                    idxName, conn);
+
+            createIndexDDL = String.format(createIndexBaseDDL, idxName, nonEncodedOneCellPerColumnTable);
+            createIndexDDL += "IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=0";
+            // should fail
+            boolean failed = false;
+            try {
+                conn.createStatement().execute(createIndexDDL);
+            } catch (SQLException e) {
+                failed = true;
+                assertEquals(SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES.getErrorCode(),e.getErrorCode());
+            }
+            assertEquals(true, failed);
+        }
+    }
+
     private void verifyUCFValueInSysCat(String tableName, String createTableString,
             Properties props, long expectedUCFInSysCat) throws SQLException {
         String readSysCatQuery = "SELECT TABLE_NAME, UPDATE_CACHE_FREQUENCY FROM SYSTEM.CATALOG "
@@ -801,6 +1024,39 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testCreateViewFromNonExistentTable() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(
+                "CREATE TABLE IF NOT EXISTS S.T1 (A INTEGER PRIMARY KEY, B INTEGER)");
+            // 1. create view from non-existent table (without schema)
+            try {
+                conn.createStatement().execute(
+                    "CREATE VIEW IF NOT EXISTS V1(C INTEGER) AS SELECT * FROM T2");
+                fail("Creating view on non-existent table should have failed");
+            } catch (TableNotFoundException e) {
+                assertEquals("T2", e.getTableName());
+                assertEquals("", e.getSchemaName());
+                assertEquals("ERROR 1012 (42M03): Table undefined. tableName=T2",
+                    e.getMessage());
+            }
+            // 2. create view from existing table - successful
+            conn.createStatement().execute(
+                "CREATE VIEW IF NOT EXISTS V1(C INTEGER) AS SELECT * FROM S.T1");
+            // 3. create view from non-existent table (with schema)
+            try {
+                conn.createStatement().execute(
+                    "CREATE VIEW IF NOT EXISTS V2(C INTEGER) AS SELECT * FROM S.T2");
+                fail("Creating view on non-existent table should have failed");
+            } catch (TableNotFoundException e) {
+                assertEquals("T2", e.getTableName());
+                assertEquals("S", e.getSchemaName());
+                assertEquals("ERROR 1012 (42M03): Table undefined. tableName=S.T2",
+                    e.getMessage());
+            }
+        }
+    }
+
+    @Test
     public void testSettingGuidePostWidth() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTable = generateUniqueName();
@@ -909,6 +1165,40 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             assertNotNull("PRIORITY is not set for table:" + indexTable, val);
             assertTrue(Integer.parseInt(val) >= PhoenixRpcSchedulerFactory.getIndexPriority(config));
         }
+    }
+
+    @Test
+    public void testCreateTableDDLTimestamp() throws Exception {
+        Properties props = new Properties();
+        final String schemaName = generateUniqueName();
+        final String tableName = generateUniqueName();
+        final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
+        String ddl =
+            "CREATE TABLE " + dataTableFullName + " (\n" + "ID1 VARCHAR(15) NOT NULL,\n"
+                + "ID2 VARCHAR(15) NOT NULL,\n" + "CREATED_DATE DATE,\n"
+                + "CREATION_TIME BIGINT,\n" + "LAST_USED DATE,\n"
+                + "CONSTRAINT PK PRIMARY KEY (ID1, ID2)) ";
+        long startTS = EnvironmentEdgeManager.currentTimeMillis();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(ddl);
+            verifyLastDDLTimestamp(dataTableFullName, startTS, conn);
+        }
+    }
+
+    public static long verifyLastDDLTimestamp(String dataTableFullName, long startTS, Connection conn) throws SQLException {
+        long endTS = EnvironmentEdgeManager.currentTimeMillis();
+        //Now try the PTable API
+        long ddlTimestamp = getLastDDLTimestamp(conn, dataTableFullName);
+        assertTrue("PTable DDL Timestamp not in the right range!",
+            ddlTimestamp >= startTS && ddlTimestamp <= endTS);
+        return ddlTimestamp;
+    }
+
+    public static long getLastDDLTimestamp(Connection conn, String dataTableFullName) throws SQLException {
+        PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+        assertNotNull("PTable is null!", table);
+        assertNotNull("DDL timestamp is null!", table.getLastDDLTimestamp());
+        return table.getLastDDLTimestamp();
     }
 
     private int checkGuidePostWidth(String tableName) throws Exception {

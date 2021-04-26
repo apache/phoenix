@@ -24,7 +24,7 @@ import org.apache.phoenix.call.CallWrapper;
 /**
  * Executes {@code Callable}s using a context classloader that is set up to load classes from
  * Phoenix.
- * <p/>
+ * 
  * Loading HBase configuration settings and endpoint coprocessor classes is done via the context
  * classloader of the calling thread. When Phoenix is being run via a JDBC-enabled GUI, the
  * driver is often loaded dynamically and executed via multiple threads, which makes it difficult
@@ -62,7 +62,7 @@ public class PhoenixContextExecutor {
      * instead of the currently-set context classloader of the current thread. This allows loading
      * dynamically-loaded classes and configuration files using the same classloader used to
      * load the rest of the JDBC driver.
-     * <p/>
+     * 
      * The context classloader of the current thread is reset to its original value after the
      * callable has been executed.
      *
@@ -84,7 +84,6 @@ public class PhoenixContextExecutor {
      *
      * @param target the callable to be executed
      * @return the return value from the callable
-     * @throws Exception any exception thrown by the underlying callable
      */
     public static <T> T callWithoutPropagation(Callable<T> target) {
         try {

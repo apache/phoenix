@@ -48,7 +48,7 @@ import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /*
  * Class for flattening derived-tables when possible. A derived-table can be
@@ -68,12 +68,11 @@ public class SubselectRewriter extends ParseNodeRewriter {
      * @param preFilterParseNodes
      * @param subselectAlias
      * @return
-     * @throws SQLException
      */
     public static SelectStatement applyPreFiltersForSubselect(
             SelectStatement subselectStatement,
             List<ParseNode> preFilterParseNodes,
-            String subselectAlias) throws SQLException {
+            String subselectAlias) {
 
         if (preFilterParseNodes.isEmpty()) {
             return subselectStatement;
@@ -111,10 +110,10 @@ public class SubselectRewriter extends ParseNodeRewriter {
      * added to the statement by {@link #applyPreFiltersForSubselect}.
      * @param statement
      * @return
-     * @throws SQLException
      */
-    public static boolean isFilterCanPushDownToSelect(SelectStatement statement) throws SQLException {
-        return statement.getLimit() == null && (!statement.isAggregate() || !statement.getGroupBy().isEmpty());        
+    public static boolean isFilterCanPushDownToSelect(SelectStatement statement) {
+        return statement.getLimit() == null &&
+               (!statement.isAggregate() || !statement.getGroupBy().isEmpty());
     }
     
     /**
@@ -281,7 +280,7 @@ public class SubselectRewriter extends ParseNodeRewriter {
     /**
      * Pruning selectAliasedNodes according to referencedColumnNames,
      * Note: the selectStatement is supposed to be a {@link DerivedTableNode} of an Outer SelectStatement,
-     * so according to {@link FromCompiler.MultiTableColumnResolver#visit(DerivedTableNode)},
+     * so according to FromCompiler.MultiTableColumnResolver#visit(DerivedTableNode) ,
      * wildcard in selectAliasedNode is not supported.
      * @param selectStatement
      * @param referencedColumnNames

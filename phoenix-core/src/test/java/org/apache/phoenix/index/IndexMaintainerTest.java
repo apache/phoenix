@@ -42,6 +42,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
+import org.apache.phoenix.hbase.index.AbstractValueGetter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
@@ -57,7 +58,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
     private static final String DEFAULT_SCHEMA_NAME = "";
@@ -76,7 +77,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
     }
 
     private static ValueGetter newValueGetter(final byte[] row, final Map<ColumnReference, byte[]> valueMap) {
-        return new ValueGetter() {
+        return new AbstractValueGetter() {
 
             @Override
             public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) {

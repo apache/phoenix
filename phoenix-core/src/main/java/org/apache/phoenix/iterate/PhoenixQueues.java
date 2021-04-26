@@ -27,8 +27,8 @@ import org.apache.phoenix.iterate.OrderedResultIterator.ResultEntry;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.MinMaxPriorityQueue;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.MinMaxPriorityQueue;
 
 public class PhoenixQueues {
 

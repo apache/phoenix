@@ -40,6 +40,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COU
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_RPC_RETRIES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_SCANNED_REGIONS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SCAN_BYTES;
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -50,6 +51,8 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
@@ -153,6 +156,9 @@ public class ScanningResultIterator implements ResultIterator {
     public Tuple next() throws SQLException {
         try {
             Result result = scanner.next();
+            while (result != null && (result.isEmpty() || isDummy(result))) {
+                result = scanner.next();
+            }
             if (result == null) {
                 close(); // Free up resources early
                 return null;
@@ -167,6 +173,11 @@ public class ScanningResultIterator implements ResultIterator {
 
     @Override
     public void explain(List<String> planSteps) {
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
     }
 
     @Override

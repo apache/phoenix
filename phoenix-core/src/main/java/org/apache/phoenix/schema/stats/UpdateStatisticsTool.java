@@ -18,13 +18,13 @@
 package org.apache.phoenix.schema.stats;
 
 import org.antlr.runtime.CharStream;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
-import org.apache.commons.cli.PosixParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.HelpFormatter;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.PosixParser;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -48,14 +48,7 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MRJobType;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.tephra.TransactionNotInProgressException;
-import org.apache.tephra.TransactionSystemClient;
-import org.apache.tephra.hbase.coprocessor.TransactionProcessor;
-import org.apache.thrift.transport.TTransportException;
-import org.apache.twill.common.Cancellable;
-import org.apache.twill.discovery.DiscoveryServiceClient;
-import org.apache.twill.discovery.ZKDiscoveryService;
-import org.apache.twill.zookeeper.ZKClient;
+
 import org.joda.time.Chronology;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -217,10 +210,19 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         job.setPriority(this.jobPriority);
 
         TableMapReduceUtil.addDependencyJars(job);
-        TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(), PhoenixConnection.class, Chronology.class,
-                CharStream.class, TransactionSystemClient.class, TransactionNotInProgressException.class,
-                ZKClient.class, DiscoveryServiceClient.class, ZKDiscoveryService.class,
-                Cancellable.class, TTransportException.class, SpanReceiver.class, TransactionProcessor.class, Gauge.class, MetricRegistriesImpl.class);
+        TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(),
+                PhoenixConnection.class, Chronology.class, CharStream.class,
+                SpanReceiver.class, Gauge.class, MetricRegistriesImpl.class);
+        try {
+            TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(),
+                Class.forName("org.apache.tephra.TransactionNotInProgressException"),
+                Class.forName("org.apache.tephra.TransactionSystemClient"),
+                Class.forName("org.apache.tephra.hbase.coprocessor.TransactionProcessor"),
+                Class.forName("org.apache.thrift.transport.TTransportException"));
+        } catch (Throwable t) {
+            //Tephra is excluded
+        }
+
         LOGGER.info("UpdateStatisticsTool running for: " + tableName
                 + " on snapshot: " + snapshotName + " with restore dir: " + restoreDir);
     }

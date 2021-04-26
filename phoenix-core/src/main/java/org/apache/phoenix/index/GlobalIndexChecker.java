@@ -17,17 +17,18 @@
  */
 package org.apache.phoenix.index;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CHECK_VERIFY_COLUMN;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
 import static org.apache.phoenix.index.IndexMaintainer.getIndexMaintainer;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
+import static org.apache.phoenix.util.ScanUtil.getDummyResult;
+import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Random;
 import java.util.Optional;
 
 import org.apache.hadoop.hbase.Cell;
@@ -46,12 +47,17 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.BaseRegionScanner;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.filter.PagedFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
@@ -88,9 +94,15 @@ import org.slf4j.LoggerFactory;
  * the verified version that is masked by the unverified version(s).
  *
  */
-public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
-    private static final Logger LOG = LoggerFactory.getLogger(GlobalIndexChecker.class);
+public class GlobalIndexChecker extends BaseScannerRegionObserver implements RegionCoprocessor{
+    private static final Logger LOG =
+        LoggerFactory.getLogger(GlobalIndexChecker.class);
+    private static final String REPAIR_LOGGING_PERCENT_ATTRIB = "phoenix.index.repair.logging.percent";
+    private static final double DEFAULT_REPAIR_LOGGING_PERCENT = 1;
+
     private GlobalIndexCheckerSource metricsSource;
+    private CoprocessorEnvironment env;
+
     public enum RebuildReturnCode {
         NO_DATA_ROW(0),
         NO_INDEX_ROW(1),
@@ -111,13 +123,11 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
      * An instance of this class is created for each scanner on an index
      * and used to verify individual rows and rebuild them if they are not valid
      */
-    private class GlobalIndexScanner implements RegionScanner {
+    private class GlobalIndexScanner extends BaseRegionScanner {
         private RegionScanner scanner;
-        private RegionScanner deleteRowScanner;
         private long ageThreshold;
         private Scan scan;
         private Scan indexScan;
-        private Scan deleteRowScan;
         private Scan singleRowIndexScan;
         private Scan buildIndexScan = null;
         private Table dataHTable = null;
@@ -130,11 +140,20 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
         private long minTimestamp;
         private long maxTimestamp;
         private GlobalIndexCheckerSource metricsSource;
+        private long rowCount = 0;
+        private long pageSize = Long.MAX_VALUE;
+        private boolean restartScanDueToPageFilterRemoval = false;
+        private boolean hasMore;
+        private double loggingPercent;
+        private Random random;
+        private String indexName;
+        private long pageSizeMs;
 
         public GlobalIndexScanner(RegionCoprocessorEnvironment env,
                                   Scan scan,
                                   RegionScanner scanner,
                                   GlobalIndexCheckerSource metricsSource) throws IOException {
+            super(scanner);
             this.env = env;
             this.scan = scan;
             this.scanner = scanner;
@@ -148,15 +167,20 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
                     QueryServicesOptions.DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS);
             minTimestamp = scan.getTimeRange().getMin();
             maxTimestamp = scan.getTimeRange().getMax();
-            byte[] indexTableName = region.getRegionInfo().getTable().getName();
+            byte[] indexTableNameBytes = region.getRegionInfo().getTable().getName();
+            this.indexName = Bytes.toString(indexTableNameBytes);
             byte[] md = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
             List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(md, true);
-            indexMaintainer = getIndexMaintainer(maintainers, indexTableName);
+            indexMaintainer = getIndexMaintainer(maintainers, indexTableNameBytes);
             if (indexMaintainer == null) {
                 throw new DoNotRetryIOException(
                         "repairIndexRows: IndexMaintainer is not included in scan attributes for " +
                                 region.getRegionInfo().getTable().getNameAsString());
             }
+            loggingPercent = env.getConfiguration().getDouble(REPAIR_LOGGING_PERCENT_ATTRIB,
+                    DEFAULT_REPAIR_LOGGING_PERCENT);
+            random = new Random(EnvironmentEdgeManager.currentTimeMillis());
+            pageSizeMs = getPageSizeMsForRegionScanner(scan);
         }
 
         @Override
@@ -169,26 +193,53 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
             return scanner.getMaxResultSize();
         }
 
-        @Override
-        public boolean next(List<Cell> result) throws IOException {
+        public boolean next(List<Cell> result, boolean raw) throws IOException {
             try {
-                boolean hasMore;
+                long startTime = EnvironmentEdgeManager.currentTimeMillis();
                 do {
-                    hasMore = scanner.next(result);
+                    if (raw) {
+                        hasMore = scanner.nextRaw(result);
+                    } else {
+                        hasMore = scanner.next(result);
+                    }
                     if (result.isEmpty()) {
                         break;
                     }
+                    if (isDummy(result)) {
+                        return true;
+                    }
+                    Cell cell = result.get(0);
                     if (verifyRowAndRepairIfNecessary(result)) {
                         break;
+                    }
+                    if (hasMore && (EnvironmentEdgeManager.currentTimeMillis() - startTime) >= pageSizeMs) {
+                        byte[] rowKey = CellUtil.cloneRow(cell);
+                        result.clear();
+                        getDummyResult(rowKey, result);
+                        return true;
                     }
                     // skip this row as it is invalid
                     // if there is no more row, then result will be an empty list
                 } while (hasMore);
+                rowCount++;
+                if (rowCount == pageSize) {
+                    return false;
+                }
                 return hasMore;
             } catch (Throwable t) {
                 ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
                 return false; // impossible
             }
+        }
+
+        @Override
+        public boolean next(List<Cell> result) throws IOException {
+           return next(result, false);
+        }
+
+        @Override
+        public boolean nextRaw(List<Cell> result) throws IOException {
+            return next(result, true);
         }
 
         @Override
@@ -215,11 +266,6 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
         }
 
         @Override
-        public boolean isFilterDone() throws IOException {
-            return scanner.isFilterDone();
-        }
-
-        @Override
         public boolean reseek(byte[] row) throws IOException {
             return scanner.reseek(row);
         }
@@ -229,29 +275,9 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
             return scanner.getMvccReadPoint();
         }
 
-        @Override
-        public boolean nextRaw(List<Cell> result) throws IOException {
-            try {
-                boolean hasMore;
-                do {
-                    hasMore = scanner.nextRaw(result);
-                    if (result.isEmpty()) {
-                        break;
-                    }
-                    if (verifyRowAndRepairIfNecessary(result)) {
-                        break;
-                    }
-                    // skip this row as it is invalid
-                    // if there is no more row, then result will be an empty list
-                } while (hasMore);
-                return hasMore;
-            } catch (Throwable t) {
-                ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
-                return false; // impossible
-            }
-        }
 
-        private void deleteRowIfAgedEnough(byte[] indexRowKey, List<Cell> row, long ts, boolean specific) throws IOException {
+        private void deleteRowIfAgedEnough(byte[] indexRowKey, long ts,
+                boolean specific) throws IOException {
             if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold) {
                 Delete del;
                 if (specific) {
@@ -266,16 +292,59 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
             }
         }
 
+        private PageFilter removePageFilterFromFilterList(FilterList filterList) {
+            Iterator<Filter> filterIterator = filterList.getFilters().iterator();
+            while (filterIterator.hasNext()) {
+                Filter filter = filterIterator.next();
+                if (filter instanceof PageFilter) {
+                    filterIterator.remove();
+                    return (PageFilter) filter;
+                } else if (filter instanceof FilterList) {
+                    PageFilter pageFilter = removePageFilterFromFilterList((FilterList) filter);
+                    if (pageFilter != null) {
+                        return pageFilter;
+                    }
+                }
+            }
+            return null;
+        }
+
+        // This method assumes that there is at most one instance of PageFilter in a scan
+        private PageFilter removePageFilter(Scan scan) {
+            Filter filter = scan.getFilter();
+            if (filter != null) {
+                if (filter instanceof PagedFilter) {
+                    filter = ((PagedFilter) filter).getDelegateFilter();
+                    if (filter == null) {
+                        return null;
+                    }
+                }
+                if (filter instanceof PageFilter) {
+                    scan.setFilter(null);
+                    return (PageFilter) filter;
+                } else if (filter instanceof FilterList) {
+                    return removePageFilterFromFilterList((FilterList) filter);
+                }
+            }
+            return null;
+        }
+
         private void repairIndexRows(byte[] indexRowKey, long ts, List<Cell> row) throws IOException {
-            // Build the data table row key from the index table row key
             if (buildIndexScan == null) {
+                PageFilter pageFilter = removePageFilter(scan);
+                if (pageFilter != null) {
+                    pageSize = pageFilter.getPageSize();
+                    restartScanDueToPageFilterRemoval = true;
+                }
                 buildIndexScan = new Scan();
                 indexScan = new Scan(scan);
-                deleteRowScan = new Scan();
                 singleRowIndexScan = new Scan(scan);
                 byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
-                dataHTable = ServerUtil.ConnectionFactory.getConnection(ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION,
-                        env).getTable(TableName.valueOf(dataTableName));
+                dataHTable =
+                    ServerUtil.ConnectionFactory.
+                        getConnection(ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION, env).
+                        getTable(TableName.valueOf(dataTableName));
+
                 viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
                 // The following attributes are set to instruct UngroupedAggregateRegionObserver to do partial index rebuild
                 // i.e., rebuild a subset of index rows.
@@ -284,10 +353,10 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
                 buildIndexScan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
                 buildIndexScan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes.toBytes(true));
                 // Scan only columns included in the index table plus the empty column
-                for (ColumnReference column : indexMaintainer.getAllColumns()) {
+                for (ColumnReference column : indexMaintainer.getAllColumnsForDataTable()) {
                     buildIndexScan.addColumn(column.getFamily(), column.getQualifier());
                 }
-                buildIndexScan.addColumn(indexMaintainer.getDataEmptyKeyValueCF(), indexMaintainer.getEmptyKeyValueQualifier());
+                buildIndexScan.addColumn(indexMaintainer.getDataEmptyKeyValueCF(), indexMaintainer.getEmptyKeyValueQualifierForDataTable());
             }
             // Rebuild the index row from the corresponding the row in the the data table
             // Get the data row key from the index row key
@@ -311,22 +380,33 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
                 // This means there does not exist a data table row for the data row key derived from
                 // this unverified index row. So, no index row has been built
                 // Delete the unverified row from index if it is old enough
-                deleteRowIfAgedEnough(indexRowKey, row, ts, false);
+                deleteRowIfAgedEnough(indexRowKey, ts, false);
                 // Skip this unverified row (i.e., do not return it to the client). Just retuning empty row is
                 // sufficient to do that
                 row.clear();
+                if (restartScanDueToPageFilterRemoval) {
+                    scanner.close();
+                    indexScan.withStartRow(indexRowKey, false);
+                    scanner = ((BaseRegionScanner)delegate).getNewRegionScanner(indexScan);
+                    hasMore = true;
+                    // Set restartScanDueToPageFilterRemoval to false as we do not restart the scan unnecessarily next time
+                    restartScanDueToPageFilterRemoval = false;
+                }
                 return;
             }
             // An index row has been built. Close the current scanner as the newly built row will not be visible to it
             scanner.close();
+            // Set restartScanDueToPageFilterRemoval to false as we do not restart the scan unnecessarily next time
+            restartScanDueToPageFilterRemoval = false;
             if (code == RebuildReturnCode.NO_INDEX_ROW.getValue()) {
                 // This means there exists a data table row for the data row key derived from this unverified index row
                 // but the data table row does not point back to the index row.
                 // Delete the unverified row from index if it is old enough
-                deleteRowIfAgedEnough(indexRowKey, row, ts, false);
+                deleteRowIfAgedEnough(indexRowKey, ts, false);
                 // Open a new scanner starting from the row after the current row
                 indexScan.withStartRow(indexRowKey, false);
-                scanner = region.getScanner(indexScan);
+                scanner = ((BaseRegionScanner)delegate).getNewRegionScanner(indexScan);
+                hasMore = true;
                 // Skip this unverified row (i.e., do not return it to the client). Just retuning empty row is
                 // sufficient to do that
                 row.clear();
@@ -335,10 +415,13 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
             // code == RebuildReturnCode.INDEX_ROW_EXISTS.getValue()
             // Open a new scanner starting from the current row
             indexScan.withStartRow(indexRowKey, true);
-            scanner = region.getScanner(indexScan);
-            scanner.next(row);
+            scanner = ((BaseRegionScanner)delegate).getNewRegionScanner(indexScan);
+            hasMore = scanner.next(row);
             if (row.isEmpty()) {
                 // This means the index row has been deleted before opening the new scanner.
+                return;
+            }
+            if (isDummy(row)) {
                 return;
             }
             // Check if the index row still exist after rebuild
@@ -352,7 +435,8 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
                 // The row is "unverified". Rewind the scanner and let the row be scanned again
                 // so that it can be repaired
                 scanner.close();
-                scanner = region.getScanner(indexScan);
+                scanner =((BaseRegionScanner)delegate).getNewRegionScanner(indexScan);
+                hasMore = true;
                 row.clear();
                 return;
             }
@@ -369,14 +453,14 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
             // There could be back to back such events so we need a loop to go through them
             do {
                 // First delete the unverified row from index if it is old enough
-                deleteRowIfAgedEnough(indexRowKey, row, ts, true);
+                deleteRowIfAgedEnough(indexRowKey, ts, true);
                 // Now we will do a single row scan to retrieve the verified index row built from the data table row.
                 // Note we cannot read all versions in one scan as the max number of row versions for an index table
                 // can be 1. In that case, we will get only one (i.e., the most recent) version instead of all versions
                 singleRowIndexScan.withStartRow(indexRowKey, true);
                 singleRowIndexScan.withStopRow(indexRowKey, true);
                 singleRowIndexScan.setTimeRange(minTimestamp, ts);
-                RegionScanner singleRowScanner = region.getScanner(singleRowIndexScan);
+                RegionScanner singleRowScanner = ((BaseRegionScanner)delegate).getNewRegionScanner(singleRowIndexScan);
                 row.clear();
                 singleRowScanner.next(row);
                 singleRowScanner.close();
@@ -386,6 +470,9 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
                             region.getRegionInfo().getTable().getNameAsString());
                     // This was not expected. The new build index row must be deleted before opening the new scanner
                     // possibly by compaction
+                    return;
+                }
+                if (isDummy(row)) {
                     return;
                 }
                 if (verifyRowAndRemoveEmptyColumn(row)) {
@@ -498,7 +585,7 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
          * @throws IOException
          */
         private boolean verifyRowAndRepairIfNecessary(List<Cell> cellList) throws IOException {
-            metricsSource.incrementIndexInspections();
+            metricsSource.incrementIndexInspections(indexName);
             Cell cell = cellList.get(0);
             if (verifyRowAndRemoveEmptyColumn(cellList)) {
                 return true;
@@ -508,14 +595,28 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
                 byte[] rowKey = CellUtil.cloneRow(cell);
                 long ts = cellList.get(0).getTimestamp();
                 cellList.clear();
-
+                long repairTime;
                 try {
                     repairIndexRows(rowKey, ts, cellList);
-                    metricsSource.incrementIndexRepairs();
-                    metricsSource.updateIndexRepairTime(EnvironmentEdgeManager.currentTimeMillis() - repairStart);
+                    repairTime = EnvironmentEdgeManager.currentTimeMillis() - repairStart;
+                    metricsSource.incrementIndexRepairs(indexName);
+                    metricsSource.updateUnverifiedIndexRowAge(indexName,
+                        EnvironmentEdgeManager.currentTimeMillis() - ts);
+                    metricsSource.updateIndexRepairTime(indexName,
+                        EnvironmentEdgeManager.currentTimeMillis() - repairStart);
+                    if (shouldLog()) {
+                        LOG.info(String.format("Index row repair on region {} took {} ms.",
+                                env.getRegionInfo().getRegionNameAsString(), repairTime));
+                    }
                 } catch (IOException e) {
-                    metricsSource.incrementIndexRepairFailures();
-                    metricsSource.updateIndexRepairFailureTime(EnvironmentEdgeManager.currentTimeMillis() - repairStart);
+                    repairTime = EnvironmentEdgeManager.currentTimeMillis() - repairStart;
+                    metricsSource.incrementIndexRepairFailures(indexName);
+                    metricsSource.updateIndexRepairFailureTime(indexName,
+                        EnvironmentEdgeManager.currentTimeMillis() - repairStart);
+                    if (shouldLog()) {
+                        LOG.warn("Index row repair failure on region {} took {} ms.",
+                                env.getRegionInfo().getRegionNameAsString(), repairTime);
+                    }
                     throw e;
                 }
 
@@ -526,6 +627,24 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
                 return true;
             }
         }
+
+        private boolean shouldLog() {
+            if (loggingPercent == 0) {
+                return false;
+            }
+            return (random.nextDouble() <= (loggingPercent / 100.0d));
+        }
+    }
+
+    @Override
+    protected boolean isRegionObserverFor(Scan scan) {
+        return scan.getAttribute(CHECK_VERIFY_COLUMN) != null;
+    }
+
+    @Override
+    protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan,
+                                              final RegionScanner s) throws IOException, SQLException {
+        return new GlobalIndexScanner(c.getEnvironment(), scan, s, metricsSource);
     }
 
     @Override
@@ -534,16 +653,9 @@ public class GlobalIndexChecker implements RegionCoprocessor, RegionObserver {
     }
 
     @Override
-    public RegionScanner postScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
-                                         Scan scan, RegionScanner s) throws IOException {
-        if (scan.getAttribute(CHECK_VERIFY_COLUMN) == null) {
-            return s;
-        }
-        return new GlobalIndexScanner(c.getEnvironment(), scan, s, metricsSource);
-    }
-
-    @Override
     public void start(CoprocessorEnvironment e) throws IOException {
+        this.env = e;
         this.metricsSource = MetricsIndexerSourceFactory.getInstance().getGlobalIndexCheckerSource();
     }
+
 }

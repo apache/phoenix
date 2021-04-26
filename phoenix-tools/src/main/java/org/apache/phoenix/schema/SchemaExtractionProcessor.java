@@ -1,16 +1,35 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.phoenix.schema;
 
-import com.google.common.collect.Sets;
+import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
@@ -184,7 +203,7 @@ public class SchemaExtractionProcessor {
 
     private String generateCreateViewDDL(String columnInfoString, String baseTableFullName,
             String whereClause, String pSchemaName, String pTableName) {
-        String viewFullName = SchemaUtil.getQualifiedTableName(pSchemaName, pTableName);
+        String viewFullName = SchemaUtil.getPTableFullNameWithQuotes(pSchemaName, pTableName);
         StringBuilder outputBuilder = new StringBuilder(String.format(CREATE_VIEW, viewFullName,
                 columnInfoString, baseTableFullName, whereClause));
         return outputBuilder.toString();
@@ -207,9 +226,10 @@ public class SchemaExtractionProcessor {
 
         return generateTableDDLString(columnInfoString, propertiesString, pSchemaName, pTableName);
     }
+
     private String generateTableDDLString(String columnInfoString, String propertiesString,
             String pSchemaName, String pTableName) {
-        String pTableFullName = SchemaUtil.getQualifiedTableName(pSchemaName, pTableName);
+        String pTableFullName = SchemaUtil.getPTableFullNameWithQuotes(pSchemaName, pTableName);
         StringBuilder outputBuilder = new StringBuilder(String.format(CREATE_TABLE, pTableFullName));
         outputBuilder.append(columnInfoString).append(" ").append(propertiesString);
         return outputBuilder.toString();
@@ -287,8 +307,10 @@ public class SchemaExtractionProcessor {
 
     private HTableDescriptor getTableDescriptor(ConnectionQueryServices cqsi, PTable table)
             throws SQLException, IOException {
-        return cqsi.getAdmin().getTableDescriptor(
-                TableName.valueOf(table.getPhysicalName().getString()));
+        try (Admin admin = cqsi.getAdmin()) {
+            return admin.getTableDescriptor(TableName.valueOf(
+                table.getPhysicalName().getString()));
+        }
     }
 
     private String convertPropertiesToString() {
@@ -308,8 +330,15 @@ public class SchemaExtractionProcessor {
                 if (optionBuilder.length() != 0) {
                     optionBuilder.append(", ");
                 }
-                key = columnFamilyName.equals(QueryConstants.DEFAULT_COLUMN_FAMILY)? key : String.format("\"%s\".%s", columnFamilyName, key);
-                optionBuilder.append(key+"="+value);
+                key = columnFamilyName.equals(QueryConstants.DEFAULT_COLUMN_FAMILY)?
+                        key : String.format("\"%s\".%s", columnFamilyName, key);
+                // properties value that corresponds to a number will not need single quotes around it
+                // properties value that corresponds to a boolean value will not need single quotes around it
+                if(!(NumberUtils.isNumber(value)) &&
+                        !(value.equalsIgnoreCase(Boolean.TRUE.toString()) ||value.equalsIgnoreCase(Boolean.FALSE.toString()))) {
+                    value= "'" + value + "'";
+                }
+                optionBuilder.append(key + "=" + value);
             }
         }
         return optionBuilder.toString();

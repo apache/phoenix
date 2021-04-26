@@ -50,7 +50,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * This class has tests for asserting the bytes and rows information exposed in the explain plan

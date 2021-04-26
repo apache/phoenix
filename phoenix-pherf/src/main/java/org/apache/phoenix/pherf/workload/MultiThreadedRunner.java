@@ -25,7 +25,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.concurrent.Callable;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.pherf.result.DataModelResult;
 import org.apache.phoenix.pherf.result.ResultManager;
@@ -57,7 +57,7 @@ class MultiThreadedRunner implements Callable<Void> {
     private final Scenario scenario;
     private final WorkloadExecutor workloadExecutor;
     private final XMLConfigParser parser;
-    
+    private final boolean writeRuntimeResults;
 
     /**
      * MultiThreadedRunner
@@ -83,6 +83,7 @@ class MultiThreadedRunner implements Callable<Void> {
        	this.resultManager = new ResultManager(dataModelResult.getName(), writeRuntimeResults);
        	this.workloadExecutor = workloadExecutor;
        	this.parser = parser;
+       	this.writeRuntimeResults = writeRuntimeResults;
     }
 
     /**
@@ -105,16 +106,25 @@ class MultiThreadedRunner implements Callable<Void> {
                 if (!timedQuery(i+1)) {
                     break;
                 }
-                if ((EnvironmentEdgeManager.currentTimeMillis() - lastResultWritten) > 1000) {
+                if (writeRuntimeResults &&
+                        (EnvironmentEdgeManager.currentTimeMillis() - lastResultWritten) > 1000) {
                     resultManager.write(dataModelResult, ruleApplier);
                     lastResultWritten = EnvironmentEdgeManager.currentTimeMillis();
                 }
             }
         }
 
+        if (!writeRuntimeResults) {
+            long duration = EnvironmentEdgeManager.currentTimeMillis() - threadStartTime;
+            LOGGER.info("The read query " + query.getStatement() + " for this thread in ("
+                    + duration + ") Ms");
+        }
+
         // Make sure all result have been dumped before exiting
-        synchronized (workloadExecutor) {
-            resultManager.flush();
+        if (writeRuntimeResults) {
+            synchronized (workloadExecutor) {
+                resultManager.flush();
+            }
         }
 
         LOGGER.info("\n\nThread exiting." + threadName + "\n\n");
@@ -151,7 +161,7 @@ class MultiThreadedRunner implements Callable<Void> {
             conn.setAutoCommit(true);
             final String statementString = query.getDynamicStatement(ruleApplier, scenario);
             statement = conn.prepareStatement(statementString);
-            LOGGER.info("Executing iteration: " + queryIteration + ": " + statementString);
+            LOGGER.debug("Executing iteration: " + queryIteration + ": " + statementString);
             
             if (scenario.getWriteParams() != null) {
             	Workload writes = new WriteWorkload(PhoenixUtil.create(), parser, scenario, GeneratePhoenixStats.NO);

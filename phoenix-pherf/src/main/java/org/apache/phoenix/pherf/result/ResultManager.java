@@ -121,7 +121,7 @@ public class ResultManager {
     /**
      * Write a combined set of results for each result in the list.
      *
-     * @param dataModelResults List<{@link DataModelResult > </>}
+     * @param dataModelResults {@code List<DataModelResult > }
      * @throws Exception
      */
     public synchronized void write(List<DataModelResult> dataModelResults, RulesApplier rulesApplier) throws Exception {
@@ -145,7 +145,6 @@ public class ResultManager {
 
     /**
      * Allows for flushing all the {@link org.apache.phoenix.pherf.result.ResultHandler}
-     * @throws Exception
      */
     public synchronized void flush(){
         for (ResultHandler handler : resultHandlers) {

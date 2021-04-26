@@ -31,7 +31,7 @@ import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
 import org.apache.phoenix.expression.visitor.SingleAggregateFunctionVisitor;
 
-import com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 /**
  * 

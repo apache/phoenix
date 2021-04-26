@@ -32,8 +32,8 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * 
@@ -58,9 +58,9 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
      * <pre>
      * Resolve the inner alias for the selectStament.
      * For following sql:
-     *   select aid,sum(age) agesum from merge where age >=11 and age<=33 group by aid order by agesum
+     *   {@code select aid,sum(age) agesum from merge where age >=11 and age <= 33 group by aid order by agesum }
      * "agesum" is an alias of "sum(age)", so for this method, the above sql is rewritten to:
-     *   select aid,sum(age) agesum from merge where age >=11 and age<=33 group by aid order by sum(age)
+     *   {@code  select aid,sum(age) agesum from merge where age >= 11 and <= 33 group by aid order by sum(age) }
      * </pre>
      * @param selectStament
      * @param phoenixConnection
@@ -102,12 +102,7 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
                 normOffset = offset.accept(rewriter);
             }
         }
-        ParseNode having = statement.getHaving();
-        ParseNode normHaving= having;
-        if (having != null) {
-            rewriter.reset();
-            normHaving = having.accept(rewriter);
-        }
+
         List<AliasedNode> selectNodes = statement.getSelect();
         List<AliasedNode> normSelectNodes = selectNodes;
         for (int i = 0; i < selectNodes.size(); i++) {
@@ -157,6 +152,14 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
             }
             normGroupByNodes.add(normGroupByNode);
         }
+
+        ParseNode having = statement.getHaving();
+        ParseNode normHaving= having;
+        if (having != null) {
+            rewriter.reset();
+            normHaving = having.accept(rewriter);
+        }
+
         List<OrderByNode> orderByNodes = statement.getOrderBy();
         List<OrderByNode> normOrderByNodes = orderByNodes;
         for (int i = 0; i < orderByNodes.size(); i++) {

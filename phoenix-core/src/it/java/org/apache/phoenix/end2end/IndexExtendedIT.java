@@ -36,15 +36,18 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
@@ -54,8 +57,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Tests for the {@link IndexTool}
@@ -66,19 +69,30 @@ public class IndexExtendedIT extends BaseTest {
     private final boolean localIndex;
     private final boolean useViewIndex;
     private final String tableDDLOptions;
+    private final String indexDDLOptions;
     private final boolean mutable;
     private final boolean useSnapshot;
-    
+
     public IndexExtendedIT( boolean mutable, boolean localIndex, boolean useViewIndex, boolean useSnapshot) {
         this.localIndex = localIndex;
         this.useViewIndex = useViewIndex;
         this.mutable = mutable;
         this.useSnapshot = useSnapshot;
         StringBuilder optionBuilder = new StringBuilder();
+        StringBuilder indexOptionBuilder = new StringBuilder();
         if (!mutable) {
             optionBuilder.append(" IMMUTABLE_ROWS=true ");
         }
+
+        if (!localIndex) {
+            if (!(optionBuilder.length() == 0)) {
+                optionBuilder.append(",");
+            }
+            optionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=0 ");
+            indexOptionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS,COLUMN_ENCODED_BYTES=2 ");
+        }
         optionBuilder.append(" SPLIT ON(1,2)");
+        this.indexDDLOptions = indexOptionBuilder.toString();
         this.tableDDLOptions = optionBuilder.toString();
     }
     
@@ -86,6 +100,7 @@ public class IndexExtendedIT extends BaseTest {
     public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        serverProps.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
@@ -101,7 +116,7 @@ public class IndexExtendedIT extends BaseTest {
             for (boolean localIndex : Booleans) {
                 for (boolean useViewIndex : Booleans) {
                     for (boolean useSnapshot : Booleans) {
-                        list.add(new Boolean[] { mutable, localIndex, useViewIndex, useSnapshot });
+                        list.add(new Boolean[] { mutable, localIndex, useViewIndex, useSnapshot});
                     }
                 }
             }
@@ -138,7 +153,7 @@ public class IndexExtendedIT extends BaseTest {
             IndexToolIT.upsertRow(stmt1, id++);
             conn.commit();
             
-            stmt.execute(String.format("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX %s ON %s (UPPER(NAME, 'en_US')) ASYNC ", indexTableName,dataTableFullName));
+            stmt.execute(String.format("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX %s ON %s (UPPER(NAME, 'en_US')) ASYNC %s" , indexTableName,dataTableFullName, this.indexDDLOptions));
             
             //update a row 
             stmt1.setInt(1, 1);
@@ -149,14 +164,23 @@ public class IndexExtendedIT extends BaseTest {
             
             //verify rows are fetched from data table.
             String selectSql = String.format("SELECT ID FROM %s WHERE UPPER(NAME, 'en_US') ='UNAME2'",dataTableFullName);
-            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-            String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-            
+
+            ExplainPlan plan = conn.prepareStatement(selectSql)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
             //assert we are pulling from data table.
-            assertEquals(String.format("CLIENT PARALLEL 1-WAY FULL SCAN OVER %s\n" +
-                    "    SERVER FILTER BY UPPER(NAME, 'en_US') = 'UNAME2'",dataTableFullName),actualExplainPlan);
-            
-            rs = stmt1.executeQuery(selectSql);
+            assertEquals(dataTableFullName,
+                explainPlanAttributes.getTableName());
+            assertEquals("SERVER FILTER BY UPPER(NAME, 'en_US') = 'UNAME2'",
+                explainPlanAttributes.getServerWhereFilter());
+
+            ResultSet rs = stmt1.executeQuery(selectSql);
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
             assertFalse(rs.next());
@@ -164,11 +188,17 @@ public class IndexExtendedIT extends BaseTest {
             //run the index MR job.
             IndexToolIT.runIndexTool(true, useSnapshot, schemaName, dataTableName, indexTableName);
             
+            plan = conn.prepareStatement(selectSql)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
             //assert we are pulling from index table.
-            rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-            actualExplainPlan = QueryUtil.getExplainPlan(rs);
-            IndexToolIT.assertExplainPlan(localIndex, actualExplainPlan, dataTableFullName, indexTableFullName);
-            
+            String expectedTableName = localIndex ? dataTableFullName
+                : indexTableFullName;
+            assertEquals(expectedTableName,
+                explainPlanAttributes.getTableName());
+
             rs = stmt.executeQuery(selectSql);
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
@@ -177,7 +207,7 @@ public class IndexExtendedIT extends BaseTest {
             conn.close();
         }
     }
-    
+
     @Test
     public void testDeleteFromImmutable() throws Exception {
         if (mutable) {
@@ -189,7 +219,7 @@ public class IndexExtendedIT extends BaseTest {
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String indexTableName = generateUniqueName();
+        String indexTableName = "IDX_" + generateUniqueName();
         String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -207,7 +237,7 @@ public class IndexExtendedIT extends BaseTest {
             conn.createStatement().execute("upsert into " + dataTableFullName + " (pk1, pk2, pk3) values ('a', '1', '1')");
             conn.createStatement().execute("upsert into " + dataTableFullName + " (pk1, pk2, pk3) values ('b', '2', '2')");
             conn.commit();
-            conn.createStatement().execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexTableName + " ON " + dataTableFullName + " (pk3, pk2) ASYNC");
+            conn.createStatement().execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexTableName + " ON " + dataTableFullName + " (pk3, pk2) ASYNC " + this.indexDDLOptions);
             
             // this delete will be issued at a timestamp later than the above timestamp of the index table
             conn.createStatement().execute("delete from " + dataTableFullName + " where pk1 = 'a'");
@@ -226,12 +256,22 @@ public class IndexExtendedIT extends BaseTest {
             // validate that delete markers were issued correctly and only ('a', '1', 'value1') was
             // deleted
             String query = "SELECT pk3 from " + dataTableFullName + " ORDER BY pk3";
-            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            String expectedPlan =
-                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + indexTableFullName + "\n"
-                            + "    SERVER FILTER BY FIRST KEY ONLY";
-            assertEquals("Wrong plan ", expectedPlan, QueryUtil.getExplainPlan(rs));
-            rs = conn.createStatement().executeQuery(query);
+
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("PARALLEL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(indexTableFullName,
+                explainPlanAttributes.getTableName());
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                explainPlanAttributes.getServerWhereFilter());
+
+            ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("2", rs.getString(1));
             assertTrue(rs.next());
@@ -286,8 +326,8 @@ public class IndexExtendedIT extends BaseTest {
             Table hIndexTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(physicalTableNameOfIndex));
 
             stmt.execute(
-                    String.format("CREATE INDEX %s ON %s (UPPER(NAME, 'en_US')) ", indexName,
-                            baseTableFullNameOfIndex));
+                    String.format("CREATE INDEX %s ON %s (UPPER(NAME, 'en_US')) %s", indexName,
+                            baseTableFullNameOfIndex, this.indexDDLOptions));
             long dataCnt = getRowCount(conn, dataTableFullName);
             long indexCnt = getUtility().countRows(hIndexTable);
             assertEquals(dataCnt, indexCnt);
@@ -341,23 +381,23 @@ public class IndexExtendedIT extends BaseTest {
 
             // Configure IndexRegionObserver to fail the first write phase. This should not
             // lead to any change on index and thus index verify during index rebuild should fail
-            IndexRegionObserver.setIgnoreIndexRebuildForTesting(true);
+            IndexRebuildRegionScanner.setIgnoreIndexRebuildForTesting(true);
             stmt.execute(String.format(
-                    "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC",
-                    indexTableName, dataTableFullName));
+                    "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC %s",
+                    indexTableName, dataTableFullName, this.indexDDLOptions));
 
             // Verify that the index table is not in the ACTIVE state
             assertFalse(checkIndexState(conn, indexFullName, PIndexState.ACTIVE, 0L));
 
-            // Run the index MR job and verify that the index table rebuild fails
-            IndexToolIT.runIndexTool(true, false, schemaName, dataTableName,
-                    indexTableName, null, -1, IndexTool.IndexVerifyType.AFTER);
+            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+                // Run the index MR job and verify that the index table rebuild fails
+                IndexToolIT.runIndexTool(true, false, schemaName, dataTableName,
+                        indexTableName, null, -1, IndexTool.IndexVerifyType.AFTER);
+                // job failed, verify that the index table is still not in the ACTIVE state
+                assertFalse(checkIndexState(conn, indexFullName, PIndexState.ACTIVE, 0L));
+            }
 
-            IndexRegionObserver.setIgnoreIndexRebuildForTesting(false);
-
-            // job failed, verify that the index table is still not in the ACTIVE state
-            assertFalse(checkIndexState(conn, indexFullName, PIndexState.ACTIVE, 0L));
-
+            IndexRebuildRegionScanner.setIgnoreIndexRebuildForTesting(false);
             // Run the index MR job and verify that the index table rebuild succeeds
             IndexToolIT.runIndexTool(true, false, schemaName, dataTableName,
                     indexTableName, null, 0, IndexTool.IndexVerifyType.AFTER);

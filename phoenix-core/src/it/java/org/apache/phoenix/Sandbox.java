@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix;
 
-import com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;

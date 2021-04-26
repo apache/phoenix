@@ -21,6 +21,7 @@ import static org.apache.phoenix.query.QueryConstants.*;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -33,21 +34,37 @@ public class UngroupedAggregatingResultIterator extends GroupedAggregatingResult
     public UngroupedAggregatingResultIterator( PeekingResultIterator resultIterator, Aggregators aggregators) {
         super(resultIterator, aggregators);
     }
-    
     @Override
     public Tuple next() throws SQLException {
-        Tuple result = super.next();
-        // Ensure ungrouped aggregregation always returns a row, even if the underlying iterator doesn't.
-        if (result == null && !hasRows) {
-            // We should reset ClientAggregators here in case they are being reused in a new ResultIterator.
-            aggregators.reset(aggregators.getAggregators());
-            byte[] value = aggregators.toBytes(aggregators.getAggregators());
-            result = new SingleKeyValueTuple(
-                    PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, 
-                            SINGLE_COLUMN_FAMILY, 
-                            SINGLE_COLUMN, 
-                            AGG_TIMESTAMP, 
-                            value));
+        Tuple result = resultIterator.next();
+        if (result == null) {
+            // Ensure ungrouped aggregregation always returns a row, even if the underlying iterator doesn't.
+            if (!hasRows) {
+                // We should reset ClientAggregators here in case they are being reused in a new ResultIterator.
+                aggregators.reset(aggregators.getAggregators());
+                byte[] value = aggregators.toBytes(aggregators.getAggregators());
+                result = new SingleKeyValueTuple(
+                        PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY,
+                                SINGLE_COLUMN_FAMILY,
+                                SINGLE_COLUMN,
+                                AGG_TIMESTAMP,
+                                value));
+            }
+        } else {
+            Aggregator[] rowAggregators = aggregators.getAggregators();
+            aggregators.reset(rowAggregators);
+            while (true) {
+                aggregators.aggregate(rowAggregators, result);
+                Tuple nextResult = resultIterator.peek();
+                if (nextResult == null) {
+                    break;
+                }
+                result = resultIterator.next();
+            }
+
+            byte[] value = aggregators.toBytes(rowAggregators);
+            Tuple tuple = wrapKeyValueAsResult(PhoenixKeyValueUtil .newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length));
+            result = tuple;
         }
         hasRows = true;
         return result;

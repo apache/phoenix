@@ -75,7 +75,7 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * When a regionserver crashes, its WAL is split and then replayed to the server. If the index

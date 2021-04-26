@@ -53,7 +53,8 @@ public interface ColumnMutator {
                                                                    List<Region.RowLock> locks,
                                                                    long clientTimeStamp,
                                                                    long clientVersion,
-                                                                   ExtendedCellBuilder extendedCellBuilder)
+                                                                   ExtendedCellBuilder extendedCellBuilder,
+                                                                   boolean isAddingOrDroppingColumns)
             throws IOException, SQLException;
 
     /**

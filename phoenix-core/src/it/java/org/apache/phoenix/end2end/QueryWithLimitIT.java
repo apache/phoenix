@@ -31,16 +31,18 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.RejectedExecutionException;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 
 public class QueryWithLimitIT extends BaseUniqueNamesOwnClusterIT {
@@ -81,11 +83,21 @@ public class QueryWithLimitIT extends BaseUniqueNamesOwnClusterIT {
             assertEquals(0, rs.getInt(1));
             assertFalse(rs.next());
             
-            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals("CLIENT SERIAL 1-WAY FULL SCAN OVER " + tableName + "\n" + 
-                    "    SERVER FILTER BY FIRST KEY ONLY\n" + 
-                    "    SERVER 1 ROW LIMIT\n" + 
-                    "CLIENT 1 ROW LIMIT", QueryUtil.getExplainPlan(rs));
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes explainPlanAttributes =
+                plan.getPlanStepsAsAttributes();
+            assertEquals("SERIAL 1-WAY",
+                explainPlanAttributes.getIteratorTypeAndScanSize());
+            assertEquals("FULL SCAN ",
+                explainPlanAttributes.getExplainScanType());
+            assertEquals(tableName,
+                explainPlanAttributes.getTableName());
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                explainPlanAttributes.getServerWhereFilter());
+            assertEquals(1, explainPlanAttributes.getServerRowLimit().intValue());
+            assertEquals(1, explainPlanAttributes.getClientRowLimit().intValue());
         } finally {
             conn.close();
         }

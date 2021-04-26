@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -42,8 +42,10 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.mapreduce.Counters;
+import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
+import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
@@ -62,6 +64,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Rule;
@@ -82,24 +85,25 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.INDEX_TOOL_RUN_STATUS_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_COLUMN_FAMILY;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_NAME;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.ROW_KEY_SEPARATOR;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RUN_STATUS_EXECUTED;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RUN_STATUS_SKIPPED;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_INVALID_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_MISSING_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_VALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_OLD_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT;
@@ -112,48 +116,68 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(Parameterized.class)
 public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT {
 
+    public static final int MAX_LOOKBACK_AGE = 3600;
     private final String tableDDLOptions;
-    private boolean directApi = true;
-    private boolean useSnapshot = false;
-    private boolean mutable;
+
+    private final boolean directApi = true;
+    private final boolean useSnapshot = false;
+    private final boolean mutable;
+    private final String indexDDLOptions;
+    private boolean singleCell;
+
     @Rule
     public ExpectedException exceptionRule = ExpectedException.none();
 
-    public IndexToolForNonTxGlobalIndexIT(boolean mutable) {
+    public IndexToolForNonTxGlobalIndexIT(boolean mutable, boolean singleCell) {
         StringBuilder optionBuilder = new StringBuilder();
+        StringBuilder indexOptionBuilder = new StringBuilder();
         this.mutable = mutable;
         if (!mutable) {
             optionBuilder.append(" IMMUTABLE_ROWS=true ");
         }
         optionBuilder.append(" SPLIT ON(1,2)");
         this.tableDDLOptions = optionBuilder.toString();
+        if (singleCell) {
+            indexOptionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS,COLUMN_ENCODED_BYTES=2");
+        }
+        this.singleCell = singleCell;
+        this.indexDDLOptions = indexOptionBuilder.toString();
     }
 
-    @Parameterized.Parameters(name = "mutable={0}")
+    @Parameterized.Parameters(name = "mutable={0}, singleCellIndex={1}")
     public static synchronized Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
-                {true},
-                {false} });
+                {true, true},
+                {true, false},
+                {false, true},
+                {false, false} });
     }
 
     @BeforeClass
     public static synchronized void setup() throws Exception {
-        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
+        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(8);
         serverProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         serverProps.put(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB, Long.toString(5));
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
                 QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         serverProps.put(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(8));
+        serverProps.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+            Long.toString(MAX_LOOKBACK_AGE));
         serverProps.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
             Long.toString(Long.MAX_VALUE));
         serverProps.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
             Long.toString(Long.MAX_VALUE));
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
+        serverProps.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
+        //In HBase 2.2.6 and HBase 2.3.0+, helps region server assignments when under an injected
+        // edge clock. See HBASE-24511.
+        serverProps.put("hbase.regionserver.rpc.retry.interval", Long.toString(0));
+        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(4);
         clientProps.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
         clientProps.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
@@ -202,7 +226,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             IndexToolIT.setEveryNthRowWithNull(NROWS, 3, stmt);
             conn.commit();
             conn.createStatement().execute(String.format(
-                    "CREATE INDEX %s ON %s (VAL1) INCLUDE (VAL2) ASYNC ", indexTableName, dataTableFullName));
+                    "CREATE INDEX %s ON %s (VAL1) INCLUDE (VAL2) ASYNC " + this.indexDDLOptions, indexTableName, dataTableFullName));
             // Run the index MR job and verify that the index table is built correctly
             IndexTool
                     indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, new String[0]);
@@ -231,328 +255,9 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(
-                    BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_EXTRA_CELLS).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(
-                    BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT_COZ_MISSING_CELLS).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
         }
-    }
-
-    @Test
-    public void testOverrideIndexRebuildPageSizeFromIndexTool() throws Exception {
-        String schemaName = generateUniqueName();
-        String dataTableName = generateUniqueName();
-        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String indexTableName = generateUniqueName();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-
-        try(Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            String stmString1 =
-                "CREATE TABLE " + dataTableFullName
-                    + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
-                    + tableDDLOptions;
-            conn.createStatement().execute(stmString1);
-            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
-            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
-
-            // Insert NROWS rows
-            final int NROWS = 16;
-            for (int i = 0; i < NROWS; i++) {
-                IndexToolIT.upsertRow(stmt1, i);
-            }
-            conn.commit();
-
-            String stmtString2 =
-                    String.format(
-                            "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC ", indexTableName, dataTableFullName);
-            conn.createStatement().execute(stmtString2);
-
-            // Run the index MR job and verify that the index table is built correctly
-            Configuration conf = new Configuration(getUtility().getConfiguration());
-            conf.set(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(2));
-            IndexTool indexTool = IndexToolIT.runIndexTool(conf, directApi, useSnapshot,
-                schemaName, dataTableName, indexTableName, null, 0,
-                IndexTool.IndexVerifyType.BEFORE, IndexTool.IndexDisableLoggingType.NONE, new String[0]);
-            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
-            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
-            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
-        }
-    }
-
-    @Test
-    public void testPointDeleteRebuildWithPageSize() throws Exception {
-        String schemaName = generateUniqueName();
-        String dataTableName = generateUniqueName();
-        String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String indexTableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement().execute(
-                "CREATE TABLE " + fullDataTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR)");
-            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'a'");
-            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'b'");
-            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'c'");
-            conn.commit();
-            conn.createStatement().execute(String.format("CREATE INDEX %s ON %s (v) ASYNC",
-                indexTableName, fullDataTableName));
-            // Run the index MR job and verify that the index table is built correctly
-            Configuration conf = new Configuration(getUtility().getConfiguration());
-            conf.set(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(1));
-            IndexTool indexTool =
-                    IndexToolIT.runIndexTool(conf, directApi, useSnapshot, schemaName,
-                        dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE,
-                        IndexTool.IndexDisableLoggingType.NONE, new String[0]);
-            assertEquals(3, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
-            assertEquals(3,
-                indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
-            assertEquals(0,
-                indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters()
-                    .findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters()
-                    .findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters()
-                    .findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters()
-                    .findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
-        }
-    }
-
-    // This test will only work with HBASE-22710 which is in 2.2.5+
-    // TODO: Enable once we move to these versions
-    @Ignore
-    @Test
-    public void testIncrementalRebuildWithPageSize() throws Exception {
-        String schemaName = generateUniqueName();
-        String dataTableName = generateUniqueName();
-        String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String indexTableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            long minTs = EnvironmentEdgeManager.currentTimeMillis();
-            conn.createStatement().execute(
-                "CREATE TABLE " + fullDataTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR)");
-            conn.createStatement().execute("UPSERT INTO " + fullDataTableName + " VALUES('a','aa')");
-            conn.createStatement().execute("UPSERT INTO " + fullDataTableName + " VALUES('b','bb')");
-            conn.commit();
-            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'a'");
-            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'b'");
-            conn.commit();
-            conn.createStatement().execute("UPSERT INTO " + fullDataTableName + " VALUES('a','aaa')");
-            conn.createStatement().execute("UPSERT INTO " + fullDataTableName + " VALUES('b','bbb')");
-            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'c'");
-            conn.commit();
-            conn.createStatement().execute(String.format("CREATE INDEX %s ON %s (v) ASYNC",
-                indexTableName, fullDataTableName));
-            // Run the index MR job and verify that the index table is built correctly
-            Configuration conf = new Configuration(getUtility().getConfiguration());
-            conf.set(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(2));
-            IndexTool indexTool =
-                    IndexToolIT.runIndexTool(conf, directApi, useSnapshot, schemaName,
-                        dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.AFTER,
-                        IndexTool.IndexDisableLoggingType.NONE,
-                        "-st", String.valueOf(minTs), "-et",
-                        String.valueOf(EnvironmentEdgeManager.currentTimeMillis()));
-            assertEquals(3, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
-            assertEquals(3,
-                indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
-            assertEquals(4,
-                indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
-            assertEquals(4, indexTool.getJob().getCounters()
-                    .findCounter(AFTER_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters()
-                    .findCounter(AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters()
-                    .findCounter(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-            assertEquals(0, indexTool.getJob().getCounters()
-                    .findCounter(AFTER_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
-        }
-    }
-
-    // This test will only work with HBASE-22710 which is in 2.2.5+
-    // TODO: Enable once we move to these versions
-    @Ignore
-    @Test
-    public void testUpdatablePKFilterViewIndexRebuild() throws Exception {
-        if (!mutable) {
-            return;
-        }
-        String schemaName = generateUniqueName();
-        String dataTableName = generateUniqueName();
-        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String view1Name = generateUniqueName();
-        String view1FullName = SchemaUtil.getTableName(schemaName, view1Name);
-        String view2Name = generateUniqueName();
-        String view2FullName = SchemaUtil.getTableName(schemaName, view2Name);
-        String indexTableName = generateUniqueName();
-        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            // Create Table and Views. Note the view is on a non leading PK data table column
-            String createTable =
-                    "CREATE TABLE IF NOT EXISTS " + dataTableFullName + " (\n"
-                            + "    ORGANIZATION_ID VARCHAR NOT NULL,\n"
-                            + "    KEY_PREFIX CHAR(3) NOT NULL,\n" + "    CREATED_BY VARCHAR,\n"
-                            + "    CONSTRAINT PK PRIMARY KEY (\n" + "        ORGANIZATION_ID,\n"
-                            + "        KEY_PREFIX\n" + "    )\n"
-                            + ") VERSIONS=1, COLUMN_ENCODED_BYTES=0";
-            conn.createStatement().execute(createTable);
-            String createView1 =
-                    "CREATE VIEW IF NOT EXISTS " + view1FullName + " (\n"
-                            + " VIEW_COLA VARCHAR NOT NULL,\n"
-                            + " VIEW_COLB CHAR(1) CONSTRAINT PKVIEW PRIMARY KEY (\n"
-                            + " VIEW_COLA\n" + " )) AS \n" + " SELECT * FROM " + dataTableFullName
-                            + " WHERE KEY_PREFIX = 'aaa'";
-            conn.createStatement().execute(createView1);
-            String createView2 =
-                    "CREATE VIEW IF NOT EXISTS " + view2FullName + " (\n"
-                            + " VIEW_COL1 VARCHAR NOT NULL,\n"
-                            + " VIEW_COL2 CHAR(1) CONSTRAINT PKVIEW PRIMARY KEY (\n"
-                            + " VIEW_COL1\n" + " )) AS \n" + " SELECT * FROM " + dataTableFullName
-                            + " WHERE KEY_PREFIX = 'ccc'";
-            conn.createStatement().execute(createView2);
-
-            // We want to verify if deletes and set null result in expected rebuild of view index
-            conn.createStatement().execute("UPSERT INTO " + view1FullName
-                    + "(ORGANIZATION_ID, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'A', 'G')");
-            conn.createStatement().execute("UPSERT INTO " + view1FullName
-                    + "(ORGANIZATION_ID, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'C', 'I')");
-            conn.createStatement().execute("UPSERT INTO " + view1FullName
-                    + "(ORGANIZATION_ID, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'D', 'J')");
-
-            conn.createStatement().execute("UPSERT INTO " + view2FullName
-                    + "(ORGANIZATION_ID, VIEW_COL1, VIEW_COL2) VALUES('ORG2', 'B', 'H')");
-            conn.commit();
-            conn.createStatement().execute("DELETE FROM " + view1FullName
-                    + " WHERE ORGANIZATION_ID = 'ORG1' AND VIEW_COLA = 'C'");
-            conn.createStatement().execute("UPSERT INTO " + view1FullName
-                    + "(ORGANIZATION_ID, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'D', NULL)");
-            conn.commit();
-
-            String createViewIndex =
-                    "CREATE INDEX IF NOT EXISTS " + indexTableName + " ON " + view1FullName
-                            + " (VIEW_COLB) ASYNC";
-            conn.createStatement().execute(createViewIndex);
-            conn.commit();
-            // Rebuild using index tool
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, view1Name, indexTableName);
-            ResultSet rs =
-                    conn.createStatement()
-                            .executeQuery("SELECT COUNT(*) FROM " + indexTableFullName);
-            rs.next();
-            assertEquals(2, rs.getInt(1));
-
-            Pair<Integer, Integer> putsAndDeletes =
-                    countPutsAndDeletes("_IDX_" + dataTableFullName);
-            assertEquals(4, (int) putsAndDeletes.getFirst());
-            assertEquals(2, (int) putsAndDeletes.getSecond());
-        }
-    }
-
-    // This test will only work with HBASE-22710 which is in 2.2.5+
-    @Ignore
-    @Test
-    public void testUpdatableNonPkFilterViewIndexRebuild() throws Exception {
-        if (!mutable) {
-            return;
-        }
-        String schemaName = generateUniqueName();
-        String dataTableName = generateUniqueName();
-        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String view1Name = generateUniqueName();
-        String view1FullName = SchemaUtil.getTableName(schemaName, view1Name);
-        String view2Name = generateUniqueName();
-        String view2FullName = SchemaUtil.getTableName(schemaName, view2Name);
-        String indexTableName = generateUniqueName();
-        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            // Create Table and Views. Note the view is on a non PK data table column
-            String createTable =
-                    "CREATE TABLE IF NOT EXISTS " + dataTableFullName + " (\n"
-                            + "    ORGANIZATION_ID VARCHAR NOT NULL,\n"
-                            + "    KEY_PREFIX CHAR(3) NOT NULL,\n" + "    CREATED_BY VARCHAR,\n"
-                            + "    CONSTRAINT PK PRIMARY KEY (\n" + "        ORGANIZATION_ID,\n"
-                            + "        KEY_PREFIX\n" + "    )\n"
-                            + ") VERSIONS=1, COLUMN_ENCODED_BYTES=0";
-            conn.createStatement().execute(createTable);
-            String createView1 =
-                    "CREATE VIEW IF NOT EXISTS " + view1FullName + " (\n"
-                            + " VIEW_COLA VARCHAR NOT NULL,\n"
-                            + " VIEW_COLB CHAR(1) CONSTRAINT PKVIEW PRIMARY KEY (\n"
-                            + " VIEW_COLA\n" + " )) AS \n" + " SELECT * FROM " + dataTableFullName
-                            + " WHERE CREATED_BY = 'foo'";
-            conn.createStatement().execute(createView1);
-            String createView2 =
-                    "CREATE VIEW IF NOT EXISTS " + view2FullName + " (\n"
-                            + " VIEW_COL1 VARCHAR NOT NULL,\n"
-                            + " VIEW_COL2 CHAR(1) CONSTRAINT PKVIEW PRIMARY KEY (\n"
-                            + " VIEW_COL1\n" + " )) AS \n" + " SELECT * FROM " + dataTableFullName
-                            + " WHERE CREATED_BY = 'bar'";
-            conn.createStatement().execute(createView2);
-
-            // We want to verify if deletes and set null result in expected rebuild of view index
-            conn.createStatement().execute("UPSERT INTO " + view1FullName
-                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'aaa', 'A', 'G')");
-            conn.createStatement().execute("UPSERT INTO " + view1FullName
-                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'ccc', 'C', 'I')");
-            conn.createStatement().execute("UPSERT INTO " + view1FullName
-                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'ddd', 'D', 'J')");
-
-            conn.createStatement().execute("UPSERT INTO " + view2FullName
-                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COL1, VIEW_COL2) VALUES('ORG2', 'bbb', 'B', 'H')");
-            conn.commit();
-            conn.createStatement().execute("DELETE FROM " + view1FullName
-                    + " WHERE ORGANIZATION_ID = 'ORG1' AND VIEW_COLA = 'C'");
-            conn.createStatement().execute("UPSERT INTO " + view1FullName
-                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'ddd', 'D', NULL)");
-            conn.commit();
-
-            String createViewIndex =
-                    "CREATE INDEX IF NOT EXISTS " + indexTableName + " ON " + view1FullName
-                            + " (VIEW_COLB) ASYNC";
-            conn.createStatement().execute(createViewIndex);
-            conn.commit();
-            // Rebuild using index tool
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, view1Name, indexTableName);
-            ResultSet rs =
-                    conn.createStatement()
-                            .executeQuery("SELECT COUNT(*) FROM " + indexTableFullName);
-            rs.next();
-            assertEquals(2, rs.getInt(1));
-
-            Pair<Integer, Integer> putsAndDeletes =
-                    countPutsAndDeletes("_IDX_" + dataTableFullName);
-            assertEquals(4, (int) putsAndDeletes.getFirst());
-            assertEquals(2, (int) putsAndDeletes.getSecond());
-        }
-    }
-
-    private Pair<Integer, Integer> countPutsAndDeletes(String tableName) throws Exception {
-        int numPuts = 0;
-        int numDeletes = 0;
-        try (org.apache.hadoop.hbase.client.Connection hcon =
-                ConnectionFactory.createConnection(config)) {
-            Table htable = hcon.getTable(TableName.valueOf(tableName));
-            Scan scan = new Scan();
-            scan.setRaw(true);
-            ResultScanner scanner = htable.getScanner(scan);
-
-            for (Result result = scanner.next(); result != null; result = scanner.next()) {
-                for (Cell cell : result.rawCells()) {
-                    if (cell.getType() == Cell.Type.Put) {
-                        numPuts++;
-                    } else if (cell.getType() == Cell.Type.DeleteFamily) {
-                                numDeletes++;
-                            }
-                }
-            }
-        }
-        return new Pair<Integer, Integer>(numPuts, numDeletes);
     }
 
     @Test
@@ -571,20 +276,24 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                     .execute("upsert into " + dataTableFullName + " values (1, 'Phoenix', 'A')");
             conn.commit();
             conn.createStatement()
-                    .execute(String.format("CREATE INDEX %s ON %s (NAME) INCLUDE (CODE) ASYNC",
+                    .execute(String.format("CREATE INDEX %s ON %s (NAME) INCLUDE (CODE) ASYNC " + this.indexDDLOptions,
                             indexTableName, dataTableFullName));
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
+            IndexTool indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
                     IndexTool.IndexVerifyType.ONLY);
-            Cell cell =
-                    IndexToolIT.getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName,
-                            indexTableFullName);
-            try {
-                String expectedErrorMsg = IndexRebuildRegionScanner.ERROR_MESSAGE_MISSING_INDEX_ROW;
-                String actualErrorMsg = Bytes
-                        .toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
-                assertTrue(expectedErrorMsg.equals(actualErrorMsg));
-            } catch(Exception ex) {
-                Assert.fail("Fail to parsing the error message from IndexToolOutputTable");
+            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+                Cell cell =
+                        IndexToolIT.getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName,
+                                indexTableFullName);
+                try {
+                    String expectedErrorMsg = IndexRebuildRegionScanner.ERROR_MESSAGE_MISSING_INDEX_ROW;
+                    String actualErrorMsg = Bytes
+                            .toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+                    assertEquals(expectedErrorMsg, actualErrorMsg);
+                } catch (Exception ex) {
+                    Assert.fail("Fail to parsing the error message from IndexToolOutputTable");
+                }
+            } else {
+                assertEquals(1, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
             }
 
             // Run the index tool to populate the index while verifying rows
@@ -594,12 +303,19 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             // Set ttl of index table ridiculously low so that all data is expired
             Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
             TableName indexTable = TableName.valueOf(indexTableFullName);
-            ColumnFamilyDescriptor desc = admin.getDescriptor(indexTable).getColumnFamilies()[0];
-            ColumnFamilyDescriptorBuilder builder =
-                    ColumnFamilyDescriptorBuilder.newBuilder(desc).setTimeToLive(1);
-            Future<Void> future = admin.modifyColumnFamilyAsync(indexTable, builder.build());
+            ColumnFamilyDescriptor desc =
+                admin.getDescriptor(indexTable).getColumnFamilies()[0];
+            ColumnFamilyDescriptor newDesc =
+                ColumnFamilyDescriptorBuilder.newBuilder(desc).setTimeToLive(1).build();
+            admin.modifyColumnFamily(indexTable, newDesc);
             Thread.sleep(1000);
-            future.get(40, TimeUnit.SECONDS);
+            Pair<Integer, Integer> status = admin.getAlterStatus(indexTable);
+            int retry = 0;
+            while (retry < 20 && status.getFirst() != 0) {
+                Thread.sleep(2000);
+                status = admin.getAlterStatus(indexTable);
+            }
+            assertEquals(0, (int) status.getFirst());
 
             TableName indexToolOutputTable = TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES);
             admin.disableTable(indexToolOutputTable);
@@ -612,7 +328,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                     conn.unwrap(PhoenixConnection.class).getQueryServices()
                             .getTable(indexToolOutputTable.getName());
             Result r = hIndexToolTable.getScanner(scan).next();
-            assertTrue(r == null);
+            assertNull(r);
         }
     }
 
@@ -644,7 +360,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
 
             String stmtString2 =
                     String.format(
-                            "CREATE INDEX %s ON %s  (LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz') ", indexTableName, dataTableFullName);
+                            "CREATE INDEX %s ON %s  (LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz') " + this.indexDDLOptions, indexTableName, dataTableFullName);
             conn.createStatement().execute(stmtString2);
             conn.commit();
             String qIndexTableName = SchemaUtil.getQualifiedTableName(schemaName, indexTableName);
@@ -655,16 +371,15 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
             Admin admin = queryServices.getAdmin();
             TableName tn = TableName.valueOf(Bytes.toBytes(dataTableFullName));
-            TableDescriptor td =
-                admin.getDescriptor(tn);
-            //add the fast fail coproc and make sure it goes first
+            TableDescriptor td = admin.getDescriptor(tn);
             CoprocessorDescriptor cd =
-                CoprocessorDescriptorBuilder.
-                    newBuilder(FastFailRegionObserver.class.getName()).
+                CoprocessorDescriptorBuilder.newBuilder(FastFailRegionObserver.class.getName()).
                     setPriority(1).build();
-            TableDescriptor newTd =
-                TableDescriptorBuilder.newBuilder(td).setCoprocessor(cd).build();
-            admin.modifyTable(tn, newTd);
+            TableDescriptor newTD =
+                TableDescriptorBuilder.newBuilder(td).
+                    setCoprocessor(cd).build();
+            //add the fast fail coproc and make sure it goes first
+            admin.modifyTable(newTD);
             // Run the index MR job and it should fail (return -1)
             IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, -1, new String[0]);
@@ -699,7 +414,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             conn.commit();
             String stmtString2 =
                     String.format(
-                            "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC ", indexTableName, dataTableFullName);
+                            "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC " + this.indexDDLOptions, indexTableName, dataTableFullName);
             conn.createStatement().execute(stmtString2);
 
             // Run the index MR job and verify that the index table is built correctly
@@ -710,7 +425,14 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+                assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+                assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+            } else {
+                assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+                assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+            }
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
             long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(NROWS, actualRowCount);
 
@@ -727,6 +449,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).getValue());
@@ -734,8 +458,80 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
             actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(2 * NROWS, actualRowCount);
+        }
+    }
+
+    @Ignore("HBase 1.7 is required for this test")
+    @Test
+    public void testCleanUpOldDesignIndexRows() throws Exception {
+        if (!mutable) {
+            return;
+        }
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String stmString1 =
+                    "CREATE TABLE " + dataTableFullName
+                            + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
+                            + tableDDLOptions;
+            conn.createStatement().execute(stmString1);
+            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
+            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
+
+            // Insert N_ROWS rows
+            final int N_ROWS = 100;
+            final int N_OLD_ROWS = 10;
+            for (int i = 0; i < N_ROWS; i++) {
+                IndexToolIT.upsertRow(stmt1, i);
+            }
+            conn.commit();
+            String stmtString2 =
+                    String.format(
+                            "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC " + this.indexDDLOptions, indexTableName, dataTableFullName);
+            conn.createStatement().execute(stmtString2);
+
+            // Run the index MR job and verify that the index table is built correctly
+            IndexTool indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
+            assertEquals(N_ROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertEquals(N_ROWS, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
+            assertEquals(N_ROWS, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(N_ROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).getValue());
+            long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
+            assertEquals(N_ROWS, actualRowCount);
+            // Read N_OLD_ROWS index rows and rewrite them back directly. This will overwrite existing rows with newer
+            // timestamps and set the empty column to value "x". The will make them old design rows (for mutable indexes)
+            String stmtString3 =
+                    String.format(
+                            "UPSERT INTO %s SELECT * FROM %s LIMIT %d", indexTableFullName, indexTableFullName, N_OLD_ROWS);
+            conn.createStatement().execute(stmtString3);
+            conn.commit();
+            // Verify that IndexTool reports that there are old design index rows
+            indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.ONLY, new String[0]);
+            assertEquals(N_OLD_ROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
+            // Clean up all old design rows
+            indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
+            assertEquals(N_OLD_ROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
+            // Verify that IndexTool does not report them anymore
+            indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
+            actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
+            assertEquals(N_ROWS, actualRowCount);
         }
     }
 
@@ -759,7 +555,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             conn.createStatement().execute("upsert into " + viewFullName + " values (1, 'Phoenix', 12345)");
             conn.commit();
             conn.createStatement().execute(String.format(
-                    "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC", indexTableName, viewFullName));
+                    "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC " + this.indexDDLOptions, indexTableName, viewFullName));
             TestUtil.addCoprocessor(conn, "_IDX_" + dataTableFullName, IndexToolIT.MutationCountingRegionObserver.class);
             // Run the index MR job and verify that the index table rebuild succeeds
             IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
@@ -799,22 +595,28 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             conn.commit();
             // Configure IndexRegionObserver to fail the first write phase. This should not
             // lead to any change on index and thus the index verify during index rebuild should fail
-            IndexRegionObserver.setIgnoreIndexRebuildForTesting(true);
+            IndexRebuildRegionScanner.setIgnoreIndexRebuildForTesting(true);
             conn.createStatement().execute(String.format(
-                    "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC", indexTableName, viewFullName));
-            // Run the index MR job and verify that the index table rebuild fails
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
-                    null, -1, IndexTool.IndexVerifyType.AFTER);
-            // The index tool output table should report that there is a missing index row
-            Cell cell = IndexToolIT.getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, "_IDX_" + dataTableFullName);
-            try {
-                String expectedErrorMsg = IndexRebuildRegionScanner.ERROR_MESSAGE_MISSING_INDEX_ROW;
-                String actualErrorMsg = Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
-                assertTrue(expectedErrorMsg.equals(actualErrorMsg));
-            } catch(Exception ex){
-                Assert.fail("Fail to parsing the error message from IndexToolOutputTable");
+                    "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC " + this.indexDDLOptions, indexTableName, viewFullName));
+            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+                // Run the index MR job and verify that the index table rebuild fails
+                IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
+                        null, -1, IndexTool.IndexVerifyType.AFTER);
+                // The index tool output table should report that there is a missing index row
+                Cell cell = IndexToolIT.getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, "_IDX_" + dataTableFullName);
+                try {
+                    String expectedErrorMsg = IndexRebuildRegionScanner.ERROR_MESSAGE_MISSING_INDEX_ROW;
+                    String actualErrorMsg = Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+                    assertEquals(expectedErrorMsg, actualErrorMsg);
+                } catch (Exception ex) {
+                    Assert.fail("Fail to parsing the error message from IndexToolOutputTable");
+                }
+            } else {
+                IndexTool indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
+                        null, 0, IndexTool.IndexVerifyType.AFTER);
+                assertEquals(1, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
             }
-            IndexRegionObserver.setIgnoreIndexRebuildForTesting(false);
+            IndexRebuildRegionScanner.setIgnoreIndexRebuildForTesting(false);
         }
     }
 
@@ -833,19 +635,21 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             conn.createStatement().execute("upsert into " + dataTableFullName + " values (1, 'Phoenix', 'A')");
             conn.commit();
             conn.createStatement().execute(String.format(
-                    "CREATE INDEX %s ON %s (NAME) INCLUDE (CODE) ASYNC", indexTableName, dataTableFullName));
+                    "CREATE INDEX %s ON %s (NAME) INCLUDE (CODE) ASYNC " + this.indexDDLOptions, indexTableName, dataTableFullName));
             // Run the index MR job to only verify that each data table row has a corresponding index row
             // IndexTool will go through each data table row and record the mismatches in the output table
             // called PHOENIX_INDEX_TOOL
             IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY);
-            Cell cell = IndexToolIT.getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, indexTableFullName);
-            try {
-                String expectedErrorMsg = IndexRebuildRegionScanner.ERROR_MESSAGE_MISSING_INDEX_ROW;
-                String actualErrorMsg = Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
-                assertTrue(expectedErrorMsg.equals(actualErrorMsg));
-            } catch(Exception ex) {
-                Assert.fail("Fail to parsing the error message from IndexToolOutputTable");
+            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+                Cell cell = IndexToolIT.getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, indexTableFullName);
+                try {
+                    String expectedErrorMsg = IndexRebuildRegionScanner.ERROR_MESSAGE_MISSING_INDEX_ROW;
+                    String actualErrorMsg = Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+                    assertEquals(expectedErrorMsg, actualErrorMsg);
+                } catch (Exception ex) {
+                    Assert.fail("Fail to parsing the error message from IndexToolOutputTable");
+                }
             }
 
             // VERIFY option should not change the index state.
@@ -864,6 +668,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
 
     @Test
     public void testIndexToolForIncrementalRebuild() throws Exception {
+        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
@@ -875,7 +680,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             conn.createStatement().execute("CREATE TABLE " + dataTableFullName
                     + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, CODE VARCHAR) "+tableDDLOptions);
             conn.createStatement().execute(String.format(
-                    "CREATE INDEX %s ON %s (NAME) INCLUDE (CODE)", indexTableName, dataTableFullName));
+                    "CREATE INDEX %s ON %s (NAME) INCLUDE (CODE) " + this.indexDDLOptions, indexTableName, dataTableFullName));
 
             conn.createStatement().execute("upsert into " + dataTableFullName + " values (1, 'Phoenix', 'A')");
             conn.createStatement().execute("upsert into " + dataTableFullName + " values (2, 'Phoenix1', 'B')");
@@ -888,8 +693,12 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             expectedStatus.add(RUN_STATUS_EXECUTED);
             expectedStatus.add(RUN_STATUS_EXECUTED);
             expectedStatus.add(RUN_STATUS_EXECUTED);
-
-            verifyRunStatusFromResultTable(conn, scn, indexTableFullName, 3, expectedStatus);
+            try {
+                verifyRunStatusFromResultTable(conn, scn, indexTableFullName, 3, expectedStatus);
+            } catch (AssertionError ae) {
+                TestUtil.dumpTable(conn, TableName.valueOf(RESULT_TABLE_NAME));
+                throw ae;
+            }
 
             deleteOneRowFromResultTable(conn, scn, indexTableFullName);
 
@@ -926,6 +735,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
 
     @Test
     public void testIndexToolForIncrementalVerify() throws Exception {
+        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         ManualEnvironmentEdge customEdge = new ManualEnvironmentEdge();
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
@@ -938,16 +748,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
-            IndexVerificationOutputRepository outputRepository =
-                new IndexVerificationOutputRepository();
-            //need to make sure that the output and result tables are created before we start
-            //overriding the environment edge, because there's a bug in HBase 2.x where table
-            //creation hangs forever when an edge is an injected
-            outputRepository.createOutputTable(conn);
-            IndexVerificationResultRepository resultRepository =
-                new IndexVerificationResultRepository();
-            resultRepository.createResultTable(conn);
-
             conn.createStatement().execute("CREATE TABLE "+dataTableFullName+" "
                     + "(key1 BIGINT NOT NULL, key2 BIGINT NOT NULL, val1 VARCHAR, val2 BIGINT, "
                     + "val3 BIGINT, val4 DOUBLE, val5 BIGINT, val6 VARCHAR "
@@ -955,10 +755,10 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             conn.createStatement().execute("CREATE VIEW "+viewFullName+" AS SELECT * FROM "+dataTableFullName);
 
             conn.createStatement().execute(String.format(
-                    "CREATE INDEX "+viewIndexName+" ON "+viewFullName+" (val3) INCLUDE(val5)"));
+                    "CREATE INDEX "+viewIndexName+" ON "+viewFullName+" (val3) INCLUDE(val5) " + this.indexDDLOptions));
 
             conn.createStatement().execute(String.format(
-                    "CREATE INDEX "+indexTableName+" ON "+dataTableFullName+" (val3) INCLUDE(val5)"));
+                    "CREATE INDEX "+indexTableName+" ON "+dataTableFullName+" (val3) INCLUDE(val5) " + this.indexDDLOptions));
 
             customEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
             EnvironmentEdgeManager.injectEdge(customEdge);
@@ -1023,11 +823,10 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                 customEdge.incrementValue(waitForUpsert);
                 return;
             }
-
             // regular job without delete row
             it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t0),"-et", String.valueOf(t4));
-            verifyCounters(it, 2, 2);
+            verifyCounters(it, 2, 3);
             customEdge.incrementValue(waitForUpsert);
 
             // job with 2 rows
@@ -1039,13 +838,13 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             // job with update on only one row
             it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),"-et", String.valueOf(t3));
-            verifyCounters(it, 1, 1);
+            verifyCounters(it, 1, 2);
             customEdge.incrementValue(waitForUpsert);
 
             // job with update on only one row
             it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t2),"-et", String.valueOf(t4));
-            verifyCounters(it, 1, 1);
+            verifyCounters(it, 1, 2);
             customEdge.incrementValue(waitForUpsert);
 
             // job with update on only one row
@@ -1066,6 +865,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
 
     @Test
     public void testIndexToolForIncrementalVerify_viewIndex() throws Exception {
+        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         ManualEnvironmentEdge customeEdge = new ManualEnvironmentEdge();
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
@@ -1085,7 +885,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                     "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName + " WHERE val6 = 'def'");
             conn.createStatement().execute(String.format(
                     "CREATE INDEX " + viewIndexName + " ON " + viewFullName
-                            + " (val3) INCLUDE(val5)"));
+                            + " (val3) INCLUDE(val5) " + this.indexDDLOptions));
             customeEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
             EnvironmentEdgeManager.injectEdge(customeEdge);
 
@@ -1108,13 +908,15 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             long t5 = customeEdge.currentTime();
             IndexTool it;
             // regular job with delete row
-            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
+            it =
+                    IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
                             viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),
                             "-et", String.valueOf(t4));
             verifyCounters(it, 2, 2);
 
             // job with 1 row
-            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
+            it =
+                    IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
                             viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),
                             "-et", String.valueOf(t2));
             verifyCounters(it, 1, 1);
@@ -1132,15 +934,19 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                             viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),
                             "-et", String.valueOf(t3));
             verifyCounters(it, 2, 2);
-/*          Disabled pending completion of PHOENIX-5989, because the view filter doesn't include
-            a PK column, so the delete is getting filtered out of the verification scan
-            // job with update on only one row
+
+            // job with update on only one row - commented out because it requires PHOENIX-5989
+            // because the view index verification code doesn't recognize the delete marker as
+            // being part of the view, because the view filters on a non-PK field
+            /*
             it =
                     IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
                             viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t3),
                             "-et", String.valueOf(t4));
+            //0,0 because the view index verification code doesn't recognize the delete marker as
+            // being part of the view, because the view filters on a non-PK field
             verifyCounters(it, 1, 1);
-*/
+            */
             // job with no new updates on any row
             it =
                     IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
@@ -1159,6 +965,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
         assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
         assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
         assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+        assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+        assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
         assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
         assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
         assertEquals(0, it.getJob().getCounters().findCounter(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).getValue());
@@ -1196,7 +1004,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             //create ASYNC
             String stmtString2 =
                 String.format(
-                    "CREATE INDEX %s ON %s (LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz') ASYNC ",
+                    "CREATE INDEX %s ON %s (LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz') ASYNC " + this.indexDDLOptions,
                     indexTableName, dataTableFullName);
             conn.createStatement().execute(stmtString2);
             conn.commit();
@@ -1209,30 +1017,34 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                 IndexTool.IndexDisableLoggingType.BEFORE, null, schemaName, dataTableName, indexTableName,
                 indexTableFullName, 0);
 
+            truncateIndexAndIndexToolTables(indexTableFullName);
+
             // disabling logging AFTER on an AFTER run should leave no output rows
             assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.AFTER,
                 IndexTool.IndexDisableLoggingType.AFTER, null, schemaName, dataTableName,
                 indexTableName,
                 indexTableFullName, 0);
 
+            truncateIndexAndIndexToolTables(indexTableFullName);
+
             //disabling logging BEFORE on a BEFORE run should leave no output rows
             assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.BEFORE,
                 IndexTool.IndexDisableLoggingType.BEFORE, null, schemaName, dataTableName, indexTableName,
                 indexTableFullName, 0);
             //now clear out all the rebuilt index rows
-            deleteAllRows(conn, TableName.valueOf(indexTableFullName));
+            truncateIndexAndIndexToolTables(indexTableFullName);
 
+            boolean MaxLookbackEnabled =
+                    CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration());
             //now check that disabling logging AFTER leaves only the BEFORE logs on a BOTH run
-            assertDisableLogging(conn, 2, IndexTool.IndexVerifyType.BOTH,
+            assertDisableLogging(conn, MaxLookbackEnabled ? 2 : 0, IndexTool.IndexVerifyType.BOTH,
                 IndexTool.IndexDisableLoggingType.AFTER,
                 IndexVerificationOutputRepository.PHASE_BEFORE_VALUE, schemaName,
                 dataTableName, indexTableName,
                 indexTableFullName, 0);
 
             //clear out both the output table and the index
-            deleteAllRows(conn,
-                TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
-            deleteAllRows(conn, TableName.valueOf(indexTableFullName));
+            truncateIndexAndIndexToolTables(indexTableFullName);
 
             //now check that disabling logging BEFORE creates only the AFTER logs on a BOTH run
             assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.BOTH,
@@ -1241,8 +1053,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                 dataTableName, indexTableName,
                 indexTableFullName, 0);
 
-            deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
-            deleteAllRows(conn, TableName.valueOf(indexTableFullName));
+            truncateIndexAndIndexToolTables(indexTableFullName);
 
             //now check that disabling logging BOTH creates no logs on a BOTH run
             assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.BOTH,
@@ -1254,11 +1065,416 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
         }
     }
 
+    @Test
+    public void testEnableOutputLoggingForMaxLookback() throws Exception {
+        Assume.assumeTrue(HbaseCompatCapabilities.isMaxLookbackTimeSupported());
+        //by default we don't log invalid or missing rows past max lookback age to the
+        // PHOENIX_INDEX_TOOL table. Verify that we can flip that logging on from the client-side
+        // using a system property (such as from the command line) and have it log rows on the
+        // server-side
+        if (!mutable) {
+            return;
+        }
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+
+            deleteAllRows(conn,
+                TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+            String stmString1 =
+                "CREATE TABLE " + dataTableFullName
+                    + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) ";
+            conn.createStatement().execute(stmString1);
+            conn.commit();
+
+            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
+            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
+
+            // insert two rows
+            IndexToolIT.upsertRow(stmt1, 1);
+            IndexToolIT.upsertRow(stmt1, 2);
+            conn.commit();
+            //now create an index async so it won't have the two rows in the base table
+
+            String stmtString2 =
+                String.format(
+                    "CREATE INDEX %s ON %s (LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz') ASYNC " + this.indexDDLOptions,
+                    indexTableName, dataTableFullName);
+            conn.createStatement().execute(stmtString2);
+            conn.commit();
+            ManualEnvironmentEdge injectEdge = new ManualEnvironmentEdge();
+            injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.incrementValue(1L);
+            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
+            deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+            getUtility().getConfiguration().
+                set(IndexRebuildRegionScanner.PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS, "true");
+            IndexTool it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName,
+                dataTableName,
+                indexTableName, null, 0, IndexTool.IndexVerifyType.ONLY);
+            TestUtil.dumpTable(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+            Counters counters = it.getJob().getCounters();
+            System.out.println(counters.toString());
+            assertEquals(2L,
+                counters.findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+            injectEdge.incrementValue(1L);
+            IndexVerificationOutputRepository outputRepository =
+                new IndexVerificationOutputRepository(Bytes.toBytes(indexTableFullName), conn);
+            List<IndexVerificationOutputRow> outputRows = outputRepository.getAllOutputRows();
+            assertEquals(2, outputRows.size());
+        } finally {
+            EnvironmentEdgeManager.reset();
+            truncateIndexToolTables(); //have to truncate rather than delete in the after handler
+            // because we wrote in "the future" and the after handler will be in the present
+        }
+    }
+
+    @Test
+    public void testOverrideIndexRebuildPageSizeFromIndexTool() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+        try(Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String stmString1 =
+                "CREATE TABLE " + dataTableFullName
+                    + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
+                    + tableDDLOptions;
+            conn.createStatement().execute(stmString1);
+            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
+            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
+
+            // Insert NROWS rows
+            final int NROWS = 16;
+            for (int i = 0; i < NROWS; i++) {
+                IndexToolIT.upsertRow(stmt1, i);
+            }
+            conn.commit();
+
+            String stmtString2 =
+                    String.format(
+                            "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC " + this.indexDDLOptions, indexTableName, dataTableFullName);
+            conn.createStatement().execute(stmtString2);
+
+            // Run the index MR job and verify that the index table is built correctly
+            Configuration conf = new Configuration(getUtility().getConfiguration());
+            conf.set(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(2));
+            IndexTool indexTool = IndexToolIT.runIndexTool(conf, directApi, useSnapshot, schemaName, dataTableName,
+                indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, IndexTool.IndexDisableLoggingType.NONE, new String[0]);
+            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
+            assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+                assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+                assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+            } else {
+                assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+                assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+            }
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
+        }
+    }
+
+    @Test
+    public void testPointDeleteRebuildWithPageSize() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(
+                "CREATE TABLE " + fullDataTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR)");
+            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'a'");
+            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'b'");
+            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'c'");
+            conn.commit();
+            conn.createStatement().execute(String.format("CREATE INDEX %s ON %s (v) ASYNC " + this.indexDDLOptions,
+                indexTableName, fullDataTableName));
+            // Run the index MR job and verify that the index table is built correctly
+            Configuration conf = new Configuration(getUtility().getConfiguration());
+            conf.set(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(1));
+            IndexTool indexTool =
+                    IndexToolIT.runIndexTool(conf, directApi, useSnapshot, schemaName,
+                        dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE,
+                        IndexTool.IndexDisableLoggingType.NONE ,new String[0]);
+            assertEquals(3, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertEquals(3,
+                indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
+            assertEquals(0,
+                indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters()
+                    .findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters()
+                    .findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters()
+                    .findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters()
+                    .findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0,
+                indexTool.getJob().getCounters()
+                        .findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT)
+                        .getValue());
+            assertEquals(0,
+                indexTool.getJob().getCounters()
+                        .findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT)
+                        .getValue());
+        }
+    }
+
+    @Test
+    public void testIncrementalRebuildWithPageSize() throws Exception {
+        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            long minTs = EnvironmentEdgeManager.currentTimeMillis();
+            conn.createStatement().execute(
+                "CREATE TABLE " + fullDataTableName + "(k VARCHAR PRIMARY KEY, v VARCHAR)");
+            conn.createStatement().execute("UPSERT INTO " + fullDataTableName + " VALUES('a','aa')");
+            conn.createStatement().execute("UPSERT INTO " + fullDataTableName + " VALUES('b','bb')");
+            conn.commit();
+            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'a'");
+            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'b'");
+            conn.commit();
+            conn.createStatement().execute("UPSERT INTO " + fullDataTableName + " VALUES('a','aaa')");
+            conn.createStatement().execute("UPSERT INTO " + fullDataTableName + " VALUES('b','bbb')");
+            conn.createStatement().execute("DELETE FROM " + fullDataTableName + " WHERE k = 'c'");
+            conn.commit();
+            conn.createStatement().execute(String.format("CREATE INDEX %s ON %s (v) ASYNC " + this.indexDDLOptions,
+                indexTableName, fullDataTableName));
+            // Run the index MR job and verify that the index table is built correctly
+            Configuration conf = new Configuration(getUtility().getConfiguration());
+            conf.set(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(2));
+            IndexTool indexTool =
+                    IndexToolIT.runIndexTool(conf, directApi, useSnapshot, schemaName,
+                        dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.AFTER,
+                        IndexTool.IndexDisableLoggingType.NONE, "-st", String.valueOf(minTs), "-et",
+                        String.valueOf(EnvironmentEdgeManager.currentTimeMillis()));
+            assertEquals(3, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertEquals(3,
+                indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
+            assertEquals(4,
+                indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(4, indexTool.getJob().getCounters()
+                    .findCounter(AFTER_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters()
+                    .findCounter(AFTER_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters()
+                    .findCounter(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters()
+                    .findCounter(AFTER_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0,
+                indexTool.getJob().getCounters()
+                        .findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT)
+                        .getValue());
+            assertEquals(0,
+                indexTool.getJob().getCounters()
+                        .findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT)
+                        .getValue());
+        }
+    }
+
+
+    @Test
+    public void testUpdatablePKFilterViewIndexRebuild() throws Exception {
+        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
+        if (!mutable) {
+            return;
+        }
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String view1Name = generateUniqueName();
+        String view1FullName = SchemaUtil.getTableName(schemaName, view1Name);
+        String view2Name = generateUniqueName();
+        String view2FullName = SchemaUtil.getTableName(schemaName, view2Name);
+        String indexTableName = generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            // Create Table and Views. Note the view is on a non leading PK data table column
+            String createTable =
+                    "CREATE TABLE IF NOT EXISTS " + dataTableFullName + " (\n"
+                            + "    ORGANIZATION_ID VARCHAR NOT NULL,\n"
+                            + "    KEY_PREFIX CHAR(3) NOT NULL,\n" + "    CREATED_BY VARCHAR,\n"
+                            + "    CONSTRAINT PK PRIMARY KEY (\n" + "        ORGANIZATION_ID,\n"
+                            + "        KEY_PREFIX\n" + "    )\n"
+                            + ") VERSIONS=1, COLUMN_ENCODED_BYTES=0";
+            conn.createStatement().execute(createTable);
+            String createView1 =
+                    "CREATE VIEW IF NOT EXISTS " + view1FullName + " (\n"
+                            + " VIEW_COLA VARCHAR NOT NULL,\n"
+                            + " VIEW_COLB CHAR(1) CONSTRAINT PKVIEW PRIMARY KEY (\n"
+                            + " VIEW_COLA\n" + " )) AS \n" + " SELECT * FROM " + dataTableFullName
+                            + " WHERE KEY_PREFIX = 'aaa'";
+            conn.createStatement().execute(createView1);
+            String createView2 =
+                    "CREATE VIEW IF NOT EXISTS " + view2FullName + " (\n"
+                            + " VIEW_COL1 VARCHAR NOT NULL,\n"
+                            + " VIEW_COL2 CHAR(1) CONSTRAINT PKVIEW PRIMARY KEY (\n"
+                            + " VIEW_COL1\n" + " )) AS \n" + " SELECT * FROM " + dataTableFullName
+                            + " WHERE KEY_PREFIX = 'ccc'";
+            conn.createStatement().execute(createView2);
+
+            // We want to verify if deletes and set null result in expected rebuild of view index
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'A', 'G')");
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'C', 'I')");
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'D', 'J')");
+
+            conn.createStatement().execute("UPSERT INTO " + view2FullName
+                    + "(ORGANIZATION_ID, VIEW_COL1, VIEW_COL2) VALUES('ORG2', 'B', 'H')");
+            conn.commit();
+            conn.createStatement().execute("DELETE FROM " + view1FullName
+                    + " WHERE ORGANIZATION_ID = 'ORG1' AND VIEW_COLA = 'C'");
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'D', NULL)");
+            conn.commit();
+
+            String createViewIndex =
+                    "CREATE INDEX IF NOT EXISTS " + indexTableName + " ON " + view1FullName
+                            + " (VIEW_COLB) ASYNC " + this.indexDDLOptions;
+            conn.createStatement().execute(createViewIndex);
+            conn.commit();
+            // Rebuild using index tool
+            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, view1Name, indexTableName);
+            ResultSet rs =
+                    conn.createStatement()
+                            .executeQuery("SELECT COUNT(*) FROM " + indexTableFullName);
+            rs.next();
+            assertEquals(2, rs.getInt(1));
+
+            Pair<Integer, Integer> putsAndDeletes =
+                    countPutsAndDeletes("_IDX_" + dataTableFullName);
+            assertEquals(4, (int) putsAndDeletes.getFirst());
+            assertEquals(2, (int) putsAndDeletes.getSecond());
+        }
+    }
+
+    @Test
+    public void testUpdatableNonPkFilterViewIndexRebuild() throws Exception {
+        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
+        if (!mutable) {
+            return;
+        }
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String view1Name = generateUniqueName();
+        String view1FullName = SchemaUtil.getTableName(schemaName, view1Name);
+        String view2Name = generateUniqueName();
+        String view2FullName = SchemaUtil.getTableName(schemaName, view2Name);
+        String indexTableName = generateUniqueName();
+        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            // Create Table and Views. Note the view is on a non PK data table column
+            String createTable =
+                    "CREATE TABLE IF NOT EXISTS " + dataTableFullName + " (\n"
+                            + "    ORGANIZATION_ID VARCHAR NOT NULL,\n"
+                            + "    KEY_PREFIX CHAR(3) NOT NULL,\n" + "    CREATED_BY VARCHAR,\n"
+                            + "    CONSTRAINT PK PRIMARY KEY (\n" + "        ORGANIZATION_ID,\n"
+                            + "        KEY_PREFIX\n" + "    )\n"
+                            + ") VERSIONS=1, COLUMN_ENCODED_BYTES=0";
+            conn.createStatement().execute(createTable);
+            String createView1 =
+                    "CREATE VIEW IF NOT EXISTS " + view1FullName + " (\n"
+                            + " VIEW_COLA VARCHAR NOT NULL,\n"
+                            + " VIEW_COLB CHAR(1) CONSTRAINT PKVIEW PRIMARY KEY (\n"
+                            + " VIEW_COLA\n" + " )) AS \n" + " SELECT * FROM " + dataTableFullName
+                            + " WHERE CREATED_BY = 'foo'";
+            conn.createStatement().execute(createView1);
+            String createView2 =
+                    "CREATE VIEW IF NOT EXISTS " + view2FullName + " (\n"
+                            + " VIEW_COL1 VARCHAR NOT NULL,\n"
+                            + " VIEW_COL2 CHAR(1) CONSTRAINT PKVIEW PRIMARY KEY (\n"
+                            + " VIEW_COL1\n" + " )) AS \n" + " SELECT * FROM " + dataTableFullName
+                            + " WHERE CREATED_BY = 'bar'";
+            conn.createStatement().execute(createView2);
+
+            // We want to verify if deletes and set null result in expected rebuild of view index
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'aaa', 'A', 'G')");
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'ccc', 'C', 'I')");
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'ddd', 'D', 'J')");
+
+            conn.createStatement().execute("UPSERT INTO " + view2FullName
+                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COL1, VIEW_COL2) VALUES('ORG2', 'bbb', 'B', 'H')");
+            conn.commit();
+            conn.createStatement().execute("DELETE FROM " + view1FullName
+                    + " WHERE ORGANIZATION_ID = 'ORG1' AND VIEW_COLA = 'C'");
+            conn.createStatement().execute("UPSERT INTO " + view1FullName
+                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'ddd', 'D', NULL)");
+            conn.commit();
+
+            String createViewIndex =
+                    "CREATE INDEX IF NOT EXISTS " + indexTableName + " ON " + view1FullName
+                            + " (VIEW_COLB) ASYNC " + this.indexDDLOptions;
+            conn.createStatement().execute(createViewIndex);
+            conn.commit();
+            // Rebuild using index tool
+            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, view1Name, indexTableName);
+            ResultSet rs =
+                    conn.createStatement()
+                            .executeQuery("SELECT COUNT(*) FROM " + indexTableFullName);
+            rs.next();
+            assertEquals(2, rs.getInt(1));
+
+            Pair<Integer, Integer> putsAndDeletes =
+                    countPutsAndDeletes("_IDX_" + dataTableFullName);
+            assertEquals(4, (int) putsAndDeletes.getFirst());
+            assertEquals(2, (int) putsAndDeletes.getSecond());
+        }
+    }
+
+    private Pair<Integer, Integer> countPutsAndDeletes(String tableName) throws Exception {
+        int numPuts = 0;
+        int numDeletes = 0;
+        try (org.apache.hadoop.hbase.client.Connection hcon =
+                ConnectionFactory.createConnection(config)) {
+            Table htable = hcon.getTable(TableName.valueOf(tableName));
+            Scan scan = new Scan();
+            scan.setRaw(true);
+            ResultScanner scanner = htable.getScanner(scan);
+
+            for (Result result = scanner.next(); result != null; result = scanner.next()) {
+                for (Cell cell : result.rawCells()) {
+                    if (cell.getType().equals(Cell.Type.Put)) {
+                        numPuts++;
+                    } else if (cell.getType().equals(Cell.Type.DeleteFamily)) {
+                                numDeletes++;
+                            }
+                }
+            }
+        }
+        return new Pair<Integer, Integer>(numPuts, numDeletes);
+    }
+
     public void deleteAllRows(Connection conn, TableName tableName) throws SQLException,
         IOException, InterruptedException {
         Scan scan = new Scan();
-        Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().
-            getTable(tableName.getName());
+        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().
+            getAdmin();
+        org.apache.hadoop.hbase.client.Connection hbaseConn = admin.getConnection();
+        Table table = hbaseConn.getTable(tableName);
         boolean deletedRows = false;
         try (ResultScanner scanner = table.getScanner(scan)) {
             for (Result r : scanner) {
@@ -1272,9 +1488,22 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
         }
         //don't flush/compact if we didn't write anything, because we'll hang forever
         if (deletedRows) {
-            getUtility().getHBaseAdmin().flush(tableName);
+            getUtility().getAdmin().flush(tableName);
             TestUtil.majorCompact(getUtility(), tableName);
         }
+    }
+
+    private void truncateIndexAndIndexToolTables(String indexTableFullName) throws IOException {
+        truncateIndexToolTables();
+        getUtility().getAdmin().disableTable(TableName.valueOf(indexTableFullName));
+        getUtility().getAdmin().truncateTable(TableName.valueOf(indexTableFullName), true);
+    }
+
+    private void truncateIndexToolTables() throws IOException {
+        getUtility().getAdmin().disableTable(TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+        getUtility().getAdmin().truncateTable(TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME), true);
+        getUtility().getAdmin().disableTable(TableName.valueOf(RESULT_TABLE_NAME));
+        getUtility().getAdmin().truncateTable(TableName.valueOf(RESULT_TABLE_NAME), true);
     }
 
     private void assertDisableLogging(Connection conn, int expectedRows,
@@ -1327,7 +1556,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
         ResultScanner rs = hIndexToolTable.getScanner(s);
         int count =0;
         for(Result r : rs) {
-            Assert.assertTrue(r != null);
+            assertNotNull(r);
             List<Cell> cells = r.getColumnCells(RESULT_TABLE_COLUMN_FAMILY, INDEX_TOOL_RUN_STATUS_BYTES);
             Assert.assertEquals(cells.size(), 1);
             Assert.assertTrue(Bytes.toString(CellUtil.cloneRow(cells.get(0))).startsWith(String.valueOf(scn)));

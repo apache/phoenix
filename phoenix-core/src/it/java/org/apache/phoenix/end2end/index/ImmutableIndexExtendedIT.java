@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.end2end.index;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -75,7 +75,7 @@ public class ImmutableIndexExtendedIT extends ParallelStatsDisabledIT {
     }
 
     @BeforeClass
-    public static void doSetup() throws Exception {
+    public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "5");
         setUpTestDriver(new ReadOnlyProps(props));

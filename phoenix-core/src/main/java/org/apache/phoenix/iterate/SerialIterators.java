@@ -29,6 +29,8 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -44,8 +46,8 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.QueryUtil;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 /**
@@ -205,6 +207,11 @@ public class SerialIterators extends BaseResultIterators {
 
         @Override
         public void explain(List<String> planSteps) {}
+
+        @Override
+        public void explain(List<String> planSteps,
+                ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        }
 
         @Override
         public void close() throws SQLException {

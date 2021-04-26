@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -49,6 +49,7 @@ import java.util.UUID;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 public class IndexToolForDeleteBeforeRebuildIT extends ParallelStatsDisabledIT {
     private Connection conn;
@@ -119,9 +120,11 @@ public class IndexToolForDeleteBeforeRebuildIT extends ParallelStatsDisabledIT {
     }
 
     @After
-    public void teardown() throws SQLException {
+    public void teardown() throws Exception {
         if (conn != null) {
+            boolean refCountLeaked = isAnyStoreRefCountLeaked();
             conn.close();
+            assertFalse("refCount leaked", refCountLeaked);
         }
     }
 

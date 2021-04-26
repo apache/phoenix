@@ -26,7 +26,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
-import com.google.common.base.Optional;
+import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
@@ -47,9 +47,9 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 public class ScanRanges {

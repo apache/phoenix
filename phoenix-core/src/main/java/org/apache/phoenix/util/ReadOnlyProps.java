@@ -31,10 +31,10 @@ import javax.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Objects;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableMap.Builder;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap.Builder;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * 
@@ -285,9 +285,9 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
     }
 
     /**
-     * Get the properties as a <code>Map<String,String></code>
+     * Get the properties as a {@code Map<String,String>}
      * 
-     * @return Map<String,String> 
+     * @return {@code Map<String,String>}
      */
     public Map<String,String> asMap() {
         return props;

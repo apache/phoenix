@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
-import static com.google.common.base.Preconditions.checkArgument;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
 import static org.apache.phoenix.util.EncodedColumnsUtil.isReservedColumnQualifier;
 
@@ -43,7 +43,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 
 /**
@@ -638,7 +638,8 @@ public interface PTable extends PMetaDataEntity {
     
     /**
      * Get the column with the given column qualifier.
-     * @param column qualifier bytes
+     * @param cf column family bytes
+     * @param cq qualifier bytes
      * @return the PColumn with the given column qualifier
      * @throws ColumnNotFoundException if no column with the given column qualifier can be found
      * @throws AmbiguousColumnException if multiple columns are found with the given column qualifier
@@ -727,6 +728,14 @@ public interface PTable extends PMetaDataEntity {
      * (use @getPhysicalTableName for this case) 
      */
     PName getParentTableName();
+
+    /**
+     * @return the logical full name of the base table. In case of the view index, it is the _IDX_+logical name of base table
+     * Ex: For hierarchical views like tableLogicalName --> view1 --> view2, for view2, returns sc.tableLogicalName
+     * For view2, getParentTableName returns view1 and getBaseTableLogicalName returns sc.tableLogicalName
+     */
+    PName getBaseTableLogicalName();
+
     /**
      * @return the schema name of the parent view for a view or data table for an index table 
      * or null if this is not a view or index table. Also returns null for view of a data table 
@@ -746,6 +755,13 @@ public interface PTable extends PMetaDataEntity {
      * @return the name of the physical HBase table storing the data.
      */
     PName getPhysicalName();
+    /**
+     * If returnColValueFromSyscat is true, returns the column value set in the syscat.
+     * Otherwise, behaves like getPhysicalName()
+     * @return the name of the physical HBase table storing the data.
+     */
+    PName getPhysicalName(boolean returnColValueFromSyscat);
+
     boolean isImmutableRows();
 
     boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection);
@@ -819,6 +835,17 @@ public interface PTable extends PMetaDataEntity {
      */
     boolean hasViewModifiedPhoenixTTL();
 
+    /**
+     * @return the last timestamp at which this entity had its data shape created or modified (e
+     * .g, create entity, adding or dropping a column. Not affected by changing table properties
+     */
+    Long getLastDDLTimestamp();
+
+    /**
+     * @return Whether change detection is enabled on a given table or view. If it is, we will
+     * annotate write-ahead logs with additional metadata
+     */
+    boolean isChangeDetectionEnabled();
     /**
      * Class to help track encoded column qualifier counters per column family.
      */

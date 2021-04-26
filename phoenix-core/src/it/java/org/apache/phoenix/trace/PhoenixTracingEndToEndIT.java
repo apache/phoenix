@@ -44,7 +44,7 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 
 /**
  * Test that the logging sink stores the expected metrics/stats

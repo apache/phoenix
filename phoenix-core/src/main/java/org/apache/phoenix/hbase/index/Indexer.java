@@ -81,14 +81,15 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * Do all the work of managing index updates from a single coprocessor. All Puts/Delets are passed
@@ -97,7 +98,7 @@ import com.google.common.collect.Multimap;
  * If the WAL is enabled, these updates are then added to the WALEdit and attempted to be written to
  * the WAL after the WALEdit has been saved. If any of the index updates fail, this server is
  * immediately terminated and we rely on WAL replay to attempt the index updates again (see
- * {@link #preWALRestore(ObserverContext, HRegionInfo, HLogKey, WALEdit)}).
+ * #preWALRestore(ObserverContext, HRegionInfo, HLogKey, WALEdit)).
  * <p>
  * If the WAL is disabled, the updates are attempted immediately. No consistency guarantees are made
  * if the WAL is disabled - some or none of the index updates may be successful. All updates in a
@@ -182,6 +183,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
   private long slowPostOpenThreshold;
   private long slowPreIncrementThreshold;
   private int rowLockWaitDuration;
+  private String dataTableName;
   
   public static final String RecoveryFailurePolicyKeyForTesting = INDEX_RECOVERY_FAILURE_POLICY_KEY;
 
@@ -225,7 +227,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
         // Metrics impl for the Indexer -- avoiding unnecessary indirection for hadoop-1/2 compat
         this.metricSource = MetricsIndexerSourceFactory.getInstance().getIndexerSource();
         setSlowThresholds(e.getConfiguration());
-
+        this.dataTableName = env.getRegionInfo().getTable().getNameAsString();
         try {
           // get the specified failure policy. We only ever override it in tests, but we need to do it
           // here
@@ -325,9 +327,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
                   LOGGER.debug(getCallTooSlowMessage("preIncrementAfterRowLock",
                           duration, slowPreIncrementThreshold));
               }
-              metricSource.incrementSlowDuplicateKeyCheckCalls();
+              metricSource.incrementSlowDuplicateKeyCheckCalls(dataTableName);
           }
-          metricSource.updateDuplicateKeyCheckTime(duration);
+          metricSource.updateDuplicateKeyCheckTime(dataTableName, duration);
       }
   }
 
@@ -350,9 +352,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
                   LOGGER.debug(getCallTooSlowMessage("preBatchMutate",
                           duration, slowIndexPrepareThreshold));
               }
-              metricSource.incrementNumSlowIndexPrepareCalls();
+              metricSource.incrementNumSlowIndexPrepareCalls(dataTableName);
           }
-          metricSource.updateIndexPrepareTime(duration);
+          metricSource.updateIndexPrepareTime(dataTableName, duration);
       }
       throw new RuntimeException(
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
@@ -366,12 +368,15 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
   public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
           MiniBatchOperationInProgress<Mutation> miniBatchOp) throws Throwable {
 
+    // Need to add cell tags to Delete Marker before we do any index processing
+    // since we add tags to tables which doesn't have indexes also.
+    IndexUtil.setDeleteAttributes(miniBatchOp);
       // first group all the updates for a single row into a single update to be processed
       Map<ImmutableBytesPtr, MultiMutation> mutationsMap =
               new HashMap<ImmutableBytesPtr, MultiMutation>();
           
       Durability defaultDurability = Durability.SYNC_WAL;
-      if(c.getEnvironment().getRegion() != null) {
+      if (c.getEnvironment().getRegion() != null) {
           defaultDurability = c.getEnvironment().getRegion().getTableDescriptor().getDurability();
           defaultDurability = (defaultDurability == Durability.USE_DEFAULT) ? 
                   Durability.SYNC_WAL : defaultDurability;
@@ -503,15 +508,15 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
                   LOGGER.debug(getCallTooSlowMessage(
                           "indexPrepare", duration, slowIndexPrepareThreshold));
               }
-              metricSource.incrementNumSlowIndexPrepareCalls();
+              metricSource.incrementNumSlowIndexPrepareCalls(dataTableName);
           }
-          metricSource.updateIndexPrepareTime(duration);
+          metricSource.updateIndexPrepareTime(dataTableName, duration);
           current.addTimelineAnnotation("Built index updates, doing preStep");
           TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
           byte[] tableName = c.getEnvironment().getRegion().getTableDescriptor().getTableName().getName();
           Iterator<Pair<Mutation, byte[]>> indexUpdatesItr = indexUpdates.iterator();
           List<Mutation> localUpdates = new ArrayList<Mutation>(indexUpdates.size());
-          while(indexUpdatesItr.hasNext()) {
+          while (indexUpdatesItr.hasNext()) {
               Pair<Mutation, byte[]> next = indexUpdatesItr.next();
               if (Bytes.compareTo(next.getSecond(), tableName) == 0) {
                   localUpdates.add(next.getFirst());
@@ -577,9 +582,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
                    LOGGER.debug(getCallTooSlowMessage("postBatchMutateIndispensably",
                            duration, slowIndexWriteThreshold));
                }
-               metricSource.incrementNumSlowIndexWriteCalls();
+               metricSource.incrementNumSlowIndexWriteCalls(dataTableName);
            }
-           metricSource.updateIndexWriteTime(duration);
+           metricSource.updateIndexWriteTime(dataTableName, duration);
        }
   }
 
@@ -618,9 +623,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
                   LOGGER.debug(getCallTooSlowMessage("indexWrite",
                           duration, slowIndexWriteThreshold));
               }
-              metricSource.incrementNumSlowIndexWriteCalls();
+              metricSource.incrementNumSlowIndexWriteCalls(dataTableName);
           }
-          metricSource.updateIndexWriteTime(duration);
+          metricSource.updateIndexWriteTime(dataTableName, duration);
       }
   }
 
@@ -675,9 +680,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
              if (LOGGER.isDebugEnabled()) {
                  LOGGER.debug(getCallTooSlowMessage("postOpen", duration, slowPostOpenThreshold));
              }
-             metricSource.incrementNumSlowPostOpenCalls();
+             metricSource.incrementNumSlowPostOpenCalls(dataTableName);
          }
-         metricSource.updatePostOpenTime(duration);
+         metricSource.updatePostOpenTime(dataTableName, duration);
     }
   }
 
@@ -712,9 +717,9 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
                   LOGGER.debug(getCallTooSlowMessage("preWALRestore",
                           duration, slowPreWALRestoreThreshold));
               }
-              metricSource.incrementNumSlowPreWALRestoreCalls();
+              metricSource.incrementNumSlowPreWALRestoreCalls(dataTableName);
           }
-          metricSource.updatePreWALRestoreTime(duration);
+          metricSource.updatePreWALRestoreTime(dataTableName, duration);
       }
   }
 
@@ -730,8 +735,8 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
     /**
      * Validate that the version and configuration parameters are supported
      * @param hbaseVersion current version of HBase on which <tt>this</tt> coprocessor is installed
-     * @param conf configuration to check for allowed parameters (e.g. WAL Compression only if >=
-     *            0.94.9)
+     * @param conf configuration to check for allowed parameters (e.g. WAL Compression only {@code if >=
+     *            0.94.9) }
      * @return <tt>null</tt> if the version is supported, the error message to display otherwise
      */
     public static String validateVersion(String hbaseVersion, Configuration conf) {
@@ -756,11 +761,11 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
 
   /**
    * Enable indexing on the given table
-   * @param desc {@link TableDescriptor} for the table on which indexing should be enabled
- * @param builder class to use when building the index for this table
- * @param properties map of custom configuration options to make available to your
+   * @param descBuilder {@link TableDescriptor} for the table on which indexing should be enabled
+   * @param builder class to use when building the index for this table
+   * @param properties map of custom configuration options to make available to your
    *          {@link IndexBuilder} on the server-side
- * @param priority TODO
+   * @param priority TODO
    * @throws IOException the Indexer coprocessor cannot be added
    */
   public static void enableIndexing(TableDescriptorBuilder descBuilder, Class<? extends IndexBuilder> builder,

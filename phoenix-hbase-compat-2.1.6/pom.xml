@@ -20,69 +20,85 @@
   xsi:schemaLocation=
     "http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-    <parent>
-    <groupId>org.apache</groupId>
-    <artifactId>apache</artifactId>
-    <version>21</version>
+  <parent>
+    <groupId>org.apache.phoenix</groupId>
+    <artifactId>phoenix</artifactId>
+    <version>5.2.0-SNAPSHOT</version>
   </parent>
-  <groupId>org.apache.phoenix</groupId>
+
   <artifactId>phoenix-hbase-compat-2.1.6</artifactId>
-  <version>5.1.0-SNAPSHOT</version>
+
   <name>Phoenix Hbase 2.1.6 compatibility</name>
   <description>Compatibility module for HBase 2.1.6+</description>
 
-  <build>
-    <plugins>
-      <!-- Setup eclipse -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-eclipse-plugin</artifactId>
-        <version>2.9</version>
-        <configuration>
-          <buildcommands>
-            <buildcommand>org.eclipse.jdt.core.javabuilder</buildcommand>
-          </buildcommands>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.rat</groupId>
-        <artifactId>apache-rat-plugin</artifactId>
-      </plugin>
-    </plugins>
-  </build>
+  <properties>
+    <hbase21.compat.version>2.1.6</hbase21.compat.version>
+  </properties>
 
   <dependencies>
-       <!-- HBase dependencies -->
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-client</artifactId>
-        <version>2.1.6</version>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-common</artifactId>
-        <version>2.1.6</version>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-server</artifactId>
-        <version>2.1.6</version>
-        <scope>provided</scope>
-      </dependency>
+    <!-- HBase dependencies -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-client</artifactId>
+      <version>${hbase21.compat.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-common</artifactId>
+      <version>${hbase21.compat.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
+      <version>${hbase21.compat.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <!-- Override parent dependencyManagement for transitive HBase dependencies -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-hadoop-compat</artifactId>
+      <version>${hbase21.compat.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-hadoop2-compat</artifactId>
+      <version>${hbase21.compat.version}</version>
+      <scope>provided</scope>
+    </dependency>
+        <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-protocol</artifactId>
+      <version>${hbase21.compat.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-protocol-shaded</artifactId>
+      <version>${hbase21.compat.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-zookeeper</artifactId>
+      <version>${hbase21.compat.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-metrics</artifactId>
+      <version>${hbase21.compat.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-metrics-api</artifactId>
+      <version>${hbase21.compat.version}</version>
+      <scope>provided</scope>
+    </dependency>
   </dependencies>
 
-  <reporting>
-      <plugins>
-          <plugin>
-              <groupId>org.apache.maven.plugins</groupId>
-              <artifactId>maven-project-info-reports-plugin</artifactId>
-          </plugin>
-          <plugin>
-              <groupId>org.codehaus.mojo</groupId>
-              <artifactId>findbugs-maven-plugin</artifactId>
-          </plugin>
-      </plugins>
-  </reporting>
+
 </project>

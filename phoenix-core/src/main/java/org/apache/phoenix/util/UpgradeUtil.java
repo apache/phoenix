@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.util;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.CURRENT_CLIENT_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.getVersion;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
@@ -31,6 +31,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DECIMAL_DIGITS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INCREMENT_BY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
@@ -40,10 +41,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.START_WITH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
@@ -63,6 +66,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.text.Format;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -73,6 +77,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
@@ -80,7 +85,8 @@ import java.util.concurrent.TimeoutException;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import com.google.common.base.Strings;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
@@ -139,9 +145,9 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Objects;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 public class UpgradeUtil {
     private static final Logger LOGGER = LoggerFactory.getLogger(UpgradeUtil.class);
@@ -665,7 +671,7 @@ public class UpgradeUtil {
         LOGGER.info("Upgrading SYSTEM.SEQUENCE table");
 
         byte[] seqTableKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE);
-        Table sysTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+        Table sysTable = conn.getQueryServices().getTable(SYSTEM_CATALOG_NAME_BYTES);
         try {
             LOGGER.info("Setting SALT_BUCKETS property of SYSTEM.SEQUENCE to " + SaltingUtil.MAX_BUCKET_NUM);
             Cell saltKV = PhoenixKeyValueUtil.newKeyValue(seqTableKey,
@@ -1198,7 +1204,9 @@ public class UpgradeUtil {
     }
     
     public static void addViewIndexToParentLinks(PhoenixConnection oldMetaConnection) throws SQLException {
-    	// Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 
+        PhoenixConnection metaConn = null;
+        boolean isMetaConnUsingQueryConn = true;
+    	// Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG
         try (PhoenixConnection queryConn = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP);
         		PhoenixConnection upsertConn = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP)) {
             LOGGER.info("Upgrading metadata to add parent links for indexes on views");
@@ -1207,36 +1215,56 @@ public class UpgradeUtil {
 			String createViewIndexLink = "UPSERT INTO SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_FAMILY, LINK_TYPE) VALUES (?,?,?,?,?) ";
             ResultSet rs = queryConn.createStatement().executeQuery(indexQuery);
             String prevTenantId = null;
-            PhoenixConnection metaConn = queryConn;
+            metaConn = queryConn;
             Properties props = new Properties(queryConn.getClientInfo());
-			props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(HConstants.LATEST_TIMESTAMP));
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
+                Long.toString(HConstants.LATEST_TIMESTAMP));
             while (rs.next()) {
-            	String tenantId = rs.getString("TENANT_ID");
-				if (!java.util.Objects.equals(prevTenantId, tenantId)) {
-					prevTenantId = tenantId;
-					props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-            		metaConn = new PhoenixConnection(oldMetaConnection, props); 
-            	}
-            	String schemaName = rs.getString("TABLE_SCHEM");
-            	String parentTableName = rs.getString("TABLE_NAME");
-            	String fullParentTableName = SchemaUtil.getTableName(schemaName, parentTableName);
-            	String indexName = rs.getString("COLUMN_FAMILY");
-            	PTable table = PhoenixRuntime.getTable(metaConn, fullParentTableName);
-            	if (table==null) {
-            		throw new TableNotFoundException(fullParentTableName);
-            	}
-            	if (table.getType().equals(PTableType.VIEW)) {
-            		PreparedStatement prepareStatement = upsertConn.prepareStatement(createViewIndexLink);
-            		prepareStatement.setString(1, tenantId);
-            		prepareStatement.setString(2, schemaName);
-            		prepareStatement.setString(3, indexName);
-            		prepareStatement.setString(4, parentTableName);
-            		prepareStatement.setByte(5, LinkType.VIEW_INDEX_PARENT_TABLE.getSerializedValue());
-            		prepareStatement.execute();
-            		upsertConn.commit();
-            	}
+                String tenantId = rs.getString("TENANT_ID");
+                if (!java.util.Objects.equals(prevTenantId, tenantId)) {
+                    prevTenantId = tenantId;
+                    props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                    // guard again queryConn because we don't want to close
+                    // queryConn if metaConn was assigned queryConn at
+                    // this point
+                    if (!isMetaConnUsingQueryConn) {
+                        metaConn.close();
+                    }
+                    metaConn = new PhoenixConnection(oldMetaConnection, props);
+                    // now that we have reassigned metaConn, make
+                    // isMetaConnUsingQueryConn false so that we make
+                    // metaConn eligible for closure
+                    isMetaConnUsingQueryConn = false;
+                }
+                String schemaName = rs.getString(TABLE_SCHEM);
+                String parentTableName = rs.getString(TABLE_NAME);
+                String fullParentTableName =
+                    SchemaUtil.getTableName(schemaName, parentTableName);
+                String indexName = rs.getString(COLUMN_FAMILY);
+                PTable table = PhoenixRuntime.getTable(metaConn, fullParentTableName);
+                if (table == null) {
+                    throw new TableNotFoundException(fullParentTableName);
+                }
+                if (table.getType().equals(PTableType.VIEW)) {
+                    PreparedStatement prepareStatement =
+                        upsertConn.prepareStatement(createViewIndexLink);
+                    prepareStatement.setString(1, tenantId);
+                    prepareStatement.setString(2, schemaName);
+                    prepareStatement.setString(3, indexName);
+                    prepareStatement.setString(4, parentTableName);
+                    prepareStatement.setByte(5,
+                        LinkType.VIEW_INDEX_PARENT_TABLE.getSerializedValue());
+                    prepareStatement.execute();
+                    upsertConn.commit();
+                }
             }
             queryConn.getQueryServices().clearCache();
+        } finally {
+            // while iterating through ResultSet, if metaConn was reassigned
+            // anytime, we need to close the last reassigned tenant connection
+            if (!isMetaConnUsingQueryConn) {
+                metaConn.close();
+            }
         }
     }
 
@@ -1315,7 +1343,7 @@ public class UpgradeUtil {
      */
     private static void syncViewIndexTable(ConnectionQueryServices cqs, PTable baseTable, ColumnFamilyDescriptor defaultColFam,
             Map<String, Object> syncedProps, Set<TableDescriptor> tableDescsToSync) throws SQLException {
-        String viewIndexName = MetaDataUtil.getViewIndexPhysicalName(baseTable.getPhysicalName().getString());
+        String viewIndexName = MetaDataUtil.getViewIndexPhysicalName(baseTable.getName().getString());
         if (!Strings.isNullOrEmpty(viewIndexName)) {
             try {
                 addTableDescIfPropsChanged(cqs.getTableDescriptor(Bytes.toBytes(viewIndexName)),
@@ -1327,11 +1355,12 @@ public class UpgradeUtil {
     }
 
     private static void syncUpdateCacheFreqForIndexesOfTable(PTable baseTable,
-            PreparedStatement stmt) throws SQLException {
+            PreparedStatement stmt, String tenantId) throws SQLException {
         for (PTable index : baseTable.getIndexes()) {
             if (index.getUpdateCacheFrequency() == baseTable.getUpdateCacheFrequency()) {
                 continue;
             }
+            stmt.setString(1, tenantId);
             stmt.setString(2, index.getSchemaName().getString());
             stmt.setString(3, index.getTableName().getString());
             stmt.setLong(4, baseTable.getUpdateCacheFrequency());
@@ -1357,9 +1386,9 @@ public class UpgradeUtil {
                     newConn.getTenantId().getBytes() : null;
 
             PreparedStatement stmt =
-                    newConn.prepareStatement(UPSERT_UPDATE_CACHE_FREQUENCY);
-            stmt.setString(1, Bytes.toString(tenantId));
-            syncUpdateCacheFreqForIndexesOfTable(table, stmt);
+                newConn.prepareStatement(UPSERT_UPDATE_CACHE_FREQUENCY);
+            syncUpdateCacheFreqForIndexesOfTable(table, stmt,
+                Bytes.toString(tenantId));
 
             TableViewFinderResult childViewsResult = new TableViewFinderResult();
             for (int i=0; i<2; i++) {
@@ -1373,18 +1402,9 @@ public class UpgradeUtil {
                             LinkType.CHILD_TABLE, childViewsResult);
 
                     // Iterate over the chain of child views
-                    for (TableInfo tableInfo: childViewsResult.getLinks()) {
-                        PTable view;
-                        String viewName = SchemaUtil.getTableName(tableInfo.getSchemaName(),
-                                tableInfo.getTableName());
-                        try {
-                            view = PhoenixRuntime.getTable(newConn, viewName);
-                        } catch (TableNotFoundException e) {
-                            // Ignore
-                            LOGGER.warn("Error getting PTable for view: " + viewName);
-                            continue;
-                        }
-                        syncUpdateCacheFreqForIndexesOfTable(view, stmt);
+                    for (TableInfo tableInfo : childViewsResult.getLinks()) {
+                        getViewAndSyncCacheFreqForIndexes(newConn, stmt,
+                            tableInfo);
                     }
                     break;
                 } catch (TableNotFoundException ex) {
@@ -1400,50 +1420,110 @@ public class UpgradeUtil {
         }
     }
 
+    private static void getViewAndSyncCacheFreqForIndexes(
+            final PhoenixConnection newConn,
+            final PreparedStatement stmt, final TableInfo tableInfo)
+            throws SQLException {
+        final String viewName = SchemaUtil.getTableName(
+            tableInfo.getSchemaName(), tableInfo.getTableName());
+        final String viewTenantId = Bytes.toString(tableInfo.getTenantId());
+        final Optional<PTable> view;
+        if (StringUtils.isNotEmpty(viewTenantId)) {
+            Properties props = new Properties(newConn.getClientInfo());
+            props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, viewTenantId);
+            // use tenant connection to resolve tenant views
+            try (PhoenixConnection tenantConn =
+                    new PhoenixConnection(newConn, props)) {
+                view = resolveView(viewName, tenantConn);
+            }
+        } else {
+            view = resolveView(viewName, newConn);
+        }
+        if (view.isPresent()) {
+            syncUpdateCacheFreqForIndexesOfTable(view.get(), stmt,
+                viewTenantId);
+        }
+    }
+
+    private static Optional<PTable> resolveView(final String viewName,
+            final PhoenixConnection conn) throws SQLException {
+        PTable view;
+        try {
+            view = PhoenixRuntime.getTable(conn, viewName);
+        } catch (TableNotFoundException e) {
+            // Ignore
+            LOGGER.error("Error getting PTable for view: {}", viewName, e);
+            return Optional.empty();
+        }
+        return Optional.of(view);
+    }
+
     /**
      * Make sure that all tables have necessary column family properties in sync
      * with each other and also in sync with all the table's indexes
      * See PHOENIX-3955
      * @param conn Phoenix connection
-     * @param admin HBase admin used for getting existing tables and their descriptors
-     * @throws SQLException
-     * @throws IOException
+     * @throws SQLException if something goes wrong while retrieving Admin,
+     *     Table or while calling underlying utilities like
+     *     {@link #syncUpdateCacheFreqAllIndexes(PhoenixConnection, PTable)} ,
+     *     {@link #addTableDescIfPropsChanged(TableDescriptor,
+     *         ColumnFamilyDescriptor, Map, Set)} ,
+     *     {@link #syncGlobalIndexesForTable(ConnectionQueryServices, PTable,
+     *         ColumnFamilyDescriptor, Map, Set)} ,
+     *     {@link #syncViewIndexTable(ConnectionQueryServices, PTable,
+     *         ColumnFamilyDescriptor, Map, Set)}
+     * @throws IOException if something goes wrong while retrieving Admin,
+     *     performing admin operations or while performing sync of updated
+     *     cache frequencies for indexes using
+     *     {@link #syncUpdateCacheFreqAllIndexes(PhoenixConnection, PTable)}
      */
-    public static void syncTableAndIndexProperties(PhoenixConnection conn, Admin admin)
-    throws SQLException, IOException {
-        Set<TableDescriptor> tableDescriptorsToSynchronize = new HashSet<>();
-        for (TableDescriptor origTableDesc : admin.listTableDescriptors()) {
-            if (MetaDataUtil.isViewIndex(origTableDesc.getTableName().getNameWithNamespaceInclAsString())) {
-                // Ignore physical view index tables since we handle them for each base table already
-                continue;
-            }
-            PTable table;
-            String fullTableName = SchemaUtil.getPhysicalTableName(
+    public static void syncTableAndIndexProperties(PhoenixConnection conn)
+            throws SQLException, IOException {
+        try (Admin admin = conn.getQueryServices().getAdmin()) {
+            Set<TableDescriptor> tableDescriptorsToSynchronize =
+                new HashSet<>();
+            for (TableDescriptor origTableDesc : admin.listTableDescriptors()) {
+                if (MetaDataUtil.isViewIndex(origTableDesc.getTableName()
+                        .getNameWithNamespaceInclAsString())) {
+                    // Ignore physical view index tables since we handle them
+                    // for each base table already
+                    continue;
+                }
+                PTable table;
+                String fullTableName = SchemaUtil.getPhysicalTableName(
                     origTableDesc.getTableName().getName(),
-                    SchemaUtil.isNamespaceMappingEnabled(
-                            null, conn.getQueryServices().getProps())).getNameAsString();
-            try {
-                // Use this getTable API to get the latest PTable
-                table = PhoenixRuntime.getTable(conn, null, fullTableName);
-            } catch (TableNotFoundException e) {
-                // Ignore tables not mapped to a Phoenix Table
-                LOGGER.warn("Error getting PTable for HBase table: " + fullTableName);
-                continue;
-            }
-            if (table.getType() == PTableType.INDEX) {
-                // Ignore global index tables since we handle them for each base table already
-                continue;
-            }
-            syncUpdateCacheFreqAllIndexes(conn, table);
-            ColumnFamilyDescriptor defaultColFam = origTableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(table));
-            Map<String, Object> syncedProps = MetaDataUtil.getSyncedProps(defaultColFam);
+                    SchemaUtil.isNamespaceMappingEnabled(null,
+                        conn.getQueryServices().getProps())).getNameAsString();
+                try {
+                    // Use this getTable API to get the latest PTable
+                    table = PhoenixRuntime.getTable(conn, null, fullTableName);
+                } catch (TableNotFoundException e) {
+                    // Ignore tables not mapped to a Phoenix Table
+                    LOGGER.warn("Error getting PTable for HBase table: {}",
+                        fullTableName);
+                    continue;
+                }
+                if (table.getType() == PTableType.INDEX) {
+                    // Ignore global index tables since we handle them for
+                    // each base table already
+                    continue;
+                }
+                syncUpdateCacheFreqAllIndexes(conn, table);
+                ColumnFamilyDescriptor defaultColFam = origTableDesc
+                    .getColumnFamily(SchemaUtil.getEmptyColumnFamily(table));
+                Map<String, Object> syncedProps =
+                    MetaDataUtil.getSyncedProps(defaultColFam);
 
-            addTableDescIfPropsChanged(origTableDesc, defaultColFam, syncedProps, tableDescriptorsToSynchronize);
-            syncGlobalIndexesForTable(conn.getQueryServices(), table, defaultColFam, syncedProps, tableDescriptorsToSynchronize);
-            syncViewIndexTable(conn.getQueryServices(), table, defaultColFam, syncedProps, tableDescriptorsToSynchronize);
-        }
-        for (TableDescriptor t: tableDescriptorsToSynchronize) {
-            admin.modifyTable(t);
+                addTableDescIfPropsChanged(origTableDesc, defaultColFam,
+                    syncedProps, tableDescriptorsToSynchronize);
+                syncGlobalIndexesForTable(conn.getQueryServices(), table,
+                    defaultColFam, syncedProps, tableDescriptorsToSynchronize);
+                syncViewIndexTable(conn.getQueryServices(), table,
+                    defaultColFam, syncedProps, tableDescriptorsToSynchronize);
+            }
+            for (TableDescriptor t : tableDescriptorsToSynchronize) {
+                admin.modifyTable(t);
+            }
         }
     }
 
@@ -2091,15 +2171,15 @@ public class UpgradeUtil {
      * use map table utility in psql.py
      */
     public static void mapTableToNamespace(Admin admin, Table metatable, String tableName,
-            ReadOnlyProps props, Long ts, PTableType pTableType, PName tenantId) throws SnapshotCreationException,
-                    IllegalArgumentException, IOException, InterruptedException, SQLException {
+            ReadOnlyProps props, Long ts, PTableType pTableType, PName tenantId)
+            throws IllegalArgumentException, IOException, InterruptedException, SQLException {
         String destTablename = SchemaUtil
                 .normalizeIdentifier(SchemaUtil.getPhysicalTableName(tableName, props).getNameAsString());
         mapTableToNamespace(admin, metatable, tableName, destTablename, props, ts, tableName, pTableType, tenantId);
     }
 
     public static void upgradeTable(PhoenixConnection conn, String srcTable) throws SQLException,
-            SnapshotCreationException, IllegalArgumentException, IOException, InterruptedException {
+            IllegalArgumentException, IOException, InterruptedException {
         ReadOnlyProps readOnlyProps = conn.getQueryServices().getProps();
         if (conn.getSchema() != null) { throw new IllegalArgumentException(
                 "Schema should not be set for connection!!"); }
@@ -2107,10 +2187,8 @@ public class UpgradeUtil {
                 readOnlyProps)) { throw new IllegalArgumentException(
                         QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " is not enabled!!"); }
         try (Admin admin = conn.getQueryServices().getAdmin();
-                Table metatable = conn.getQueryServices()
-                        .getTable(SchemaUtil
-                                .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, readOnlyProps)
-                                .getName());) {
+                Table metatable = conn.getQueryServices().getTable(SchemaUtil.getPhysicalName(
+                                SYSTEM_CATALOG_NAME_BYTES, readOnlyProps).getName())) {
             String fullTableName = SchemaUtil.normalizeIdentifier(srcTable);
             String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
             String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
@@ -2119,18 +2197,23 @@ public class UpgradeUtil {
             
             // Upgrade is not required if schemaName is not present.
             if (schemaName.equals("") && !PTableType.VIEW
-                    .equals(table.getType())) { throw new IllegalArgumentException("Table doesn't have schema name"); }
-
-            if (table.isNamespaceMapped()) { throw new IllegalArgumentException("Table is already upgraded"); }
+                    .equals(table.getType())) {
+                throw new IllegalArgumentException("Table doesn't have schema name");
+            }
+            if (table.isNamespaceMapped()) {
+                throw new IllegalArgumentException("Table is already upgraded");
+            }
             if (!schemaName.equals("")) {
                 LOGGER.info(String.format("Creating schema %s..", schemaName));
                 conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
             }
             String oldPhysicalName = table.getPhysicalName().getString();
             String newPhysicalTablename = SchemaUtil.normalizeIdentifier(
-                    SchemaUtil.getPhysicalTableName(oldPhysicalName, readOnlyProps).getNameAsString());
+                    SchemaUtil.getPhysicalTableName(oldPhysicalName, readOnlyProps)
+                            .getNameAsString());
             LOGGER.info(String.format("Upgrading %s %s..", table.getType(), fullTableName));
-            LOGGER.info(String.format("oldPhysicalName %s newPhysicalTablename %s..", oldPhysicalName, newPhysicalTablename));
+            LOGGER.info(String.format("oldPhysicalName %s newPhysicalTablename %s..",
+                    oldPhysicalName, newPhysicalTablename));
             LOGGER.info(String.format("teanantId %s..", conn.getTenantId()));
 
             TableViewFinderResult childViewsResult = new TableViewFinderResult();
@@ -2140,8 +2223,10 @@ public class UpgradeUtil {
                         .getTable(SchemaUtil.getPhysicalName(
                                 i==0 ? SYSTEM_CHILD_LINK_NAME_BYTES : SYSTEM_CATALOG_TABLE_BYTES,
                                 readOnlyProps).getName())) {
-                    byte[] tenantId = conn.getTenantId() != null ? conn.getTenantId().getBytes() : null;
-                    ViewUtil.findAllRelatives(sysCatOrSysChildLinkTable, tenantId, schemaName.getBytes(),
+                    byte[] tenantId = conn.getTenantId() != null ?
+                            conn.getTenantId().getBytes() : null;
+                    ViewUtil.findAllRelatives(sysCatOrSysChildLinkTable, tenantId,
+                            schemaName.getBytes(),
                             tableName.getBytes(), LinkType.CHILD_TABLE, childViewsResult);
                     break;
                 } catch (TableNotFoundException ex) {
@@ -2154,13 +2239,15 @@ public class UpgradeUtil {
             }
 
             // Upgrade the data or main table
-            mapTableToNamespace(admin, metatable, fullTableName, newPhysicalTablename, readOnlyProps,
-                    PhoenixRuntime.getCurrentScn(readOnlyProps), fullTableName, table.getType(),conn.getTenantId());
+            mapTableToNamespace(admin, metatable, fullTableName, newPhysicalTablename,
+                    readOnlyProps, PhoenixRuntime.getCurrentScn(readOnlyProps), fullTableName,
+                    table.getType(),conn.getTenantId());
             // clear the cache and get new table
             conn.removeTable(conn.getTenantId(), fullTableName,
                 table.getParentName() != null ? table.getParentName().getString() : null,
                 table.getTimeStamp());
-            byte[] tenantIdBytes = conn.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY : conn.getTenantId().getBytes();
+            byte[] tenantIdBytes = conn.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY :
+                    conn.getTenantId().getBytes();
             conn.getQueryServices().clearTableFromCache(
                     tenantIdBytes,
                     table.getSchemaName().getBytes(), table.getTableName().getBytes(),
@@ -2168,8 +2255,9 @@ public class UpgradeUtil {
             MetaDataMutationResult result =
                     new MetaDataClient(conn).updateCache(conn.getTenantId(), schemaName, tableName,
                         true);
-            if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) { throw new TableNotFoundException(
-              schemaName, fullTableName); }
+            if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+                throw new TableNotFoundException(schemaName, fullTableName);
+            }
             table = result.getTable();
             
             // check whether table is properly upgraded before upgrading indexes
@@ -2189,33 +2277,39 @@ public class UpgradeUtil {
                         LOGGER.info(String.format("local index '%s' found with physical hbase table name ''..",
                                 index.getName(), srcTableName));
                         destTableName = Bytes
-                                .toString(MetaDataUtil.getLocalIndexPhysicalName(newPhysicalTablename.getBytes()));
+                                .toString(MetaDataUtil.getLocalIndexPhysicalName(
+                                        newPhysicalTablename.getBytes()));
                         // update parent_table property in local index table descriptor
                         conn.createStatement()
-                                .execute(String.format("ALTER TABLE %s set " + MetaDataUtil.PARENT_TABLE_KEY + "='%s'",
+                                .execute(String.format("ALTER TABLE %s set " +
+                                                MetaDataUtil.PARENT_TABLE_KEY + "='%s'",
                                         phoenixTableName, table.getPhysicalName()));
                     } else if (MetaDataUtil.isViewIndex(srcTableName)) {
                         LOGGER.info(String.format("View index '%s' found with physical hbase table name ''..",
                                 index.getName(), srcTableName));
                         destTableName = Bytes
-                                .toString(MetaDataUtil.getViewIndexPhysicalName(newPhysicalTablename.getBytes()));
+                                .toString(MetaDataUtil.getViewIndexPhysicalName(
+                                        newPhysicalTablename.getBytes()));
                     } else {
                         LOGGER.info(String.format("Global index '%s' found with physical hbase table name ''..",
                                 index.getName(), srcTableName));
                         destTableName = SchemaUtil
-                                .getPhysicalTableName(index.getPhysicalName().getString(), readOnlyProps)
-                                .getNameAsString();
+                                .getPhysicalTableName(index.getPhysicalName().getString(),
+                                        readOnlyProps).getNameAsString();
                     }
                     LOGGER.info(String.format("Upgrading index %s..", index.getName()));
-                    if (!(table.getType() == PTableType.VIEW && !MetaDataUtil.isViewIndex(srcTableName)
+                    if (!(table.getType() == PTableType.VIEW && !MetaDataUtil.isViewIndex(
+                            srcTableName)
                             && IndexType.LOCAL != index.getIndexType())) {
-                        mapTableToNamespace(admin, metatable, srcTableName, destTableName, readOnlyProps,
-                                PhoenixRuntime.getCurrentScn(readOnlyProps), phoenixTableName, index.getType(),
-                                conn.getTenantId());
+                        mapTableToNamespace(admin, metatable, srcTableName, destTableName,
+                                readOnlyProps, PhoenixRuntime.getCurrentScn(readOnlyProps),
+                                phoenixTableName, index.getType(), conn.getTenantId());
                     }
                     if (updateLink) {
-                        LOGGER.info(String.format("Updating link information for index '%s' ..", index.getName()));
-                        updateLink(conn, srcTableName, destTableName,index.getSchemaName(),index.getTableName());
+                        LOGGER.info(String.format("Updating link information for index '%s' ..",
+                                index.getName()));
+                        updateLink(conn, srcTableName, destTableName,index.getSchemaName(),
+                                index.getTableName());
                         conn.commit();
                     }
                     conn.getQueryServices().clearTableFromCache(
@@ -2226,19 +2320,24 @@ public class UpgradeUtil {
                 updateIndexesSequenceIfPresent(conn, table);
                 conn.commit();
             } else {
-                throw new RuntimeException("Error: problem occured during upgrade. Table is not upgraded successfully");
+                throw new RuntimeException("Error: problem occured during upgrade. "
+                        + "Table is not upgraded successfully");
             }
             if (table.getType() == PTableType.VIEW) {
-                LOGGER.info(String.format("Updating link information for view '%s' ..", table.getTableName()));
-                updateLink(conn, oldPhysicalName, newPhysicalTablename,table.getSchemaName(),table.getTableName());
+                LOGGER.info(String.format("Updating link information for view '%s' ..",
+                        table.getTableName()));
+                updateLink(conn, oldPhysicalName, newPhysicalTablename,table.getSchemaName(),
+                        table.getTableName());
                 conn.commit();
                 
                 // if the view is a first level child, then we need to create the PARENT_TABLE link
                 // that was overwritten by the PHYSICAL_TABLE link 
                 if (table.getParentName().equals(table.getPhysicalName())) {
-                    LOGGER.info(String.format("Creating PARENT link for view '%s' ..", table.getTableName()));
+                    LOGGER.info(String.format("Creating PARENT link for view '%s' ..",
+                            table.getTableName()));
                     // Add row linking view to its parent 
-                    PreparedStatement linkStatement = conn.prepareStatement(MetaDataClient.CREATE_VIEW_LINK);
+                    PreparedStatement linkStatement = conn.prepareStatement(
+                            MetaDataClient.CREATE_VIEW_LINK);
                     linkStatement.setString(1, Bytes.toStringBinary(tenantIdBytes));
                     linkStatement.setString(2, table.getSchemaName().getString());
                     linkStatement.setString(3, table.getTableName().getString());
@@ -2256,7 +2355,8 @@ public class UpgradeUtil {
             }
             // Upgrade all child views
             if (table.getType() == PTableType.TABLE) {
-                mapChildViewsToNamespace(conn.getURL(), conn.getClientInfo(), childViewsResult.getLinks());
+                mapChildViewsToNamespace(conn.getURL(), conn.getClientInfo(),
+                        childViewsResult.getLinks());
             }
         }
     }
@@ -2264,7 +2364,7 @@ public class UpgradeUtil {
     private static void updateIndexesSequenceIfPresent(PhoenixConnection connection, PTable dataTable)
             throws SQLException {
         PName tenantId = connection.getTenantId();
-        PName physicalName = dataTable.getPhysicalName();
+        PName physicalName = dataTable.getName();
         PName oldPhysicalName = PNameFactory.newName(
                 physicalName.toString().replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR));
         String oldSchemaName = MetaDataUtil.getViewIndexSequenceSchemaName(oldPhysicalName, false);
@@ -2311,32 +2411,41 @@ public class UpgradeUtil {
         deleteLinkStatment.execute();
     }
     
-    private static void mapChildViewsToNamespace(String connUrl, Properties props, List<TableInfo> viewInfoList)
-            throws SQLException, SnapshotCreationException, IllegalArgumentException, IOException,
-            InterruptedException {
-        String tenantId = null;
+    private static void mapChildViewsToNamespace(String connUrl, Properties props,
+            List<TableInfo> viewInfoList) throws SQLException, IllegalArgumentException,
+            IOException, InterruptedException {
+        String tenantId;
         String prevTenantId = null;
         PhoenixConnection conn = null;
         for (TableInfo viewInfo : viewInfoList) {
             tenantId = viewInfo.getTenantId()!=null ? Bytes.toString(viewInfo.getTenantId()) : null;
-            String viewName = SchemaUtil.getTableName(viewInfo.getSchemaName(), viewInfo.getTableName());
+            String viewName = SchemaUtil.getTableName(viewInfo.getSchemaName(),
+                    viewInfo.getTableName());
             if (!java.util.Objects.equals(prevTenantId, tenantId)) {
                 if (tenantId != null) {
                     props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
                 } else {
                     props.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
                 }
-                if (conn!=null)
+                if (conn!=null) {
                     conn.close();
+                }
                 conn = DriverManager.getConnection(connUrl, props).unwrap(PhoenixConnection.class);
             }
             LOGGER.info(String.format("Upgrading view %s for tenantId %s..", viewName,tenantId));
-            UpgradeUtil.upgradeTable(conn, viewName);
+            if (conn != null) {
+                try {
+                    UpgradeUtil.upgradeTable(conn, viewName);
+                } catch (TableNotFoundException e) {
+                    // Ignore
+                    LOGGER.error("Error getting PTable for view: " + viewInfo, e);
+                }
+            }
             prevTenantId = tenantId;
         }
     }
 
-    public static void mergeViewIndexIdSequences(ConnectionQueryServices cqs, PhoenixConnection metaConnection)
+    public static void mergeViewIndexIdSequences(PhoenixConnection olderMetaConnection)
         throws SQLException{
          /* before PHOENIX-5132, there was a per-tenant sequence to generate view index ids,
            which could cause problems if global and tenant-owned view indexes were mixed for the
@@ -2347,101 +2456,105 @@ public class UpgradeUtil {
          */
          //map of physical table names to view index sequences
         Map<String, List<SequenceKey>> sequenceTableMap = new HashMap<>();
-        DatabaseMetaData metaData = metaConnection.getMetaData();
-
-        try (ResultSet sequenceRS = metaData.getTables(null, null,
-            "%" + MetaDataUtil.VIEW_INDEX_SEQUENCE_NAME_PREFIX + "%",
-            new String[] {PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE})) {
-            while (sequenceRS.next()) {
-                String tenantId = sequenceRS.getString(TABLE_CAT);
-                String schemaName = sequenceRS.getString(TABLE_SCHEM);
-                String sequenceName = sequenceRS.getString(TABLE_NAME);
-                int numBuckets = sequenceRS.getInt(SALT_BUCKETS);
-                SequenceKey key = new SequenceKey(tenantId, schemaName, sequenceName, numBuckets);
-                String baseTableName;
-                //under the old naming convention, view index sequences
-                // of non-namespace mapped tables stored their physical table name in the sequence schema for
-                //some reason. Namespace-mapped tables stored it in the sequence name itself.
-                //Note the difference between VIEW_INDEX_SEQUENCE_PREFIX (_SEQ_)
-                //and VIEW_INDEX_SEQUENCE_NAME_PREFIX (_ID_)
-                if (schemaName != null && schemaName.contains(MetaDataUtil.VIEW_INDEX_SEQUENCE_PREFIX)) {
-                    baseTableName = schemaName.replace(MetaDataUtil.VIEW_INDEX_SEQUENCE_PREFIX, "");
-                } else {
-                    baseTableName = SchemaUtil.getTableName(schemaName,
-                        sequenceName.replace(MetaDataUtil.VIEW_INDEX_SEQUENCE_NAME_PREFIX, ""));
-                }
-                if (!sequenceTableMap.containsKey(baseTableName)) {
-                    sequenceTableMap.put(baseTableName, new ArrayList<SequenceKey>());
-                }
-                sequenceTableMap.get(baseTableName).add(key);
-            }
-        }
-        for (String baseTableName : sequenceTableMap.keySet()){
-            Map<SequenceKey, Long> currentSequenceValues = new HashMap<SequenceKey, Long>();
-            long maxViewIndexId = Long.MIN_VALUE;
-            PName name = PNameFactory.newName(baseTableName);
-            boolean hasNamespaceMapping =
-                SchemaUtil.isNamespaceMappingEnabled(null, cqs.getConfiguration()) ||
-                    cqs.getProps().getBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, false);
-            List<SequenceKey> existingSequenceKeys = sequenceTableMap.get(baseTableName);
-            for (SequenceKey sequenceKey : existingSequenceKeys){
-                long[] currentValueArray = new long[1];
-                SQLException[] sqlExceptions = new SQLException[1];
-                cqs.incrementSequences(
-                    Lists.newArrayList(new SequenceAllocation(sequenceKey, 1L)),
-                    EnvironmentEdgeManager.currentTimeMillis(),
-                    currentValueArray, new SQLException[1]);
-
-                if (sqlExceptions[0] != null) {
-                    LOGGER.error("Unable to convert view index sequence because of error. " +
-                        "It will need to be converted manually, " +
-                        " or there's a risk that two view indexes of the same base table " +
-                        "will have colliding view index ids.", sqlExceptions[0]);
-                    continue;
-                }
-                if (currentValueArray[0] > maxViewIndexId){
-                    maxViewIndexId = currentValueArray[0];
-                }
-                currentSequenceValues.put(sequenceKey, currentValueArray[0]);
-            }
-            //just in case someone is creating a view index RIGHT NOW, increment maxViewIndexId
-            //by 100 to make very sure there are no collisions
-            maxViewIndexId += 100;
-            try {
-                //In one case (namespaced-mapped base table, global view index), the new sequence
-                //is the same as the old sequence, so rather than create it we just increment it
-                //to the right value.
-                SequenceKey newSequenceKey = new SequenceKey(null, MetaDataUtil.getViewIndexSequenceSchemaName(name, hasNamespaceMapping),
-                    MetaDataUtil.getViewIndexSequenceName(name, null, hasNamespaceMapping), cqs.getSequenceSaltBuckets());
-                if (currentSequenceValues.containsKey(newSequenceKey)){
-                    long incrementValue = maxViewIndexId - currentSequenceValues.get(newSequenceKey);
-                    SQLException[] incrementExceptions = new SQLException[1];
-                    List<SequenceAllocation> incrementAllocations = Lists.newArrayList(new SequenceAllocation(newSequenceKey, incrementValue));
-                    cqs.incrementSequences(incrementAllocations, EnvironmentEdgeManager.currentTimeMillis(),
-                        new long[1], incrementExceptions);
-                    if (incrementExceptions[0] != null){
-                        throw incrementExceptions[0];
+        try (PhoenixConnection metaConnection = new PhoenixConnection(
+                olderMetaConnection, HConstants.LATEST_TIMESTAMP)) {
+            DatabaseMetaData metaData = metaConnection.getMetaData();
+            ConnectionQueryServices cqs = metaConnection.getQueryServices();
+            try (ResultSet sequenceRS = metaData.getTables(null, null,
+                    "%" + MetaDataUtil.VIEW_INDEX_SEQUENCE_NAME_PREFIX + "%",
+                    new String[]{PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE})) {
+                while (sequenceRS.next()) {
+                    String tenantId = sequenceRS.getString(TABLE_CAT);
+                    String schemaName = sequenceRS.getString(TABLE_SCHEM);
+                    String sequenceName = sequenceRS.getString(TABLE_NAME);
+                    int numBuckets = sequenceRS.getInt(SALT_BUCKETS);
+                    SequenceKey key = new SequenceKey(tenantId, schemaName, sequenceName, numBuckets);
+                    String baseTableName;
+                    //under the old naming convention, view index sequences
+                    // of non-namespace mapped tables stored their physical table name in the sequence schema for
+                    //some reason. Namespace-mapped tables stored it in the sequence name itself.
+                    //Note the difference between VIEW_INDEX_SEQUENCE_PREFIX (_SEQ_)
+                    //and VIEW_INDEX_SEQUENCE_NAME_PREFIX (_ID_)
+                    if (schemaName != null && schemaName.contains(MetaDataUtil.VIEW_INDEX_SEQUENCE_PREFIX)) {
+                        baseTableName = schemaName.replace(MetaDataUtil.VIEW_INDEX_SEQUENCE_PREFIX, "");
+                    } else {
+                        baseTableName = SchemaUtil.getTableName(schemaName,
+                                sequenceName.replace(MetaDataUtil.VIEW_INDEX_SEQUENCE_NAME_PREFIX, ""));
                     }
-                } else {
-                    cqs.createSequence(null, newSequenceKey.getSchemaName(),
-                        newSequenceKey.getSequenceName(), maxViewIndexId, 1, 1,
-                        Long.MIN_VALUE, Long.MAX_VALUE,
-                        false, EnvironmentEdgeManager.currentTimeMillis());
+                    if (!sequenceTableMap.containsKey(baseTableName)) {
+                        sequenceTableMap.put(baseTableName, new ArrayList<SequenceKey>());
+                    }
+                    sequenceTableMap.get(baseTableName).add(key);
                 }
-            } catch(SequenceAlreadyExistsException sae) {
-                LOGGER.info("Tried to create view index sequence "
-                    + SchemaUtil.getTableName(sae.getSchemaName(), sae.getSequenceName()) +
-                    " during upgrade but it already existed. This is probably fine.");
+            }
+            for (String baseTableName : sequenceTableMap.keySet()) {
+                Map<SequenceKey, Long> currentSequenceValues = new HashMap<SequenceKey, Long>();
+                long maxViewIndexId = Long.MIN_VALUE;
+                PName name = PNameFactory.newName(baseTableName);
+                boolean hasNamespaceMapping =
+                        SchemaUtil.isNamespaceMappingEnabled(null, cqs.getConfiguration()) ||
+                                cqs.getProps().getBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, false);
+                List<SequenceKey> existingSequenceKeys = sequenceTableMap.get(baseTableName);
+                for (SequenceKey sequenceKey : existingSequenceKeys) {
+                    long[] currentValueArray = new long[1];
+                    SQLException[] sqlExceptions = new SQLException[1];
+                    cqs.incrementSequences(
+                            Lists.newArrayList(new SequenceAllocation(sequenceKey, 1L)),
+                            EnvironmentEdgeManager.currentTimeMillis(),
+                            currentValueArray, new SQLException[1]);
+
+                    if (sqlExceptions[0] != null) {
+                        LOGGER.error("Unable to convert view index sequence because of error. " +
+                                "It will need to be converted manually, " +
+                                " or there's a risk that two view indexes of the same base table " +
+                                "will have colliding view index ids.", sqlExceptions[0]);
+                        continue;
+                    }
+                    if (currentValueArray[0] > maxViewIndexId) {
+                        maxViewIndexId = currentValueArray[0];
+                    }
+                    currentSequenceValues.put(sequenceKey, currentValueArray[0]);
+                }
+                //just in case someone is creating a view index RIGHT NOW, increment maxViewIndexId
+                //by 100 to make very sure there are no collisions
+                maxViewIndexId += 100;
+                try {
+                    //In one case (namespaced-mapped base table, global view index), the new sequence
+                    //is the same as the old sequence, so rather than create it we just increment it
+                    //to the right value.
+                    SequenceKey newSequenceKey = new SequenceKey(null, MetaDataUtil.getViewIndexSequenceSchemaName(name, hasNamespaceMapping),
+                            MetaDataUtil.getViewIndexSequenceName(name, null, hasNamespaceMapping), cqs.getSequenceSaltBuckets());
+                    if (currentSequenceValues.containsKey(newSequenceKey)) {
+                        long incrementValue = maxViewIndexId - currentSequenceValues.get(newSequenceKey);
+                        SQLException[] incrementExceptions = new SQLException[1];
+                        List<SequenceAllocation> incrementAllocations = Lists.newArrayList(new SequenceAllocation(newSequenceKey, incrementValue));
+                        cqs.incrementSequences(incrementAllocations, EnvironmentEdgeManager.currentTimeMillis(),
+                                new long[1], incrementExceptions);
+                        if (incrementExceptions[0] != null) {
+                            throw incrementExceptions[0];
+                        }
+                    } else {
+                        cqs.createSequence(null, newSequenceKey.getSchemaName(),
+                                newSequenceKey.getSequenceName(), maxViewIndexId, 1, 1,
+                                Long.MIN_VALUE, Long.MAX_VALUE,
+                                false, EnvironmentEdgeManager.currentTimeMillis());
+                    }
+                } catch (SequenceAlreadyExistsException sae) {
+                    LOGGER.info("Tried to create view index sequence "
+                            + SchemaUtil.getTableName(sae.getSchemaName(), sae.getSequenceName()) +
+                            " during upgrade but it already existed. This is probably fine.");
+                }
             }
         }
     }
 
-    public static final String getSysCatalogSnapshotName(long currentSystemTableTimestamp) {
-        String tableString = SYSTEM_CATALOG_NAME;
+    public static String getSysTableSnapshotName(
+            long currentSystemTableTimestamp, String tableName) {
         Format formatter = new SimpleDateFormat("yyyyMMddHHmmss");
         String date = formatter.format(new Date(EnvironmentEdgeManager.currentTimeMillis()));
         String upgradingFrom = getVersion(currentSystemTableTimestamp);
-        return "SNAPSHOT_" + tableString + "_" + upgradingFrom + "_TO_" + CURRENT_CLIENT_VERSION + "_" + date;
+        return String.format("SNAPSHOT_%s_%s_TO_%s_%s", tableName,
+            upgradingFrom, CURRENT_CLIENT_VERSION, date);
     }
     
     public static boolean isNoUpgradeSet(Properties props) {
@@ -2450,5 +2563,63 @@ public class UpgradeUtil {
     
     public static void doNotUpgradeOnFirstConnection(Properties props) {
         props.setProperty(DO_NOT_UPGRADE, String.valueOf(true));
+    }
+
+    public static boolean isUpdateViewIndexIdColumnDataTypeFromShortToLongNeeded(
+            PhoenixConnection metaConnection, byte[] rowKey, byte[] syscatBytes) {
+        try (Table sysTable = metaConnection.getQueryServices().getTable(syscatBytes)) {
+            Scan s = new Scan();
+            s.setRowPrefixFilter(rowKey);
+            s.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                    PhoenixDatabaseMetaData.DATA_TYPE_BYTES);
+            ResultScanner scanner = sysTable.getScanner(s);
+            Result result = scanner.next();
+            Cell cell = result.getColumnLatestCell(
+                    PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                    PhoenixDatabaseMetaData.DATA_TYPE_BYTES);
+            return Bytes.compareTo(CellUtil.cloneValue(cell),
+                    PInteger.INSTANCE.toBytes(Types.SMALLINT)) == 0 ? true : false;
+        } catch (Exception e) {
+            LOGGER.error(String.format(
+                    "Checking VIEW_INDEX_ID data type for upgrade failed: %s. ", e.getMessage()));
+        }
+        return false;
+    }
+
+    public static void updateViewIndexIdColumnDataTypeFromShortToLong(
+            PhoenixConnection metaConnection, byte[] rowKey, byte[] syscatBytes) {
+        try(Table sysTable = metaConnection.getQueryServices().getTable(syscatBytes)) {
+            KeyValue viewIndexIdKV = new KeyValue(rowKey,
+                    PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                    PhoenixDatabaseMetaData.DATA_TYPE_BYTES,
+                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
+                    PInteger.INSTANCE.toBytes(Types.BIGINT));
+            Put viewIndexIdPut = new Put(rowKey);
+            viewIndexIdPut.add(viewIndexIdKV);
+            sysTable.put(viewIndexIdPut);
+            LOGGER.info("Updated VIEW_INDEX_ID data type from SMALLINT TO BIGINT.");
+        } catch (Exception e) {
+            LOGGER.error(String.format(
+                    "Upgrade/change VIEW_INDEX_ID data type failed: %s. ",e.getMessage()));
+        }
+    }
+
+    //When upgrading to Phoenix 4.16 or 5.1, make each existing table's DDL timestamp equal to its
+    // last updated row timestamp.
+    public static void bootstrapLastDDLTimestamp(Connection metaConnection) throws SQLException  {
+        String pkCols = TENANT_ID + ", " + TABLE_SCHEM +
+            ", " + TABLE_NAME + ", " + COLUMN_NAME + ", " + COLUMN_FAMILY;
+        final String upsertSql =
+            "UPSERT INTO " + SYSTEM_CATALOG_NAME + " (" + pkCols + ", " +
+        LAST_DDL_TIMESTAMP + ")" + " " +
+            "SELECT " + pkCols + ", PHOENIX_ROW_TIMESTAMP() FROM " + SYSTEM_CATALOG_NAME + " " +
+                "WHERE " + TABLE_TYPE + " " + " in " + "('" + PTableType.TABLE.getSerializedValue()
+                + "', '" + PTableType.VIEW.getSerializedValue() + "')";
+        LOGGER.info("Setting DDL timestamps for tables and views to row timestamps");
+        try (PreparedStatement stmt = metaConnection.prepareStatement(upsertSql)) {
+            stmt.execute();
+            metaConnection.commit();
+        }
+        LOGGER.info("Setting DDL timestamps for tables and views is complete");
     }
 }

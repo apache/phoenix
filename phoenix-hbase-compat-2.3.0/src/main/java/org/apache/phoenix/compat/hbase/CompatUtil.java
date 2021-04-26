@@ -21,6 +21,13 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellComparatorImpl;
+import org.apache.hadoop.hbase.MetaTableAccessor;
+import org.apache.hadoop.hbase.RegionMetrics;
+import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
@@ -30,10 +37,18 @@ import org.apache.hadoop.hbase.regionserver.HStore;
 import org.apache.hadoop.hbase.regionserver.StoreFileWriter;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.PermissionStorage;
+import org.apache.hadoop.hbase.util.ChecksumType;
 import org.apache.hbase.thirdparty.com.google.common.collect.ListMultimap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
 
 
 public class CompatUtil {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(
+        CompatUtil.class);
 
     private CompatUtil() {
         //Not to be instantiated
@@ -69,4 +84,59 @@ public class CompatUtil {
             CellComparatorImpl cellComparator) {
         return builder;
     }
+
+    public static Scan getScanForTableName(Connection conn, TableName tableName) {
+        return MetaTableAccessor.getScanForTableName(conn, tableName);
+    }
+
+    /**
+     * HBase 2.3+ has storeRefCount available in RegionMetrics
+     *
+     * @param admin Admin instance
+     * @return true if any region has refCount leakage
+     * @throws IOException if something went wrong while connecting to Admin
+     */
+    public synchronized static boolean isAnyStoreRefCountLeaked(Admin admin)
+            throws IOException {
+        int retries = 5;
+        while (retries > 0) {
+            boolean isStoreRefCountLeaked = isStoreRefCountLeaked(admin);
+            if (!isStoreRefCountLeaked) {
+                return false;
+            }
+            retries--;
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                LOGGER.error("Interrupted while sleeping", e);
+                break;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isStoreRefCountLeaked(Admin admin)
+            throws IOException {
+        for (ServerName serverName : admin.getRegionServers()) {
+            for (RegionMetrics regionMetrics : admin.getRegionMetrics(serverName)) {
+                int regionTotalRefCount = regionMetrics.getStoreRefCount();
+                if (regionTotalRefCount > 0) {
+                    LOGGER.error("Region {} has refCount leak. Total refCount"
+                            + " of all storeFiles combined for the region: {}",
+                        regionMetrics.getNameAsString(), regionTotalRefCount);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static ChecksumType getChecksumType(Configuration conf) {
+        return HStore.getChecksumType(conf);
+    }
+
+    public static int getBytesPerChecksum(Configuration conf) {
+        return HStore.getBytesPerChecksum(conf);
+    }
+
 }

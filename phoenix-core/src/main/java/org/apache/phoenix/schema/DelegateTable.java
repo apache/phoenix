@@ -157,6 +157,11 @@ public class DelegateTable implements PTable {
     }
 
     @Override
+    public PName getBaseTableLogicalName() {
+        return delegate.getBaseTableLogicalName();
+    }
+
+    @Override
     public List<PName> getPhysicalNames() {
         return delegate.getPhysicalNames();
     }
@@ -164,6 +169,11 @@ public class DelegateTable implements PTable {
     @Override
     public PName getPhysicalName() {
         return delegate.getPhysicalName();
+    }
+
+    @Override
+    public PName getPhysicalName(boolean returnColValueFromSyscat) {
+        return delegate.getPhysicalName(returnColValueFromSyscat);
     }
 
     @Override
@@ -348,6 +358,16 @@ public class DelegateTable implements PTable {
 
     @Override public boolean hasViewModifiedPhoenixTTL() {
         return delegate.hasViewModifiedPhoenixTTL();
+    }
+
+    @Override
+    public Long getLastDDLTimestamp() {
+        return delegate.getLastDDLTimestamp();
+    }
+
+    @Override
+    public boolean isChangeDetectionEnabled() {
+        return delegate.isChangeDetectionEnabled();
     }
 
     @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }

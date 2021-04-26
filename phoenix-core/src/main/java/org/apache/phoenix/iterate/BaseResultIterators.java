@@ -71,6 +71,8 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
@@ -79,7 +81,6 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
-import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.ScanPlan;
@@ -132,10 +133,10 @@ import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Function;
-import com.google.common.base.Predicate;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.base.Predicate;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 /**
@@ -279,7 +280,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
 
             if (perScanLimit != null) {
-                ScanUtil.andFilterAtEnd(scan, new PageFilter(perScanLimit));
+                if (scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER) == null) {
+                    ScanUtil.andFilterAtEnd(scan, new PageFilter(perScanLimit));
+                } else {
+                    // if we have a local index filter and a limit, handle the limit after the filter
+                    // we cast the limit to a long even though it passed as an Integer so that
+                    // if we need extend this in the future the serialization is unchanged
+                    scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_LIMIT, Bytes.toBytes((long)perScanLimit));
+                }
             }
             
             if(offset!=null){
@@ -403,6 +411,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         ImmutableStorageScheme storageScheme = table.getImmutableStorageScheme();
         BitSet trackedColumnsBitset = isPossibleToUseEncodedCQFilter(encodingScheme, storageScheme) && !hasDynamicColumns(table) ? new BitSet(10) : null;
         boolean filteredColumnNotInProjection = false;
+
         for (Pair<byte[], byte[]> whereCol : context.getWhereConditionColumns()) {
             byte[] filteredFamily = whereCol.getFirst();
             if (!(familyMap.containsKey(filteredFamily))) {
@@ -442,22 +451,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 preventSeekToColumn = referencedCfCount == 1 && hbaseServerVersion < MIN_SEEK_TO_COLUMN_VERSION;
             }
         }
-        for (Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
-            ImmutableBytesPtr cf = new ImmutableBytesPtr(entry.getKey());
-            NavigableSet<byte[]> qs = entry.getValue();
-            NavigableSet<ImmutableBytesPtr> cols = null;
-            if (qs != null) {
-                cols = new TreeSet<ImmutableBytesPtr>();
-                for (byte[] q : qs) {
-                    cols.add(new ImmutableBytesPtr(q));
-                    if (trackedColumnsBitset != null) {
-                        int qualifier = encodingScheme.decode(q);
-                        trackedColumnsBitset.set(qualifier);
-                    }
-                }
-            }
-            columnsTracker.put(cf, cols);
-        }
         // Making sure that where condition CFs are getting scanned at HRS.
         for (Pair<byte[], byte[]> whereCol : context.getWhereConditionColumns()) {
             byte[] family = whereCol.getFirst();
@@ -489,6 +482,26 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     scan.addColumn(family, whereCol.getSecond());
                 }
             }
+        }
+        for (Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
+            ImmutableBytesPtr cf = new ImmutableBytesPtr(entry.getKey());
+            NavigableSet<byte[]> qs = entry.getValue();
+            NavigableSet<ImmutableBytesPtr> cols = null;
+            if (qs != null) {
+                cols = new TreeSet<ImmutableBytesPtr>();
+                for (byte[] q : qs) {
+                    cols.add(new ImmutableBytesPtr(q));
+                    if (trackedColumnsBitset != null) {
+                        int qualifier = encodingScheme.decode(q);
+                        trackedColumnsBitset.set(qualifier);
+                    }
+                }
+            } else {
+                // cannot use EncodedQualifiersColumnProjectionFilter in this case
+                // since there's an unknown set of qualifiers (cf.*)
+                trackedColumnsBitset = null;
+            }
+            columnsTracker.put(cf, cols);
         }
         if (!columnsTracker.isEmpty()) {
             if (preventSeekToColumn) {
@@ -1280,7 +1293,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         .getInt(QueryConstants.HASH_JOIN_CACHE_RETRIES, QueryConstants.DEFAULT_HASH_JOIN_CACHE_RETRIES));
     }
 
-    class ScanWrapper {
+    private static class ScanWrapper {
         Scan scan;
 
         public Scan getScan() {
@@ -1564,6 +1577,21 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     @Override
     public void explain(List<String> planSteps) {
+        explainUtil(planSteps, null);
+    }
+
+    /**
+     * Utility to generate ExplainPlan steps.
+     *
+     * @param planSteps Add generated plan in list of planSteps. This argument
+     *     is used to provide planSteps as whole statement consisting of
+     *     list of Strings.
+     * @param explainPlanAttributesBuilder Add generated plan in attributes
+     *     object. Having an API to provide planSteps as an object is easier
+     *     while comparing individual attributes of ExplainPlan.
+     */
+    private void explainUtil(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
         boolean displayChunkCount = context.getConnection().getQueryServices().getProps().getBoolean(
                 QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB,
                 QueryServicesOptions.DEFAULT_EXPLAIN_CHUNK_COUNT);
@@ -1574,32 +1602,65 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     QueryServices.EXPLAIN_ROW_COUNT_ATTRIB,
                     QueryServicesOptions.DEFAULT_EXPLAIN_ROW_COUNT);
             buf.append(this.splits.size()).append("-CHUNK ");
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setSplitsChunk(this.splits.size());
+            }
             if (displayRowCount && estimatedRows != null) {
                 buf.append(estimatedRows).append(" ROWS ");
                 buf.append(estimatedSize).append(" BYTES ");
+                if (explainPlanAttributesBuilder != null) {
+                    explainPlanAttributesBuilder.setEstimatedRows(estimatedRows);
+                    explainPlanAttributesBuilder.setEstimatedSizeInBytes(estimatedSize);
+                }
             }
         }
-        buf.append(getName()).append(" ").append(size()).append("-WAY ");
-        
-        if(this.plan.getStatement().getTableSamplingRate()!=null){
-        	buf.append(plan.getStatement().getTableSamplingRate()/100D).append("-").append("SAMPLED ");
+        String iteratorTypeAndScanSize = getName() + " " + size() + "-WAY";
+        buf.append(iteratorTypeAndScanSize).append(" ");
+        if (explainPlanAttributesBuilder != null) {
+            explainPlanAttributesBuilder.setIteratorTypeAndScanSize(
+                iteratorTypeAndScanSize);
+        }
+
+        if (this.plan.getStatement().getTableSamplingRate() != null) {
+            Double samplingRate = plan.getStatement().getTableSamplingRate() / 100D;
+            buf.append(samplingRate).append("-").append("SAMPLED ");
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setSamplingRate(samplingRate);
+            }
         }
         try {
             if (plan.useRoundRobinIterator()) {
                 buf.append("ROUND ROBIN ");
+                if (explainPlanAttributesBuilder != null) {
+                    explainPlanAttributesBuilder.setUseRoundRobinIterator(true);
+                }
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
 
-        if(this.plan instanceof ScanPlan) {
+        if (this.plan instanceof ScanPlan) {
             ScanPlan scanPlan = (ScanPlan) this.plan;
-            if(scanPlan.getRowOffset().isPresent()) {
-                buf.append("With RVC Offset " + "0x" + Hex.encodeHexString(scanPlan.getRowOffset().get()) + " ");
+            if (scanPlan.getRowOffset().isPresent()) {
+                String rowOffset =
+                    Hex.encodeHexString(scanPlan.getRowOffset().get());
+                buf.append("With RVC Offset " + "0x")
+                    .append(rowOffset)
+                    .append(" ");
+                if (explainPlanAttributesBuilder != null) {
+                    explainPlanAttributesBuilder.setHexStringRVCOffset(
+                        "0x" + rowOffset);
+                }
             }
         }
 
-        explain(buf.toString(),planSteps);
+        explain(buf.toString(), planSteps, explainPlanAttributesBuilder);
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        explainUtil(planSteps, explainPlanAttributesBuilder);
     }
 
     public Long getEstimatedRowCount() {

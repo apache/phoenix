@@ -21,18 +21,23 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Array;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Statement;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 public class HashJoinMoreIT extends ParallelStatsDisabledIT {
@@ -910,6 +915,117 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
         } finally {
             conn.close();
+        }
+    }
+
+    @Test
+    public void testHashJoinBug6232() throws Exception {
+        Connection conn = null;
+        try {
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            conn = DriverManager.getConnection(getUrl(), props);
+
+            String tableName1 = generateUniqueName();
+            String tableName2 = generateUniqueName();
+
+            String sql="CREATE TABLE IF NOT EXISTS "+tableName1+" ( "+
+                    "AID INTEGER PRIMARY KEY,"+
+                    "AGE INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (1,11)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (2,22)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (3,33)");
+            conn.commit();
+
+            sql="CREATE TABLE IF NOT EXISTS "+tableName2+" ( "+
+                    "BID INTEGER PRIMARY KEY,"+
+                    "CODE INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (1,66)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (2,11)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (3,22)");
+            conn.commit();
+
+            //test for LHS is a flat table and pushed down NonCorrelated subquery as preFiter.
+            //would use HashJoin.
+            sql="select a.aid from " + tableName1 + " a inner join  "+
+                    "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
+                    "where a.age > (select code from " + tableName2 + " c where c.bid = 2) order by a.aid";
+            ResultSet rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 2);
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(!rs.next());
+
+            //test for LHS is a subselect and pushed down NonCorrelated subquery as preFiter.
+            //would use HashJoin.
+            sql = "select a.aid from (select aid,age from " + tableName1 + " where age >=11 and age<=33) a inner join  "+
+                    "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
+                    "where a.age > (select code from " + tableName2 + " c where c.bid = 2) order by a.aid";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 2);
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(!rs.next());
+
+            //test for LHS is a subselect and pushed down aggregate NonCorrelated subquery as preFiter.
+            //would use HashJoin.
+            sql = "select a.aid from (select aid,age from " + tableName1 + " where age >=11 and age<=33) a inner join  "+
+                    "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
+                    "where a.age > (select max(code) from " + tableName2 + " c where c.bid >= 1) order by a.aid";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertTrue(!rs.next());
+
+            /**
+             * test for LHS is a subselect and has an aggregate Correlated subquery as preFiter,
+             * but the aggregate Correlated subquery would be rewrite as HashJoin before
+             * {@link JoinCompiler#compile}.
+             */
+            sql = "select a.aid from (select aid,age from " + tableName1 + " where age >=11 and age<=33) a inner join  "+
+                    "(select bid,code from "  + tableName2 + " where code > 10 limit 3) b on a.aid = b.bid "+
+                    "where a.age > (select max(code) from " + tableName2 + " c where c.bid = a.aid) order by a.aid";
+            rs = conn.prepareStatement(sql).executeQuery();
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 2);
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(!rs.next());
+
+            String tableName3 = generateUniqueName();
+            sql ="CREATE TABLE " + tableName3 + " (" +
+                    "      id INTEGER NOT NULL," +
+                    "      test_id INTEGER," +
+                    "      lastchanged VARCHAR," +
+                    "      CONSTRAINT my_pk PRIMARY KEY (id))";
+            conn.createStatement().execute(sql);
+            conn.createStatement().execute("UPSERT INTO " + tableName3 + "(id,test_id,lastchanged) VALUES (0,100,'2000-01-01 00:00:00')");
+            conn.createStatement().execute("UPSERT INTO " + tableName3 + "(id,test_id,lastchanged) VALUES (1,101,'2000-01-01 00:00:00')");
+            conn.createStatement().execute("UPSERT INTO " + tableName3 + "(id,test_id,lastchanged) VALUES (2,100,'2011-11-11 11:11:11')");
+            conn.commit();
+
+            //test for LHS is Correlated subquery,the RHS would be as the probe side of Hash join.
+            sql= "SELECT AAA.* FROM " +
+                    "(SELECT id, test_id, lastchanged FROM " + tableName3 + " T " +
+                    "  WHERE lastchanged = ( SELECT max(lastchanged) FROM " + tableName3 + " WHERE test_id = T.test_id )) AAA " +
+                    "inner join " +
+                    "(SELECT id FROM " + tableName3 + ") BBB " +
+                    "on AAA.id = BBB.id order by AAA.id";
+            rs = conn.prepareStatement(sql).executeQuery();
+            TestUtil.assertResultSet(
+                    rs,
+                    new Object[][] {
+                        {1,101,"2000-01-01 00:00:00"},
+                        {2,100,"2011-11-11 11:11:11"}});
+        } finally {
+            if(conn!=null) {
+                conn.close();
+            }
         }
     }
 }

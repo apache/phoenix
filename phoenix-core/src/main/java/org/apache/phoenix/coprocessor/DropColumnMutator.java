@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ExtendedCellBuilder;
 import org.apache.hadoop.hbase.client.Delete;
@@ -132,23 +132,27 @@ public class DropColumnMutator implements ColumnMutator {
                 if (existingViewColumn != null && view.getViewStatement() != null) {
                     ParseNode viewWhere =
                             new SQLParser(view.getViewStatement()).parseQuery().getWhere();
-                    PhoenixConnection conn = QueryUtil.getConnectionOnServer(conf).unwrap(
-                            PhoenixConnection.class);
-                    PhoenixStatement statement = new PhoenixStatement(conn);
-                    TableRef baseTableRef = new TableRef(view);
-                    ColumnResolver columnResolver = FromCompiler.getResolver(baseTableRef);
-                    StatementContext context = new StatementContext(statement, columnResolver);
-                    Expression whereExpression = WhereCompiler.compile(context, viewWhere);
-                    Expression colExpression =
-                            new ColumnRef(baseTableRef, existingViewColumn.getPosition())
-                                    .newColumnExpression();
-                    MetaDataEndpointImpl.ColumnFinder columnFinder =
-                            new MetaDataEndpointImpl.ColumnFinder(colExpression);
-                    whereExpression.accept(columnFinder);
-                    if (columnFinder.getColumnFound()) {
-                        return new MetaDataProtocol.MetaDataMutationResult(
+                    try (PhoenixConnection conn =
+                            QueryUtil.getConnectionOnServer(conf)
+                                .unwrap(PhoenixConnection.class)) {
+                        PhoenixStatement statement = new PhoenixStatement(conn);
+                        TableRef baseTableRef = new TableRef(view);
+                        ColumnResolver columnResolver =
+                            FromCompiler.getResolver(baseTableRef);
+                        StatementContext context =
+                            new StatementContext(statement, columnResolver);
+                        Expression whereExpression =
+                            WhereCompiler.compile(context, viewWhere);
+                        Expression colExpression = new ColumnRef(baseTableRef,
+                            existingViewColumn.getPosition()).newColumnExpression();
+                        MetaDataEndpointImpl.ColumnFinder columnFinder =
+                          new MetaDataEndpointImpl.ColumnFinder(colExpression);
+                        whereExpression.accept(columnFinder);
+                        if (columnFinder.getColumnFound()) {
+                            return new MetaDataProtocol.MetaDataMutationResult(
                                 MetaDataProtocol.MutationCode.UNALLOWED_TABLE_MUTATION,
                                 EnvironmentEdgeManager.currentTimeMillis(), table);
+                        }
                     }
                 }
 
@@ -170,15 +174,17 @@ public class DropColumnMutator implements ColumnMutator {
                                                          List<Region.RowLock> locks,
                                                          long clientTimeStamp,
                                                          long clientVersion,
-                                                         ExtendedCellBuilder extendedCellBuilder)
-                    throws SQLException {
-
+                                                         ExtendedCellBuilder extendedCellBuilder,
+                                                         final boolean isDroppingColumns)
+        throws SQLException {
         byte[] tenantId = rowKeyMetaData[TENANT_ID_INDEX];
         byte[] schemaName = rowKeyMetaData[SCHEMA_NAME_INDEX];
         byte[] tableName = rowKeyMetaData[TABLE_NAME_INDEX];
         boolean isView = table.getType() == PTableType.VIEW;
         boolean deletePKColumn = false;
 
+        byte[] tableHeaderRowKey = SchemaUtil.getTableKey(tenantId,
+            schemaName, tableName);
         List<Mutation> additionalTableMetaData = Lists.newArrayList();
         ListIterator<Mutation> iterator = tableMetaData.listIterator();
         while (iterator.hasNext()) {
@@ -192,7 +198,7 @@ public class DropColumnMutator implements ColumnMutator {
                         && Bytes.compareTo(tableName, rowKeyMetaData[TABLE_NAME_INDEX]) == 0) {
                     column = MetaDataUtil.getColumn(pkCount, rowKeyMetaData, table);
                 } else {
-                    for(int i = 0; i < table.getIndexes().size(); i++) {
+                    for (int i = 0; i < table.getIndexes().size(); i++) {
                         PTableImpl indexTable = (PTableImpl) table.getIndexes().get(i);
                         byte[] indexTableName = indexTable.getTableName().getBytes();
                         byte[] indexSchema = indexTable.getSchemaName().getBytes();
@@ -268,6 +274,17 @@ public class DropColumnMutator implements ColumnMutator {
             }
 
         }
+        //We're changing the application-facing schema by dropping a column, so update the DDL
+        // timestamp to current _server_ timestamp
+        if (MetaDataUtil.isTableDirectlyQueried(table.getType())) {
+            long serverTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+            additionalTableMetaData.add(MetaDataUtil.getLastDDLTimestampUpdate(tableHeaderRowKey,
+                clientTimeStamp, serverTimestamp));
+        }
+        //we don't need to update the DDL timestamp for any child views we may have, because
+        // when we look up a PTable for any of those child views, we'll take the max timestamp
+        // of the view and all its ancestors. This is true
+        // whether the view is diverged or not.
         tableMetaData.addAll(additionalTableMetaData);
         if (deletePKColumn) {
             if (table.getPKColumns().size() == 1) {

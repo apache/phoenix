@@ -30,8 +30,8 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.phoenix.query.KeyRange;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Input split class to hold the lower and upper bound range. {@link KeyRange}
@@ -51,7 +51,7 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
     
    /**
     * 
-    * @param keyRange
+    * @param scans
     */
     public PhoenixInputSplit(final List<Scan> scans) {
         this(scans, 0, null);

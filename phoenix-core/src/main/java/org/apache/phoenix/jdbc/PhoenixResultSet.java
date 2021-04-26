@@ -48,7 +48,7 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
 
-import com.google.common.primitives.Bytes;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Bytes;
 import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.hadoop.hbase.Cell;
@@ -95,8 +95,8 @@ import org.apache.phoenix.util.SQLCloseable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Throwables;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.phoenix.util.SchemaUtil;
 
 /**

@@ -23,11 +23,12 @@ import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
+import org.apache.phoenix.mapreduce.PhoenixMultiViewInputFormat;
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
+import org.apache.phoenix.mapreduce.PhoenixTTLTool;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 
 import java.io.IOException;
-import java.util.UUID;
 
 /**
  * Utility class for setting Configuration parameters for the Map Reduce job
@@ -127,6 +128,21 @@ public final class PhoenixMapReduceUtil {
 
     /**
      *
+     * @param job MR job instance
+     * @param tool PhoenixTtlTool for Phoenix TTL deletion MR job
+     */
+    public static void setInput(final Job job, PhoenixTTLTool tool) {
+        Configuration configuration = job.getConfiguration();
+        job.setInputFormatClass(PhoenixMultiViewInputFormat.class);
+        tool.setPhoenixTTLJobInputConfig(configuration);
+        PhoenixConfigurationUtil.setSchemaType(configuration,
+                PhoenixConfigurationUtil.SchemaType.QUERY);
+        PhoenixConfigurationUtil.setMultiInputMapperSplitSize(configuration, tool.getSplitSize());
+        PhoenixConfigurationUtil.setMultiViewQueryMoreSplitSize(configuration, tool.getBatchSize());
+    }
+
+    /**
+     *
      * @param job
      * @param inputClass DBWritable class
      * @param snapshotName The name of a snapshot (of a table) to read from
@@ -164,8 +180,7 @@ public final class PhoenixMapReduceUtil {
         PhoenixConfigurationUtil.setInputClass(configuration, inputClass);
         PhoenixConfigurationUtil.setSnapshotNameKey(configuration, snapshotName);
         PhoenixConfigurationUtil.setInputTableName(configuration, tableName);
-
-        PhoenixConfigurationUtil.setRestoreDirKey(configuration, new Path(restoreDir, UUID.randomUUID().toString()).toString());
+        PhoenixConfigurationUtil.setRestoreDirKey(configuration, restoreDir.toString());
         PhoenixConfigurationUtil.setSchemaType(configuration, schemaType);
         return configuration;
     }

@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.SystemExitRule;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
@@ -46,6 +47,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Test;
 
 
@@ -73,7 +75,10 @@ public class ConnectionlessTest {
     private static String getUrl() {
         return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + PhoenixRuntime.CONNECTIONLESS;
     }
-    
+
+    @ClassRule
+    public static final SystemExitRule SYSTEM_EXIT_RULE = new SystemExitRule();
+
     @BeforeClass
     public static synchronized void verifyDriverRegistered() throws SQLException {
         assertTrue(DriverManager.getDriver(getUrl()) == PhoenixDriver.INSTANCE);

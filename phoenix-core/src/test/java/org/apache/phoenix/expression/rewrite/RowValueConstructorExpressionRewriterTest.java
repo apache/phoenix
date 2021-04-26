@@ -18,7 +18,7 @@
 
 package org.apache.phoenix.expression.rewrite;
 
-import com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;

@@ -32,8 +32,8 @@ import java.util.List;
 import java.util.Queue;
 import java.util.UUID;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.MinMaxPriorityQueue;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.MinMaxPriorityQueue;
 
 public abstract class BufferedQueue<T> extends AbstractQueue<T> implements SizeAwareQueue<T> {
     private final long thresholdBytes;

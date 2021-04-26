@@ -152,7 +152,7 @@ public class StatisticsWriter implements Closeable {
     }
 
     /**
-     * Update a list of statistics for a given region. If the UPDATE STATISTICS <tablename> query is issued then we use
+     * Update a list of statistics for a given region. If the UPDATE STATISTICS {@code <tablename> } query is issued then we use
      * Upsert queries to update the table If the region gets splitted or the major compaction happens we update using
      * HTable.put()
      * 

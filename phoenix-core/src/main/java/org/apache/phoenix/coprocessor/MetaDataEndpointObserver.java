@@ -68,4 +68,7 @@ public interface MetaDataEndpointObserver extends Coprocessor {
     void preCreateViewAddChildLink(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
             final String tableName) throws IOException;
 
+    void preUpsertTaskDetails(
+          ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+          String tableName) throws IOException;
 }

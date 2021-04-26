@@ -59,16 +59,13 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Splitter;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Splitter;
 
 public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     
     public static final String SCHEMA_NAME = "";
-    public static final String DATA_TABLE_NAME = "T";
-    public static final String INDEX_TABLE_NAME = "I";
     public static final String DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "T");
-    public static final String INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "I");
 
     public QueryOptimizerTest() {
     }
@@ -370,12 +367,12 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         DeleteCompiler compiler = new DeleteCompiler(stmt, null);
         MutationPlan plan = compiler.compile(delete);
         assertEquals("T", plan.getQueryPlan().getTableRef().getTable().getTableName().getString());
-        assertTrue(plan.getClass().getName().contains("ServerSelectDeleteMutationPlan"));
+        assertEquals(plan.getClass(), DeleteCompiler.ServerSelectDeleteMutationPlan.class);
         parser = new SQLParser("DELETE FROM t WHERE v1 = 'foo'");
         delete = (DeleteStatement) parser.parseStatement();
         plan = compiler.compile(delete);
         assertEquals("IDX", plan.getQueryPlan().getTableRef().getTable().getTableName().getString());
-        assertTrue(plan.getClass().getName().contains("ClientSelectDeleteMutationPlan"));
+        assertEquals(plan.getClass(), DeleteCompiler.ClientSelectDeleteMutationPlan.class);
     }
 
     @Test
@@ -515,7 +512,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
             
             // create a tenant specific view if multi-tenant
             if (multitenant) {
-                conn.createStatement().execute("CREATE VIEW ABC_VIEW (ORGANIZATION_ID VARCHAR) AS SELECT * FROM XYZ.ABC");
+                conn.createStatement().execute("CREATE VIEW ABC_VIEW (ORG_ID VARCHAR) AS SELECT * FROM XYZ.ABC");
             }
             
             String expectedColNames = multitenant ? addQuotes(null, "DEC,A_STRING_ARRAY") : addQuotes(null,"ORGANIZATION_ID,DEC,A_STRING_ARRAY");

@@ -254,4 +254,14 @@ public class PhoenixMetaDataCoprocessorHost
             int sequence, Configuration conf) {
         return new PhoenixMetaDataControllerEnvironment(env, instance, priority, sequence, conf);
     }
+
+    void preUpsertTaskDetails(final String tableName) throws IOException {
+        execOperation(new PhoenixObserverOperation() {
+            @Override
+            public void call(MetaDataEndpointObserver observer)
+                    throws IOException {
+                observer.preUpsertTaskDetails(this, tableName);
+            }
+        });
+    }
 }

@@ -19,6 +19,9 @@ package org.apache.phoenix.hbase.index;
 
 import java.io.IOException;
 
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 
@@ -35,6 +38,7 @@ public interface ValueGetter {
    * @throws IOException if there is an error accessing the underlying data storage
    */
   public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) throws IOException;
+  public KeyValue getLatestKeyValue(ColumnReference ref, long ts) throws IOException;
   
   public byte[] getRowKey();
 

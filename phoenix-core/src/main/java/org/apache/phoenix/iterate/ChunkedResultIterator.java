@@ -26,6 +26,8 @@ import java.util.List;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.execute.MutationState;
@@ -41,7 +43,7 @@ import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * {@code PeekingResultIterator} implementation that loads data in chunks. This is intended for
@@ -132,6 +134,12 @@ public class ChunkedResultIterator implements PeekingResultIterator {
     }
 
     @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        resultIterator.explain(planSteps, explainPlanAttributesBuilder);
+    }
+
+    @Override
     public void close() throws SQLException {
         resultIterator.close();
     }
@@ -207,6 +215,12 @@ public class ChunkedResultIterator implements PeekingResultIterator {
         @Override
         public void explain(List<String> planSteps) {
             delegate.explain(planSteps);
+        }
+
+        @Override
+        public void explain(List<String> planSteps,
+                ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+            delegate.explain(planSteps, explainPlanAttributesBuilder);
         }
 
         @Override

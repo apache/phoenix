@@ -17,54 +17,71 @@
  */
 package org.apache.phoenix.end2end;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
+import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.FutureTask;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
-import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.UpgradeInProgressException;
 import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -77,250 +94,6 @@ import org.junit.experimental.categories.Category;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class UpgradeIT extends ParallelStatsDisabledIT {
-
-    @Test
-    public void testMapTableToNamespaceDuringUpgrade()
-            throws SQLException, IOException, IllegalArgumentException, InterruptedException {
-        String[] strings = new String[] { "a", "b", "c", "d" };
-
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String schemaName = "TEST";
-            String phoenixFullTableName = schemaName + "." + generateUniqueName();
-            String indexName = "IDX_" + generateUniqueName();
-            String localIndexName = "LIDX_" + generateUniqueName();
-
-            String viewName = "VIEW_" + generateUniqueName();
-            String viewIndexName = "VIDX_" + generateUniqueName();
-
-            String[] tableNames = new String[] { phoenixFullTableName, schemaName + "." + indexName,
-                    schemaName + "." + localIndexName, "diff." + viewName, "test." + viewName, viewName};
-            String[] viewIndexes = new String[] { "diff." + viewIndexName, "test." + viewIndexName };
-            conn.createStatement().execute("CREATE TABLE " + phoenixFullTableName
-                    + "(k VARCHAR PRIMARY KEY, v INTEGER, f INTEGER, g INTEGER NULL, h INTEGER NULL)");
-            PreparedStatement upsertStmt = conn
-                    .prepareStatement("UPSERT INTO " + phoenixFullTableName + " VALUES(?, ?, 0, 0, 0)");
-            int i = 1;
-            for (String str : strings) {
-                upsertStmt.setString(1, str);
-                upsertStmt.setInt(2, i++);
-                upsertStmt.execute();
-            }
-            conn.commit();
-            // creating local index
-            conn.createStatement()
-                    .execute("create local index " + localIndexName + " on " + phoenixFullTableName + "(K)");
-            // creating global index
-            conn.createStatement().execute("create index " + indexName + " on " + phoenixFullTableName + "(k)");
-            // creating view in schema 'diff'
-            conn.createStatement().execute("CREATE VIEW diff." + viewName + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
-            // creating view in schema 'test'
-            conn.createStatement().execute("CREATE VIEW test." + viewName + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
-            conn.createStatement().execute("CREATE VIEW " + viewName + "(col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
-            // Creating index on views
-            conn.createStatement().execute("create index " + viewIndexName + "  on diff." + viewName + "(col)");
-            conn.createStatement().execute("create index " + viewIndexName + " on test." + viewName + "(col)");
-
-            // validate data
-            for (String tableName : tableNames) {
-                ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName);
-                for (String str : strings) {
-                    assertTrue(rs.next());
-                    assertEquals(str, rs.getString(1));
-                }
-            }
-
-            // validate view Index data
-            for (String viewIndex : viewIndexes) {
-                ResultSet rs = conn.createStatement().executeQuery("select * from " + viewIndex);
-                for (String str : strings) {
-                    assertTrue(rs.next());
-                    assertEquals(str, rs.getString(2));
-                }
-            }
-
-            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            assertTrue(admin.tableExists(TableName.valueOf(phoenixFullTableName)));
-            assertTrue(admin.tableExists(TableName.valueOf(schemaName + QueryConstants.NAME_SEPARATOR + indexName)));
-            assertTrue(admin.tableExists(TableName.valueOf(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(phoenixFullTableName)))));
-            Properties props = new Properties();
-            props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
-            props.setProperty(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, Boolean.toString(false));
-            admin.close();
-            PhoenixConnection phxConn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
-            UpgradeUtil.upgradeTable(phxConn, phoenixFullTableName);
-            phxConn.close();
-            props = new Properties();
-            phxConn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
-            // purge MetaDataCache except for system tables
-            phxConn.getMetaDataCache().pruneTables(new PMetaData.Pruner() {
-                @Override public boolean prune(PTable table) {
-                    return table.getType() != PTableType.SYSTEM;
-                }
-
-                @Override public boolean prune(PFunction function) {
-                    return false;
-                }
-            });
-            admin = phxConn.getQueryServices().getAdmin();
-            String hbaseTableName = SchemaUtil.getPhysicalTableName(Bytes.toBytes(phoenixFullTableName), true)
-                    .getNameAsString();
-            assertTrue(admin.tableExists(TableName.valueOf(hbaseTableName)));
-            assertTrue(admin.tableExists(TableName.valueOf(schemaName + QueryConstants.NAMESPACE_SEPARATOR + indexName)));
-            assertTrue(admin.tableExists(TableName.valueOf(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(hbaseTableName)))));
-            i = 0;
-            // validate data
-            for (String tableName : tableNames) {
-                ResultSet rs = phxConn.createStatement().executeQuery("select * from " + tableName);
-                for (String str : strings) {
-                    assertTrue(rs.next());
-                    assertEquals(str, rs.getString(1));
-                }
-            }
-            // validate view Index data
-            for (String viewIndex : viewIndexes) {
-                ResultSet rs = conn.createStatement().executeQuery("select * from " + viewIndex);
-                for (String str : strings) {
-                    assertTrue(rs.next());
-                    assertEquals(str, rs.getString(2));
-                }
-            }
-            PName tenantId = phxConn.getTenantId();
-            PName physicalName = PNameFactory.newName(hbaseTableName);
-            String newSchemaName = MetaDataUtil.getViewIndexSequenceSchemaName(physicalName, true);
-            String newSequenceName = MetaDataUtil.getViewIndexSequenceName(physicalName, tenantId, true);
-            verifySequenceValue(null, newSequenceName, newSchemaName, Short.MIN_VALUE + 3);
-            admin.close();
-        }
-    }
-
-    @Test
-    public void testMapMultiTenantTableToNamespaceDuringUpgrade() throws SQLException, SnapshotCreationException,
-            IllegalArgumentException, IOException, InterruptedException {
-        String[] strings = new String[] { "a", "b", "c", "d" };
-        String schemaName1 = "S_" +generateUniqueName(); // TEST
-        String schemaName2 = "S_" +generateUniqueName(); // DIFF
-        String phoenixFullTableName = schemaName1 + "." + generateUniqueName();
-        String hbaseTableName = SchemaUtil.getPhysicalTableName(Bytes.toBytes(phoenixFullTableName), true)
-                .getNameAsString();
-        String indexName = "IDX_" + generateUniqueName();
-        String viewName = "V_" + generateUniqueName();
-        String viewName1 = "V1_" + generateUniqueName();
-        String viewIndexName = "V_IDX_" + generateUniqueName();
-        String tenantViewIndexName = "V1_IDX_" + generateUniqueName();
-
-        String[] tableNames = new String[] { phoenixFullTableName, schemaName2 + "." + viewName1, schemaName1 + "." + viewName1, viewName1 };
-        String[] viewIndexes = new String[] { schemaName1 + "." + viewIndexName, schemaName2 + "." + viewIndexName };
-        String[] tenantViewIndexes = new String[] { schemaName1 + "." + tenantViewIndexName, schemaName2 + "." + tenantViewIndexName };
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement().execute("CREATE TABLE " + phoenixFullTableName
-                    + "(k VARCHAR not null, v INTEGER not null, f INTEGER, g INTEGER NULL, h INTEGER NULL CONSTRAINT pk PRIMARY KEY(k,v)) MULTI_TENANT=true");
-            PreparedStatement upsertStmt = conn
-                    .prepareStatement("UPSERT INTO " + phoenixFullTableName + " VALUES(?, ?, 0, 0, 0)");
-            int i = 1;
-            for (String str : strings) {
-                upsertStmt.setString(1, str);
-                upsertStmt.setInt(2, i++);
-                upsertStmt.execute();
-            }
-            conn.commit();
-
-            // creating global index
-            conn.createStatement().execute("create index " + indexName + " on " + phoenixFullTableName + "(f)");
-            // creating view in schema 'diff'
-            conn.createStatement().execute("CREATE VIEW " + schemaName2 + "." + viewName + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
-            // creating view in schema 'test'
-            conn.createStatement().execute("CREATE VIEW " + schemaName1 + "." + viewName + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
-            conn.createStatement().execute("CREATE VIEW " + viewName + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
-            // Creating index on views
-            conn.createStatement().execute("create local index " + viewIndexName + " on " + schemaName2 + "." + viewName + "(col)");
-            conn.createStatement().execute("create local index " + viewIndexName + " on " + schemaName1 + "." + viewName + "(col)");
-        }
-        Properties props = new Properties();
-        String tenantId = strings[0];
-        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            PreparedStatement upsertStmt = conn
-                    .prepareStatement("UPSERT INTO " + phoenixFullTableName + "(k,v,f,g,h)  VALUES(?, ?, 0, 0, 0)");
-            int i = 1;
-            for (String str : strings) {
-                upsertStmt.setString(1, str);
-                upsertStmt.setInt(2, i++);
-                upsertStmt.execute();
-            }
-            conn.commit();
-            // creating view in schema 'diff'
-            conn.createStatement()
-                    .execute("CREATE VIEW " + schemaName2 + "." + viewName1 + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
-            // creating view in schema 'test'
-            conn.createStatement()
-                    .execute("CREATE VIEW " + schemaName1 + "." + viewName1 + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
-            conn.createStatement().execute("CREATE VIEW " + viewName1 + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
-            // Creating index on views
-            conn.createStatement().execute("create index " + tenantViewIndexName + " on " + schemaName2 + "." + viewName1 + "(col)");
-            conn.createStatement().execute("create index " + tenantViewIndexName + " on " + schemaName1 + "." + viewName1 + "(col)");
-        }
-
-        props = new Properties();
-        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
-        props.setProperty(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, Boolean.toString(false));
-        PhoenixConnection phxConn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
-        UpgradeUtil.upgradeTable(phxConn, phoenixFullTableName);
-        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-        phxConn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
-        // purge MetaDataCache except for system tables
-        phxConn.getMetaDataCache().pruneTables(new PMetaData.Pruner() {
-            @Override public boolean prune(PTable table) {
-                return table.getType() != PTableType.SYSTEM;
-            }
-
-            @Override public boolean prune(PFunction function) {
-                return false;
-            }
-        });
-        int i = 1;
-        String indexPhysicalTableName = Bytes
-                .toString(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(hbaseTableName)));
-        // validate data with tenant
-        for (String tableName : tableNames) {
-            assertTableUsed(phxConn, tableName, hbaseTableName);
-            ResultSet rs = phxConn.createStatement().executeQuery("select * from " + tableName);
-            assertTrue(rs.next());
-            do {
-                assertEquals(i++, rs.getInt(1));
-            } while (rs.next());
-            i = 1;
-        }
-        // validate view Index data
-        for (String viewIndex : tenantViewIndexes) {
-            assertTableUsed(phxConn, viewIndex, indexPhysicalTableName);
-            ResultSet rs = phxConn.createStatement().executeQuery("select * from " + viewIndex);
-            assertTrue(rs.next());
-            do {
-                assertEquals(i++, rs.getInt(2));
-            } while (rs.next());
-            i = 1;
-        }
-        phxConn.close();
-        props.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
-        phxConn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
-
-        // validate view Index data
-        for (String viewIndex : viewIndexes) {
-            assertTableUsed(phxConn, viewIndex, hbaseTableName);
-            ResultSet rs = phxConn.createStatement().executeQuery("select * from " + viewIndex);
-            for (String str : strings) {
-                assertTrue(rs.next());
-                assertEquals(str, rs.getString(1));
-            }
-        }
-        phxConn.close();
-    }
-
-    public void assertTableUsed(Connection conn, String phoenixTableName, String hbaseTableName) throws SQLException {
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + phoenixTableName);
-        assertTrue(rs.next());
-        assertTrue(rs.getString(1).contains(hbaseTableName));
-    }
         
     @Test
     public void testUpgradeRequiredPreventsSQL() throws SQLException {
@@ -433,31 +206,44 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
     }
     
     @Test
-    public void testConcurrentUpgradeThrowsUprgadeInProgressException() throws Exception {
+    public void testConcurrentUpgradeThrowsUpgradeInProgressException() throws Exception {
         final AtomicBoolean mutexStatus1 = new AtomicBoolean(false);
         final AtomicBoolean mutexStatus2 = new AtomicBoolean(false);
+        final AtomicBoolean mutexStatus3 = new AtomicBoolean(true);
         final CountDownLatch latch = new CountDownLatch(2);
         final AtomicInteger numExceptions = new AtomicInteger(0);
-        ConnectionQueryServices services = null;
-        final byte[] mutexKey = Bytes.toBytes(generateUniqueName());
         try (Connection conn = getConnection(false, null)) {
-            services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-            FutureTask<Void> task1 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus1, services, latch, numExceptions, mutexKey));
-            FutureTask<Void> task2 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus2, services, latch, numExceptions, mutexKey));
-            Thread t1 = new Thread(task1);
-            t1.setDaemon(true);
-            Thread t2 = new Thread(task2);
-            t2.setDaemon(true);
-            t1.start();
-            t2.start();
+            ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class)
+                .getQueryServices();
+            Callable<Void> task1 = new AcquireMutexRunnable(
+                mutexStatus1, services, latch, numExceptions);
+            Callable<Void> task2 = new AcquireMutexRunnable(
+                mutexStatus2, services, latch, numExceptions);
+            Callable<Void> task3 = new AcquireMutexRunnable(
+                mutexStatus3, services, latch, numExceptions);
+            ExecutorService executorService = Executors.newFixedThreadPool(2,
+                new ThreadFactoryBuilder().setDaemon(true)
+                    .setNameFormat("mutex-acquire-%d").build());
+            Future<?> futureTask1 = executorService.submit(task1);
+            Future<?> futureTask2 = executorService.submit(task2);
             latch.await();
             // make sure tasks didn't fail by calling get()
-            task1.get();
-            task2.get();
-            assertTrue("One of the threads should have acquired the mutex", mutexStatus1.get() || mutexStatus2.get());
-            assertNotEquals("One and only one thread should have acquired the mutex ", mutexStatus1.get(),
-                    mutexStatus2.get());
-            assertEquals("One and only one thread should have caught UpgradeRequiredException ", 1, numExceptions.get());
+            futureTask1.get();
+            futureTask2.get();
+            executorService.submit(task3).get();
+            assertTrue("One of the threads should have acquired the mutex",
+                mutexStatus1.get() || mutexStatus2.get() || mutexStatus3.get());
+            assertNotEquals("One and only one thread should have acquired the mutex ",
+                mutexStatus1.get(), mutexStatus2.get());
+            assertFalse("mutexStatus3 should never be true ",
+                mutexStatus3.get());
+            assertEquals("One and only one thread should have caught UpgradeRequiredException ",
+                2, numExceptions.get());
+            // release mutex only after all threads are done executing
+            // so as to avoid case where one thread releases lock and only
+            // after that another thread acquires lock (due to slow thread
+            // execution)
+            ((ConnectionQueryServicesImpl) services).releaseUpgradeMutex();
         }
     }
     
@@ -467,14 +253,15 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         private final ConnectionQueryServices services;
         private final CountDownLatch latch;
         private final AtomicInteger numExceptions;
-        private final byte[] mutexRowKey;
-        public AcquireMutexRunnable(AtomicBoolean acquireStatus, ConnectionQueryServices services, CountDownLatch latch, AtomicInteger numExceptions, byte[] mutexKey) {
+
+        private AcquireMutexRunnable(AtomicBoolean acquireStatus,
+                ConnectionQueryServices services, CountDownLatch latch, AtomicInteger numExceptions) {
             this.acquireStatus = acquireStatus;
             this.services = services;
             this.latch = latch;
             this.numExceptions = numExceptions;
-            this.mutexRowKey = mutexKey;
         }
+
         @Override
         public Void call() throws Exception {
             try {
@@ -482,12 +269,10 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                         MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
                 acquireStatus.set(true);
             } catch (UpgradeInProgressException e) {
+                acquireStatus.set(false);
                 numExceptions.incrementAndGet();
             } finally {
                 latch.countDown();
-                if (acquireStatus.get()) {
-                    ((ConnectionQueryServicesImpl)services).releaseUpgradeMutex();
-                }
             }
             return null;
         }
@@ -608,7 +393,10 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         cqs.clearCache();
         //Now make sure that running the merge logic doesn't cause a problem when there are no
         //sequences
-        UpgradeUtil.mergeViewIndexIdSequences(cqs, conn);
+        try (PhoenixConnection mockUpgradeScnTsConn = new PhoenixConnection(
+                conn, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0)) {
+            UpgradeUtil.mergeViewIndexIdSequences(mockUpgradeScnTsConn);
+        }
         PName tenantOne = PNameFactory.newName("TENANT_ONE");
         PName tenantTwo = PNameFactory.newName("TENANT_TWO");
         String tableName =
@@ -640,7 +428,10 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             assertNull(e);
         }
 
-        UpgradeUtil.mergeViewIndexIdSequences(cqs, conn);
+        try (PhoenixConnection mockUpgradeScnTsConn = new PhoenixConnection(
+                conn, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0)) {
+            UpgradeUtil.mergeViewIndexIdSequences(mockUpgradeScnTsConn);
+        }
         //now check that there exists a sequence using the new naming convention, whose value is the
         //max of all the previous sequences for this table.
 
@@ -670,6 +461,145 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         cqs.createSequence(sequenceTenantId, key.getSchemaName(), key.getSequenceName(),
             Long.MIN_VALUE, 1, 1, Long.MIN_VALUE, Long.MAX_VALUE, false, EnvironmentEdgeManager.currentTimeMillis());
         return key;
+    }
+
+    @Test
+    public void testUpgradeViewIndexIdDataType() throws Exception {
+        byte[] rowKey = SchemaUtil.getColumnKey(null,
+                SYSTEM_SCHEMA_NAME, SYSTEM_CATALOG_TABLE, VIEW_INDEX_ID,
+                PhoenixDatabaseMetaData.TABLE_FAMILY);
+        byte[] syscatBytes = PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.getBytes();
+        byte[] viewIndexIdTypeCellValueIn414 = PInteger.INSTANCE.toBytes(Types.SMALLINT);
+        byte[] viewIndexIdTypeCellValueIn416 = PInteger.INSTANCE.toBytes(Types.BIGINT);
+
+        try (PhoenixConnection conn = getConnection(false, null).
+                unwrap(PhoenixConnection.class)) {
+            // update the VIEW_INDEX_ID 0:DATAT_TYPE cell value to SMALLINT
+            // (4.14 and prior version is a SMALLINT column)
+            updateViewIndexIdColumnValue(rowKey, syscatBytes, viewIndexIdTypeCellValueIn414);
+            assertTrue(UpgradeUtil.isUpdateViewIndexIdColumnDataTypeFromShortToLongNeeded(
+                    conn, rowKey, syscatBytes));
+            verifyExpectedCellValue(rowKey, syscatBytes, viewIndexIdTypeCellValueIn414);
+            // calling UpgradeUtil to mock the upgrade VIEW_INDEX_ID data type to BIGINT
+            UpgradeUtil.updateViewIndexIdColumnDataTypeFromShortToLong(conn, rowKey, syscatBytes);
+            verifyExpectedCellValue(rowKey, syscatBytes, viewIndexIdTypeCellValueIn416);
+            assertFalse(UpgradeUtil.isUpdateViewIndexIdColumnDataTypeFromShortToLongNeeded(
+                    conn, rowKey, syscatBytes));
+        } finally {
+            updateViewIndexIdColumnValue(rowKey, syscatBytes, viewIndexIdTypeCellValueIn416);
+        }
+    }
+
+    private void updateViewIndexIdColumnValue(byte[] rowKey, byte[] syscatBytes,
+                                              byte[] newColumnValue) throws Exception {
+
+        try (PhoenixConnection conn =
+                     DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
+            Table sysTable = conn.getQueryServices().getTable(syscatBytes)) {
+            KeyValue viewIndexIdKV = new KeyValue(rowKey,
+                    PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                    PhoenixDatabaseMetaData.DATA_TYPE_BYTES,
+                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
+                    newColumnValue);
+            Put viewIndexIdPut = new Put(rowKey);
+            viewIndexIdPut.add(viewIndexIdKV);
+            sysTable.put(viewIndexIdPut);
+        }
+    }
+
+    private void verifyExpectedCellValue(byte[] rowKey, byte[] syscatBytes,
+                                         byte[] expectedDateTypeBytes) throws Exception {
+        try(PhoenixConnection conn = getConnection(false, null).
+                unwrap(PhoenixConnection.class);
+            Table sysTable = conn.getQueryServices().getTable(syscatBytes)) {
+            Scan s = new Scan();
+            s.setRowPrefixFilter(rowKey);
+            s.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                    PhoenixDatabaseMetaData.DATA_TYPE_BYTES);
+            ResultScanner scanner = sysTable.getScanner(s);
+            Result result= scanner.next();
+            Cell cell = result.getColumnLatestCell(
+                    PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                    PhoenixDatabaseMetaData.DATA_TYPE_BYTES);
+            assertArrayEquals(expectedDateTypeBytes, CellUtil.cloneValue(cell));
+        }
+    }
+
+    @Test
+    public void testLastDDLTimestampBootstrap() throws Exception {
+        //Create a table, view, and index
+        String schemaName = "S_" + generateUniqueName();
+        String tableName = "T_" + generateUniqueName();
+        String viewName = "V_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        String fullViewName = SchemaUtil.getTableName(schemaName, viewName);
+        try (Connection conn = getConnection(false, null)) {
+            conn.createStatement().execute(
+                "CREATE TABLE " + fullTableName
+                    + " (PK1 VARCHAR NOT NULL, PK2 VARCHAR, KV1 VARCHAR, KV2 VARCHAR CONSTRAINT " +
+                    "PK PRIMARY KEY(PK1, PK2)) ");
+            conn.createStatement().execute(
+                "CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName);
+
+            //Now we null out any existing last ddl timestamps
+            nullDDLTimestamps(conn);
+
+            //now get the row timestamps for each header row
+            long tableTS = getRowTimestampForMetadata(conn, schemaName, tableName,
+                PTableType.TABLE);
+            long viewTS = getRowTimestampForMetadata(conn, schemaName, viewName, PTableType.VIEW);
+
+            UpgradeUtil.bootstrapLastDDLTimestamp(conn.unwrap(PhoenixConnection.class));
+            long actualTableTS = getLastTimestampForMetadata(conn, schemaName, tableName,
+                PTableType.TABLE);
+            long actualViewTS = getLastTimestampForMetadata(conn, schemaName, viewName,
+                PTableType.VIEW);
+            assertEquals(tableTS, actualTableTS);
+            assertEquals(viewTS, actualViewTS);
+
+        }
+    }
+
+    private void nullDDLTimestamps(Connection conn) throws SQLException {
+        String pkCols = TENANT_ID + ", " + TABLE_SCHEM +
+            ", " + TABLE_NAME + ", " + COLUMN_NAME + ", " + COLUMN_FAMILY;
+        String upsertSql =
+            "UPSERT INTO " + SYSTEM_CATALOG_NAME + " (" + pkCols + ", " +
+                LAST_DDL_TIMESTAMP + ")" + " " +
+                "SELECT " + pkCols + ", NULL FROM " + SYSTEM_CATALOG_NAME + " " +
+                "WHERE " + TABLE_TYPE + " IS NOT NULL";
+        conn.createStatement().execute(upsertSql);
+        conn.commit();
+    }
+
+    private long getRowTimestampForMetadata(Connection conn, String schemaName, String objectName,
+                                            PTableType type) throws SQLException {
+        String sql = "SELECT PHOENIX_ROW_TIMESTAMP() FROM " + SYSTEM_CATALOG_NAME + " WHERE " +
+            " TENANT_ID IS NULL AND TABLE_SCHEM = ? AND TABLE_NAME = ? and TABLE_TYPE = ?";
+        PreparedStatement stmt = conn.prepareStatement(sql);
+        stmt.setString(1, schemaName);
+        stmt.setString(2, objectName);
+        stmt.setString(3, type.getSerializedValue());
+
+        ResultSet rs = stmt.executeQuery();
+        assertNotNull(rs);
+        assertTrue("Result set was empty!", rs.next());
+        return rs.getLong(1);
+    }
+
+    private long getLastTimestampForMetadata(Connection conn, String schemaName, String objectName,
+                                            PTableType type) throws SQLException {
+        String sql = "SELECT LAST_DDL_TIMESTAMP FROM " + SYSTEM_CATALOG_NAME + " WHERE " +
+            " TENANT_ID IS NULL AND TABLE_SCHEM = ? AND TABLE_NAME = ? and TABLE_TYPE = ?";
+        PreparedStatement stmt = conn.prepareStatement(sql);
+        stmt.setString(1, schemaName);
+        stmt.setString(2, objectName);
+        stmt.setString(3, type.getSerializedValue());
+
+        ResultSet rs = stmt.executeQuery();
+        assertNotNull(rs);
+        assertTrue("Result set was empty!", rs.next());
+        return rs.getLong(1);
     }
 
 }

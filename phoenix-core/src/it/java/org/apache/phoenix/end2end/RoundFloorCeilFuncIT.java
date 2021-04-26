@@ -43,8 +43,8 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.google.common.primitives.Doubles;
-import com.google.common.primitives.Floats;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Floats;
 
 /**
  * 

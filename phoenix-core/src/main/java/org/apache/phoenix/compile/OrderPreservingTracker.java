@@ -40,9 +40,9 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ExpressionUtil;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * <pre>

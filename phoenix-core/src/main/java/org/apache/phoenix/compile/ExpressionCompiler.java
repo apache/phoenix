@@ -1222,8 +1222,10 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     @Override
     public Expression visitLeave(ExistsParseNode node, List<Expression> l) throws SQLException {
         LiteralExpression child = (LiteralExpression) l.get(0);
-        PhoenixArray array = (PhoenixArray) child.getValue();
-        return LiteralExpression.newConstant(array.getDimensions() > 0 ^ node.isNegate(), PBoolean.INSTANCE);
+        boolean elementExists = child != null
+                && child.getValue() != null
+                && ((PhoenixArray)child.getValue()).getDimensions() > 0;
+        return LiteralExpression.newConstant(elementExists ^ node.isNegate(), PBoolean.INSTANCE);
     }
 
     @Override
@@ -1240,7 +1242,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     return new PDatumImpl(expression, pDataTypeInput);
   }
 
-  private class PDatumImpl implements PDatum {
+  private static class PDatumImpl implements PDatum {
 
     private final boolean isNullable;
     private final PDataType dataType;
@@ -1283,7 +1285,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
 
   }
 
-  private class ExpressionDeterminism {
+  private static class ExpressionDeterminism {
     private ArithmeticParseNode node;
     private List<Expression> children;
     private PDataType theType;

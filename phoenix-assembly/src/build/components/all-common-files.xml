@@ -30,6 +30,13 @@
         <include>*.txt</include>
       </includes>
     </fileSet>
+    <!-- Copy the binary license files -->
+    <fileSet>
+      <directory>${project.basedir}/../dev/release_files</directory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+      <outputDirectory>/</outputDirectory>
+    </fileSet>
     <!-- Copy the executable files from the bin directory  -->
     <fileSet>
       <directory>${project.basedir}/../bin</directory>
@@ -63,31 +70,12 @@
       </excludes>
     </fileSet>
     <fileSet>
-      <directory>${project.basedir}/../dev</directory>
-      <fileMode>0644</fileMode>
-      <directoryMode>0755</directoryMode>
-    </fileSet>
-    <fileSet>
       <directory>${project.basedir}/../docs</directory>
       <fileMode>0644</fileMode>
       <directoryMode>0755</directoryMode>
     </fileSet>
     <fileSet>
       <directory>${project.basedir}/../examples</directory>
-      <fileMode>0644</fileMode>
-      <directoryMode>0755</directoryMode>
-    </fileSet>
-      <fileSet>
-          <directory>${project.basedir}/../phoenix-pherf/target</directory>
-          <outputDirectory>phoenix-pherf</outputDirectory>
-          <includes>
-              <include>*.zip</include>
-          </includes>
-          <fileMode>0644</fileMode>
-          <directoryMode>0755</directoryMode>
-      </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../python</directory>
       <fileMode>0644</fileMode>
       <directoryMode>0755</directoryMode>
     </fileSet>

@@ -26,7 +26,7 @@ import org.apache.hadoop.hbase.Cell;
  * Implementing this interface and configuring it via the {@link
  * org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil#UPSERT_HOOK_CLASS_CONFKEY}
  * configuration key.
- * <p/>
+ * 
  * The intention of such a hook is to allow coproccessor-style operations to be peformed on
  * data that is being bulk-loaded via MapReduce.
  */
@@ -35,14 +35,14 @@ public interface ImportPreUpsertKeyValueProcessor {
     /**
      * Process a list of KeyValues before they are written to an HFile. The supplied list of
      * KeyValues contain all data that is to be written for a single Phoenix row.
-     * <p/>
+     * 
      * Implementors can filter certain KeyValues from the list, augment the list, or return the
      * same list.
      *
-     * @param rowKey the row key for the key values that are being passed in
+     * @param tableName the table name for the key values that are being passed in
      * @param keyValues list of KeyValues that are to be written to an HFile
      * @return the list that will actually be written
      */
-    List<Cell> preUpsert(byte[] rowKey, List<Cell> keyValues);
+    List<Cell> preUpsert(byte[] tableName, List<Cell> keyValues);
 
 }

@@ -17,13 +17,12 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.end2end.index.IndexTestUtil;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.index.IndexCoprocIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.Indexer;
@@ -41,6 +40,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -105,12 +105,18 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
     private Connection connTenant;
     private Admin admin;
     private IndexUpgradeTool iut;
+    private static String tmpDir = System.getProperty("java.io.tmpdir");;
 
     @Mock
     private IndexTool indexToolMock;
 
     @Captor
     private ArgumentCaptor<String []> argCapture;
+
+    @BeforeClass
+    public static synchronized void saveTmp () throws Exception {
+        tmpDir = System.getProperty("java.io.tmpdir");
+    }
 
     @Before
     public void setup () throws Exception {
@@ -146,7 +152,8 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
                 .get(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB))
                 || Boolean.toString(!isNamespaceEnabled).equals(serverProps
                 .get(QueryServices.IS_NAMESPACE_MAPPING_ENABLED))) {
-            tearDownMiniClusterAsync(1);
+            tearDownMiniCluster(1);
+            System.setProperty("java.io.tmpdir", tmpDir);
         }
         //setting up properties for namespace
         clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
@@ -196,7 +203,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         TRANSACTIONAL_TABLE_LIST[0] = transactTable;
         conn.createStatement().execute("CREATE TABLE " + transactTable + " (id bigint NOT NULL "
                         + "PRIMARY KEY, a.name varchar, sal bigint, address varchar) "
-                + " TRANSACTIONAL=true, TRANSACTION_PROVIDER='TEPHRA' "
+                + " TRANSACTIONAL=true, TRANSACTION_PROVIDER='OMID' "
                 + ((tableDDLOptions.trim().length() > 0) ? "," : "") + tableDDLOptions);
 
         String mockOneViewOne = "TEST." + generateUniqueName();
@@ -392,7 +399,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
                         indexDesc.hasCoprocessor(IndexRegionObserver.class.getName()));
                     Assert.assertFalse("Found Indexer on " + table,
                         indexDesc.hasCoprocessor(Indexer.class.getName()));
-                    IndexCoprocIT.assertCoprocConfig(indexDesc, IndexRegionObserver.class.getName(),
+                    IndexTestUtil.assertCoprocConfig(indexDesc, IndexRegionObserver.class.getName(),
                         IndexCoprocIT.INDEX_REGION_OBSERVER_CONFIG);
                 }
             }
@@ -402,7 +409,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
                 TableDescriptor indexDesc = admin.getDescriptor(TableName.valueOf(index));
                 Assert.assertTrue("Couldn't find GlobalIndexChecker on " + index,
                     indexDesc.hasCoprocessor(GlobalIndexChecker.class.getName()));
-                IndexCoprocIT.assertCoprocConfig(indexDesc, GlobalIndexChecker.class.getName(),
+                IndexTestUtil.assertCoprocConfig(indexDesc, GlobalIndexChecker.class.getName(),
                     IndexCoprocIT.GLOBAL_INDEX_CHECKER_CONFIG);
             }
         }
@@ -432,7 +439,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
                     indexDesc.hasCoprocessor(Indexer.class.getName()));
                 Assert.assertFalse("Found IndexRegionObserver on " + table,
                     indexDesc.hasCoprocessor(IndexRegionObserver.class.getName()));
-                IndexCoprocIT.assertCoprocConfig(indexDesc, Indexer.class.getName(),
+                IndexTestUtil.assertCoprocConfig(indexDesc, Indexer.class.getName(),
                     IndexCoprocIT.INDEXER_CONFIG);
             }
         }

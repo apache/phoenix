@@ -97,8 +97,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SequenceUtil;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  *
@@ -189,7 +189,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
     
     protected String getMutexDDL() {
-        return setSystemDDLProperties(QueryConstants.CREATE_MUTEX_METADTA);
+        return setSystemDDLProperties(QueryConstants.CREATE_MUTEX_METADATA);
     }
 
     protected String getTaskDDL() {
@@ -209,6 +209,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public Table getTable(byte[] tableName) throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Table getTableIfExists(byte[] tableName) {
         throw new UnsupportedOperationException();
     }
 
@@ -734,8 +739,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
      * Manually adds {@link GuidePostsInfo} for a table to the client-side cache. Not a
      * {@link ConnectionQueryServices} method. Exposed for testing purposes.
      *
-     * @param tableName Table name
-     * @param stats Stats instance
+     * @param key
+     * @param info
      */
     public void addTableStats(GuidePostsKey key, GuidePostsInfo info) {
         this.guidePostsCache.put(Objects.requireNonNull(key), info);

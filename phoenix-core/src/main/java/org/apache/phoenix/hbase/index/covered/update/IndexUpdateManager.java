@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.hbase.index.covered.update;
 
+import java.io.Serializable;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -34,8 +35,8 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
-import com.google.common.collect.Lists;
-import com.google.common.primitives.Longs;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Longs;
 
 /**
  * Keeps track of the index updates
@@ -43,7 +44,9 @@ import com.google.common.primitives.Longs;
 public class IndexUpdateManager {
 
   public Comparator<Mutation> COMPARATOR = new MutationComparator();
-  class MutationComparator implements Comparator<Mutation> {
+
+  private static class MutationComparator implements Comparator<Mutation>,
+      Serializable {
 
     @Override
     public int compare(Mutation o1, Mutation o2) {

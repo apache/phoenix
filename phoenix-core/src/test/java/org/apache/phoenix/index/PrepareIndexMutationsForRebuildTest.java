@@ -600,8 +600,8 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
         // idxKey2 is required by dataDel, as dataDel change the corresponding row key of index table
         List<Byte> idxKey2 = new ArrayList<>();
         idxKey2.add(QueryConstants.SEPARATOR_BYTE);
-        idxKey2.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
-        byte[] idxKeyBytes2 = com.google.common.primitives.Bytes.toArray(idxKey2);
+        idxKey2.addAll(org.apache.phoenix.thirdparty.com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
+        byte[] idxKeyBytes2 = org.apache.phoenix.thirdparty.com.google.common.primitives.Bytes.toArray(idxKey2);
         Put idxPut2 = new Put(idxKeyBytes2);
         addCellToPutMutation(idxPut2,
                 QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
@@ -744,10 +744,10 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
     byte[] generateIndexRowKey(String indexVal) {
         List<Byte> idxKey = new ArrayList<>();
         if (indexVal != null && !indexVal.isEmpty())
-            idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(indexVal)));
+            idxKey.addAll(org.apache.phoenix.thirdparty.com.google.common.primitives.Bytes.asList(Bytes.toBytes(indexVal)));
         idxKey.add(QueryConstants.SEPARATOR_BYTE);
-        idxKey.addAll(com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
-        return com.google.common.primitives.Bytes.toArray(idxKey);
+        idxKey.addAll(org.apache.phoenix.thirdparty.com.google.common.primitives.Bytes.asList(Bytes.toBytes(ROW_KEY)));
+        return org.apache.phoenix.thirdparty.com.google.common.primitives.Bytes.toArray(idxKey);
     }
 
     void addCellToPutMutation(Put put, byte[] family, byte[] column, long ts, byte[] value) throws Exception {

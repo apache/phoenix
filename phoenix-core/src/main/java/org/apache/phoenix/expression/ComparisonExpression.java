@@ -27,7 +27,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
@@ -51,12 +51,12 @@ import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.StringUtil;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 /**
  * 
- * Implementation for <,<=,>,>=,=,!= comparison expressions
+ * Implementation for {@code <,<=,>,>=,=,!= } comparison expressions
  * 
  * @since 0.1
  */

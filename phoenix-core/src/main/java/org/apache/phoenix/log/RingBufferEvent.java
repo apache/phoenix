@@ -21,7 +21,7 @@ import java.util.Map;
 
 import org.apache.phoenix.monitoring.MetricType;
 
-import com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 import com.lmax.disruptor.EventFactory;
 
  class RingBufferEvent {

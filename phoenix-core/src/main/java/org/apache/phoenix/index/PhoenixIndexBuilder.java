@@ -65,7 +65,7 @@ import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Index builder for covered-columns index that ties into phoenix for faster use.
@@ -232,7 +232,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
                             expression.getSortOrder(), expression.getMaxLength(), expression.getScale(),
                             column.getMaxLength(), column.getScale())) {
                         throw new DataExceedsCapacityException(column.getDataType(), column.getMaxLength(),
-                            column.getScale());
+                                column.getScale(), column.getName().getString());
                     }
                     column.getDataType().coerceBytes(ptr, value, expression.getDataType(), expression.getMaxLength(),
                         expression.getScale(), expression.getSortOrder(),column.getMaxLength(), column.getScale(),
@@ -286,7 +286,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
      *       UPSERT VALUES ON DUPLICATE KEY IGNORE followed by UPSERT VALUES ON DUPLICATE KEY UPDATE
      * 2) Short value tracking how many times the next first clause should be executed. This
      *    optimizes the same clause be executed many times by only serializing it once.
-     * 3) Repeating {List<Expression>, PTable} pairs that encapsulate the ON DUPLICATE KEY clause.
+     * 3) Repeating {@code List<Expression>, PTable } pairs that encapsulate the ON DUPLICATE KEY clause.
      * @param table table representing columns being updated
      * @param expressions list of expressions to evaluate for updating columns
      * @return serialized byte array representation of ON DUPLICATE KEY UPDATE info

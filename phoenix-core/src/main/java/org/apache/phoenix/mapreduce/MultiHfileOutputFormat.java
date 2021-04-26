@@ -61,7 +61,6 @@ import org.apache.hadoop.hbase.mapreduce.MutationSerialization;
 import org.apache.hadoop.hbase.mapreduce.ResultSerialization;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.regionserver.BloomType;
-import org.apache.hadoop.hbase.regionserver.HStore;
 import org.apache.hadoop.hbase.regionserver.StoreFileWriter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.NullWritable;
@@ -80,9 +79,9 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 /**
  * The MultiHfileOutputFormat class simplifies writing HFiles for multiple tables.
@@ -258,8 +257,8 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
               tempConf.setFloat(HConstants.HFILE_BLOCK_CACHE_SIZE_KEY, 0.0f);
               HFileContextBuilder contextBuilder = new HFileContextBuilder()
                                         .withCompression(compression)
-                                        .withChecksumType(HStore.getChecksumType(conf))
-                                        .withBytesPerCheckSum(HStore.getBytesPerChecksum(conf))
+                                        .withChecksumType(CompatUtil.getChecksumType(conf))
+                                        .withBytesPerCheckSum(CompatUtil.getBytesPerChecksum(conf))
                                         .withBlockSize(blockSize)
                                         .withDataBlockEncoding(encoding);
               CompatUtil.withComparator(contextBuilder, CellComparatorImpl.COMPARATOR);

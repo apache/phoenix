@@ -45,23 +45,17 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class NullIT extends BaseQueryIT {
     
     @Parameters(name="NullIT_{index},columnEncoded={1}")
     public static synchronized Collection<Object> data() {
-        List<Object> testCases = Lists.newArrayList();
-        for (String indexDDL : INDEX_DDLS) {
-            for (boolean columnEncoded : new boolean[]{false,true}) {
-                testCases.add(new Object[] { indexDDL, columnEncoded });
-            }
-        }
-        return testCases;
+        return BaseQueryIT.allIndexesWithEncoded();
     }
     
-    public NullIT(String indexDDL, boolean columnEncoded) throws Exception {
-        super(indexDDL, columnEncoded, false);
+    public NullIT(String indexDDL, boolean columnEncoded, boolean keepDeletedCells) {
+        super(indexDDL, columnEncoded, keepDeletedCells);
     }
     
     private void testNoStringValue(String value) throws Exception {

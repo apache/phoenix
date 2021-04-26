@@ -50,8 +50,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 
 
@@ -500,7 +500,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             try {
                 this.user = User.getCurrent();
             } catch (IOException e) {
-                throw new RuntimeException("Couldn't get the current user!!");
+                throw new RuntimeException("Couldn't get the current user!!", e);
             }
             if (null == this.user) {
                 throw new RuntimeException("Acquired null user which should never happen");

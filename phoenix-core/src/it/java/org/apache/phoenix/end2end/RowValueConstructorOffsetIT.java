@@ -76,7 +76,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     private static Connection conn = null;
 
     @BeforeClass
-    public static void init() throws SQLException {
+    public static synchronized void init() throws SQLException {
         conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
 
         String dataTableDDL = String.format(DATA_DDL, DATA_TABLE_NAME);
@@ -125,7 +125,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     }
 
     @AfterClass
-    public static void cleanup() {
+    public static synchronized void cleanup() {
         try {
             if (conn != null) {
                 conn.close();

@@ -94,11 +94,11 @@ import org.apache.phoenix.util.TransactionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Validates FROM clause and builds a ColumnResolver for resolving column references
@@ -253,7 +253,7 @@ public class FromCompiler {
     }
 
     public static ColumnResolver getResolverForSchema(String schema, PhoenixConnection connection) throws SQLException {
-        return new SchemaResolver(connection, SchemaUtil.normalizeIdentifier(schema), true);
+        return new SchemaResolver(connection, schema, true);
     }
 
     public static ColumnResolver getResolver(NamedTableNode tableNode, PhoenixConnection connection) throws SQLException {

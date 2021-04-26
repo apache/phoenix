@@ -32,13 +32,18 @@ import org.apache.phoenix.coprocessor.generated.PFunctionProtos;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
-import org.apache.phoenix.schema.*;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnImpl;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import com.google.protobuf.ByteString;
 
 /**
@@ -47,7 +52,7 @@ import com.google.protobuf.ByteString;
  * an HBase table named SYSTEM.TABLE. Each table is represented by:
  * - one row for the table
  * - one row per column in the tabe
- * Upto {@link #DEFAULT_MAX_META_DATA_VERSIONS} versions are kept. The time
+ * Upto #DEFAULT_MAX_META_DATA_VERSIONS versions are kept. The time
  * stamp of the metadata must always be increasing. The timestamp of the key
  * values in the data row corresponds to the schema that it's using.
  *
@@ -60,7 +65,8 @@ import com.google.protobuf.ByteString;
  */
 public abstract class MetaDataProtocol extends MetaDataService {
     public static final int PHOENIX_MAJOR_VERSION = 5;
-    public static final int PHOENIX_MINOR_VERSION = 1;
+    public static final int PHOENIX_MINOR_VERSION = 2;
+
     public static final int PHOENIX_PATCH_NUMBER = 0;
     public static final int PHOENIX_VERSION =
             VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER);
@@ -92,11 +98,13 @@ public abstract class MetaDataProtocol extends MetaDataService {
     // TODO Need to account for the inevitable 4.14 release too
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_0_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0 = MIN_TABLE_TIMESTAMP + 29;
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 = MIN_TABLE_TIMESTAMP + 31;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 = MIN_TABLE_TIMESTAMP + 33;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_17_0 = MIN_TABLE_TIMESTAMP + 34;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_17_0;
     // MIN_SYSTEM_TABLE_TIMESTAMP needs to be set to the max of all the MIN_SYSTEM_TABLE_TIMESTAMP_* constants
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0;
-    
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0;
+
     // Version below which we should disallow usage of mutable secondary indexing.
     public static final int MUTABLE_SI_VERSION_THRESHOLD = VersionUtil.encodeVersion("0", "94", "10");
     public static final int MAX_LOCAL_SI_VERSION_DISALLOW = VersionUtil.encodeVersion("0", "98", "8");
@@ -141,11 +149,12 @@ public abstract class MetaDataProtocol extends MetaDataService {
         TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_TIMESTAMP_4_12_0, "4.12.x");
         TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_TIMESTAMP_4_13_0, "4.13.x");
         TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_TIMESTAMP_5_0_0, "5.0.x");
-	TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_TIMESTAMP_5_0_0, "5.1.x");
+        TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0, "5.1.x");
+        TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0, "5.2.x");
     }
     
     public static final String CURRENT_CLIENT_VERSION = PHOENIX_MAJOR_VERSION + "." + PHOENIX_MINOR_VERSION + "." + PHOENIX_PATCH_NUMBER;
-     
+
     
     // TODO: pare this down to minimum, as we don't need duplicates for both table and column errors, nor should we need
     // a different code for every type of error.
@@ -178,8 +187,9 @@ public abstract class MetaDataProtocol extends MetaDataService {
         UNABLE_TO_CREATE_CHILD_LINK,
         UNABLE_TO_UPDATE_PARENT_TABLE,
         UNABLE_TO_DELETE_CHILD_LINK,
+        UNABLE_TO_UPSERT_TASK,
         NO_OP
-    };
+    }
 
   public static class SharedTableState {
         private PName tenantId;
@@ -387,7 +397,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
           }
           if (proto.getFunctionCount() > 0) {
               result.wasUpdated = true;
-              for(PFunctionProtos.PFunction function: proto.getFunctionList())
+              for (PFunctionProtos.PFunction function: proto.getFunctionList())
               result.functions.add(PFunction.createFromProto(function));
           }
           if (proto.getTablesToDeleteCount() > 0) {
@@ -398,13 +408,13 @@ public abstract class MetaDataProtocol extends MetaDataService {
             }
           }
           result.columnName = ByteUtil.EMPTY_BYTE_ARRAY;
-          if(proto.hasColumnName()){
+          if (proto.hasColumnName()){
             result.columnName = proto.getColumnName().toByteArray();
           }
-          if(proto.hasFamilyName()){
+          if (proto.hasFamilyName()){
             result.familyName = proto.getFamilyName().toByteArray();
           }
-          if(proto.getSharedTablesToDeleteCount() > 0) {
+          if (proto.getSharedTablesToDeleteCount() > 0) {
               result.sharedTablesToDelete = 
                  Lists.newArrayListWithExpectedSize(proto.getSharedTablesToDeleteCount());
               for (org.apache.phoenix.coprocessor.generated.MetaDataProtos.SharedTableState sharedTable : 
@@ -443,10 +453,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
                 builder.addTablesToDelete(ByteStringer.wrap(tableName));
               }
             }
-            if(result.getColumnName() != null){
+            if (result.getColumnName() != null){
               builder.setColumnName(ByteStringer.wrap(result.getColumnName()));
             }
-            if(result.getFamilyName() != null){
+            if (result.getFamilyName() != null){
               builder.setFamilyName(ByteStringer.wrap(result.getFamilyName()));
             }
             if (result.getSharedTablesToDelete() !=null){

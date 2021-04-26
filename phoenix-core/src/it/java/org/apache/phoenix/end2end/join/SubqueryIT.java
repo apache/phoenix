@@ -41,7 +41,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 @RunWith(Parameterized.class)
 public class SubqueryIT extends BaseJoinIT {
@@ -510,10 +510,10 @@ public class SubqueryIT extends BaseJoinIT {
             assertEquals(rs.getString(2), "T5");
 
             assertFalse(rs.next());
-            
+
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             assertPlansEqual(plans[3], QueryUtil.getExplainPlan(rs));
-            
+
             query = "SELECT * FROM " + tableName5 + " co WHERE EXISTS (SELECT 1 FROM " + tableName1 + " i WHERE NOT EXISTS (SELECT 1 FROM " + tableName4 + " WHERE \"item_id\" = i.\"item_id\") AND co.item_id = \"item_id\" AND name = co.item_name)"
                     + " OR EXISTS (SELECT 1 FROM " + tableName1 + " WHERE \"item_id\" IN (SELECT \"item_id\" FROM " + tableName4 + ") AND co.co_item_id = \"item_id\" AND name = co.co_item_name)";
             statement = conn.prepareStatement(query);
@@ -530,10 +530,28 @@ public class SubqueryIT extends BaseJoinIT {
             assertEquals(rs.getString(4), "T1");
 
             assertFalse(rs.next());
-            
+
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             String plan = QueryUtil.getExplainPlan(rs);
             assertPlansMatch(plans[2], plan);
+
+            //PHOENIX-3633
+            query = "SELECT * FROM " + tableName4 + " o WHERE NOT EXISTS (SELECT 1 FROM " + tableName1 + " i WHERE \"item_id\" = 'does not exist')";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000002");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000003");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+
+            assertFalse(rs.next());
+
         } finally {
             conn.close();
         }
@@ -665,7 +683,133 @@ public class SubqueryIT extends BaseJoinIT {
             conn.close();
         }
     }
-    
+
+    @Test
+    public void testCorrelatedInSubqueryBug6224() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        final Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName3 = getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        try {
+            String query = "SELECT \"order_id\", name FROM " + tableName4 +
+                    " o JOIN " + tableName1 +
+                    " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity in (SELECT max(quantity) FROM " +
+                    tableName4 + " q WHERE o.\"item_id\" = q.\"item_id\")";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertEquals(rs.getString(2), "T1");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000003");
+            assertEquals(rs.getString(2), "T2");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertEquals(rs.getString(2), "T6");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertEquals(rs.getString(2), "T3");
+            assertFalse(rs.next());
+
+            query = "SELECT \"order_id\", name FROM " + tableName4 +
+                    " o JOIN " + tableName1 +
+                    " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity in (SELECT max(quantity) FROM " +
+                    tableName1 + " i2 JOIN " + tableName4 +
+                    " q ON i2.\"item_id\" = q.\"item_id\" WHERE o.\"item_id\" = i2.\"item_id\")";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertEquals(rs.getString(2), "T1");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000003");
+            assertEquals(rs.getString(2), "T2");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertEquals(rs.getString(2), "T6");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertEquals(rs.getString(2), "T3");
+            assertFalse(rs.next());
+
+            query = "SELECT name from " + tableName3 +
+                    " WHERE \"customer_id\" IN (SELECT \"customer_id\" FROM " +
+                    tableName1 + " i JOIN " + tableName4 +
+                    " o ON o.\"item_id\" = i.\"item_id\" WHERE i.name = 'T2' OR quantity in (SELECT max(quantity) FROM " +
+                    tableName4 + " q WHERE o.\"item_id\" = q.\"item_id\" and q.\"item_id\" = '0000000006'))";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "C2");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "C4");
+            assertFalse(rs.next());
+
+            query = "SELECT \"order_id\" FROM " + tableName4 +
+                    " o WHERE quantity in (SELECT quantity FROM " + tableName4 +
+                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000004')";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000002");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000003");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertFalse(rs.next());
+
+            query = "SELECT \"order_id\" FROM " + tableName4 +
+                    " o WHERE quantity in (SELECT quantity FROM " + tableName4 +
+                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000003')";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000002");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertFalse(rs.next());
+
+            query = "SELECT \"order_id\" FROM " + tableName4 +
+                    " o WHERE quantity in (SELECT max(quantity) FROM " + tableName4 +
+                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000004' GROUP BY \"order_id\")";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000002");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000003");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertFalse(rs.next());
+
+            query = "SELECT \"order_id\" FROM " + tableName4 +
+                    " o WHERE quantity in (SELECT max(quantity) FROM " + tableName4 +
+                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000003' GROUP BY \"order_id\")";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000002");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
     @Test
     public void testAnyAllComparisonSubquery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

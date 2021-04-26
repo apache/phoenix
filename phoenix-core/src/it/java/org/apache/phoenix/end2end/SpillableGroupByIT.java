@@ -33,16 +33,18 @@ import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /*
  * Run in own cluster since it updates QueryServices.MAX_MEMORY_SIZE_ATTRIB
@@ -80,6 +82,7 @@ public class SpillableGroupByIT extends BaseOwnClusterIT {
         props.put(QueryServices.STATS_COLLECTION_ENABLED, Boolean.toString(false));
         props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
         props.put(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.TRUE.toString());
+        props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Long.toString(60000));
         // Must update config before starting server
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
@@ -188,12 +191,19 @@ public class SpillableGroupByIT extends BaseOwnClusterIT {
         assertFalse(rs.next());
         rs.close();
         stmt.close();
-        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName);
-        String explainPlan = QueryUtil.getExplainPlan(rs);
-        assertEquals(
-                "CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER " + tableName,
-                explainPlan);
-       conn.close();
+        String query = "SELECT * FROM " + tableName;
+        ExplainPlan plan = conn.prepareStatement(query)
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes =
+            plan.getPlanStepsAsAttributes();
+        assertEquals(new Integer(1), explainPlanAttributes.getSplitsChunk());
+        assertEquals("PARALLEL 1-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("FULL SCAN ",
+            explainPlanAttributes.getExplainScanType());
+        assertEquals(tableName, explainPlanAttributes.getTableName());
+        conn.close();
     }
     
     @Test

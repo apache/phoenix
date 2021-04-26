@@ -47,12 +47,12 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Function used to bucketize date/time values by rounding them to
  * an even increment.  Usage:
- * ROUND(<date/time col ref>,<'day'|'hour'|'minute'|'second'|'millisecond'|'week'|'month'|'year'>,<optional integer multiplier>)
+ * {@code ROUND(<date/time col ref>,<'day'|'hour'|'minute'|'second'|'millisecond'|'week'|'month'|'year'>,<optional integer multiplier>) }
  * The integer multiplier is optional and is used to do rollups to a partial time unit (i.e. 10 minute rollup)
  * The function returns a {@link org.apache.phoenix.schema.types.PDate}
 

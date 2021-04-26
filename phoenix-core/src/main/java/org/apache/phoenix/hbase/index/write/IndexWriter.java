@@ -35,8 +35,8 @@ import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * Do the actual work of writing to the index tables.
@@ -133,7 +133,7 @@ public class IndexWriter implements Stoppable {
   }
 
   /**
-   * see {@link #writeAndHandleFailure(Collection)}.
+   * see #writeAndHandleFailure(Collection).
    * @param toWrite
    * @throws IOException
    */
@@ -194,7 +194,7 @@ public class IndexWriter implements Stoppable {
     }
     
     /**
-   * see {@link #write(Collection)}
+   * see #write(Collection)
    * @param toWrite
    * @throws IndexWriteException
    */

@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.execute;
 
-import static com.google.common.collect.Lists.newArrayList;
+import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayList;
 import static java.util.Collections.singletonList;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_FAILED_COUNT;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZE;
@@ -67,9 +67,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 // Needs to extend BaseUniqueNamesOwnClusterIT due to installation of FailingRegionObserver coprocessor
@@ -266,11 +266,11 @@ public class PartialCommitIT extends BaseUniqueNamesOwnClusterIT {
     
     private PhoenixConnection getConnectionWithTableOrderPreservingMutationState() throws SQLException {
         try (PhoenixConnection con = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
-            final Map<TableRef, MultiRowMutationState> mutations = Maps.newTreeMap(new TableRefComparator());
+            final Map<TableRef, List<MultiRowMutationState>> mutations = Maps.newTreeMap(new TableRefComparator());
             // passing a null mutation state forces the connection.newMutationState() to be used to create the MutationState
             return new PhoenixConnection(con, (MutationState)null) {
                 @Override
-                protected MutationState newMutationState(int maxSize, int maxSizeBytes) {
+                protected MutationState newMutationState(int maxSize, long maxSizeBytes) {
                     return new MutationState(maxSize, maxSizeBytes, this, mutations, false, null);
                 };
             };

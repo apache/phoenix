@@ -20,8 +20,12 @@ package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.coprocessor.ScanRegionObserver.WILDCARD_SCAN_INCLUDES_DYNAMIC_COLUMNS;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
+import static org.apache.phoenix.util.ScanUtil.getDummyResult;
+import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
-import com.google.common.collect.ImmutableList;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
@@ -37,9 +41,12 @@ import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -54,10 +61,13 @@ import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -118,6 +128,31 @@ public abstract class RegionScannerFactory {
       private RegionInfo regionInfo = env.getRegionInfo();
       private byte[] actualStartKey = getActualStartKey();
       private boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
+      final long pageSizeMs = getPageSizeMsForRegionScanner(scan);
+      Expression extraWhere = null;
+      long extraLimit = -1;
+
+      {
+          // for local indexes construct the row filter for uncovered columns if it exists
+          if (ScanUtil.isLocalIndex(scan)) {
+              byte[] expBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER);
+              if (expBytes != null) {
+                  try {
+                      ByteArrayInputStream stream = new ByteArrayInputStream(expBytes);
+                      DataInputStream input = new DataInputStream(stream);
+                      extraWhere = ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
+                      extraWhere.readFields(input);
+                  } catch (IOException io) {
+                      // should not happen since we're reading from a byte[]
+                      throw new RuntimeException(io);
+                  }
+              }
+              byte[] limitBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_LIMIT);
+              if (limitBytes != null) {
+                  extraLimit = Bytes.toLong(limitBytes);
+              }
+          }
+      }
 
       // Get the actual scan start row of local index. This will be used to compare the row
       // key of the results less than scan start row when there are references.
@@ -129,7 +164,11 @@ public abstract class RegionScannerFactory {
       @Override
       public boolean next(List<Cell> results) throws IOException {
         try {
-          return s.next(results);
+          boolean next = s.next(results);
+          if (isDummy(results)) {
+            return true;
+          }
+          return next;
         } catch (Throwable t) {
           ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
           return false; // impossible
@@ -170,19 +209,17 @@ public abstract class RegionScannerFactory {
       public boolean nextRaw(List<Cell> result) throws IOException {
         try {
           boolean next = s.nextRaw(result);
-          Cell arrayElementCell = null;
+          if (isDummy(result)) {
+            return true;
+          }
           if (result.size() == 0) {
             return next;
-          }
-          if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
-            int arrayElementCellPosition = replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
-            arrayElementCell = result.get(arrayElementCellPosition);
           }
           if (ScanUtil.isLocalIndex(scan) && !ScanUtil.isAnalyzeTable(scan)) {
             if(actualStartKey!=null) {
               next = scanTillScanStartRow(s, arrayKVRefs, arrayFuncRefs, result,
-                  null, arrayElementCell);
-              if (result.isEmpty()) {
+                  null);
+              if (result.isEmpty() || isDummy(result)) {
                 return next;
               }
             }
@@ -192,6 +229,22 @@ public abstract class RegionScannerFactory {
              */
             IndexUtil.wrapResultUsingOffset(env, result, offset, dataColumns,
                 tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
+
+            if (extraWhere != null) {
+                Tuple merged = useQualifierAsListIndex ? new PositionBasedResultTuple(result) :
+                    new ResultTuple(Result.create(result));
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                extraWhere.evaluate(merged, ptr);
+                if (!Boolean.TRUE.equals(extraWhere.getDataType().toObject(ptr))) {
+                    result.clear();
+                    return next;
+                }
+            }
+          }
+          Cell arrayElementCell = null;
+          if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
+            int arrayElementCellPosition = replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+            arrayElementCell = result.get(arrayElementCellPosition);
           }
           if (projector != null) {
             Tuple toProject = useQualifierAsListIndex ? new PositionBasedResultTuple(result) :
@@ -208,6 +261,9 @@ public abstract class RegionScannerFactory {
             if (arrayElementCell != null) {
               result.add(arrayElementCell);
             }
+          }
+          if (extraLimit >= 0 && --extraLimit == 0) {
+              return false;
           }
           // There is a scanattribute set to retrieve the specific array element
           return next;
@@ -287,11 +343,18 @@ public abstract class RegionScannerFactory {
       private boolean scanTillScanStartRow(final RegionScanner s,
           final Set<KeyValueColumnExpression> arrayKVRefs,
           final Expression[] arrayFuncRefs, List<Cell> result,
-          ScannerContext scannerContext, Cell arrayElementCell) throws IOException {
+          ScannerContext scannerContext) throws IOException {
         boolean next = true;
         Cell firstCell = result.get(0);
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         while (Bytes.compareTo(firstCell.getRowArray(), firstCell.getRowOffset(),
             firstCell.getRowLength(), actualStartKey, 0, actualStartKey.length) < 0) {
+          if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
+            byte[] rowKey = CellUtil.cloneRow(result.get(0));
+            result.clear();
+            getDummyResult(rowKey, result);
+            return true;
+          }
           result.clear();
           if(scannerContext == null) {
             next = s.nextRaw(result);
@@ -301,9 +364,8 @@ public abstract class RegionScannerFactory {
           if (result.isEmpty()) {
             return next;
           }
-          if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
-            int arrayElementCellPosition = replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
-            arrayElementCell = result.get(arrayElementCellPosition);
+          if (isDummy(result)) {
+            return true;
           }
           firstCell = result.get(0);
         }

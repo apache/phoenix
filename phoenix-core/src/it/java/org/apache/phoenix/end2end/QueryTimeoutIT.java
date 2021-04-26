@@ -46,7 +46,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 
 public class QueryTimeoutIT extends BaseUniqueNamesOwnClusterIT {
@@ -69,14 +69,13 @@ public class QueryTimeoutIT extends BaseUniqueNamesOwnClusterIT {
     }
     
     @After
-    public void assertNoUnfreedMemory() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
-        try {
+    public void assertNoUnfreedMemory() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
             long unfreedBytes = conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
-            assertEquals(0,unfreedBytes);
-        } finally {
-            conn.close();
+            assertEquals(0, unfreedBytes);
         }
+        assertFalse("refCount leaked", refCountLeaked);
     }
     
     @Test
@@ -106,7 +105,7 @@ public class QueryTimeoutIT extends BaseUniqueNamesOwnClusterIT {
     
     @Test
     public void testQueryTimeout() throws Exception {
-        int nRows = 30000;
+        int nRows = 60000;
         Connection conn;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);

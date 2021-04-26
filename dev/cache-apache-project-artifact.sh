@@ -120,7 +120,7 @@ if [ -n "${keys}" ]; then
 fi
 
 echo "downloading artifact"
-if ! curl --dump-header "${working_dir}/artifact_download_headers.txt" -L --fail -o "${working_dir}/artifact" "https://www.apache.org/dyn/closer.lua?filename=${artifact}&action=download" ; then
+if ! curl --dump-header "${working_dir}/artifact_download_headers.txt" -L --fail -o "${working_dir}/artifact" "https://www.apache.org/dyn/closer.lua/${artifact}?action=download" ; then
   echo "Artifact wasn't in mirror system. falling back to archive.a.o."
   curl --dump-header "${working_dir}/artifact_fallback_headers.txt" -L --fail -o "${working_dir}/artifact" "http://archive.apache.org/dist/${artifact}"
 fi

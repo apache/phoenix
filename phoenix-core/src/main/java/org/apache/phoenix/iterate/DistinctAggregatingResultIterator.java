@@ -25,12 +25,14 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ColumnProjector;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.schema.tuple.Tuple;
 
-import com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 /**
  * Result scanner that dedups the incoming tuples to make them distinct.
@@ -154,6 +156,15 @@ public class DistinctAggregatingResultIterator implements AggregatingResultItera
     @Override
     public void explain(List<String> planSteps) {
         delegate.explain(planSteps);
+        planSteps.add("CLIENT DISTINCT ON " + rowProjector.toString());
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        delegate.explain(planSteps, explainPlanAttributesBuilder);
+        explainPlanAttributesBuilder.setClientDistinctFilter(
+            rowProjector.toString());
         planSteps.add("CLIENT DISTINCT ON " + rowProjector.toString());
     }
 

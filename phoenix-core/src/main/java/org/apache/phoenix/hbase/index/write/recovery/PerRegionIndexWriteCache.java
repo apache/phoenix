@@ -24,8 +24,8 @@ import java.util.Map;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.regionserver.Region;
 
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 
@@ -38,7 +38,7 @@ public class PerRegionIndexWriteCache {
 
   /**
    * Get the edits for the current region. Removes the edits from the cache. To add them back, call
-   * {@link #addEdits(HRegion, HTableInterfaceReference, Collection)}.
+   * #addEdits(HRegion, HTableInterfaceReference, Collection).
    * @param region
    * @return Get the edits for the given region. Returns <tt>null</tt> if there are no pending edits
    *         for the region

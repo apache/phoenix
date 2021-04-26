@@ -22,6 +22,8 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.query.KeyRange;
 
 /**
@@ -39,6 +41,11 @@ public class MaterializedResultIterators implements ResultIterators {
     @Override
     public List<PeekingResultIterator> getIterators() throws SQLException {
         return results;
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
     }
 
     @Override

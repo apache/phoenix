@@ -26,6 +26,8 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -103,4 +105,9 @@ public abstract class BaseGroupedAggregatingResultIterator implements
         resultIterator.explain(planSteps);
     }
 
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        resultIterator.explain(planSteps, explainPlanAttributesBuilder);
+    }
 }

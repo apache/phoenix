@@ -222,7 +222,7 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
     
     /**
      * 
-     * @param kv
+     * @param cell
      * @param isSeek pass true for seek, false for reseek.
      * @return 
      * @throws IOException

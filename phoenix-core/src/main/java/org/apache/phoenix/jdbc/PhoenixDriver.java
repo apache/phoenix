@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -29,7 +29,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import javax.annotation.concurrent.GuardedBy;
 
-import com.google.common.cache.*;
+import org.apache.phoenix.thirdparty.com.google.common.cache.*;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -43,14 +43,14 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 
 /**
  * 
  * JDBC Driver implementation of Phoenix for production.
  * To use this driver, specify the following URL:
- *     jdbc:phoenix:<zookeeper quorum server name>;
+ *     {@code jdbc:phoenix:<zookeeper quorum server name>; }
  * Only an embedded driver is currently supported (Phoenix client
  * runs in the same JVM as the driver). Connections are lightweight
  * and are not pooled. The last part of the URL, the hbase zookeeper

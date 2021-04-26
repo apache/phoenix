@@ -47,18 +47,19 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
-import org.apache.commons.cli.PosixParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.HelpFormatter;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.PosixParser;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -758,10 +759,12 @@ public class OrphanViewTool extends Configured implements Tool {
 
     private void createSnapshot(PhoenixConnection phoenixConnection, long scn)
         throws Exception {
-        phoenixConnection.getQueryServices().getAdmin().snapshot("OrphanViewTool." + Long.toString(scn),
-                TableName.valueOf(SYSTEM_CATALOG_NAME));
-        phoenixConnection.getQueryServices().getAdmin().snapshot("OrphanViewTool." + Long.toString(scn+1),
-                TableName.valueOf(SYSTEM_CHILD_LINK_NAME));
+        try (Admin admin = phoenixConnection.getQueryServices().getAdmin()) {
+            admin.snapshot("OrphanViewTool." + scn, TableName
+                .valueOf(SYSTEM_CATALOG_NAME));
+            admin.snapshot("OrphanViewTool." + (scn + 1), TableName
+                .valueOf(SYSTEM_CHILD_LINK_NAME));
+        }
     }
 
     private void readOrphanViews() throws Exception {

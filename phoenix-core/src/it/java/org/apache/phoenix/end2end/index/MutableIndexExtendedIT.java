@@ -99,65 +99,6 @@ public class MutableIndexExtendedIT extends ParallelStatsDisabledIT {
                         { true, "TEPHRA", false }, { true, "TEPHRA", true }, }), 1);
     }
 
-    // Tests that if major compaction is run on a table with a disabled index,
-    // deleted cells are kept
-    // TODO: Move to a different test class?
-    @Test
-    public void testCompactDisabledIndex() throws Exception {
-        if (localIndex || tableDDLOptions.contains("TRANSACTIONAL=true")) return;
-
-        try (Connection conn = getConnection()) {
-            String schemaName = generateUniqueName();
-            String dataTableName = generateUniqueName() + "_DATA";
-            String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-            String indexTableName = generateUniqueName() + "_IDX";
-            String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
-            conn.createStatement().execute(
-                    String.format(PartialScannerResultsDisabledIT.TEST_TABLE_DDL,
-                            dataTableFullName));
-            conn.createStatement().execute(
-                    String.format(PartialScannerResultsDisabledIT.INDEX_1_DDL, indexTableName,
-                            dataTableFullName));
-
-            //insert a row, and delete it
-            PartialScannerResultsDisabledIT.writeSingleBatch(conn, 1, 1, dataTableFullName);
-            List<HRegion>
-                    regions =
-                    getUtility().getHBaseCluster().getRegions(TableName.valueOf(dataTableFullName));
-            HRegion hRegion = regions.get(0);
-            hRegion.flush(
-                    true); // need to flush here, or else nothing will get written to disk due to the delete
-            conn.createStatement().execute("DELETE FROM " + dataTableFullName);
-            conn.commit();
-
-            // disable the index, simulating an index write failure
-            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
-            IndexUtil.updateIndexState(pConn, indexTableFullName, PIndexState.DISABLE,
-                    EnvironmentEdgeManager.currentTimeMillis());
-
-            // major compaction should not remove the deleted row
-            hRegion.flush(true);
-            hRegion.compact(true);
-            Table
-                    dataTable =
-                    conn.unwrap(PhoenixConnection.class).getQueryServices()
-                            .getTable(Bytes.toBytes(dataTableFullName));
-            assertEquals(1, TestUtil.getRawRowCount(dataTable));
-
-            // reenable the index
-            IndexUtil.updateIndexState(pConn, indexTableFullName, PIndexState.INACTIVE,
-                    EnvironmentEdgeManager.currentTimeMillis());
-            IndexUtil.updateIndexState(pConn, indexTableFullName, PIndexState.ACTIVE, 0L);
-
-            // now major compaction should remove the deleted row
-            hRegion.compact(true);
-            dataTable =
-                    conn.unwrap(PhoenixConnection.class).getQueryServices()
-                            .getTable(Bytes.toBytes(dataTableFullName));
-            assertEquals(0, TestUtil.getRawRowCount(dataTable));
-        }
-    }
-
     // some tables (e.g. indexes on views) have UngroupedAgg coproc loaded, but don't have a
     // corresponding row in syscat.  This tests that compaction isn't blocked
     // TODO: Move to a different test class?

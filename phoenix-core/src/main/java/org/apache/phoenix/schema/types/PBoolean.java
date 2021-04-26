@@ -22,8 +22,8 @@ import java.sql.Types;
 
 import org.apache.phoenix.schema.SortOrder;
 
-import com.google.common.base.Preconditions;
-import com.google.common.primitives.Booleans;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Booleans;
 
 public class PBoolean extends PDataType<Boolean> {
 

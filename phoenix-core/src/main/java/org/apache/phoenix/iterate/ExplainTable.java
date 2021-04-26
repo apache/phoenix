@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
@@ -31,6 +32,8 @@ import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.ScanRanges;
@@ -42,6 +45,7 @@ import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
@@ -78,7 +82,8 @@ public abstract class ExplainTable {
         this.offset = offset;
     }
 
-    private boolean explainSkipScan(StringBuilder buf) {
+    private String explainSkipScan() {
+        StringBuilder buf = new StringBuilder();
         ScanRanges scanRanges = context.getScanRanges();
         if (scanRanges.isPointLookup()) {
             int keyCount = scanRanges.getPointLookupCount();
@@ -102,10 +107,11 @@ public abstract class ExplainTable {
         } else {
             buf.append("RANGE SCAN ");
         }
-        return scanRanges.useSkipScanFilter();
+        return buf.toString();
     }
-    
-    protected void explain(String prefix, List<String> planSteps) {
+
+    protected void explain(String prefix, List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
         StringBuilder buf = new StringBuilder(prefix);
         ScanRanges scanRanges = context.getScanRanges();
         Scan scan = context.getScan();
@@ -119,19 +125,40 @@ public abstract class ExplainTable {
         if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
             buf.append("REVERSE ");
         }
+        String scanTypeDetails;
         if (scanRanges.isEverything()) {
-            buf.append("FULL SCAN ");
+            scanTypeDetails = "FULL SCAN ";
         } else {
-            explainSkipScan(buf);
+            scanTypeDetails = explainSkipScan();
         }
+        buf.append(scanTypeDetails);
         buf.append("OVER ").append(tableRef.getTable().getPhysicalName().getString());
         if (!scanRanges.isPointLookup()) {
-            appendKeyRanges(buf);
+            buf.append(appendKeyRanges());
         }
         planSteps.add(buf.toString());
+        if (explainPlanAttributesBuilder != null) {
+            explainPlanAttributesBuilder.setConsistency(scan.getConsistency());
+            if (hint.hasHint(Hint.SMALL)) {
+                explainPlanAttributesBuilder.setHint(Hint.SMALL);
+            }
+            if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
+                explainPlanAttributesBuilder.setClientSortedBy("REVERSE");
+            }
+            explainPlanAttributesBuilder.setExplainScanType(scanTypeDetails);
+            explainPlanAttributesBuilder.setTableName(tableRef.getTable()
+                .getPhysicalName().getString());
+            if (!scanRanges.isPointLookup()) {
+                explainPlanAttributesBuilder.setKeyRanges(appendKeyRanges());
+            }
+        }
         if (context.getScan() != null && tableRef.getTable().getRowTimestampColPos() != -1) {
             TimeRange range = context.getScan().getTimeRange();
             planSteps.add("    ROW TIMESTAMP FILTER [" + range.getMin() + ", " + range.getMax() + ")");
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setScanTimeRangeMin(range.getMin());
+                explainPlanAttributesBuilder.setScanTimeRangeMax(range.getMax());
+            }
         }
         
         PageFilter pageFilter = null;
@@ -153,23 +180,79 @@ public abstract class ExplainTable {
                 }
             } while (filterIterator.hasNext());
         }
+        Set<PColumn> dataColumns = context.getDataColumns();
+        if (dataColumns != null && !dataColumns.isEmpty()) {
+            planSteps.add("    SERVER MERGE " + dataColumns.toString());
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setServerMergeColumns(dataColumns);
+            }
+        }
+        String whereFilterStr = null;
         if (whereFilter != null) {
-            planSteps.add("    SERVER FILTER BY " + (firstKeyOnlyFilter == null ? "" : "FIRST KEY ONLY AND ") + whereFilter.toString());
+            whereFilterStr = whereFilter.toString();
+        } else {
+            byte[] expBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER_STR);
+            if (expBytes != null) {
+                whereFilterStr = Bytes.toString(expBytes);
+            }
+        }
+        if (whereFilterStr != null) {
+            String serverWhereFilter = "SERVER FILTER BY "
+                + (firstKeyOnlyFilter == null ? "" : "FIRST KEY ONLY AND ")
+                + whereFilterStr;
+            planSteps.add("    " + serverWhereFilter);
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setServerWhereFilter(serverWhereFilter);
+            }
         } else if (firstKeyOnlyFilter != null) {
             planSteps.add("    SERVER FILTER BY FIRST KEY ONLY");
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setServerWhereFilter(
+                    "SERVER FILTER BY FIRST KEY ONLY");
+            }
         }
         if (distinctFilter != null) {
-            planSteps.add("    SERVER DISTINCT PREFIX FILTER OVER "+groupBy.getExpressions().toString());
+            String serverDistinctFilter = "SERVER DISTINCT PREFIX FILTER OVER "
+                + groupBy.getExpressions().toString();
+            planSteps.add("    " + serverDistinctFilter);
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setServerDistinctFilter(serverDistinctFilter);
+            }
         }
         if (!orderBy.getOrderByExpressions().isEmpty() && groupBy.isEmpty()) { // with GROUP BY, sort happens client-side
-            planSteps.add("    SERVER" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
-                    + " SORTED BY " + orderBy.getOrderByExpressions().toString());
+            String orderByExpressions = "SERVER"
+                + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
+                + " SORTED BY " + orderBy.getOrderByExpressions().toString();
+            planSteps.add("    " + orderByExpressions);
+            if (explainPlanAttributesBuilder != null) {
+                if (limit != null) {
+                    explainPlanAttributesBuilder.setServerRowLimit(limit.longValue());
+                }
+                explainPlanAttributesBuilder.setServerSortedBy(
+                    orderBy.getOrderByExpressions().toString());
+            }
         } else {
             if (offset != null) {
                 planSteps.add("    SERVER OFFSET " + offset);
             }
+            Long limit = null;
             if (pageFilter != null) {
-                planSteps.add("    SERVER " + pageFilter.getPageSize() + " ROW LIMIT");
+                limit = pageFilter.getPageSize();
+            } else {
+                byte[] limitBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_LIMIT);
+                if (limitBytes != null) {
+                    limit = Bytes.toLong(limitBytes);
+                }
+            }
+            if (limit != null) {
+                planSteps.add("    SERVER " + limit + " ROW LIMIT");
+            }
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setServerOffset(offset);
+                if (pageFilter != null) {
+                    explainPlanAttributesBuilder.setServerRowLimit(
+                        pageFilter.getPageSize());
+                }
             }
         }
         Integer groupByLimit = null;
@@ -177,9 +260,12 @@ public abstract class ExplainTable {
         if (groupByLimitBytes != null) {
             groupByLimit = (Integer) PInteger.INSTANCE.toObject(groupByLimitBytes);
         }
-        groupBy.explain(planSteps, groupByLimit);
+        groupBy.explain(planSteps, groupByLimit, explainPlanAttributesBuilder);
         if (scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX) != null) {
             planSteps.add("    SERVER ARRAY ELEMENT PROJECTION");
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setServerArrayElementProjection(true);
+            }
         }
     }
 
@@ -292,11 +378,12 @@ public abstract class ExplainTable {
             buf.append(',');
         }
     }
-    
-    private void appendKeyRanges(StringBuilder buf) {
+
+    private String appendKeyRanges() {
+        final StringBuilder buf = new StringBuilder();
         ScanRanges scanRanges = context.getScanRanges();
         if (scanRanges.isDegenerate() || scanRanges.isEverything()) {
-            return;
+            return "";
         }
         buf.append(" [");
         StringBuilder buf1 = new StringBuilder();
@@ -310,5 +397,6 @@ public abstract class ExplainTable {
             buf.append(buf2);
         }
         buf.setCharAt(buf.length()-1, ']');
+        return buf.toString();
     }
 }

@@ -24,7 +24,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;

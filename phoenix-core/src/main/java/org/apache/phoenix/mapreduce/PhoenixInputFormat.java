@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
@@ -119,8 +119,8 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
             // Generate splits based off statistics, or just region splits?
             boolean splitByStats = PhoenixConfigurationUtil.getSplitByStats(config);
 
-            if(splitByStats) {
-                for(Scan aScan: scans) {
+            if (splitByStats) {
+                for (Scan aScan : scans) {
                     if (LOGGER.isDebugEnabled()) {
                         LOGGER.debug("Split for  scan : " + aScan + "with scanAttribute : " + aScan
                                 .getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : [" +
@@ -160,7 +160,6 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
      * @param context
      * @return
      * @throws IOException
-     * @throws SQLException
      */
     protected  QueryPlan getQueryPlan(final JobContext context, final Configuration configuration)
             throws IOException {
@@ -170,7 +169,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
             final String currentScnValue = configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE);
             final String tenantId = configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID);
             final Properties overridingProps = new Properties();
-            if(txnScnValue==null && currentScnValue!=null) {
+            if (txnScnValue == null && currentScnValue != null) {
                 overridingProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, currentScnValue);
             }
             if (tenantId != null && configuration.get(PhoenixRuntime.TENANT_ID_ATTRIB) == null){
@@ -208,9 +207,19 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
 
               // setting the snapshot configuration
               String snapshotName = configuration.get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
+              String restoreDir = configuration.get(PhoenixConfigurationUtil.RESTORE_DIR_KEY);
+              boolean isSnapshotRestoreManagedExternally = PhoenixConfigurationUtil.isMRSnapshotManagedExternally(configuration);
+              Configuration config = queryPlan.getContext().
+                      getConnection().getQueryServices().getConfiguration();
               if (snapshotName != null) {
-                  PhoenixConfigurationUtil.setSnapshotNameKey(queryPlan.getContext().getConnection().
-                      getQueryServices().getConfiguration(), snapshotName);
+                PhoenixConfigurationUtil.setSnapshotNameKey(config, snapshotName);
+                PhoenixConfigurationUtil.setRestoreDirKey(config, restoreDir);
+                PhoenixConfigurationUtil.setMRSnapshotManagedExternally(config, isSnapshotRestoreManagedExternally);
+              } else {
+                // making sure we unset snapshot name as new job doesn't need it
+                config.unset(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
+                config.unset(PhoenixConfigurationUtil.RESTORE_DIR_KEY);
+                config.unset(PhoenixConfigurationUtil.MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE);
               }
 
               return queryPlan;

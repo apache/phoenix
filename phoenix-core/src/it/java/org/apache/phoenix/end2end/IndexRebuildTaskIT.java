@@ -29,6 +29,7 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -146,9 +147,19 @@ public class IndexRebuildTaskIT extends BaseUniqueNamesOwnClusterIT {
                             TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
 
             Timestamp startTs = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
-            Task.addTask(conn.unwrap(PhoenixConnection.class), PTable.TaskType.INDEX_REBUILD,
-                    TENANT1, null, viewName,
-                    PTable.TaskStatus.CREATED.toString(), data, null, startTs, null, true);
+            Task.addTask(new SystemTaskParams.SystemTaskParamsBuilder()
+                .setConn(conn.unwrap(PhoenixConnection.class))
+                .setTaskType(PTable.TaskType.INDEX_REBUILD)
+                .setTenantId(TENANT1)
+                .setSchemaName(null)
+                .setTableName(viewName)
+                .setTaskStatus(PTable.TaskStatus.CREATED.toString())
+                .setData(data)
+                .setPriority(null)
+                .setStartTs(startTs)
+                .setEndTs(null)
+                .setAccessCheckEnabled(true)
+                .build());
             task.run();
 
             // Check task status and other column values.

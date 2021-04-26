@@ -20,7 +20,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>5.1.0-SNAPSHOT</version>
+  <version>5.2.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -40,12 +40,16 @@
   </organization>
 
   <modules>
+    <module>phoenix-hbase-compat-2.4.1</module>
+    <module>phoenix-hbase-compat-2.4.0</module>
     <module>phoenix-hbase-compat-2.3.0</module>
-    <module>phoenix-hbase-compat-2.2.1</module>
+    <module>phoenix-hbase-compat-2.2.5</module>
     <module>phoenix-hbase-compat-2.1.6</module>
     <module>phoenix-core</module>
     <module>phoenix-pherf</module>
-    <module>phoenix-client</module>
+    <module>phoenix-client-parent</module>
+    <module>phoenix-client-parent/phoenix-client</module>
+    <!-- phoenix-client-embedded is added in profile "embedded" -->
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tools</module>
@@ -62,7 +66,7 @@
   <parent>
     <groupId>org.apache</groupId>
     <artifactId>apache</artifactId>
-    <version>21</version>
+    <version>23</version>
   </parent>
 
   <scm>
@@ -72,15 +76,24 @@
   </scm>
 
   <properties>
-    <!-- The HBase compatibility module that that will be included in
-    the shaded JARs and the assembly -->
-    <hbase.profile>2.2</hbase.profile>
 
     <!-- Hadoop and Hbase-thirdparty version -->
     <!-- These are expected to be overridden to conform to cluster versions
     along with hbase.version (defined in profiles) -->
-    <hadoop.version>3.0.3</hadoop.version>
+    <hadoop.version>3.1.4</hadoop.version>
     <hbase.thirdparty.version>2.2.1</hbase.thirdparty.version>
+
+    <phoenix.thirdparty.version>1.1.0</phoenix.thirdparty.version>
+    <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
+
+    <!-- This is used by the release script only -->
+    <hbase.profile.list>2.1 2.2 2.3 2.4.0 2.4</hbase.profile.list>
+    <!-- The default hbase versions to build with (override with hbase.version) -->
+    <hbase-2.1.runtime.version>2.1.10</hbase-2.1.runtime.version>
+    <hbase-2.2.runtime.version>2.2.6</hbase-2.2.runtime.version>
+    <hbase-2.3.runtime.version>2.3.5</hbase-2.3.runtime.version>
+    <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
+    <hbase-2.4.runtime.version>2.4.2</hbase-2.4.runtime.version>
 
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
@@ -89,7 +102,6 @@
     <top.dir>${project.basedir}</top.dir>
 
     <!-- Dependency versions -->
-    <commons-cli.version>1.4</commons-cli.version>
     <jackson.version>2.10.3</jackson.version>
     <antlr.version>3.5.2</antlr.version>
     <log4j.version>1.2.17</log4j.version>
@@ -99,10 +111,8 @@
     <commons-io.version>2.5</commons-io.version>
     <commons-lang.version>3.8</commons-lang.version>
     <commons-csv.version>1.0</commons-csv.version>
-    <commons-logging.version>1.2</commons-logging.version>
     <sqlline.version>1.9.0</sqlline.version>
     <commons-configuration2.version>2.1.1</commons-configuration2.version>
-    <guava.version>13.0.1</guava.version>
     <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jsr305.version>2.0.1</jsr305.version>
@@ -111,17 +121,16 @@
     <htrace.version>3.1.0-incubating</htrace.version>
     <collections.version>3.2.2</collections.version>
     <jodatime.version>2.10.5</jodatime.version>
-    <joni.version>2.1.2</joni.version>
-    <tephra.version>0.15.0-incubating</tephra.version>
-    <omid.version>1.0.1</omid.version>
+    <joni.version>2.1.31</joni.version>
+    <tephra.version>0.16.0</tephra.version>
+    <omid.version>1.0.2</omid.version>
     <stream.version>2.9.5</stream.version>
     <i18n-util.version>1.0.4</i18n-util.version>
-    <twill.version>0.8.0</twill.version>
     <guice.version>4.0</guice.version>
-    <zookeeper.version>3.4.10</zookeeper.version>
+    <zookeeper.version>3.4.14</zookeeper.version>
     <curator.version>4.0.0</curator.version>
-    <jcodings.version>1.0.18</jcodings.version>
-    <thrift.version>0.9.0</thrift.version>
+    <jcodings.version>1.0.55</jcodings.version>
+    <thrift.version>0.9.3-1</thrift.version>
     <!-- Test Dependencies -->
     <mockito.version>1.10.19</mockito.version>
     <junit.version>4.13</junit.version>
@@ -131,8 +140,15 @@
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
     <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
     <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
+    <restrict-imports.enforcer.version>1.1.0</restrict-imports.enforcer.version>
+    <maven-shade-plugin.version>3.2.4</maven-shade-plugin.version>
     <maven-antlr-eclipse-plugin.version>${antlr.version}</maven-antlr-eclipse-plugin.version>
-    <jacoco-maven-plugin.version>0.7.9</jacoco-maven-plugin.version>
+    <maven-project-info-reports-plugin.version>3.1.1</maven-project-info-reports-plugin.version>
+    <!-- Override property in ASF parent -->
+    <surefire.version>2.22.2</surefire.version>
+    <spotbugs-maven-plugin.version>4.1.3</spotbugs-maven-plugin.version>
+    <spotbugs.version>4.1.3</spotbugs.version>
+    <jacoco-maven-plugin.version>0.8.5</jacoco-maven-plugin.version>
 
     <!-- Plugin options -->
     <numForkedUT>8</numForkedUT>
@@ -148,15 +164,27 @@
     <!-- JaCoCo thresholds which we can override in each sub-module if required -->
     <jacoco.instruction.coverage.percentage>0.700</jacoco.instruction.coverage.percentage>
     <jacoco.branch.coverage.percentage>0.600</jacoco.branch.coverage.percentage>
+
+    <maven-owasp-plugin.version>5.3.2</maven-owasp-plugin.version>
+    <protobuf.plugin.version>0.6.1</protobuf.plugin.version>
+    <os.maven.version>1.5.0.Final</os.maven.version>
   </properties>
 
   <build>
+    <extensions>
+      <extension>
+        <groupId>kr.motd.maven</groupId>
+        <artifactId>os-maven-plugin</artifactId>
+        <version>${os.maven.version}</version>
+      </extension>
+    </extensions>
+
     <pluginManagement>
       <plugins>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-enforcer-plugin</artifactId>
-          <version>${maven-enforcer-plugin.version}</version>
+          <artifactId>maven-project-info-reports-plugin</artifactId>
+          <version>${maven-project-info-reports-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -174,7 +202,23 @@
         <plugin>
           <groupId>com.github.searls</groupId>
           <artifactId>jasmine-maven-plugin</artifactId>
-          <version>1.3.1.6</version>
+          <version>2.2</version>
+        </plugin>
+        <plugin>
+          <groupId>com.github.spotbugs</groupId>
+          <artifactId>spotbugs-maven-plugin</artifactId>
+          <version>${spotbugs-maven-plugin.version}</version>
+          <dependencies>
+            <dependency>
+              <groupId>com.github.spotbugs</groupId>
+              <artifactId>spotbugs</artifactId>
+              <version>${spotbugs.version}</version>
+            </dependency>
+          </dependencies>
+          <configuration>
+            <effort>Max</effort>
+            <maxHeap>2048</maxHeap>
+          </configuration>
         </plugin>
         <!--This plugin's configuration is used to store Eclipse m2e settings 
           only. It has no influence on the Maven build itself. -->
@@ -276,9 +320,7 @@
               <id>ParallelStatsEnabledTest</id>
               <configuration>
                 <reuseForks>true</reuseForks>
-                <!--parallel>methods</parallel>
-                <threadCount>20</threadCount-->
-                <argLine>@{jacocoArgLine} -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
+                <argLine>@{jacocoArgLine} -Xmx2000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 </argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
               </configuration>
               <goals>
@@ -290,17 +332,7 @@
               <id>ParallelStatsDisabledTest</id>
               <configuration>
                 <reuseForks>true</reuseForks>
-                <!--parallel>methods</parallel>
-                <threadCount>20</threadCount-->
-                <!-- We're intermittantly hitting this assertion when running in parallel:
-                     Caused by: java.lang.AssertionError: we should never remove a different context
-	                 at org.apache.hadoop.hbase.regionserver.HRegion$RowLockContext.cleanUp(HRegion.java:5206)
-	                 at org.apache.hadoop.hbase.regionserver.HRegion$RowLockImpl.release(HRegion.java:5246)
-	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.doGetTable(MetaDataEndpointImpl.java:2898)
-	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.doGetTable(MetaDataEndpointImpl.java:2835)
-	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.getTable(MetaDataEndpointImpl.java:490) -->
-		<!--enableAssertions>false</enableAssertions-->
-                <argLine>@{jacocoArgLine} -Xmx3000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
+                <argLine>@{jacocoArgLine} -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 </argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
               </configuration>
               <goals>
@@ -309,35 +341,11 @@
               </goals>
             </execution>
             <execution>
-              <id>HBaseManagedTimeTests</id>
-              <configuration>
-                <reuseForks>true</reuseForks>
-                <argLine>@{jacocoArgLine} -enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
-                <groups>org.apache.phoenix.end2end.HBaseManagedTimeTest</groups>
-              </configuration>
-              <goals>
-                <goal>integration-test</goal>
-                <goal>verify</goal>
-              </goals>
-            </execution>
-	    <execution>
               <id>NeedTheirOwnClusterTests</id>
               <configuration>
                  <reuseForks>false</reuseForks>
-                 <argLine>@{jacocoArgLine} -enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -Dorg.apache.hadoop.hbase.shaded.io.netty.packagePrefix=org.apache.hadoop.hbase.shaded.</argLine>
+                 <argLine>@{jacocoArgLine} -enableassertions -Xmx2000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
-              </configuration>
-              <goals>
-                 <goal>integration-test</goal>
-                 <goal>verify</goal>
-              </goals>
-            </execution>
-<execution>
-              <id>SplitSystemCatalogTests</id>
-              <configuration>
-                 <reuseForks>false</reuseForks>
-                 <argLine>@{jacocoArgLine} -enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
-                 <groups>org.apache.phoenix.end2end.SplitSystemCatalogTests</groups>
               </configuration>
               <goals>
                  <goal>integration-test</goal>
@@ -366,6 +374,11 @@
                   org.slf4j:slf4j-log4j12
                 </ignoredUnusedDeclaredDependency>
               </ignoredUnusedDeclaredDependencies>
+              <ignoredUsedUndeclaredDependencies>
+                <ignoredUsedUndeclaredDependency>
+                  dnsjava:dnsjava
+                </ignoredUsedUndeclaredDependency>
+              </ignoredUsedUndeclaredDependencies>
             </configuration>
           <executions>
             <execution>
@@ -396,6 +409,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
+          <version>${maven-shade-plugin.version}</version>
         </plugin>
         <plugin>
           <!-- Allows us to get the apache-ds bundle artifacts -->
@@ -408,53 +422,69 @@
           <artifactId>exec-maven-plugin</artifactId>
           <version>1.6.0</version>
         </plugin>
-      </plugins>
-    </pluginManagement>
-
-    <plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-enforcer-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>check-hbase-compatibility</id>
-            <phase>validate</phase>
-            <goals>
-              <goal>enforce</goal>
-            </goals>
-            <configuration>
-              <rules>
-                <evaluateBeanshell>
-                 <condition>
-                   import java.util.regex.Pattern;
-                   import java.lang.Integer;
-
-                   versionPattern = Pattern.compile("(\\d+)\\.(\\d+)\\.(\\d+)[^.]*$");
-                   versionMatcher = versionPattern.matcher("${hbase.version}");
-                   versionMatcher.find();
-
-                   hbaseMajor = Integer.parseInt(versionMatcher.group(1));
-                   hbaseMinor = Integer.parseInt(versionMatcher.group(2));
-                   hbasePatch = Integer.parseInt(versionMatcher.group(3));
-
-                   hbaseMajor == 2 &amp;&amp; (
-                     ("${hbase.compat.version}".equals("2.1.6")
-                       &amp;&amp; hbaseMinor == 1
-                       &amp;&amp; hbasePatch &gt;=6)
-                     || ("${hbase.compat.version}".equals("2.2.1")
-                       &amp;&amp; hbaseMinor == 2
-                       &amp;&amp; hbasePatch &gt;=1)
-                     || ("${hbase.compat.version}".equals("2.3.0")
-                       &amp;&amp; hbaseMinor == 3
-                       &amp;&amp; hbasePatch &gt;=0)
-                   )
-                   </condition>
-                  </evaluateBeanshell>
+        <plugin>
+          <groupId>org.xolstice.maven.plugins</groupId>
+          <artifactId>protobuf-maven-plugin</artifactId>
+          <version>${protobuf.plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-enforcer-plugin</artifactId>
+          <version>${maven-enforcer-plugin.version}</version>
+          <dependencies>
+            <dependency>
+              <groupId>de.skuzzle.enforcer</groupId>
+              <artifactId>restrict-imports-enforcer-rule</artifactId>
+              <version>${restrict-imports.enforcer.version}</version>
+            </dependency>
+          </dependencies>
+          <executions>
+            <execution>
+              <id>banned-illegal-imports</id>
+              <phase>process-sources</phase>
+              <goals>
+                <goal>enforce</goal>
+              </goals>
+              <configuration>
+                <rules>
+                  <restrictImports implementation="de.skuzzle.enforcer.restrictimports.rule.RestrictImports">
+                    <includeTestCode>true</includeTestCode>
+                    <reason>Use SLF4j for logging</reason>
+                    <bannedImports>
+                      <bannedImport>org.apache.commons.logging.Log</bannedImport>
+                      <bannedImport>org.apache.commons.logging.LogFactory</bannedImport>
+                    </bannedImports>
+                  </restrictImports>
+                  <restrictImports implementation="de.skuzzle.enforcer.restrictimports.rule.RestrictImports">
+                    <includeTestCode>true</includeTestCode>
+                    <reason>Use shaded version in phoenix-thirdparty</reason>
+                    <bannedImports>
+                      <bannedImport>com.google.common.**</bannedImport>
+                    </bannedImports>
+                  </restrictImports>
+                  <restrictImports implementation="de.skuzzle.enforcer.restrictimports.rule.RestrictImports">
+                    <includeTestCode>true</includeTestCode>
+                    <reason>Use shaded version in phoenix-thirdparty</reason>
+                    <bannedImports>
+                      <bannedImport>org.apache.commons.cli.**</bannedImport>
+                    </bannedImports>
+                  </restrictImports>
+                  <restrictImports implementation="de.skuzzle.enforcer.restrictimports.rule.RestrictImports">
+                    <includeTestCode>true</includeTestCode>
+                    <reason>Use commons lang 3</reason>
+                    <bannedImports>
+                      <bannedImport>org.apache.commons.lang.**</bannedImport>
+                    </bannedImports>
+                  </restrictImports>
                 </rules>
               </configuration>
             </execution>
           </executions>
         </plugin>
+      </plugins>
+    </pluginManagement>
+
+    <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
@@ -538,33 +568,15 @@
         </executions>
       </plugin>
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-site-plugin</artifactId>
-        <dependencies>
-        <dependency>
-           <groupId>org.apache.maven.doxia</groupId>
-           <artifactId>doxia-module-markdown</artifactId>
-           <version>1.3</version>
-         </dependency>
-         <dependency>
-           <groupId>lt.velykis.maven.skins</groupId>
-           <artifactId>reflow-velocity-tools</artifactId>
-           <version>1.0.0</version>
-         </dependency>
-         <dependency>
-           <groupId>org.apache.velocity</groupId>
-           <artifactId>velocity</artifactId>
-           <version>1.7</version>
-         </dependency>
-       </dependencies>
-      </plugin>
-      <plugin>
         <groupId>org.apache.rat</groupId>
         <artifactId>apache-rat-plugin</artifactId>
         <configuration>
           <excludes>
             <!-- Header on changelog isn't normal -->
             <exclude>CHANGES</exclude>
+            <!-- create-release scripts -->
+            <exclude>dev/create-release/README.txt</exclude>
+            <exclude>dev/create-release/vote.tmpl</exclude>
             <!-- IDE configuration -->
             <exclude>dev/phoenix.importorder</exclude>
             <!-- Release L&N -->
@@ -604,12 +616,52 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-client</artifactId>
+        <artifactId>phoenix-client-hbase-2.1</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-server</artifactId>
+        <artifactId>phoenix-client-hbase-2.2</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-hbase-2.3</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-hbase-2.4.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-hbase-2.4</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.1</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.2</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.3</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.4.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.4</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -628,18 +680,33 @@
         <version>${project.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.apache.phoenix.thirdparty</groupId>
+        <artifactId>phoenix-shaded-guava</artifactId>
+        <version>${phoenix.thirdparty.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-hbase-compat-2.1.6</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-hbase-compat-2.2.1</artifactId>
+        <artifactId>phoenix-hbase-compat-2.2.5</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-hbase-compat-2.3.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.4.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.4.1</artifactId>
         <version>${project.version}</version>
       </dependency>
       <!-- Intra-project test dependencies -->
@@ -886,7 +953,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-core</artifactId>
+        <artifactId>tephra-core-shaded</artifactId>
         <version>${tephra.version}</version>
         <exclusions>
           <exclusion>
@@ -926,7 +993,15 @@
       <dependency>
         <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-hbase-compat-2.0</artifactId>
+        <classifier>shaded</classifier>
         <version>${tephra.version}</version>
+        <!-- use tephra-core-shaded instead -->
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.tephra</groupId>
+            <artifactId>tephra-core</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
 
       <!-- Omid -->
@@ -961,7 +1036,11 @@
           <exclusion>
             <groupId>org.apache.omid</groupId>
             <artifactId>omid-hbase-commit-table-hbase1.x</artifactId>
-            </exclusion>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.omid</groupId>
+            <artifactId>omid-hbase-common-hbase1.x</artifactId>
+          </exclusion>
           <exclusion>
             <groupId>org.apache.omid</groupId>
             <artifactId>omid-hbase-client-hbase1.x</artifactId>
@@ -973,7 +1052,7 @@
          <exclusion>
            <groupId>org.testng</groupId>
            <artifactId>testng</artifactId>
-          </exclusion>
+         </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1221,11 +1300,6 @@
         <version>${antlr.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.google.guava</groupId>
-        <artifactId>guava</artifactId>
-        <version>${guava.version}</version>
-      </dependency>
-      <dependency>
         <groupId>com.google.inject</groupId>
         <artifactId>guice</artifactId>
         <version>${guice.version}</version>
@@ -1311,9 +1385,9 @@
         <version>${commons-io.version}</version>
       </dependency>
       <dependency>
-        <groupId>commons-cli</groupId>
-        <artifactId>commons-cli</artifactId>
-        <version>${commons-cli.version}</version>
+        <groupId>org.apache.phoenix.thirdparty</groupId>
+        <artifactId>phoenix-shaded-commons-cli</artifactId>
+        <version>${phoenix.thirdparty.version}</version>
       </dependency>
       <dependency>
         <groupId>joda-time</groupId>
@@ -1341,36 +1415,6 @@
         <version>${joni.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.twill</groupId>
-        <artifactId>twill-zookeeper</artifactId>
-        <version>${twill.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-core</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-classic</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.twill</groupId>
-        <artifactId>twill-common</artifactId>
-        <version>${twill.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.twill</groupId>
-        <artifactId>twill-discovery-api</artifactId>
-        <version>${twill.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.twill</groupId>
-        <artifactId>twill-discovery-core</artifactId>
-        <version>${twill.version}</version>
-      </dependency>
-      <dependency>
         <groupId>org.jruby.jcodings</groupId>
         <artifactId>jcodings</artifactId>
         <version>${jcodings.version}</version>
@@ -1386,11 +1430,6 @@
           </exclusion>
         </exclusions>
       </dependency>
-      <dependency>
-        <groupId>commons-logging</groupId>
-        <artifactId>commons-logging</artifactId>
-        <version>${commons-logging.version}</version>
-    </dependency>
 
       <!-- Other test dependencies -->
       <dependency>
@@ -1452,18 +1491,35 @@
               </execution>
             </executions>
           </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>exclude-tephra</id>
+      <activation>
+        <property>
+          <name>without.tephra</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-gpg-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>sign-artifacts</id>
-                <phase>verify</phase>
-                <goals>
-                  <goal>sign</goal>
-                </goals>
-              </execution>
-            </executions>
+            <artifactId>maven-failsafe-plugin</artifactId>
+            <configuration>
+              <classpathDependencyExcludes>
+                org.apache.tephra:tephra-api,org.apache.tephra:tephra-core,org.apache.thrift:libthrift
+              </classpathDependencyExcludes>
+            </configuration>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <classpathDependencyExcludes>
+                org.apache.tephra:tephra-api,org.apache.tephra:tephra-core,org.apache.thrift:libthrift
+              </classpathDependencyExcludes>
+            </configuration>
           </plugin>
         </plugins>
       </build>
@@ -1472,20 +1528,25 @@
     <!-- The dependencies should be defined only in phoenix-core
     ,but maven doesn't seem to support that -->
     <profile>
-      <!-- must be identical to phoenix-hbase-compat-2.1.6 profile -->
-      <id>phoenix-hbase-compat-2.1.6-default</id>
+      <!-- must be identical to phoenix-hbase-compat-2.4.1 profile -->
+      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
+      <id>phoenix-hbase-compat-2.4.1-default</id>
       <activation>
         <property>
           <name>!hbase.profile</name>
         </property>
       </activation>
       <properties>
-        <hbase.profile>2.1</hbase.profile>
-        <hbase.compat.version>2.1.6</hbase.compat.version>
-        <hbase.version>2.1.9</hbase.version>
+        <hbase.profile>2.4</hbase.profile>
+        <hbase.compat.version>2.4.1</hbase.compat.version>
+        <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
+        <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
+        <zookeeper.version>3.5.7</zookeeper.version>
       </properties>
     </profile>
     <profile>
+      <!-- PHOENIX-5993 may work with the public HBase artifacts, as the test don't trip over
+      anything but it should be rebuilt like 2.2+ -->
       <id>phoenix-hbase-compat-2.1.6</id>
       <activation>
         <activeByDefault>true</activeByDefault>
@@ -1497,12 +1558,13 @@
       <properties>
         <hbase.profile>2.1</hbase.profile>
         <hbase.compat.version>2.1.6</hbase.compat.version>
-        <hbase.version>2.1.9</hbase.version>
+        <hbase.version>${hbase-2.1.runtime.version}</hbase.version>
+        <hadoop.version>3.0.3</hadoop.version>
       </properties>
     </profile>
     <profile>
       <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
-      <id>phoenix-hbase-compat-2.2.1</id>
+      <id>phoenix-hbase-compat-2.2.5</id>
       <activation>
         <property>
           <name>hbase.profile</name>
@@ -1511,10 +1573,9 @@
       </activation>
       <properties>
         <hbase.profile>2.2</hbase.profile>
-        <hbase.compat.version>2.2.1</hbase.compat.version>
-        <hbase.version>2.2.5</hbase.version>
-        <!-- PHOENIX-6010 3.1.3 doesn't work because of Guava rebase -->
-        <hadoop.version>3.1.2</hadoop.version>
+        <hbase.compat.version>2.2.5</hbase.compat.version>
+        <hbase.version>${hbase-2.2.runtime.version}</hbase.version>
+        <hadoop.version>3.1.3</hadoop.version>
       </properties>
     </profile>
     <profile>
@@ -1529,12 +1590,74 @@
       <properties>
         <hbase.profile>2.3</hbase.profile>
         <hbase.compat.version>2.3.0</hbase.compat.version>
-        <hbase.version>2.3.0</hbase.version>
-        <!-- PHOENIX-6010 3.1.3 doesn't work because of Guava rebase -->
-        <hadoop.version>3.1.2</hadoop.version>
+        <hbase.version>${hbase-2.3.runtime.version}</hbase.version>
         <hbase.thirdparty.version>3.3.0</hbase.thirdparty.version>
         <zookeeper.version>3.5.7</zookeeper.version>
+        <hadoop.version>3.1.3</hadoop.version>
       </properties>
+    </profile>
+    <profile>
+      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
+      <id>phoenix-hbase-compat-2.4.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.4.0</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.4.0</hbase.profile>
+        <hbase.compat.version>2.4.0</hbase.compat.version>
+        <hbase.version>${hbase-2.4.0.runtime.version}</hbase.version>
+        <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
+        <zookeeper.version>3.5.7</zookeeper.version>
+      </properties>
+    </profile>
+    <profile>
+      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
+      <id>phoenix-hbase-compat-2.4.1</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.4</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.4</hbase.profile>
+        <hbase.compat.version>2.4.1</hbase.compat.version>
+        <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
+        <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
+        <zookeeper.version>3.5.7</zookeeper.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>owasp-dependency-check</id>
+      <activation>
+        <property>
+          <name>owasp-check</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.owasp</groupId>
+            <artifactId>dependency-check-maven</artifactId>
+            <version>${maven-owasp-plugin.version}</version>
+            <configuration>
+              <skipProvidedScope>true</skipProvidedScope>
+              <skipRuntimeScope>true</skipRuntimeScope>
+              <skipSystemScope>true</skipSystemScope>
+            </configuration>
+            <executions>
+              <execution>
+                <goals>
+                  <goal>aggregate</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
     <profile>
       <id>codecoverage</id>
@@ -1597,18 +1720,75 @@
         </plugins>
       </build>
     </profile>
+    <profile>
+      <id>embedded</id>
+      <activation>
+        <property>
+            <name>!skip.embedded</name>
+        </property>
+      </activation>
+      <modules>
+        <module>phoenix-client-parent/phoenix-client-embedded</module>
+      </modules>
+    </profile>
+    <profile>
+      <id>spotbugs-site</id>
+      <activation>
+        <property>
+            <name>!spotbugs.site</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.github.spotbugs</groupId>
+            <artifactId>spotbugs-maven-plugin</artifactId>
+            <configuration>
+              <spotbugsXmlOutput>true</spotbugsXmlOutput>
+              <xmlOutput>true</xmlOutput>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
   </profiles>
   <reporting>
-      <plugins>
-          <plugin>
-              <groupId>org.apache.maven.plugins</groupId>
-              <artifactId>maven-project-info-reports-plugin</artifactId>
-          </plugin>
-          <plugin>
-              <groupId>org.codehaus.mojo</groupId>
-              <artifactId>findbugs-maven-plugin</artifactId>
-              <version>3.0.5</version>
-          </plugin>
-      </plugins>
+    <plugins>
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.owasp</groupId>
+        <artifactId>dependency-check-maven</artifactId>
+        <configuration>
+          <skipProvidedScope>true</skipProvidedScope>
+          <skipRuntimeScope>true</skipRuntimeScope>
+          <skipSystemScope>true</skipSystemScope>
+        </configuration>
+        <reportSets>
+          <reportSet>
+              <reports>
+                  <report>aggregate</report>
+              </reports>
+          </reportSet>
+        </reportSets>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <reportSets>
+          <reportSet>
+            <reports>
+              <report>report</report>
+            </reports>
+          </reportSet>
+        </reportSets>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.rat</groupId>
+        <artifactId>apache-rat-plugin</artifactId>
+      </plugin>
+    </plugins>
   </reporting>
 </project>

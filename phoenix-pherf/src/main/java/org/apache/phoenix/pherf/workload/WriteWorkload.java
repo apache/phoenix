@@ -274,11 +274,11 @@ public class WriteWorkload implements Workload {
                         logPerNRows = Integer.valueOf(customizedLogPerNRows);
                     }
                     last = start = EnvironmentEdgeManager.currentTimeMillis();
-                    String sql = buildSql(columns, tableName);
+                    String sql = pUtil.buildSql(columns, tableName);
                     stmt = connection.prepareStatement(sql);
                     for (long i = rowCount; (i > 0) && ((EnvironmentEdgeManager.currentTimeMillis() - logStartTime)
                             < maxDuration); i--) {
-                        stmt = buildStatement(scenario, columns, stmt, simpleDateFormat);
+                        stmt = pUtil.buildStatement(rulesApplier, scenario, columns, stmt, simpleDateFormat);
                         if (useBatchApi) {
                             stmt.addBatch();
                         } else {
@@ -360,133 +360,6 @@ public class WriteWorkload implements Workload {
             }
         });
         return future;
-    }
-
-    private PreparedStatement buildStatement(Scenario scenario, List<Column> columns,
-            PreparedStatement statement, SimpleDateFormat simpleDateFormat) throws Exception {
-        int count = 1;
-        for (Column column : columns) {
-
-            DataValue dataValue = getRulesApplier().getDataForRule(scenario, column);
-            switch (column.getType()) {
-            case VARCHAR:
-                if (dataValue.getValue().equals("")) {
-                    statement.setNull(count, Types.VARCHAR);
-                } else {
-                    statement.setString(count, dataValue.getValue());
-                }
-                break;
-            case CHAR:
-                if (dataValue.getValue().equals("")) {
-                    statement.setNull(count, Types.CHAR);
-                } else {
-                    statement.setString(count, dataValue.getValue());
-                }
-                break;
-            case DECIMAL:
-                if (dataValue.getValue().equals("")) {
-                    statement.setNull(count, Types.DECIMAL);
-                } else {
-                    statement.setBigDecimal(count, new BigDecimal(dataValue.getValue()));
-                }
-                break;
-            case INTEGER:
-                if (dataValue.getValue().equals("")) {
-                    statement.setNull(count, Types.INTEGER);
-                } else {
-                    statement.setInt(count, Integer.parseInt(dataValue.getValue()));
-                }
-                break;
-            case UNSIGNED_LONG:
-                if (dataValue.getValue().equals("")) {
-                    statement.setNull(count, Types.OTHER);
-                } else {
-                    statement.setLong(count, Long.parseLong(dataValue.getValue()));
-                }
-                break;
-            case BIGINT:
-                if (dataValue.getValue().equals("")) {
-                    statement.setNull(count, Types.BIGINT);
-                } else {
-                    statement.setLong(count, Long.parseLong(dataValue.getValue()));
-                }
-                break;
-            case TINYINT:
-                if (dataValue.getValue().equals("")) {
-                    statement.setNull(count, Types.TINYINT);
-                } else {
-                    statement.setLong(count, Integer.parseInt(dataValue.getValue()));
-                }
-                break;
-            case DATE:
-                if (dataValue.getValue().equals("")) {
-                    statement.setNull(count, Types.DATE);
-                } else {
-                    Date
-                            date =
-                            new java.sql.Date(simpleDateFormat.parse(dataValue.getValue()).getTime());
-                    statement.setDate(count, date);
-                }
-                break;
-            case VARCHAR_ARRAY:
-                if (dataValue.getValue().equals("")) {
-                    statement.setNull(count, Types.ARRAY);
-                } else {
-                    Array
-                            arr =
-                            statement.getConnection().createArrayOf("VARCHAR", dataValue.getValue().split(","));
-                    statement.setArray(count, arr);
-                }
-            	break;
-            case VARBINARY:
-                if (dataValue.getValue().equals("")) {
-                    statement.setNull(count, Types.VARBINARY);
-                } else {
-                    statement.setBytes(count, dataValue.getValue().getBytes());
-                }
-                break;
-            case TIMESTAMP:
-                if (dataValue.getValue().equals("")) {
-                    statement.setNull(count, Types.TIMESTAMP);
-                } else {
-                    java.sql.Timestamp
-                            ts =
-                            new java.sql.Timestamp(simpleDateFormat.parse(dataValue.getValue()).getTime());
-                    statement.setTimestamp(count, ts);
-                }
-                break;
-            default:
-                break;
-            }
-            count++;
-        }
-        return statement;
-    }
-
-    private String buildSql(final List<Column> columns, final String tableName) {
-        StringBuilder builder = new StringBuilder();
-        builder.append("upsert into ");
-        builder.append(tableName);
-        builder.append(" (");
-        int count = 1;
-        for (Column column : columns) {
-            builder.append(column.getName());
-            if (count < columns.size()) {
-                builder.append(",");
-            } else {
-                builder.append(")");
-            }
-            count++;
-        }
-        builder.append(" VALUES (");
-        for (int i = 0; i < columns.size(); i++) {
-            if (i < columns.size() - 1) {
-                builder.append("?,");
-            } else {
-                builder.append("?)");
-            }
-        }
-        return builder.toString();
     }
 
     public XMLConfigParser getParser() {

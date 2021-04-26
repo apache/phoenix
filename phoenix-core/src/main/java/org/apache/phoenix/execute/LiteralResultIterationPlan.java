@@ -26,6 +26,8 @@ import java.util.Map;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.RowProjector;
@@ -118,7 +120,12 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
             @Override
             public void explain(List<String> planSteps) {
             }
-            
+
+            @Override
+            public void explain(List<String> planSteps,
+                    ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+            }
+
         };
         
         if (context.getSequenceManager().getSequenceCount() > 0) {

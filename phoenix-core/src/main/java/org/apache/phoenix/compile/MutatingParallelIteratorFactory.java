@@ -27,6 +27,8 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.PeekingResultIterator;
@@ -64,6 +66,7 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
             QueryPlan plan) throws SQLException {
 
         final PhoenixConnection clonedConnection = new PhoenixConnection(this.connection);
+        connection.addChildConnection(clonedConnection);
         try {
             MutationState state = mutate(parentContext, iterator, clonedConnection);
 
@@ -97,6 +100,11 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
                 }
 
                 @Override
+                public void explain(List<String> planSteps,
+                    ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+                }
+
+                @Override
                 public void close() throws SQLException {
                     try {
                         /*
@@ -111,6 +119,8 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
                         MutatingParallelIteratorFactory.this.connection.getMutationState()
                                 .join(finalState);
                     } finally {
+                        //Removing to be closed connection from the parent connection queue.
+                        connection.removeChildConnection(clonedConnection);
                         clonedConnection.close();
                     }
                 }
@@ -123,6 +133,8 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
         } catch (Throwable ex) {
             // Catch just to make sure we close the cloned connection and then rethrow
             try {
+                //Removing to be closed connection from the parent connection queue.
+                connection.removeChildConnection(clonedConnection);
                 // closeQuietly only handles IOException
                 clonedConnection.close();
             } catch (SQLException sqlEx) {

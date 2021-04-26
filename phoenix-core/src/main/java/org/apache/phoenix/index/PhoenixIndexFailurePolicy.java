@@ -72,10 +72,10 @@ import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * 
@@ -377,11 +377,8 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
 
     /**
      * Check config for whether to disable index on index write failures
-     * @param htd
-     * @param config
-     * @param connection
-     * @return The table config for {@link PhoenixIndexFailurePolicy.DISABLE_INDEX_ON_WRITE_FAILURE}
-     * @throws SQLException
+     * @param env
+     * @return
      */
     public static boolean getDisableIndexOnFailure(RegionCoprocessorEnvironment env) {
         TableDescriptor htd = env.getRegion().getTableDescriptor();
@@ -460,7 +457,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
      * @param iwe original IndexWriteException
      * @param connection connection to use
      * @param config config used to get retry settings
-     * @throws Exception
+     * @throws IOException
      */
     public static void doBatchWithRetries(MutateCommand mutateCommand,
             IndexWriteException iwe, PhoenixConnection connection, ReadOnlyProps config)

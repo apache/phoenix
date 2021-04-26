@@ -27,7 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.google.common.collect.ArrayListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.expression.Expression;
@@ -53,10 +54,10 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * 
@@ -83,7 +84,7 @@ public class ParseNodeFactory {
      *
      * Key used to look up a built-in function using the combination of
      * the lowercase name and the number of arguments. This disambiguates
-     * the aggregate MAX(<col>) from the non aggregate MAX(<col1>,<col2>).
+     * the aggregate {@code MAX(<col>) } from the non aggregate {@code MAX(<col1>,<col2>) }.
      *
      * 
      * @since 0.1
@@ -198,6 +199,16 @@ public class ParseNodeFactory {
     }
     
     private static AtomicInteger tempAliasCounter = new AtomicInteger(0);
+
+    @VisibleForTesting
+    public static int getTempAliasCounterValue() {
+        return tempAliasCounter.get();
+    }
+
+    @VisibleForTesting
+    public static void setTempAliasCounterValue(int newValue) {
+        tempAliasCounter.set(newValue);
+    }
     
     public static String createTempAlias() {
         return "$" + tempAliasCounter.incrementAndGet();
@@ -357,8 +368,8 @@ public class ParseNodeFactory {
         return new SequenceValueParseNode(tableName, SequenceValueParseNode.Op.NEXT_VALUE, numToAllocateNode);
     }
 
-    public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props) {
-        return new AddColumnStatement(table, tableType, columnDefs, ifNotExists, props);
+    public AddColumnStatement addColumn(NamedTableNode table,  PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props, boolean cascade, List<NamedNode>indexes) {
+        return new AddColumnStatement(table, tableType, columnDefs, ifNotExists, props, cascade, indexes);
     }
 
     public DropColumnStatement dropColumn(NamedTableNode table,  PTableType tableType, List<ColumnName> columnNodes, boolean ifExists) {

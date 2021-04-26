@@ -71,7 +71,7 @@ public interface QueryServices extends SQLCloseable {
     /**
 	 * max size to spool the the result into
 	 * ${java.io.tmpdir}/ResultSpoolerXXX.bin if
-	 * {@link QueryServices#SPOOL_THRESHOLD_BYTES_ATTRIB } is reached.
+	 * QueryServices#SPOOL_THRESHOLD_BYTES_ATTRIB is reached.
 	 * <p>
 	 * default is unlimited(-1)
 	 * <p>
@@ -97,6 +97,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String SCAN_CACHE_SIZE_ATTRIB = "hbase.client.scanner.caching";
     public static final String MAX_MUTATION_SIZE_ATTRIB = "phoenix.mutate.maxSize";
     public static final String MAX_MUTATION_SIZE_BYTES_ATTRIB = "phoenix.mutate.maxSizeBytes";
+    public static final String HBASE_CLIENT_KEYVALUE_MAXSIZE = "hbase.client.keyvalue.maxsize";
 
     public static final String MUTATE_BATCH_SIZE_ATTRIB = "phoenix.mutate.batchSize";
     public static final String MUTATE_BATCH_SIZE_BYTES_ATTRIB = "phoenix.mutate.batchSizeBytes";
@@ -279,6 +280,9 @@ public interface QueryServices extends SQLCloseable {
     //max number of connections from a single client to a single cluster. 0 is unlimited.
     public static final String CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS =
         "phoenix.client.connection.max.allowed.connections";
+    //max number of connections from a single client to a single cluster. 0 is unlimited.
+    public static final String INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS =
+            "phoenix.internal.connection.max.allowed.connections";
     public static final String DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB  = "phoenix.default.column.encoded.bytes.attrib";
     public static final String DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.immutable.storage.scheme";
     public static final String DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.multitenant.immutable.storage.scheme";
@@ -322,10 +326,16 @@ public interface QueryServices extends SQLCloseable {
     public static final String GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB = "phoenix.global.index.row.age.threshold.to.delete.ms";
     // Enable the IndexRegionObserver Coprocessor
     public static final String INDEX_REGION_OBSERVER_ENABLED_ATTRIB = "phoenix.index.region.observer.enabled";
+    // Enable Phoenix server paging
+    public static final String PHOENIX_SERVER_PAGING_ENABLED_ATTRIB = "phoenix.server.paging.enabled";
     // Enable support for long view index(default is false)
     public static final String LONG_VIEW_INDEX_ENABLED_ATTRIB = "phoenix.index.longViewIndex.enabled";
     // The number of index rows to be rebuild in one RPC call
     public static final String INDEX_REBUILD_PAGE_SIZE_IN_ROWS = "phoenix.index.rebuild_page_size_in_rows";
+    // Flag indicating that server side masking of ttl expired rows is enabled.
+    public static final String PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED = "phoenix.ttl.server_side.masking.enabled";
+    // The time limit on the amount of work to be done in one RPC call
+    public static final String PHOENIX_SERVER_PAGE_SIZE_MS = "phoenix.server.page.size.ms";
 
 
     // Before 4.15 when we created a view we included the parent table column metadata in the view
@@ -354,6 +364,13 @@ public interface QueryServices extends SQLCloseable {
     public static final String GUIDE_POSTS_CACHE_FACTORY_CLASS = "phoenix.guide.posts.cache.factory.class";
 
     public static final String PENDING_MUTATIONS_DDL_THROW_ATTRIB = "phoenix.pending.mutations.before.ddl.throw";
+
+    /**
+     * Parameter to indicate the source of operation attribute.
+     * It can include metadata about the customer, service, etc.
+     */
+    String SOURCE_OPERATION_ATTRIB = "phoenix.source.operation";
+
     /**
      * Get executor service used for parallel scans
      */

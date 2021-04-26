@@ -26,7 +26,6 @@ import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -36,7 +35,9 @@ import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
+import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import org.apache.phoenix.execute.TupleProjector;
+import org.apache.phoenix.filter.PagedFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
@@ -46,8 +47,9 @@ import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
+import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
 
-abstract public class BaseScannerRegionObserver implements RegionObserver {
+abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionObserver {
 
     public static final String AGGREGATORS = "_Aggs";
     public static final String UNORDERED_GROUP_BY_EXPRESSIONS = "_UnorderedGroupByExpressions";
@@ -67,14 +69,20 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String GROUP_BY_LIMIT = "_GroupByLimit";
     public static final String LOCAL_INDEX = "_LocalIndex";
     public static final String LOCAL_INDEX_BUILD = "_LocalIndexBuild";
-    // The number of index rows to be rebuild in one RPC call
     public static final String INDEX_REBUILD_PAGING = "_IndexRebuildPaging";
+    // The number of index rows to be rebuild in one RPC call
     public static final String INDEX_REBUILD_PAGE_ROWS = "_IndexRebuildPageRows";
+    public static final String SERVER_PAGE_SIZE_MS = "_ServerPageSizeMs";
     // Index verification type done by the index tool
     public static final String INDEX_REBUILD_VERIFY_TYPE = "_IndexRebuildVerifyType";
     public static final String INDEX_RETRY_VERIFY = "_IndexRetryVerify";
     public static final String INDEX_REBUILD_DISABLE_LOGGING_VERIFY_TYPE =
         "_IndexRebuildDisableLoggingVerifyType";
+    public static final String INDEX_REBUILD_DISABLE_LOGGING_BEYOND_MAXLOOKBACK_AGE =
+        "_IndexRebuildDisableLoggingBeyondMaxLookbackAge";
+    public static final String LOCAL_INDEX_FILTER = "_LocalIndexFilter";
+    public static final String LOCAL_INDEX_LIMIT = "_LocalIndexLimit";
+    public static final String LOCAL_INDEX_FILTER_STR = "_LocalIndexFilterStr";
 
     /* 
     * Attribute to denote that the index maintainer has been serialized using its proto-buf presentation.
@@ -97,6 +105,10 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String RUN_UPDATE_STATS_ASYNC_ATTRIB = "_RunUpdateStatsAsync";
     public static final String SKIP_REGION_BOUNDARY_CHECK = "_SKIP_REGION_BOUNDARY_CHECK";
     public static final String TX_SCN = "_TxScn";
+    public static final String PHOENIX_TTL = "_PhoenixTTL";
+    public static final String MASK_PHOENIX_TTL_EXPIRED = "_MASK_TTL_EXPIRED";
+    public static final String DELETE_PHOENIX_TTL_EXPIRED = "_DELETE_TTL_EXPIRED";
+    public static final String PHOENIX_TTL_SCAN_TABLE_NAME = "_PhoenixTTLScanTableName";
     public static final String SCAN_ACTUAL_START_ROW = "_ScanActualStartRow";
     public static final String REPLAY_WRITES = "_IGNORE_NEWER_MUTATIONS";
     public final static String SCAN_OFFSET = "_RowOffset";
@@ -224,6 +236,12 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             // last possible moment. You need to swap the start/stop and make the
             // start exclusive and the stop inclusive.
             ScanUtil.setupReverseScan(scan);
+            if (scan.getFilter() != null && !(scan.getFilter() instanceof PagedFilter)) {
+                byte[] pageSizeMsBytes = scan.getAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS);
+                if (pageSizeMsBytes != null) {
+                    scan.setFilter(new PagedFilter(scan.getFilter(), getPageSizeMsForFilter(scan)));
+                }
+            }
         }
     }
 
@@ -324,11 +342,14 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public final RegionScanner postScannerOpen(
             final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan,
             final RegionScanner s) throws IOException {
-       try {
+        try {
             if (!isRegionObserverFor(scan)) {
                 return s;
             }
-            return new RegionScannerHolder(c, scan, s);
+            // Make sure PageRegionScanner wraps only the lowest region scanner, i.e., HBase region scanner. We assume
+            // here every Phoenix region scanner extends BaseRegionScanner
+            return new RegionScannerHolder(c, scan, s instanceof BaseRegionScanner ? s :
+                    new PagedRegionScanner(c.getEnvironment().getRegion(), s, scan));
         } catch (Throwable t) {
             // If the exception is NotServingRegionException then throw it as
             // StaleRegionBoundaryCacheException to handle it by phoenix client other wise hbase
@@ -366,5 +387,19 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         return regionScannerFactory.getWrappedScanner(c.getEnvironment(), s, null, null, offset, scan, dataColumns, tupleProjector,
                 dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr, useQualiferAsListIndex);
     }
+
+
+   /* We want to override the store scanner so that we can read "past" a delete
+    marker on an SCN / lookback query to see the underlying edit. This was possible
+    in HBase 1.x, but not possible after the interface changes in HBase 2.0. HBASE-24321 in
+     HBase 2.3 gave us this ability back, but we need to use it through a compatibility shim
+     so we can compile against 2.1 and 2.2. When 2.3 is the minimum supported HBase
+     version, the shim can be retired and the logic moved into the real coproc.
+
+    We also need to override the flush compaction coproc hooks in order to implement max lookback
+     age to keep versions from being purged.
+
+    Because the required APIs aren't present in HBase 2.1 and 2.2, we override in the 2.3
+     version of CompatBaseScannerRegionObserver and no-op in the other versions. */
 
 }

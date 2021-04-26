@@ -70,13 +70,13 @@ public interface IndexBuilder extends Stoppable {
    * called concurrently for different mutations, which may or may not be part of the same batch.
    * @param mutation update to the primary table to be indexed.
    * @param context index meta data for the mutation
-   * @return a Map of the mutations to make -> target index table name
+   * @return a Map of the mutations to {@code make -> target } index table name
    * @throws IOException on failure
    */
   public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation, IndexMetaData context, LocalHBaseState localHBaseState) throws IOException;
 
     /**
-     * Build an index update to cleanup the index when we remove {@link KeyValue}s via the normal flush or compaction
+     * Build an index update to cleanup the index when we remove KeyValue s via the normal flush or compaction
      * mechanisms. Currently not implemented by any implementors nor called, but left here to be implemented if we
      * ever need it. In Jesse's words:
      * 
@@ -89,11 +89,11 @@ public interface IndexBuilder extends Stoppable {
      * b/c its covered by the delete marker, but an older timestamp based read would actually show the index row, even
      * after the primary table row is gone due to MAX_VERSIONS requirement.
      *  
-     * @param filtered {@link KeyValue}s that previously existed, but won't be included
+     * @param filtered KeyValue s that previously existed, but won't be included
      * in further output from HBase.
      * @param context TODO
      * 
-     * @return a {@link Map} of the mutations to make -> target index table name
+     * @return a {@link Map} of the mutations to {@code make -> target } index table name
      * @throws IOException on failure
      */
   public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(
@@ -131,7 +131,6 @@ public interface IndexBuilder extends Stoppable {
    * @param m mutation that should be indexed.
    * @return <tt>true</tt> if indexing is enabled for the given table. This should be on a per-table
    *         basis, as each codec is instantiated per-region.
- * @throws IOException 
    */
   public boolean isEnabled(Mutation m);
   
@@ -139,7 +138,6 @@ public interface IndexBuilder extends Stoppable {
    * True if mutation has an ON DUPLICATE KEY clause
    * @param m mutation
    * @return true if mutation has ON DUPLICATE KEY expression and false otherwise.
-   * @throws IOException
    */
   public boolean isAtomicOp(Mutation m);
 

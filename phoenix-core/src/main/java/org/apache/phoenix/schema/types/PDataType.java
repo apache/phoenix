@@ -40,10 +40,10 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
 
-import com.google.common.base.Preconditions;
-import com.google.common.math.LongMath;
-import com.google.common.primitives.Doubles;
-import com.google.common.primitives.Longs;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.math.LongMath;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Longs;
 
 /**
  * The data types of PColumns
@@ -613,7 +613,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     /**
      * Deserialize a variable length byte array into a BigDecimal. Note that because of the normalization that gets done
      * to the scale, if you roundtrip a BigDecimal, it may not be equal before and after. However, the before and after
-     * number will always compare to be equal (i.e. <nBefore>.compareTo(<nAfter>) == 0)
+     * number will always compare to be equal {@code (i.e. <nBefore>.compareTo(<nAfter>) == 0) }
      *
      * @param bytes
      *            the bytes containing the number

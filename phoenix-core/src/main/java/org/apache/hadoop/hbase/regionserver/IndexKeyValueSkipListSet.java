@@ -24,7 +24,7 @@ import org.apache.hadoop.hbase.CellComparator;
 
 /**
  * Like a {@link KeyValueSkipListSet}, but also exposes useful, atomic methods (e.g.
- * {@link #putIfAbsent(KeyValue)}).
+ * #putIfAbsent(KeyValue)).
  */
 public class IndexKeyValueSkipListSet extends KeyValueSkipListSet {
 
@@ -54,7 +54,7 @@ public class IndexKeyValueSkipListSet extends KeyValueSkipListSet {
   }
 
   /**
-   * Add the passed {@link KeyValue} to the set, only if one is not already set. This is equivalent
+   * Add the passed KeyValue to the set, only if one is not already set. This is equivalent
    * to
    * <pre>
    * if (!set.containsKey(key))
@@ -63,7 +63,7 @@ public class IndexKeyValueSkipListSet extends KeyValueSkipListSet {
    *  return map.set(key);
    * </pre>
    * except that the action is performed atomically.
-   * @param kv {@link KeyValue} to add
+   * @param kv KeyValue to add
    * @return the previous value associated with the specified key, or <tt>null</tt> if there was no
    *         previously stored key
    * @throws ClassCastException if the specified key cannot be compared with the keys currently in

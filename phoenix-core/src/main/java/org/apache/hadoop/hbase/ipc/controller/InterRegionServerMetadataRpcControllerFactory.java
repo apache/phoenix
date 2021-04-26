@@ -26,7 +26,7 @@ import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 
 /**
- * {@link RpcControllerFactory} that should only be used when creating {@link Table} for
+ * {@link RpcControllerFactory} that should only be used when creating Table for
  * making remote RPCs to the region servers hosting Phoenix SYSTEM tables.
  */
 public class InterRegionServerMetadataRpcControllerFactory extends RpcControllerFactory {

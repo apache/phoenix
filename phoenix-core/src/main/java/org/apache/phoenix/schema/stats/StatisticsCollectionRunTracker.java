@@ -31,7 +31,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ByteUtil;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
  * Singleton that is used to track state associated with regions undergoing stats collection at the
@@ -106,7 +106,7 @@ public class StatisticsCollectionRunTracker {
      * @return true if UPDATE STATISTICS wasn't already running on the region, false otherwise.
      */
     public boolean addUpdateStatsCommandRegion(RegionInfo regionInfo, Set<byte[]> familySet) {
-        return updateStatsRegions.add(new ColumnFamilyRegionInfo(regionInfo,familySet));
+        return updateStatsRegions.add(new ColumnFamilyRegionInfo(regionInfo, familySet));
     }
 
     /**
@@ -114,7 +114,7 @@ public class StatisticsCollectionRunTracker {
      * @return true if UPDATE STATISTICS was running on the region, false otherwise.
      */
     public boolean removeUpdateStatsCommandRegion(RegionInfo regionInfo, Set<byte[]> familySet) {
-        return updateStatsRegions.remove(new ColumnFamilyRegionInfo(regionInfo,familySet));
+        return updateStatsRegions.remove(new ColumnFamilyRegionInfo(regionInfo, familySet));
     }
 
     /**
@@ -126,9 +126,9 @@ public class StatisticsCollectionRunTracker {
         return executor.submit(c);
     }
 
-    class ColumnFamilyRegionInfo {
-        private RegionInfo regionInfo;
-        private Set<byte[]> familySet;
+    private static class ColumnFamilyRegionInfo {
+        private final RegionInfo regionInfo;
+        private final Set<byte[]> familySet;
 
         public ColumnFamilyRegionInfo(RegionInfo regionInfo, Set<byte[]> familySet) {
             this.regionInfo = regionInfo;

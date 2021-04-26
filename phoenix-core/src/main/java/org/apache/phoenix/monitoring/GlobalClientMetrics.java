@@ -26,6 +26,7 @@ import static org.apache.phoenix.monitoring.MetricType.MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.NUM_PARALLEL_SCANS;
+import static org.apache.phoenix.monitoring.MetricType.OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.INDEX_COMMIT_FAILURE_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_FAILED_COUNTER;
@@ -66,7 +67,7 @@ import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.metrics.MetricRegistryInfo;
 import org.apache.phoenix.query.QueryServicesOptions;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -99,6 +100,7 @@ public enum GlobalClientMetrics {
     GLOBAL_FAILED_QUERY_COUNTER(QUERY_FAILED_COUNTER),
     GLOBAL_SPOOL_FILE_COUNTER(SPOOL_FILE_COUNTER),
     GLOBAL_OPEN_PHOENIX_CONNECTIONS(OPEN_PHOENIX_CONNECTIONS_COUNTER),
+    GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS(OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER),
     GLOBAL_QUERY_SERVICES_COUNTER(QUERY_SERVICES_COUNTER),
     GLOBAL_HCONNECTIONS_COUNTER(HCONNECTIONS_COUNTER),
     GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER(PHOENIX_CONNECTIONS_THROTTLED_COUNTER),

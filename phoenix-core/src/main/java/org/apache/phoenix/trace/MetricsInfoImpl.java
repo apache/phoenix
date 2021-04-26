@@ -17,8 +17,9 @@
  */
 package org.apache.phoenix.trace;
 
-import com.google.common.base.Objects;
-import static com.google.common.base.Preconditions.*;
+import org.apache.phoenix.thirdparty.com.google.common.base.MoreObjects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.*;
 import org.apache.hadoop.metrics2.MetricsInfo;
 
 /**
@@ -56,7 +57,7 @@ public class MetricsInfoImpl implements MetricsInfo {
   }
 
   @Override public String toString() {
-    return Objects.toStringHelper(this)
+    return MoreObjects.toStringHelper(this)
         .add("name", name).add("description", description)
         .toString();
   }

@@ -9,7 +9,7 @@
  */
 package org.apache.phoenix.monitoring;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -28,7 +28,7 @@ import javax.annotation.Nonnull;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.CombinableMetric.NoOpRequestMetric;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 /**
  * Queue of all metrics associated with performing reads from the cluster.
@@ -70,7 +70,7 @@ public class ReadMetricQueue {
     }
 
     /**
-     * @return map of table name -> list of pair of (metric name, metric value)
+     * @return map of table {@code name -> list } of pair of (metric name, metric value)
      */
     public Map<String, Map<MetricType, Long>> aggregate() {
         Map<String, Map<MetricType, Long>> publishedMetrics = new HashMap<>();

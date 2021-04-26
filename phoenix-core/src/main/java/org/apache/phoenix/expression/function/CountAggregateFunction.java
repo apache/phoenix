@@ -37,7 +37,7 @@ import org.apache.phoenix.util.SchemaUtil;
 
 /**
  * 
- * Built-in function for COUNT(<expression>) aggregate function,
+ * Built-in function for {@code COUNT(<expression>) } aggregate function,
  * for example COUNT(foo), COUNT(1), COUNT(*)
  *
  * 

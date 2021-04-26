@@ -65,13 +65,33 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public ConnectionQueryServices getChildQueryServices(ImmutableBytesWritable tenantId);
 
     /**
-     * Get an HTableInterface by the given name. It is the callers
-     * responsibility to close the returned HTableInterface.
+     * Get Table by the given name. It is the callers
+     * responsibility to close the returned Table reference.
+     *
      * @param tableName the name of the HTable
-     * @return the HTableInterface
+     * @return Table interface. It is caller's responsibility to close this
+     *     returned Table reference.
      * @throws SQLException 
      */
     public Table getTable(byte[] tableName) throws SQLException;
+
+    /**
+     * Get Table by the given name. It is the responsibility of callers
+     * to close the returned Table interface. This method uses additional Admin
+     * API to ensure if table exists before returning Table interface from
+     * Connection. If table does not exist, this method will throw
+     * {@link org.apache.phoenix.schema.TableNotFoundException}
+     * It is caller's responsibility to close returned Table reference.
+     *
+     * @param tableName the name of the Table
+     * @return Table interface. It is caller's responsibility to close this
+     *     returned Table reference.
+     * @throws SQLException If something goes wrong while retrieving table
+     *     interface from connection managed by implementor. If table does not
+     *     exist, {@link org.apache.phoenix.schema.TableNotFoundException} will
+     *     be thrown.
+     */
+    Table getTableIfExists(byte[] tableName) throws SQLException;
 
     public TableDescriptor getTableDescriptor(byte[] tableName) throws SQLException;
 
@@ -145,7 +165,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     /**
      * Removes cache {@link GuidePostsInfo} for the table with the given name. If no cached guideposts are present, this does nothing.
      *
-     * @param tableName The table to remove stats for
+     * @param key
      */
     void invalidateStats(GuidePostsKey key);
     

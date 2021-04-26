@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.util;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Strings.isNullOrEmpty;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Strings.isNullOrEmpty;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
@@ -93,11 +93,11 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 
-import com.google.common.base.Function;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * 
@@ -199,7 +199,8 @@ public class SchemaUtil {
 
     /**
      * Normalize an identifier. If name is surrounded by double quotes,
-     * it is used as-is, otherwise the name is upper caased.
+     * the double quotes are stripped and the rest is used as-is,
+     * otherwise the name is upper caased.
      * @param name the parsed identifier
      * @return the normalized identifier
      */
@@ -274,6 +275,12 @@ public class SchemaUtil {
         return l3;
     }
 
+    public static byte[] getTableKey(PTable dataTable) {
+        PName tenantId = dataTable.getTenantId();
+        PName schemaName = dataTable.getSchemaName();
+        return getTableKey(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getBytes(), schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : schemaName.getBytes(), dataTable.getTableName().getBytes());
+    }
+
     /**
      * Get the key used in the Phoenix metadata row for a table definition
      * @param schemaName
@@ -316,6 +323,10 @@ public class SchemaUtil {
                 SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName),
                 SEPARATOR_BYTE_ARRAY, Bytes.toBytes(columnName),
                 SEPARATOR_BYTE_ARRAY, Bytes.toBytes(familyName));
+    }
+
+    public static PName getTableName(PName schemaName, PName tableName) {
+        return PNameFactory.newName(getName(schemaName==null? null : schemaName.getString(), tableName.getString(), false));
     }
 
     public static String getTableName(String schemaName, String tableName) {
@@ -696,9 +707,12 @@ public class SchemaUtil {
     }
 
     public static String getSchemaNameFromFullName(String tableName) {
-        if (isExistingTableMappedToPhoenixName(tableName)) { return StringUtil.EMPTY_STRING; }
-        if (tableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) { return getSchemaNameFromFullName(tableName,
-                QueryConstants.NAMESPACE_SEPARATOR); }
+        if (isExistingTableMappedToPhoenixName(tableName)) {
+            return StringUtil.EMPTY_STRING;
+        }
+        if (tableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
+            return getSchemaNameFromFullName(tableName, QueryConstants.NAMESPACE_SEPARATOR);
+        }
         return getSchemaNameFromFullName(tableName, QueryConstants.NAME_SEPARATOR);
     }
 
@@ -1051,12 +1065,6 @@ public class SchemaUtil {
     	return table.getRowTimestampColPos()>0;
     }
 
-    public static byte[] getTableKey(PTable dataTable) {
-        PName tenantId = dataTable.getTenantId();
-        PName schemaName = dataTable.getSchemaName();
-        return getTableKey(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getBytes(), schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : schemaName.getBytes(), dataTable.getTableName().getBytes());
-    }
-
     public static byte[] getSchemaKey(String schemaName) {
         return SchemaUtil.getTableKey(null, schemaName, MetaDataClient.EMPTY_TABLE);
     }
@@ -1163,6 +1171,21 @@ public class SchemaUtil {
     }
 
     /**
+     * Calculate the Phoenix Table name without normalization
+     *
+     * @param schemaName import schema name, can be null
+     * @param tableName import table name
+     * @return the qualified Phoenix table name, from the non normalized schema and table
+     */
+    public static String getQualifiedPhoenixTableName(String schemaName, String tableName) {
+        if (schemaName != null && !schemaName.isEmpty()) {
+            return String.format("%s.%s", schemaName, tableName);
+        } else {
+            return tableName;
+        }
+    }
+
+    /**
      * Pads the data in ptr by the required amount for fixed width data types
      */
     public static void padData(String tableName, PColumn column, ImmutableBytesWritable ptr) {
@@ -1174,7 +1197,8 @@ public class SchemaUtil {
             if (ptr.getLength() < maxLength) {
                 type.pad(ptr, maxLength, column.getSortOrder());
             } else if (ptr.getLength() > maxLength) {
-                throw new DataExceedsCapacityException(tableName + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + type.toObject(byteValue) + ")");
+                throw new DataExceedsCapacityException(column.getDataType(), column.getMaxLength(),
+                        column.getScale(), column.getName().getString());
             }
         }
     }
@@ -1210,5 +1234,48 @@ public class SchemaUtil {
      */
     public static String getNormalizedColumnName(ColumnParseNode columnParseNode) {
         return columnParseNode.getName();
+    }
+
+
+    /**
+     * This function is needed so that SchemaExtractionTool returns a valid DDL with correct
+     * table/schema name that can be parsed
+     *
+     * @param pSchemaName
+     * @param pTableName
+     * @return quoted string if schema or table name has non-alphabetic characters in it.
+     */
+    public static String getPTableFullNameWithQuotes(String pSchemaName, String pTableName) {
+        String pTableFullName = getQualifiedTableName(pSchemaName, pTableName);
+        boolean tableNameNeedsQuotes = isQuotesNeeded(pTableName);
+        boolean schemaNameNeedsQuotes = isQuotesNeeded(pSchemaName);
+
+        if(schemaNameNeedsQuotes) {
+            pSchemaName= "\""+pSchemaName+"\"";
+        }
+        if(tableNameNeedsQuotes) {
+            pTableName = "\""+pTableName+"\"";
+        }
+        if(tableNameNeedsQuotes || schemaNameNeedsQuotes) {
+            pTableFullName = pSchemaName + "." + pTableName;
+        }
+
+        return pTableFullName;
+    }
+
+    private static boolean isQuotesNeeded(String name) {
+        // first char numeric or non-underscore
+        if(!Character.isAlphabetic(name.charAt(0)) && name.charAt(0)!='_') {
+            return true;
+        }
+        // for all other chars
+        // ex. name like z@@ will need quotes whereas t0001 will not need quotes
+        for (int i=1; i<name.toCharArray().length; i++) {
+            char charAtI = name.charAt(i);
+            if (!(Character.isAlphabetic(charAtI)) && !Character.isDigit(charAtI) && charAtI != '_') {
+                return true;
+            }
+        }
+        return false;
     }
 }

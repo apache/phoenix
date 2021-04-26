@@ -19,6 +19,7 @@
 package org.apache.phoenix.parse;
 
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.function.FunctionExpression;
@@ -90,10 +91,8 @@ public class PhoenixRowTimestampParseNode extends FunctionParseNode {
             }
         }, emptyColumnFamilyName, emptyColumnName);
         List<Expression> expressionList = Arrays.asList(new Expression[] {emptyColumnExpression});
-
-        // Add the empty column to the projection list.
-        // According to PHOENIX-4179 this will then return the timestamp of the empty column cell.
-        context.getScan().addColumn(emptyColumnFamilyName, emptyColumnName);
+        context.getScan().setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
+        context.getScan().setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
         return new PhoenixRowTimestampFunction(expressionList);
     }
 }

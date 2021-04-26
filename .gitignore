@@ -9,7 +9,7 @@
 
 # eclipse stuffs
 .settings/*
-*/.settings/
+**/.settings/
 .classpath
 .project
 */.externalToolBuilders
@@ -28,3 +28,6 @@ RESULTS/
 CSV_EXPORT/
 .DS_Store
 
+phoenix-hbase-compat-1.3.0/
+phoenix-hbase-compat-1.4.0/
+phoenix-hbase-compat-1.5.0/

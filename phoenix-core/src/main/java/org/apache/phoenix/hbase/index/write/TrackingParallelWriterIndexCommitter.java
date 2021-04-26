@@ -46,7 +46,7 @@ import org.apache.phoenix.util.IndexUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 import static org.apache.phoenix.util.ServerUtil.wrapInDoNotRetryIOException;
 
 /**
@@ -56,7 +56,7 @@ import static org.apache.phoenix.util.ServerUtil.wrapInDoNotRetryIOException;
  * you need to at least attempt all writes and know their result; for instance, this is fine for doing WAL recovery -
  * it's not a performance intensive situation and we want to limit the the edits we need to retry.
  * <p>
- * On failure to {@link #write(Multimap)}, we return a {@link MultiIndexWriteFailureException} that contains the list of
+ * On failure to #write(Multimap), we return a MultiIndexWriteFailureException that contains the list of
  * {@link HTableInterfaceReference} that didn't complete successfully.
  * <p>
  * Failures to write to the index can happen several different ways:

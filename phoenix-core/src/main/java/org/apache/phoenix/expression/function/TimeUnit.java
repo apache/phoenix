@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.expression.function;
 
-import com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 
 public enum TimeUnit {
     DAY("day"), 

@@ -44,7 +44,7 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class TestCoveredColumnIndexCodec {
   private static final byte[] PK = new byte[] { 'a' };

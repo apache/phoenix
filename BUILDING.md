@@ -32,7 +32,7 @@ HBase 2 and Hadoop 3
 Phoenix 5.x requires Hadoop 3. While HBase 2.x is compatible with Hadoop 3, the public Maven Hbase
 artifacts are built with Hadoop 2, and are not.
 
-For this reason, when building Phoenix with an Hbase version later than 2.2.4, you need to rebuild
+For this reason, when building Phoenix, you need to rebuild
 HBase with Hadoop 3, and install it to the local maven repo of the build host.
 
 `$ wget https://downloads.apache.org/hbase/2.2.5/hbase-2.2.5-src.tar.gz`
@@ -71,7 +71,7 @@ As Phoenix uses *limited public* HBase APIs, which sometimes change even within 
 Phoenix may not build or work with older releases of HBase, or ones that were released after
 Phoenix, even within the same HBase minor release.
 
-By default, Phoenix will be built for the latest known patch level of the earliest HBase 2.x
+By default, Phoenix will be built for the latest known patch level of the latest HBase 2.x
 minor release that Phoenix supports.
 
 You can specify the targeted HBase minor release by setting the `hbase.profile` system property for 
@@ -80,7 +80,7 @@ maven.
 You can also specify the exact HBase release to build Phoenix with by additionally
 setting the `hbase.version` system property.
 
- * `mvn clean install` will use the latest known patch release of the the earliest supported HBase 2 minor relese
+ * `mvn clean install` will use the latest known patch release of the the latest supported HBase 2 minor relese
  * `mvn clean install -Dhbase.profile=2.1` will use the latest known patch release of HBase 2.1
  * `mvn clean install -Dhbase.profile=2.1 -Dhbase.version=2.1.7` will build with HBase 2.1.7
 
@@ -100,7 +100,7 @@ Running the tests
 All Unit Tests  
 `$ mvn clean test`
 
-All Unit Tests and Integration tests  
+All Unit Tests and Integration tests (takes a few hours)
 `$ mvn clean verify`
 
 The verify maven target will also run dependency:analyze-only, which checks if the dependencies
@@ -110,11 +110,20 @@ generated at /target/site/jacoco/index.html
 To skip code coverage analysis
 `$ mvn verify -Dskip.code-coverage`
 
-Findbugs
---------
+Running project reports
+-----------------------
 
-Findbugs report is generated in /target/site  
-`$ mvn site`
+Phoenix currently supports generating the standard set of Maven Project Info Reports, as well as
+Spotbugs, Apache Creadur RAT, OWASP Dependency-Check, and Jacoco Code Coverage reports.
+
+To run all available reports (takes a few hours)
+`$ mvn clean verify site -Dspotbugs.site`
+
+To run OWASP, RAT and Spotbugs, but not Jacoco (takes ~10 minutes)
+`$ mvn clean compile test-compile site -Dspotbugs.site`
+
+The reports are accessible via `target/site/index.html`, under the main project,
+as well as each of the subprojects. (not every project has all reports)
 
 Generate Apache Web Site
 ------------------------

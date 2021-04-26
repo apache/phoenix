@@ -41,10 +41,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.Statement;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PropertiesUtil;
@@ -58,7 +56,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 @RunWith(Parameterized.class)
@@ -101,8 +99,10 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
     }
 
     @After
-    public void cleanUp(){
-        tableName=null;
+    public void cleanUp() throws Exception {
+        boolean refCountLeaked = isAnyStoreRefCountLeaked();
+        tableName = null;
+        assertFalse("refCount leaked", refCountLeaked);
     }
 
     @Parameters(name="DerivedTableIT_{index}") // name is used by failsafe as file name in reports

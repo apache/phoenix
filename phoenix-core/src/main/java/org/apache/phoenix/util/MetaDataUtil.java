@@ -25,7 +25,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.*;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -76,9 +76,9 @@ import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class MetaDataUtil {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataUtil.class);
@@ -105,6 +105,29 @@ public class MetaDataUtil {
             ColumnFamilyDescriptorBuilder.TTL,
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS,
             ColumnFamilyDescriptorBuilder.REPLICATION_SCOPE);
+
+    public static Put getLastDDLTimestampUpdate(byte[] tableHeaderRowKey,
+                                                     long clientTimestamp,
+                                                     long lastDDLTimestamp) {
+        //use client timestamp as the timestamp of the Cell, to match the other Cells that might
+        // be created by this DDL. But the actual value will be a _server_ timestamp
+        Put p = new Put(tableHeaderRowKey, clientTimestamp);
+        byte[] lastDDLTimestampBytes = PLong.INSTANCE.toBytes(lastDDLTimestamp);
+        p.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+            PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP_BYTES, lastDDLTimestampBytes);
+        return p;
+    }
+
+    /**
+     * Checks if a table is meant to be queried directly (and hence is relevant to external
+     * systems tracking Phoenix schema)
+     * @param tableType
+     * @return True if a table or view, false otherwise (such as for an index, system table, or
+     * subquery)
+     */
+    public static boolean isTableDirectlyQueried(PTableType tableType) {
+        return tableType.equals(PTableType.TABLE) || tableType.equals(PTableType.VIEW);
+    }
 
     public static class ClientServerCompatibility {
 
@@ -208,8 +231,8 @@ public class MetaDataUtil {
      * Encode HBase and Phoenix version along with some server-side config information such as whether WAL codec is
      * installed (necessary for non transactional, mutable secondar indexing), and whether systemNamespace mapping is enabled.
      * 
-     * @param env
-     *            RegionCoprocessorEnvironment to access HBase version and Configuration.
+     * @param hbaseVersionStr
+     * @param config
      * @return long value sent back during initialization of a cluster connection.
      */
     public static long encodeVersion(String hbaseVersionStr, Configuration config) {
@@ -573,6 +596,19 @@ public class MetaDataUtil {
         return getIndexPhysicalName(physicalTableName, VIEW_INDEX_TABLE_PREFIX);
     }
 
+    public static String getNamespaceMappedName(PName tableName, boolean isNamespaceMapped) {
+        String logicalName = tableName.getString();
+        if (isNamespaceMapped) {
+            logicalName = logicalName.replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR);
+        }
+        return logicalName;
+    }
+
+    public static String getViewIndexPhysicalName(PName logicalTableName, boolean isNamespaceMapped) {
+        String logicalName = getNamespaceMappedName(logicalTableName, isNamespaceMapped);
+        return getIndexPhysicalName(logicalName, VIEW_INDEX_TABLE_PREFIX);
+    }
+
     private static byte[] getIndexPhysicalName(byte[] physicalTableName, String indexPrefix) {
         return Bytes.toBytes(getIndexPhysicalName(Bytes.toString(physicalTableName), indexPrefix));
     }
@@ -657,13 +693,13 @@ public class MetaDataUtil {
         return new SequenceKey(isNamespaceMapped ? tenantId : null, schemaName, tableName, nSaltBuckets);
     }
 
-    public static String getViewIndexSequenceSchemaName(PName physicalName, boolean isNamespaceMapped) {
+    public static String getViewIndexSequenceSchemaName(PName logicalBaseTableName, boolean isNamespaceMapped) {
         if (!isNamespaceMapped) {
-            String baseTableName = SchemaUtil.getParentTableNameFromIndexTable(physicalName.getString(),
+            String baseTableName = SchemaUtil.getParentTableNameFromIndexTable(logicalBaseTableName.getString(),
                 MetaDataUtil.VIEW_INDEX_TABLE_PREFIX);
             return SchemaUtil.getSchemaNameFromFullName(baseTableName);
         } else {
-            return SchemaUtil.getSchemaNameFromFullName(physicalName.toString());
+            return SchemaUtil.getSchemaNameFromFullName(logicalBaseTableName.toString());
         }
 
     }
@@ -778,10 +814,9 @@ public class MetaDataUtil {
     
     /**
      * This function checks if all regions of a table is online
+     * @param conf
      * @param table
      * @return true when all regions of a table are online
-     * @throws IOException
-     * @throws
      */
     public static boolean tableRegionsOnline(Configuration conf, PTable table) {
         try (ClusterConnection hcon =

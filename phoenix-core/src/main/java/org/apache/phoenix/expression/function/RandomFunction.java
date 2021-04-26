@@ -40,6 +40,7 @@ import org.apache.phoenix.schema.types.PLong;
  * <p>
  * Example:
  * <pre>
+ * {@code
  * 0: jdbc:phoenix:localhost> select rand(), rand(), rand(1), rand(2), rand(1) from t;
  * +----------------------------+----------------------------+----------------------------+----------------------------+-----------------------+
  * |           RAND()           |           RAND()           |          RAND(1)           |          RAND(2)           |          RAND(1)      |
@@ -56,6 +57,7 @@ import org.apache.phoenix.schema.types.PLong;
  * | 0.8084646053276106         | 0.6969504742211767         | 0.41008081149220166        | 0.9014476240300544         | 0.41008081149220166   |
  * +----------------------------+----------------------------+----------------------------+----------------------------+-----------------------+
  * 2 rows selected (0.098 seconds)
+ * }
  * </pre>
  */
 @BuiltInFunction(name = RandomFunction.NAME, args = {@Argument(allowedTypes={PLong.class},defaultValue="null",isConstant=true)})

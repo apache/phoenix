@@ -53,6 +53,7 @@ import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
@@ -67,7 +68,7 @@ import org.apache.phoenix.util.RepairUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class IndexHalfStoreFileReaderGenerator implements RegionObserver, RegionCoprocessor{
     
@@ -97,7 +98,7 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
             byte[] regionStartKeyInHFile = null;
             try (Connection hbaseConn =
                     ConnectionFactory.createConnection(ctx.getEnvironment().getConfiguration())) {
-                Scan scan = MetaTableAccessor.getScanForTableName(hbaseConn, tableName);
+                Scan scan = CompatUtil.getScanForTableName(hbaseConn, tableName);
                 SingleColumnValueFilter scvf = null;
                 if (Reference.isTopFileRegion(r.getFileRegion())) {
                     scvf = new SingleColumnValueFilter(HConstants.CATALOG_FAMILY,
@@ -276,24 +277,22 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                 scan.addFamily(s.getColumnFamilyDescriptor().getName());
             }
         }
-        try {
-            PhoenixConnection conn = QueryUtil.getConnectionOnServer(env.getConfiguration())
-                    .unwrap(PhoenixConnection.class);
+        try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
+                env.getConfiguration()).unwrap(PhoenixConnection.class)) {
             PTable dataPTable = IndexUtil.getPDataTable(conn, env.getRegion().getTableDescriptor());
             final List<IndexMaintainer> maintainers = Lists
-                    .newArrayListWithExpectedSize(dataPTable.getIndexes().size());
+                .newArrayListWithExpectedSize(dataPTable.getIndexes().size());
             for (PTable index : dataPTable.getIndexes()) {
                 if (index.getIndexType() == IndexType.LOCAL) {
                     maintainers.add(index.getIndexMaintainer(dataPTable, conn));
                 }
             }
-            return new DataTableLocalIndexRegionScanner(env.getRegion().getScanner(scan), env.getRegion(),
-                    maintainers, store.getColumnFamilyDescriptor().getName(),env.getConfiguration());
-            
-
+            return new DataTableLocalIndexRegionScanner(
+                env.getRegion().getScanner(scan), env.getRegion(), maintainers,
+                store.getColumnFamilyDescriptor().getName(),
+                env.getConfiguration());
         } catch (SQLException e) {
             throw new IOException(e);
-
         }
     }
 }

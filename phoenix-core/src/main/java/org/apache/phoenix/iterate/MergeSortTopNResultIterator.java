@@ -21,6 +21,8 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -108,10 +110,26 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
         }
     }
 
-	@Override
-	public String toString() {
-		return "MergeSortTopNResultIterator [limit=" + limit + ", count="
-				+ count + ", orderByColumns=" + orderByColumns + ", ptr1="
-				+ ptr1 + ", ptr2=" + ptr2 + ",offset=" + offset + "]";
-	}
+    @Override
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        resultIterators.explain(planSteps, explainPlanAttributesBuilder);
+        explainPlanAttributesBuilder.setClientSortAlgo("CLIENT MERGE SORT");
+        planSteps.add("CLIENT MERGE SORT");
+        if (offset > 0) {
+            explainPlanAttributesBuilder.setClientOffset(offset);
+            planSteps.add("CLIENT OFFSET " + offset);
+        }
+        if (limit > 0) {
+            explainPlanAttributesBuilder.setClientRowLimit(limit);
+            planSteps.add("CLIENT LIMIT " + limit);
+        }
+    }
+
+    @Override
+    public String toString() {
+        return "MergeSortTopNResultIterator [limit=" + limit + ", count="
+            + count + ", orderByColumns=" + orderByColumns + ", ptr1="
+            + ptr1 + ", ptr2=" + ptr2 + ",offset=" + offset + "]";
+    }
 }

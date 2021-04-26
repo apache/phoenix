@@ -39,7 +39,7 @@ import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * 
