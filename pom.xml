@@ -914,7 +914,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-hbase-compat-1.4</artifactId>
+        <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
         <version>${tephra.version}</version>
       </dependency>
       <dependency>
@@ -1188,6 +1188,7 @@
         <!-- We are using the 1.5 compat module for 1.6 -->
         <hbase.compat.version>1.5.0</hbase.compat.version>
         <hbase.version>${hbase-1.6.runtime.version}</hbase.version>
+        <tephra.hbase.compat.version>1.6</tephra.hbase.compat.version>
       </properties>
     </profile>
     <profile>
@@ -1202,6 +1203,7 @@
         <hbase.profile>1.3</hbase.profile>
         <hbase.compat.version>1.3.0</hbase.compat.version>
         <hbase.version>${hbase-1.3.runtime.version}</hbase.version>
+        <tephra.hbase.compat.version>1.3</tephra.hbase.compat.version>
       </properties>
     </profile>
     <profile>
@@ -1216,6 +1218,7 @@
         <hbase.profile>1.4</hbase.profile>
         <hbase.compat.version>1.4.0</hbase.compat.version>
         <hbase.version>${hbase-1.4.runtime.version}</hbase.version>
+        <tephra.hbase.compat.version>1.4</tephra.hbase.compat.version>
       </properties>
     </profile>
     <profile>
@@ -1230,6 +1233,7 @@
         <hbase.profile>1.5</hbase.profile>
         <hbase.compat.version>1.5.0</hbase.compat.version>
         <hbase.version>${hbase-1.5.runtime.version}</hbase.version>
+        <tephra.hbase.compat.version>1.5</tephra.hbase.compat.version>
       </properties>
     </profile>
     <profile>
@@ -1246,6 +1250,7 @@
         <!-- We are using the 1.5 compat module for 1.6 -->
         <hbase.compat.version>1.5.0</hbase.compat.version>
         <hbase.version>${hbase-1.6.runtime.version}</hbase.version>
+        <tephra.hbase.compat.version>1.6</tephra.hbase.compat.version>
       </properties>
     </profile>
     <profile>
