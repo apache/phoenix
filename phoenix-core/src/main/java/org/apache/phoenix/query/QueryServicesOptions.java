@@ -362,7 +362,6 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB = false;
     public static final String DEFAULT_LOGGING_LEVEL = LogLevel.OFF.name();
     public static final String DEFAULT_AUDIT_LOGGING_LEVEL = LogLevel.OFF.name();
-
     public static final String DEFAULT_LOG_SAMPLE_RATE = "1.0";
     public static final int DEFAULT_LOG_SALT_BUCKETS = 32;
     public static final int DEFAULT_SALT_BUCKETS = 0;

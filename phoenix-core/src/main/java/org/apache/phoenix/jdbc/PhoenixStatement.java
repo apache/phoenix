@@ -1893,8 +1893,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         return compileMutation(stmt, sql);
     }
 
-    public boolean checkIgnoreQueryAudit(CompilableStatement stmt) {
-        boolean needIgnore = false;
+    public boolean isSystemTable(CompilableStatement stmt) {
+        boolean systemTable = false;
         TableName tableName = null;
         if (stmt instanceof ExecutableSelectStatement) {
             TableNode from = ((ExecutableSelectStatement)stmt).getFrom();
@@ -1911,10 +1911,10 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
         if (tableName != null && PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA
                 .equals(tableName.getSchemaName())) {
-            needIgnore = true;
+            systemTable = true;
         }
 
-        return needIgnore;
+        return systemTable;
     }
 
     public QueryLogger createQueryLogger(CompilableStatement stmt, String sql) throws SQLException {
@@ -1923,9 +1923,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             return QueryLogger.NO_OP_INSTANCE;
         }
 
-        boolean isSystemTable = checkIgnoreQueryAudit(stmt);
-
-        QueryLogger queryLogger = QueryLogger.getInstance(connection, isSystemTable);
+        QueryLogger queryLogger = QueryLogger.getInstance(connection, isSystemTable(stmt));
         QueryLoggerUtil.logInitialDetails(queryLogger, connection.getTenantId(),
                 connection.getQueryServices(), sql, getParameters());
         return queryLogger;
