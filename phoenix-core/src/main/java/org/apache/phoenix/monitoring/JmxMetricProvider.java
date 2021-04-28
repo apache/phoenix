@@ -30,6 +30,7 @@ import java.util.Map;
 /**
  * This class implements the JMX based default Metric publishing
  * of Metrics to JMX end point.
+ * This class is defined in phoenix/phoenix-core/src/main/resources/META-INF/services/org.apache.phoenix.monitoring.MetricPublisherSupplierFactory
  */
 public class JmxMetricProvider implements MetricPublisherSupplierFactory {
 
