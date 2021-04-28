@@ -91,13 +91,6 @@ public class PhoenixMRJobUtil {
     public static String getActiveResourceManagerAddress(Configuration config, String zkQuorum)
             throws IOException, InterruptedException, KeeperException,
             InvalidProtocolBufferException, ZooKeeperConnectionException {
-        // In case of yarn HA is NOT enabled
-        String resourceManager = PhoenixMRJobUtil.getRMWebAddress(config);
-
-        LOGGER.info("ResourceManagerAddress from config = " + resourceManager);
-        if(!resourceManager.equals(YarnConfiguration.DEFAULT_RM_WEBAPP_ADDRESS)){
-            return resourceManager;
-        }
         // In case of yarn HA is enabled
         ZooKeeperWatcher zkw = null;
         ZooKeeper zk = null;
@@ -129,6 +122,11 @@ public class PhoenixMRJobUtil {
         } finally {
             if (zkw != null) zkw.close();
             if (zk != null) zk.close();
+        }
+        // In case of yarn HA is NOT enabled
+        if (activeRMHost == null) {
+            activeRMHost = PhoenixMRJobUtil.getRMWebAddress(config);
+            LOGGER.info("ResourceManagerAddress from config = " + activeRMHost);
         }
 
         return activeRMHost;
