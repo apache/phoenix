@@ -172,6 +172,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private TableResultIteratorFactory tableResultIteratorFactory;
     private boolean isRunningUpgrade;
     private LogLevel logLevel;
+    private LogLevel auditLogLevel;
     private Double logSamplingRate;
     private String sourceOfOperation;
 
@@ -381,6 +382,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         };
         this.logLevel= LogLevel.valueOf(this.services.getProps().get(QueryServices.LOG_LEVEL,
                 QueryServicesOptions.DEFAULT_LOGGING_LEVEL));
+        this.auditLogLevel= LogLevel.valueOf(this.services.getProps().get(QueryServices.AUDIT_LOG_LEVEL,
+                QueryServicesOptions.DEFAULT_AUDIT_LOGGING_LEVEL));
         this.isRequestLevelMetricsEnabled = JDBCUtil.isCollectingRequestLevelMetricsEnabled(url, info,
                 this.services.getProps());
         this.mutationState = mutationState == null ? newMutationState(maxSize,
@@ -1357,6 +1360,10 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     public LogLevel getLogLevel(){
         return this.logLevel;
+    }
+
+    public LogLevel getAuditLogLevel(){
+        return this.auditLogLevel;
     }
     
     public Double getLogSamplingRate(){
