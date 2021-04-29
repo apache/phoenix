@@ -88,6 +88,7 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.log.AuditQueryLogger;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.log.QueryLogInfo;
 import org.apache.phoenix.log.QueryLogger;
@@ -405,11 +406,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     }
 
 
-    protected int executeMutation(final CompilableStatement stmt, final QueryLogger queryLogger) throws SQLException {
+    protected int executeMutation(final CompilableStatement stmt, final AuditQueryLogger queryLogger) throws SQLException {
         return executeMutation(stmt, true, queryLogger);
     }
 
-    private int executeMutation(final CompilableStatement stmt, final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger) throws SQLException {
+    private int executeMutation(final CompilableStatement stmt, final boolean doRetryOnMetaNotFoundError, final AuditQueryLogger queryLogger) throws SQLException {
 	 if (connection.isReadOnly()) {
             throw new SQLExceptionInfo.Builder(
                 SQLExceptionCode.READ_ONLY_CONNECTION).
@@ -454,7 +455,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                     queryLogger.log(QueryLogInfo.TABLE_NAME_I, getTargetForAudit(stmt));
                                     queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.COMPLETED.toString());
                                     queryLogger.log(QueryLogInfo.NO_OF_RESULTS_ITERATED_I, lastUpdateCount);
-                                    queryLogger.syncAudit(null, null);
+                                    queryLogger.syncAudit();
                                 }
 
                                 return lastUpdateCount;
@@ -487,7 +488,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 queryLogger.log(QueryLogInfo.TABLE_NAME_I, getTargetForAudit(stmt));
                 queryLogger.log(QueryLogInfo.EXCEPTION_TRACE_I, Throwables.getStackTraceAsString(e));
                 queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.FAILED.toString());
-                queryLogger.syncAudit(null, null);
+                queryLogger.syncAudit();
             }
             Throwables.propagateIfInstanceOf(e, SQLException.class);
             Throwables.propagate(e);
@@ -1918,12 +1919,22 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     }
 
     public QueryLogger createQueryLogger(CompilableStatement stmt, String sql) throws SQLException {
-        if (connection.getLogLevel() == LogLevel.OFF &&
-                connection.getAuditLogLevel() == LogLevel.OFF) {
+        if (connection.getLogLevel() == LogLevel.OFF) {
             return QueryLogger.NO_OP_INSTANCE;
         }
 
         QueryLogger queryLogger = QueryLogger.getInstance(connection, isSystemTable(stmt));
+        QueryLoggerUtil.logInitialDetails(queryLogger, connection.getTenantId(),
+                connection.getQueryServices(), sql, getParameters());
+        return queryLogger;
+    }
+
+    public AuditQueryLogger createAuditQueryLogger(CompilableStatement stmt, String sql) throws SQLException {
+        if (connection.getAuditLogLevel() == LogLevel.OFF) {
+            return AuditQueryLogger.NO_OP_INSTANCE;
+        }
+
+        AuditQueryLogger queryLogger = AuditQueryLogger.getInstance(connection, isSystemTable(stmt));
         QueryLoggerUtil.logInitialDetails(queryLogger, connection.getTenantId(),
                 connection.getQueryServices(), sql, getParameters());
         return queryLogger;
@@ -1953,7 +1964,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
             .build().buildException();
         }
-        int updateCount = executeMutation(stmt, createQueryLogger(stmt, sql));
+        int updateCount = executeMutation(stmt, createAuditQueryLogger(stmt, sql));
         flushIfNecessary();
         return updateCount;
     }
@@ -1972,7 +1983,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
                 .build().buildException();
             }
-            executeMutation(stmt, createQueryLogger(stmt, sql));
+            executeMutation(stmt, createAuditQueryLogger(stmt, sql));
             flushIfNecessary();
             return false;
         }
