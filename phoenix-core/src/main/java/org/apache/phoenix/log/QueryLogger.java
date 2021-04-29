@@ -39,23 +39,20 @@ public class QueryLogger {
     private QueryLoggerDisruptor queryDisruptor;
     private String queryId;
     private LogLevel logLevel;
-    private LogLevel auditLogLevel;
     private Builder<QueryLogInfo, Object> queryLogBuilder = ImmutableMap.builder();
     private boolean isSynced;
     private static final Logger LOGGER = LoggerFactory.getLogger(QueryLogger.class);
     
-    private QueryLogger(PhoenixConnection connection) {
+    protected QueryLogger(PhoenixConnection connection) {
         this.queryId = UUID.randomUUID().toString();
         this.queryDisruptor = connection.getQueryServices().getQueryDisruptor();
         logLevel = connection.getLogLevel();
-        auditLogLevel = connection.getAuditLogLevel();
         log(QueryLogInfo.QUERY_ID_I, queryId);
         log(QueryLogInfo.START_TIME_I, EnvironmentEdgeManager.currentTimeMillis());
     }
-    
-    private QueryLogger() {
+
+    protected QueryLogger() {
         logLevel = LogLevel.OFF;
-        auditLogLevel = LogLevel.OFF;
     }
     
     private RingBufferEventTranslator getCachedTranslator() {
@@ -133,20 +130,6 @@ public class QueryLogger {
         return this.logLevel != null && logLevel != LogLevel.OFF ? logLevel.ordinal() <= this.logLevel.ordinal()
                 : false;
     }
-
-    /**
-     *  Is audit logging currently enabled?
-     *  Call this method to prevent having to perform expensive operations (for example,
-     *  String concatenation) when the audit log level is more than info.
-     */
-    public boolean isAuditLoggingEnabled(){
-        return isAuditLevelEnabled(LogLevel.INFO);
-    }
-
-    private boolean isAuditLevelEnabled(LogLevel logLevel){
-        return this.auditLogLevel != null && logLevel != LogLevel.OFF ? logLevel.ordinal() <= this.auditLogLevel.ordinal()
-                : false;
-    }
     
     /**
      * Is Info logging currently enabled?
@@ -173,10 +156,6 @@ public class QueryLogger {
 
     public void sync(Map<String, Map<MetricType, Long>> readMetrics, Map<MetricType, Long> overAllMetrics) {
         syncBase(readMetrics, overAllMetrics, logLevel);
-    }
-
-    public void syncAudit(Map<String, Map<MetricType, Long>> readMetrics, Map<MetricType, Long> overAllMetrics) {
-        syncBase(readMetrics, overAllMetrics, LogLevel.TRACE);
     }
 
     public void syncBase(Map<String, Map<MetricType, Long>> readMetrics, Map<MetricType, Long> overAllMetrics, LogLevel logLevel) {

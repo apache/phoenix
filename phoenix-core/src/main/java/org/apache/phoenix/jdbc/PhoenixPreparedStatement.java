@@ -170,7 +170,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
             .build().buildException();
         }
         if (statement.getOperation().isMutation()) {
-            executeMutation(statement, createQueryLogger(statement,query));
+            executeMutation(statement, createAuditQueryLogger(statement,query));
             return false;
         }
         executeQuery(statement, createQueryLogger(statement,query));
@@ -203,7 +203,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
             .build().buildException();
         }
-        return executeMutation(statement, createQueryLogger(statement,query));
+        return executeMutation(statement, createAuditQueryLogger(statement,query));
     }
 
     public QueryPlan optimizeQuery() throws SQLException {
