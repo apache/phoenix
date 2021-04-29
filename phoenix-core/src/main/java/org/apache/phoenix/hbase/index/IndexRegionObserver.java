@@ -1022,6 +1022,19 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
         return false;
     }
 
+    private boolean hasAtomicUpdate(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+        for (int i = 0; i < miniBatchOp.size(); i++) {
+            if (miniBatchOp.getOperationStatus(i) == IGNORE) {
+                continue;
+            }
+            Mutation m = miniBatchOp.getOperation(i);
+            if (this.builder.isAtomicOp(m)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void waitForPreviousConcurrentBatch(TableName table, BatchMutateContext context)
             throws Throwable {
         boolean done;
@@ -1087,20 +1100,25 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
         }
         lockRows(context);
 
-        // Retrieve the current row states from the data table while holding the lock.
-        // This is needed for both atomic mutations and global indexes
-        getCurrentRowStates(c, context);
+        boolean hasAtomic = hasAtomicUpdate(miniBatchOp);
+        if (hasAtomic || hasGlobalIndex(indexMetaData)) {
+            // Retrieve the current row states from the data table while holding the lock.
+            // This is needed for both atomic mutations and global indexes
+            getCurrentRowStates(c, context);
+        }
 
-        // add the mutations for conditional updates to the mini batch
-        addOnDupMutationsToBatch(miniBatchOp, context);
+        if (hasAtomic) {
+            // add the mutations for conditional updates to the mini batch
+            addOnDupMutationsToBatch(miniBatchOp, context);
 
-        // release locks for ON DUPLICATE KEY IGNORE since we won't be changing those rows
-        // this is needed so that we can exit early
-        releaseLocksForOnDupIgnoreMutations(miniBatchOp, context);
+            // release locks for ON DUPLICATE KEY IGNORE since we won't be changing those rows
+            // this is needed so that we can exit early
+            releaseLocksForOnDupIgnoreMutations(miniBatchOp, context);
 
-        // early exit if we are not changing any rows
-        if (context.rowsToLock.isEmpty()) {
-            return;
+            // early exit if we are not changing any rows
+            if (context.rowsToLock.isEmpty()) {
+                return;
+            }
         }
 
         long now = EnvironmentEdgeManager.currentTimeMillis();
@@ -1155,6 +1173,7 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
     private void releaseLocksForOnDupIgnoreMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
                                                      BatchMutateContext context) {
         for (int i = 0; i < miniBatchOp.size(); i++) {
+            // status of all ON DUPLICATE KEY IGNORE mutations is updated to IGNORE
             if (miniBatchOp.getOperationStatus(i) != IGNORE) {
                 continue;
             }
@@ -1532,7 +1551,6 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
         }
 
         SimpleValueGetter valueGetter = new SimpleValueGetter(currentDataRow);
-        long ts = getMaxTimestamp(currentDataRow);
         for (ColumnReference colRef : cols) {
             Cell cell = valueGetter.getLatestCell(colRef, HConstants.LATEST_TIMESTAMP);
             if (cell != null) {
