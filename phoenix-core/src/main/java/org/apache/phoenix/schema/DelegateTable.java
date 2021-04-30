@@ -370,6 +370,11 @@ public class DelegateTable implements PTable {
         return delegate.isChangeDetectionEnabled();
     }
 
+    @Override
+    public String getSchemaVersion() {
+        return delegate.getSchemaVersion();
+    }
+
     @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }
 
     @Override public Map<String, String> getDefaultPropertyValues() { return delegate.getDefaultPropertyValues(); }
