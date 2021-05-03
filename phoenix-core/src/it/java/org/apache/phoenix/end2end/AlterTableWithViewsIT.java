@@ -1486,6 +1486,8 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             conn.createStatement().execute(alterViewSql);
             PTable view2 = PhoenixRuntime.getTableNoCache(conn, viewFullName);
             assertEquals(newVersion, view2.getSchemaVersion());
+            PTable baseTable = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+            assertEquals(oldVersion, baseTable.getSchemaVersion());
         }
     }
 
