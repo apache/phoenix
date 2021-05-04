@@ -363,10 +363,12 @@ public class ScanUtil {
         }
         int[] position = new int[slots.size()];
         int maxLength = 0;
+        int slotEndingFieldPos = -1;
         for (int i = 0; i < position.length; i++) {
             position[i] = bound == Bound.LOWER ? 0 : slots.get(i).size()-1;
             KeyRange range = slots.get(i).get(position[i]);
-            Field field = schema.getField(i + slotSpan[i]);
+            slotEndingFieldPos = slotEndingFieldPos + slotSpan[i] + 1;
+            Field field = schema.getField(slotEndingFieldPos);
             int keyLength = range.getRange(bound).length;
             if (!field.getDataType().isFixedWidth()) {
                 keyLength++;
