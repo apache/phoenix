@@ -62,11 +62,11 @@
               be equivalent, except for the changes for hbase-shaded-client compatibility  -->
                 <relocation>
                   <pattern>org/antlr/</pattern>
-                  <shadedPattern>${shaded.package}.org.antlr</shadedPattern>
+                  <shadedPattern>${shaded.package}.org.antlr.</shadedPattern>
                 </relocation>
                 <relocation>
                   <pattern>org/aopalliance/</pattern>
-                  <shadedPattern>${shaded.package}.org.aopalliance</shadedPattern>
+                  <shadedPattern>${shaded.package}.org.aopalliance.</shadedPattern>
                 </relocation>
                 <!-- HBase shaded ! -->
                 <relocation>
@@ -196,17 +196,17 @@
                   <shadedPattern>${shaded.package}.com.force.</shadedPattern>
                 </relocation>
                 <relocation>
-                  <pattern>com/google/gson</pattern>
+                  <pattern>com/google/gson/</pattern>
                   <shadedPattern>${shaded.package}.com.google.gson.</shadedPattern>
                 </relocation>
                 <relocation>
-                  <pattern>com/google/inject</pattern>
+                  <pattern>com/google/inject/</pattern>
                   <shadedPattern>${shaded.package}.com.google.inject.</shadedPattern>
                 </relocation>
                 <!-- HBase shaded ! -->
                 <relocation>
-                  <pattern>com/google/protobuf</pattern>
-                  <shadedPattern>${hbase.shaded.package}.com.google.protobuf</shadedPattern>
+                  <pattern>com/google/protobuf/</pattern>
+                  <shadedPattern>${hbase.shaded.package}.com.google.protobuf.</shadedPattern>
                 </relocation>
                 <relocation>
                   <pattern>com/ibm/</pattern>
@@ -217,7 +217,7 @@
                   <shadedPattern>${shaded.package}.com.lmax.</shadedPattern>
                 </relocation>
                 <relocation>
-                  <pattern>com/sun/jna</pattern>
+                  <pattern>com/sun/jna/</pattern>
                   <shadedPattern>${shaded.package}.com.sun.jna.</shadedPattern>
                 </relocation>
 

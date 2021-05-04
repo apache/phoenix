@@ -142,8 +142,8 @@
                 </filters>
                 <relocations>
                     <relocation>
-                      <pattern>org.apache.commons</pattern>
-                      <shadedPattern>${shaded.package}.org.apache.commons</shadedPattern>
+                      <pattern>org.apache.commons.</pattern>
+                      <shadedPattern>${shaded.package}.org.apache.commons.</shadedPattern>
                       <excludes>
                         <exclude>org.apache.commons.csv.**</exclude>
                         <exclude>org.apache.commons.logging.**</exclude>
@@ -152,132 +152,132 @@
                       </excludes>
                     </relocation>
                     <relocation>
-                      <pattern>org.apache.htrace</pattern>
-                      <shadedPattern>${shaded.package}.org.apache.htrace</shadedPattern>
+                      <pattern>org.apache.htrace.</pattern>
+                      <shadedPattern>${shaded.package}.org.apache.htrace.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>org.apache.http</pattern>
-                      <shadedPattern>${shaded.package}.org.apache.http</shadedPattern>
+                      <pattern>org.apache.http.</pattern>
+                      <shadedPattern>${shaded.package}.org.apache.http.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>org.antlr</pattern>
-                      <shadedPattern>${shaded.package}.org.antlr</shadedPattern>
+                      <pattern>org.antlr.</pattern>
+                      <shadedPattern>${shaded.package}.org.antlr.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>org.iq80</pattern>
-                      <shadedPattern>${shaded.package}.org.iq80</shadedPattern>
+                      <pattern>org.iq80.</pattern>
+                      <shadedPattern>${shaded.package}.org.iq80.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>org.jcodings</pattern>
-                      <shadedPattern>${shaded.package}.org.jcodings</shadedPattern>
+                      <pattern>org.jcodings.</pattern>
+                      <shadedPattern>${shaded.package}.org.jcodings.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>org.joda</pattern>
-                      <shadedPattern>${shaded.package}.org.joda</shadedPattern>
+                      <pattern>org.joda.</pattern>
+                      <shadedPattern>${shaded.package}.org.joda.</shadedPattern>
                     </relocation>
                     <!-- Tephra and dependencies -->
                     <relocation>
-                      <pattern>co.cask.tephra</pattern>
-                      <shadedPattern>${shaded.package}.co.cask.tephra</shadedPattern>
+                      <pattern>co.cask.tephra.</pattern>
+                      <shadedPattern>${shaded.package}.co.cask.tephra.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>org.apache.tephra</pattern>
-                      <shadedPattern>${shaded.package}.org.apache.tephra</shadedPattern>
+                      <pattern>org.apache.tephra.</pattern>
+                      <shadedPattern>${shaded.package}.org.apache.tephra.</shadedPattern>
                     </relocation>
                     <relocation>
-                        <pattern>org.apache.omid</pattern>
-                        <shadedPattern>${shaded.package}.org.apache.omid</shadedPattern>
+                        <pattern>org.apache.omid.</pattern>
+                        <shadedPattern>${shaded.package}.org.apache.omid.</shadedPattern>
                     </relocation>
                     <relocation>
-                        <pattern>org.apache.commons-collections4</pattern>
-                        <shadedPattern>${shaded.package}.org.apache.commons-collections4</shadedPattern>
+                        <pattern>org.apache.commons-collections4.</pattern>
+                        <shadedPattern>${shaded.package}.org.apache.commons-collections4.</shadedPattern>
                     </relocation>
                     <relocation>
-                        <pattern>org.jboss.netty</pattern>
-                        <shadedPattern>${shaded.package}.org.jboss.netty:netty</shadedPattern>
+                        <pattern>org.jboss.netty.</pattern>
+                        <shadedPattern>${shaded.package}.org.jboss.netty:netty.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>org.apache.twill</pattern>
-                      <shadedPattern>${shaded.package}.org.apache.twill</shadedPattern>
+                      <pattern>org.apache.twill.</pattern>
+                      <shadedPattern>${shaded.package}.org.apache.twill.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>org.apache.thrift</pattern>
-                      <shadedPattern>${shaded.package}.org.apache.thrift</shadedPattern>
+                      <pattern>org.apache.thrift.</pattern>
+                      <shadedPattern>${shaded.package}.org.apache.thrift.</shadedPattern>
                     </relocation>
 
                     <relocation>
                       <!-- This would shade protobuf, but we don't package it as hbase provides it
                            for all CPEPs. Similarly, we need to exclude the package so that
                            Phoenix looks for it in the "standard" package. -->
-                      <pattern>com.google</pattern>
-                      <shadedPattern>${shaded.package}.com.google</shadedPattern>
+                      <pattern>com.google.</pattern>
+                      <shadedPattern>${shaded.package}.com.google.</shadedPattern>
                       <excludes>
                         <exclude>com.google.protobuf.**</exclude>
                       </excludes>
                     </relocation>
                     <relocation>
-                      <pattern>com.codahale.metrics</pattern>
-                      <shadedPattern>${shaded.package}.com.codahale.metrics</shadedPattern>
+                      <pattern>com.codahale.metrics.</pattern>
+                      <shadedPattern>${shaded.package}.com.codahale.metrics.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>it.unimi.dsi.fastutil</pattern>
-                      <shadedPattern>${shaded.package}.it.unimi.dsi.fastutil</shadedPattern>
+                      <pattern>it.unimi.dsi.fastutil.</pattern>
+                      <shadedPattern>${shaded.package}.it.unimi.dsi.fastutil.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>com.ibm.icu</pattern>
-                      <shadedPattern>${shaded.package}.com.ibm.icu</shadedPattern>
+                      <pattern>com.ibm.icu.</pattern>
+                      <shadedPattern>${shaded.package}.com.ibm.icu.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>com.force</pattern>
-                      <shadedPattern>${shaded.package}.com.force</shadedPattern>
+                      <pattern>com.force.</pattern>
+                      <shadedPattern>${shaded.package}.com.force.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>com.clearspring</pattern>
-                      <shadedPattern>${shaded.package}.com.clearspring</shadedPattern>
+                      <pattern>com.clearspring.</pattern>
+                      <shadedPattern>${shaded.package}.com.clearspring.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>org.joni</pattern>
-                      <shadedPattern>${shaded.package}.org.joni</shadedPattern>
+                      <pattern>org.joni.</pattern>
+                      <shadedPattern>${shaded.package}.org.joni.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>org.jcodings</pattern>
-                      <shadedPattern>${shaded.package}.org.jcodings</shadedPattern>
+                      <pattern>org.jcodings.</pattern>
+                      <shadedPattern>${shaded.package}.org.jcodings.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>org.iq80.snappy</pattern>
-                      <shadedPattern>${shaded.package}.org.iq80.snappy</shadedPattern>
+                      <pattern>org.iq80.snappy.</pattern>
+                      <shadedPattern>${shaded.package}.org.iq80.snappy.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>edu.umd.cs.findbugs.annotations</pattern>
-                      <shadedPattern>${shaded.package}.edu.umd.cs.findbugs.annotations</shadedPattern>
+                      <pattern>edu.umd.cs.findbugs.annotations.</pattern>
+                      <shadedPattern>${shaded.package}.edu.umd.cs.findbugs.annotations.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>net.jcip.annotations</pattern>
-                      <shadedPattern>${shaded.package}.net.jcip.annotations</shadedPattern>
+                      <pattern>net.jcip.annotations.</pattern>
+                      <shadedPattern>${shaded.package}.net.jcip.annotations.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>com.fasterxml.jackson</pattern>
-                      <shadedPattern>${shaded.package}.com.fasterxml.jackson</shadedPattern>
+                      <pattern>com.fasterxml.jackson.</pattern>
+                      <shadedPattern>${shaded.package}.com.fasterxml.jackson.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>javax.annotation</pattern>
-                      <shadedPattern>${shaded.package}.javax.annotation</shadedPattern>
+                      <pattern>javax.annotation.</pattern>
+                      <shadedPattern>${shaded.package}.javax.annotation.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>com.lmax.disruptor</pattern>
-                      <shadedPattern>${shaded.package}.com.lmax.disruptor</shadedPattern>
+                      <pattern>com.lmax.disruptor.</pattern>
+                      <shadedPattern>${shaded.package}.com.lmax.disruptor.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>javax.servlet</pattern>
-                      <shadedPattern>${shaded.package}.javax.servlet</shadedPattern>
+                      <pattern>javax.servlet.</pattern>
+                      <shadedPattern>${shaded.package}.javax.servlet.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>org.aopalliance</pattern>
-                      <shadedPattern>${shaded.package}.org.aopalliance</shadedPattern>
+                      <pattern>org.aopalliance.</pattern>
+                      <shadedPattern>${shaded.package}.org.aopalliance.</shadedPattern>
                     </relocation>
                     <relocation>
-                      <pattern>org.objectweb.asm</pattern>
-                      <shadedPattern>${shaded.package}.org.objectweb.asm</shadedPattern>
+                      <pattern>org.objectweb.asm.</pattern>
+                      <shadedPattern>${shaded.package}.org.objectweb.asm.</shadedPattern>
                     </relocation>
                 </relocations>
             </configuration>
