@@ -98,6 +98,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 
 /**
  * 
@@ -1253,15 +1254,21 @@ public class SchemaUtil {
             pTableName = "\""+pTableName+"\"";
         }
         if(tableNameNeedsQuotes || schemaNameNeedsQuotes) {
-            pTableFullName = pSchemaName + "." + pTableName;
+            if (!Strings.isNullOrEmpty(pSchemaName)) {
+                return String.format("%s.%s", pSchemaName, pTableName);
+            } else {
+                return pTableName;
+            }
         }
-
         return pTableFullName;
     }
 
     private static boolean isQuotesNeeded(String name) {
         // first char numeric or non-underscore
-        if(!Character.isAlphabetic(name.charAt(0)) && name.charAt(0)!='_') {
+        if (Strings.isNullOrEmpty(name)) {
+            return false;
+        }
+        if (!Character.isAlphabetic(name.charAt(0)) && name.charAt(0)!='_') {
             return true;
         }
         // for all other chars

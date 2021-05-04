@@ -29,7 +29,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
@@ -105,38 +104,58 @@ public class SchemaExtractionProcessor {
 
         List<PColumn> indexPK = indexPTable.getPKColumns();
         List<PColumn> dataPK = dataPTable.getPKColumns();
-        Set<String> indexPkSet = new HashSet<>();
-        Set<String> dataPkSet = new HashSet<>();
-        Map<String, SortOrder> sortOrderMap = new HashMap<>();
+        List<String> indexPKName = new ArrayList<>();
+        List<String> dataPKName = new ArrayList<>();
+        Map<String, SortOrder> indexSortOrderMap = new HashMap<>();
         StringBuilder indexedColumnsBuilder = new StringBuilder();
+
         for (PColumn indexedColumn : indexPK) {
             String indexColumn = extractIndexColumn(indexedColumn.getName().getString(), defaultCF);
             if(indexColumn.equalsIgnoreCase(MetaDataUtil.VIEW_INDEX_ID_COLUMN_NAME)) {
                 continue;
             }
-            indexPkSet.add(indexColumn);
-            sortOrderMap.put(indexColumn, indexedColumn.getSortOrder());
+            indexPKName.add(indexColumn);
+            indexSortOrderMap.put(indexColumn, indexedColumn.getSortOrder());
         }
-
         for(PColumn pColumn : dataPK) {
-            dataPkSet.add(pColumn.getName().getString());
+            dataPKName.add(pColumn.getName().getString());
         }
 
-        Set<String> effectivePK = Sets.symmetricDifference(indexPkSet, dataPkSet);
-        if (effectivePK.isEmpty()) {
-            effectivePK = indexPkSet;
+        // This is added because of PHOENIX-2340
+        String tenantIdColumn = dataPKName.get(0);
+        if (dataPTable.isMultiTenant() && indexPKName.contains(tenantIdColumn)) {
+            indexPKName.remove(tenantIdColumn);
         }
-        for (String column : effectivePK) {
+
+        for (String column : indexPKName) {
             if(indexedColumnsBuilder.length()!=0) {
                 indexedColumnsBuilder.append(", ");
             }
             indexedColumnsBuilder.append(column);
-            if(sortOrderMap.containsKey(column) && sortOrderMap.get(column) != SortOrder.getDefault()) {
+            if(indexSortOrderMap.containsKey(column)
+                    && indexSortOrderMap.get(column) != SortOrder.getDefault()) {
                 indexedColumnsBuilder.append(" ");
-                indexedColumnsBuilder.append(sortOrderMap.get(column));
+                indexedColumnsBuilder.append(indexSortOrderMap.get(column));
             }
         }
         return indexedColumnsBuilder.toString();
+    }
+
+    private List<PColumn> getSymmetricDifferencePColumns(List<PColumn> firstList, List<PColumn> secondList) {
+        List<PColumn> effectivePK = new ArrayList<>();
+        for(PColumn column : firstList) {
+            if(secondList.contains(column)) {
+                continue;
+            }
+            effectivePK.add(column);
+        }
+        for(PColumn column : secondList) {
+            if(firstList.contains(column)) {
+                continue;
+            }
+            effectivePK.add(column);
+        }
+        return effectivePK;
     }
 
     private String extractIndexColumn(String columnName, String defaultCF) {
@@ -404,21 +423,11 @@ public class SchemaExtractionProcessor {
         List<PColumn> columns = table.getColumns();
         List<PColumn> pkColumns = table.getPKColumns();
 
-        Set<PColumn> columnSet = new HashSet<>(columns);
-        Set<PColumn> pkSet = new HashSet<>(pkColumns);
-
         List<PColumn> baseColumns = baseTable.getColumns();
         List<PColumn> basePkColumns = baseTable.getPKColumns();
 
-        Set<PColumn> baseColumnSet = new HashSet<>(baseColumns);
-        Set<PColumn> basePkSet = new HashSet<>(basePkColumns);
-
-        Set<PColumn> columnsSet = Sets.symmetricDifference(baseColumnSet, columnSet);
-        Set<PColumn> pkColumnsSet = Sets.symmetricDifference(basePkSet, pkSet);
-
-        columns = new ArrayList<>(columnsSet);
-        pkColumns = new ArrayList<>(pkColumnsSet);
-
+        columns = getSymmetricDifferencePColumns(baseColumns, columns);
+        pkColumns = getSymmetricDifferencePColumns(basePkColumns, pkColumns);
 
         return getColumnInfoString(table, colInfo, columns, pkColumns);
     }
