@@ -23,7 +23,6 @@ import java.sql.SQLException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.query.QueryServices;
 import org.slf4j.Logger;
@@ -46,6 +45,7 @@ public class QueryLoggerDisruptor implements Closeable{
     private static final int RING_BUFFER_SIZE = 8 * 1024;
     private static final Logger LOGGER = LoggerFactory.getLogger(QueryLoggerDisruptor.class);
     private static final String DEFAULT_WAIT_STRATEGY = BlockingWaitStrategy.class.getName();
+    private static final int DEFAULT_AUDIT_LOGGER_PROCESS_COUNT = 1;
     
     public QueryLoggerDisruptor(Configuration configuration) throws SQLException{
         WaitStrategy waitStrategy;
@@ -74,12 +74,29 @@ public class QueryLoggerDisruptor implements Closeable{
         final ExceptionHandler<RingBufferEvent> errorHandler = new QueryLoggerDefaultExceptionHandler();
         disruptor.setDefaultExceptionHandler(errorHandler);
 
-        final QueryLogDetailsEventHandler[] handlers = { new QueryLogDetailsEventHandler(configuration) };
-        disruptor.handleEventsWith(handlers);
+        /**
+         * if LOG_HANDLER_COUNT is 1 it will work as the previous implementation
+         * if LOG_HANDLER_COUNT is 2 or more then Multi Thread
+         */
+        int handlerCount = configuration.getInt(
+                QueryServices.LOG_HANDLER_COUNT, DEFAULT_AUDIT_LOGGER_PROCESS_COUNT);
+
+        if (handlerCount <= 0){
+            LOGGER.error("Audit Log Handler Count must be greater than 0." +
+                    "change to default value, input : " + handlerCount);
+            handlerCount = DEFAULT_AUDIT_LOGGER_PROCESS_COUNT;
+        }
+
+        QueryLogDetailsWorkHandler[] workHandlers = new QueryLogDetailsWorkHandler[handlerCount];
+        for (int i = 0; i < handlerCount; i++){
+            workHandlers[i] = new QueryLogDetailsWorkHandler(configuration);
+        }
+        disruptor.handleEventsWithWorkerPool(workHandlers);
+
         LOGGER.info("Starting  QueryLoggerDisruptor for with ringbufferSize=" +
                 disruptor.getRingBuffer().getBufferSize() + ", waitStrategy=" +
                 waitStrategy.getClass().getSimpleName() + ", " + "exceptionHandler="
-                + errorHandler + "...");
+                + errorHandler + ", handlerCount=" + handlerCount);
         disruptor.start();
         
     }
