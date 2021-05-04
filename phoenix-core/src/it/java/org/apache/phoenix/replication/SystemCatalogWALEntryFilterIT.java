@@ -244,7 +244,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
     createNonTenantView();
   }
 
-  public Get getGet(PTable catalogTable, byte[] tenantId, String viewName) {
+  private Get getGet(PTable catalogTable, byte[] tenantId, String viewName) {
     byte[][] tenantKeyParts = new byte[5][];
     tenantKeyParts[0] = tenantId;
     tenantKeyParts[1] = Bytes.toBytes(SCHEMA_NAME.toUpperCase());
@@ -258,7 +258,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
     return new Get(key.copyBytes());
   }
 
-  public Get getGetChildLink(PTable catalogTable, byte[] tenantId, String viewName) {
+  private Get getGetChildLink(PTable catalogTable, byte[] tenantId, String viewName) {
     byte[][] tenantKeyParts = new byte[5][];
     tenantKeyParts[0] = ByteUtil.EMPTY_BYTE_ARRAY;
     tenantKeyParts[1] = ByteUtil.EMPTY_BYTE_ARRAY;
@@ -326,7 +326,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
   }
 
 
-  public WAL.Entry getEntry(TableName tableName, Get get) throws IOException {
+  private WAL.Entry getEntry(TableName tableName, Get get) throws IOException {
     WAL.Entry entry = null;
     try(Connection conn = ConnectionFactory.createConnection(getUtility().getConfiguration())){
       Table htable = conn.getTable(tableName);
@@ -348,7 +348,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
     return entry;
   }
 
-  public WAL.Entry getEntry(TableName tableName, Scan scan, boolean addIndexedKeyValueCell)
+  private WAL.Entry getEntry(TableName tableName, Scan scan, boolean addIndexedKeyValueCell)
       throws IOException {
     WAL.Entry entry = null;
     try(HConnection conn = HConnectionManager.createConnection(getUtility().getConfiguration())) {
