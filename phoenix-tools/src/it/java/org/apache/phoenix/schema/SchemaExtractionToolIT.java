@@ -31,7 +31,9 @@ import org.junit.Test;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
@@ -154,18 +156,46 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
                 + "id3 VARCHAR NOT NULL CONSTRAINT PKVIEW PRIMARY KEY (id2, id3 DESC)) "
                 + "AS SELECT * FROM "+pTableFullName;
         String createView1 = "CREATE VIEW "+childviewName + " AS SELECT * FROM "+viewFullName;
-        String createIndexStatement = "CREATE INDEX "+indexName + " ON "+childviewName+"(id1) INCLUDE (v1)";
+        String createIndexStatement = "CREATE INDEX "+indexName + " ON "+childviewName+"(id2, id1) INCLUDE (v1)";
         List<String> queries = new ArrayList<String>(){};
         queries.add(createTableStmt);
         queries.add(createView);
         queries.add(createView1);
         queries.add(createIndexStatement);
+        String expected = "CREATE INDEX %s ON " +childviewName +"(ID2, ID1, K, ID3 DESC) INCLUDE (V1)";
         String result = runSchemaExtractionTool(schemaName, indexName, null, queries);
-        Assert.assertEquals(createIndexStatement.toUpperCase(), result.toUpperCase());
+        Assert.assertEquals(String.format(expected, indexName).toUpperCase(), result.toUpperCase());
+        queries.clear();
+        String newIndex =indexName+"_NEW";
+        queries.add(String.format(expected, newIndex));
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            executeCreateStatements(conn, queries);
+        }
+        compareOrdinalPositions(indexName, newIndex);
+    }
+
+    private void compareOrdinalPositions(String table, String newTable) throws SQLException {
+        String ordinalQuery = "SELECT COLUMN_NAME, "
+                + "ORDINAL_POSITION FROM SYSTEM.CATALOG"
+                + " WHERE TABLE_NAME='%s' AND ORDINAL_POSITION IS NOT NULL ORDER BY COLUMN_NAME";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Map<String, Integer> ordinalMap = new HashMap<>();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            ResultSet rs = conn.createStatement().executeQuery(String.format(ordinalQuery, table));
+            while(rs.next()) {
+                ordinalMap.put(rs.getString(1), rs.getInt(2));
+            }
+            rs = conn.createStatement().executeQuery(String.format(ordinalQuery, newTable));
+            while(rs.next()) {
+                Assert.assertEquals(ordinalMap.get(rs.getString(1)).intValue(),
+                        rs.getInt(2));
+            }
+        }
     }
 
     @Test
-    public void testCreateTableStatement_tenant() throws Exception {
+    public void testCreateViewStatement_tenant() throws Exception {
         String tableName = generateUniqueName();
         String viewName = generateUniqueName();
         String schemaName = generateUniqueName();
@@ -218,8 +248,7 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
     @Test
     public void testCreateTableWithArrayColumn() throws Exception {
         String tableName = generateUniqueName();
-        String schemaName = generateUniqueName();
-        String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+        String pTableFullName = tableName;
         String query = "create table " + pTableFullName +
                 "(a_char CHAR(15) NOT NULL, " +
                 "b_char CHAR(10) NOT NULL, " +
@@ -228,7 +257,7 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
                 "TTL=2592000, IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN', REPLICATION_SCOPE=1";
         List<String> queries = new ArrayList<String>(){};
         queries.add(query);
-        String result = runSchemaExtractionTool(schemaName, tableName, null, queries);
+        String result = runSchemaExtractionTool("", tableName, null, queries);
         Assert.assertEquals(query.toUpperCase(), result.toUpperCase());
     }
 
@@ -297,9 +326,13 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
     public void testCreateTableWithMultipleCFProperties() throws Exception {
         String tableName = "07"+generateUniqueName();
         String schemaName = generateUniqueName();
-        String properties = "\"av\".DATA_BLOCK_ENCODING='DIFF', \"bv\".DATA_BLOCK_ENCODING='DIFF', \"cv\".DATA_BLOCK_ENCODING='DIFF', " +
-                "IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN', SALT_BUCKETS=16, MULTI_TENANT=true, BLOOMFITER='ROW'";
-        String simplifiedProperties = "DATA_BLOCK_ENCODING='DIFF', IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN', SALT_BUCKETS=16, MULTI_TENANT=true, BLOOMFITER='ROW'";
+        String properties = "\"av\".DATA_BLOCK_ENCODING='DIFF', \"bv\".DATA_BLOCK_ENCODING='DIFF', "
+                + "\"cv\".DATA_BLOCK_ENCODING='DIFF', " +
+                "IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN', "
+                + "SALT_BUCKETS=16, MULTI_TENANT=true, BLOOMFITER='ROW'";
+        String simplifiedProperties = "DATA_BLOCK_ENCODING='DIFF', "
+                + "IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN', "
+                + "SALT_BUCKETS=16, MULTI_TENANT=true, BLOOMFITER='ROW'";
         String query = "create table " + schemaName+".\""+tableName+"\"" +
                 "(a_char CHAR(15) NOT NULL, " +
                 "b_char CHAR(10) NOT NULL, " +
@@ -318,18 +351,119 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
     }
 
     @Test
+    public void testColumnAndPKOrdering() throws Exception {
+        String table = "CREATE TABLE IF NOT EXISTS MY_SCHEMA.MY_DATA_TABLE (\n"
+                + "    ORGANIZATION_ID CHAR(15) NOT NULL, \n"
+                + "    KEY_PREFIX CHAR(3) NOT NULL,\n"
+                + "    CREATED_DATE DATE,\n"
+                + "    CREATED_BY CHAR(15) \n"
+                + "    CONSTRAINT PK PRIMARY KEY (\n"
+                + "        ORGANIZATION_ID, \n"
+                + "        KEY_PREFIX\n" + "    )\n"
+                + ") VERSIONS=1, IMMUTABLE_ROWS=true, MULTI_TENANT=true, REPLICATION_SCOPE=1";
+
+        String view = "CREATE VIEW IF NOT EXISTS MY_SCHEMA.MY_DATA_VIEW  (\n"
+                + "    DATE_TIME1 DATE NOT NULL,\n"
+                + "    TEXT1 VARCHAR NOT NULL,\n"
+                + "    INT1 BIGINT NOT NULL,\n"
+                + "    DOUBLE1 DECIMAL(12, 3),\n"
+                + "    DOUBLE2 DECIMAL(12, 3),\n"
+                + "    DOUBLE3 DECIMAL(12, 3),\n"
+                + "    CONSTRAINT PKVIEW PRIMARY KEY\n" + "    (\n"
+                + "        DATE_TIME1, TEXT1, INT1\n" + "    )\n" + ")\n"
+                + "AS SELECT * FROM MY_SCHEMA.MY_DATA_TABLE WHERE KEY_PREFIX = '9Yj'";
+
+        String index = "CREATE INDEX IF NOT EXISTS MY_VIEW_INDEX\n"
+                + "ON MY_SCHEMA.MY_DATA_VIEW (TEXT1, DATE_TIME1 DESC, DOUBLE1)\n"
+                + "INCLUDE (CREATED_BY, CREATED_DATE)";
+        List<String> queries = new ArrayList<String>(){};
+
+        queries.add(table);
+        queries.add(view);
+        queries.add(index);
+
+        String expectedIndex = "CREATE INDEX MY_VIEW_INDEX "
+                + "ON MY_SCHEMA.MY_DATA_VIEW(TEXT1, DATE_TIME1 DESC, DOUBLE1, INT1)"
+                + " INCLUDE (CREATED_BY, CREATED_DATE)";
+        String result = runSchemaExtractionTool("MY_SCHEMA", "MY_VIEW_INDEX", null, queries);
+        Assert.assertEquals(expectedIndex.toUpperCase(), result.toUpperCase());
+
+        String expectedView = "CREATE VIEW MY_SCHEMA.MY_DATA_VIEW(DATE_TIME1 DATE NOT NULL, "
+                + "TEXT1 VARCHAR NOT NULL, INT1 BIGINT NOT NULL, DOUBLE1 DECIMAL(12,3), "
+                + "DOUBLE2 DECIMAL(12,3), DOUBLE3 DECIMAL(12,3)"
+                + " CONSTRAINT PKVIEW PRIMARY KEY (DATE_TIME1, TEXT1, INT1))"
+                + " AS SELECT * FROM MY_SCHEMA.MY_DATA_TABLE WHERE KEY_PREFIX = '9YJ'";
+        result = runSchemaExtractionTool("MY_SCHEMA", "MY_DATA_VIEW", null, new ArrayList<String>());
+        Assert.assertEquals(expectedView.toUpperCase(), result.toUpperCase());
+    }
+
+    @Test
+    public void testColumnAndPKOrdering_nonView() throws Exception {
+        String indexName = "MY_DATA_TABLE_INDEX";
+        String table = "CREATE TABLE MY_SCHEMA.MY_SAMPLE_DATA_TABLE("
+                + "ORGANIZATION_ID CHAR(15) NOT NULL,"
+                + " SOME_ID_COLUMN CHAR(3) NOT NULL,"
+                + " SOME_ID_COLUMN_2 CHAR(15) NOT NULL,"
+                + " CREATED_DATE DATE NOT NULL,"
+                + " SOME_ID_COLUMN_3 CHAR(15) NOT NULL,"
+                + " SOME_ID_COLUMN_4 CHAR(15),"
+                + " CREATED_BY_ID VARCHAR,"
+                + " VALUE_FIELD VARCHAR"
+                + " CONSTRAINT PK PRIMARY KEY (ORGANIZATION_ID, SOME_ID_COLUMN, SOME_ID_COLUMN_2,"
+                + " CREATED_DATE DESC, SOME_ID_COLUMN_3))"
+                + " IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN',"
+                + " MULTI_TENANT=true, REPLICATION_SCOPE=1\n";
+
+        String index = "CREATE INDEX IF NOT EXISTS MY_DATA_TABLE_INDEX\n"
+                + " ON MY_SCHEMA.MY_SAMPLE_DATA_TABLE (SOME_ID_COLUMN, CREATED_DATE DESC,"
+                + " SOME_ID_COLUMN_2, SOME_ID_COLUMN_3)\n"
+                + " INCLUDE\n"
+                + "(SOME_ID_COLUMN_4, CREATED_BY_ID, VALUE_FIELD)\n";
+        List<String> queries = new ArrayList<String>(){};
+
+        queries.add(table);
+        queries.add(index);
+        String result = runSchemaExtractionTool("MY_SCHEMA",
+                "MY_DATA_TABLE_INDEX", null, queries);
+        String expected = "CREATE INDEX %s ON MY_SCHEMA.MY_SAMPLE_DATA_TABLE"
+                + "(SOME_ID_COLUMN, CREATED_DATE DESC, SOME_ID_COLUMN_2, SOME_ID_COLUMN_3) "
+                + "INCLUDE (SOME_ID_COLUMN_4, CREATED_BY_ID, VALUE_FIELD)";
+
+        Assert.assertEquals(String.format(expected, indexName).toUpperCase(), result.toUpperCase());
+        queries.clear();
+        String newIndex = indexName+"_NEW";
+        queries.add(String.format(expected, newIndex));
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            executeCreateStatements(conn, queries);
+        }
+        compareOrdinalPositions(indexName, newIndex);
+    }
+
+    @Test
     public void testCreateIndexStatementWithColumnFamily() throws Exception {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
         String indexName = generateUniqueName();
         String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
-        String createTableStmt = "CREATE TABLE "+pTableFullName + "(k VARCHAR NOT NULL PRIMARY KEY, \"av\".\"_\" CHAR(1), v2 VARCHAR)";
+        String createTableStmt = "CREATE TABLE "+pTableFullName + "(k VARCHAR NOT NULL PRIMARY KEY, "
+                + "\"av\".\"_\" CHAR(1), v2 VARCHAR)";
         String createIndexStmt = "CREATE INDEX "+ indexName + " ON "+pTableFullName+ "(\"av\".\"_\")";
         List<String> queries = new ArrayList<String>() {};
         queries.add(createTableStmt);
         queries.add(createIndexStmt);
+        //by the principle of having maximal columns in pk
+        String expected = "CREATE INDEX %s ON "+pTableFullName+ "(\"av\".\"_\", K)";
         String result =  runSchemaExtractionTool(schemaName, indexName, null, queries);
-        Assert.assertEquals(createIndexStmt.toUpperCase(), result.toUpperCase());
+        Assert.assertEquals(String.format(expected, indexName).toUpperCase(), result.toUpperCase());
+        queries.clear();
+        String newIndex = indexName+"_NEW";
+        queries.add(String.format(expected, newIndex));
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            executeCreateStatements(conn, queries);
+        }
+        compareOrdinalPositions(indexName, newIndex);
     }
 
     private Connection getTenantConnection(String url, String tenantId) throws SQLException {
@@ -338,7 +472,8 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
         return DriverManager.getConnection(url, props);
     }
 
-    private String runSchemaExtractionTool(String schemaName, String tableName, String tenantId, List<String> queries) throws Exception {
+    private String runSchemaExtractionTool(String schemaName, String tableName, String tenantId,
+            List<String> queries) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String output;
         if (tenantId == null) {
