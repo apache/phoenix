@@ -46,8 +46,10 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -1655,6 +1657,39 @@ public class InListIT extends ParallelStatsDisabledIT {
                 plan.getPlanStepsAsAttributes();
             assertTrue(explainPlanAttributes.getExplainScanType()
                 .startsWith(ExplainTable.POINT_LOOKUP_ON_STRING));
+        }
+    }
+
+    @Test
+    public void testInListExpressionWithVariableLengthColumnsRanges() throws Exception {
+        Properties props = new Properties();
+        final String schemaName = generateUniqueName();
+        final String tableName = generateUniqueName();
+        final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
+        String ddl =
+                "CREATE TABLE " + dataTableFullName + " (a VARCHAR(22) NOT NULL," +
+                        "b CHAR(6) NOT NULL," +
+                        "c VARCHAR(12) NOT NULL,d VARCHAR(200) NOT NULL, " +
+                        "CONSTRAINT PK_TEST_KO PRIMARY KEY (a,b,c,d)) ";
+        long startTS = EnvironmentEdgeManager.currentTimeMillis();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(ddl);
+            conn.commit();
+            conn.createStatement().execute("upsert into "+ dataTableFullName+
+                    " values('AAAA1234567890','202001','A1','foo')");
+            conn.createStatement().execute("upsert into "+ dataTableFullName+
+                    " values('AAAA1234567892','202002','A1','foo')");
+            conn.createStatement().execute("upsert into "+ dataTableFullName+
+                    " values('AAAA1234567892','202002','B1','foo')");
+            conn.createStatement().execute("upsert into "+ dataTableFullName+
+                    " values('AAAA1234567890','202001','B1','foo')");
+            conn.commit();
+            String query = "SELECT count(*) FROM "+dataTableFullName+
+                    " WHERE (a, b) IN (('AAAA1234567890', '202001'), ( 'AAAA1234567892', '202002'))" +
+                    " AND c IN ('A1')";
+            ResultSet r  = conn.createStatement().executeQuery(query);
+            r.next();
+            assertEquals(2, r.getInt(1));
         }
     }
 }
