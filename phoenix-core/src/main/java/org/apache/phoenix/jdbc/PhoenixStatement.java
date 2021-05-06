@@ -20,6 +20,26 @@ package org.apache.phoenix.jdbc;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_FAILURE_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_FAILED_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_SQL_QUERY_TIME;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_SUCCESS_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.MUTATION_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.SELECT_AGGREGATE_FAILURE_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.SELECT_FAILED_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.SELECT_POINTLOOKUP_FAILED_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.SELECT_POINTLOOKUP_SUCCESS_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.SELECT_SCAN_FAILED_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.SELECT_SCAN_SUCCESS_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.SELECT_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.SELECT_SQL_QUERY_TIME;
+import static org.apache.phoenix.monitoring.MetricType.SELECT_SUCCESS_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_FAILURE_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_FAILED_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_SQL_QUERY_TIME;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_SUCCESS_SQL_COUNTER;
 
 import java.io.File;
 import java.io.IOException;
@@ -40,6 +60,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -94,6 +115,7 @@ import org.apache.phoenix.log.QueryLogInfo;
 import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.log.QueryLoggerUtil;
 import org.apache.phoenix.log.QueryStatus;
+import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AddJarsStatement;
@@ -198,6 +220,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.math.IntMath;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 /**
  * 
  * JDBC Statement implementation of Phoenix.
@@ -290,88 +313,151 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     private PhoenixResultSet executeQuery(final CompilableStatement stmt,
         final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger) throws SQLException {
         GLOBAL_SELECT_SQL_COUNTER.increment();
-        
+
         try {
-            return CallRunner.run(
-                new CallRunner.CallableThrowable<PhoenixResultSet, SQLException>() {
-                @Override
-                    public PhoenixResultSet call() throws SQLException {
-                    final long startTime = EnvironmentEdgeManager.currentTimeMillis();
-                    try {
-                        PhoenixConnection conn = getConnection();
-                        
-                        if (conn.getQueryServices().isUpgradeRequired() && !conn.isRunningUpgrade()
-                                && stmt.getOperation() != Operation.UPGRADE) {
-                            throw new UpgradeRequiredException();
-                        }
-                        QueryPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.VALIDATE_SEQUENCE);
-                        // Send mutations to hbase, so they are visible to subsequent reads.
-                        // Use original plan for data table so that data and immutable indexes will be sent
-                        // TODO: for joins, we need to iterate through all tables, but we need the original table,
-                        // not the projected table, so plan.getContext().getResolver().getTables() won't work.
-                        Iterator<TableRef> tableRefs = plan.getSourceRefs().iterator();
-                        connection.getMutationState().sendUncommitted(tableRefs);
-                        plan = connection.getQueryServices().getOptimizer().optimize(PhoenixStatement.this, plan);
-                         // this will create its own trace internally, so we don't wrap this
-                         // whole thing in tracing
-                        ResultIterator resultIterator = plan.iterator();
-                        if (LOGGER.isDebugEnabled()) {
-                            String explainPlan = QueryUtil.getExplainPlan(resultIterator);
-                            LOGGER.debug(LogUtil.addCustomAnnotations(
-                                    "Explain plan: " + explainPlan, connection));
-                        }
-                        StatementContext context = plan.getContext();
-                        context.setQueryLogger(queryLogger);
-                        if (queryLogger.isDebugEnabled()) {
-                            queryLogger.log(QueryLogInfo.EXPLAIN_PLAN_I, QueryUtil.getExplainPlan(resultIterator));
-                            queryLogger.log(QueryLogInfo.GLOBAL_SCAN_DETAILS_I, context.getScan()!=null?context.getScan().toString():null);
-                        }
-                        context.getOverallQueryMetrics().startQuery();
-                        PhoenixResultSet rs = newResultSet(resultIterator, plan.getProjector(), plan.getContext());
-                        resultSets.add(rs);
-                        setLastQueryPlan(plan);
-                        setLastResultSet(rs);
-                        setLastUpdateCount(NO_UPDATE);
-                        setLastUpdateOperation(stmt.getOperation());
-                        // If transactional, this will move the read pointer forward
-                        if (connection.getAutoCommit()) {
-                            connection.commit();
-                        }
-                        connection.incrementStatementExecutionCounter();
-                        return rs;
-                    }
-                    //Force update cache and retry if meta not found error occurs
-                    catch (MetaDataEntityNotFoundException e) {
-                        if (doRetryOnMetaNotFoundError && e.getTableName() != null) {
-                            if (LOGGER.isDebugEnabled()) {
-                                LOGGER.debug("Reloading table {} data from server",  e.getTableName());
+            return CallRunner
+                    .run(new CallRunner.CallableThrowable<PhoenixResultSet, SQLException>() {
+                        @Override public PhoenixResultSet call() throws SQLException {
+                            final long startTime = EnvironmentEdgeManager.currentTimeMillis();
+                            boolean success = false;
+                            boolean pointLookup = false;
+                            String tableName = null;
+                            PhoenixResultSet rs = null;
+                            try {
+                                PhoenixConnection conn = getConnection();
+
+                                if (conn.getQueryServices().isUpgradeRequired() && !conn
+                                        .isRunningUpgrade()
+                                        && stmt.getOperation() != Operation.UPGRADE) {
+                                    throw new UpgradeRequiredException();
+                                }
+                                QueryPlan
+                                        plan =
+                                        stmt.compilePlan(PhoenixStatement.this,
+                                                Sequence.ValueOp.VALIDATE_SEQUENCE);
+                                // Send mutations to hbase, so they are visible to subsequent reads.
+                                // Use original plan for data table so that data and immutable indexes will be sent
+                                // TODO: for joins, we need to iterate through all tables, but we need the original table,
+                                // not the projected table, so plan.getContext().getResolver().getTables() won't work.
+                                if (plan.getTableRef() != null
+                                        && plan.getTableRef().getTable() != null && !Strings
+                                        .isNullOrEmpty(
+                                                plan.getTableRef().getTable().getPhysicalName()
+                                                        .toString())) {
+                                    tableName = plan.getTableRef().getTable().getPhysicalName()
+                                            .toString();
+                                }
+                                if (plan.getContext().getScanRanges().isPointLookup()) {
+                                    pointLookup = true;
+                                }
+                                Iterator<TableRef> tableRefs = plan.getSourceRefs().iterator();
+                                connection.getMutationState().sendUncommitted(tableRefs);
+                                plan =
+                                        connection.getQueryServices().getOptimizer()
+                                                .optimize(PhoenixStatement.this, plan);
+                                // this will create its own trace internally, so we don't wrap this
+                                // whole thing in tracing
+                                ResultIterator resultIterator = plan.iterator();
+                                if (LOGGER.isDebugEnabled()) {
+                                    String explainPlan = QueryUtil.getExplainPlan(resultIterator);
+                                    LOGGER.debug(LogUtil.addCustomAnnotations(
+                                            "Explain plan: " + explainPlan, connection));
+                                }
+                                StatementContext context = plan.getContext();
+                                context.setQueryLogger(queryLogger);
+                                if (queryLogger.isDebugEnabled()) {
+                                    queryLogger.log(QueryLogInfo.EXPLAIN_PLAN_I,
+                                            QueryUtil.getExplainPlan(resultIterator));
+                                    queryLogger.log(QueryLogInfo.GLOBAL_SCAN_DETAILS_I,
+                                            context.getScan() != null ?
+                                                    context.getScan().toString() :
+                                                    null);
+                                }
+                                context.getOverallQueryMetrics().startQuery();
+                                rs =
+                                        newResultSet(resultIterator, plan.getProjector(),
+                                                plan.getContext());
+                                resultSets.add(rs);
+                                setLastQueryPlan(plan);
+                                setLastResultSet(rs);
+                                setLastUpdateCount(NO_UPDATE);
+                                setLastUpdateOperation(stmt.getOperation());
+                                // If transactional, this will move the read pointer forward
+                                if (connection.getAutoCommit()) {
+                                    connection.commit();
+                                }
+                                connection.incrementStatementExecutionCounter();
+                                success = true;
                             }
-                            if (new MetaDataClient(connection).updateCache(connection.getTenantId(),
-                                e.getSchemaName(), e.getTableName(), true).wasUpdated()) {
-                                //TODO we can log retry count and error for debugging in LOG table
-                                return executeQuery(stmt, false, queryLogger);
+                            //Force update cache and retry if meta not found error occurs
+                            catch (MetaDataEntityNotFoundException e) {
+                                if (doRetryOnMetaNotFoundError && e.getTableName() != null) {
+                                    if (LOGGER.isDebugEnabled()) {
+                                        LOGGER.debug("Reloading table {} data from server",
+                                                e.getTableName());
+                                    }
+                                    if (new MetaDataClient(connection)
+                                            .updateCache(connection.getTenantId(),
+                                                    e.getSchemaName(), e.getTableName(), true)
+                                            .wasUpdated()) {
+                                        //TODO we can log retry count and error for debugging in LOG table
+                                        return executeQuery(stmt, false, queryLogger);
+                                    }
+                                }
+                                throw e;
+                            } catch (RuntimeException e) {
+
+                                // FIXME: Expression.evaluate does not throw SQLException
+                                // so this will unwrap throws from that.
+                                if (e.getCause() instanceof SQLException) {
+                                    throw (SQLException) e.getCause();
+                                }
+                                throw e;
+                            } finally {
+                                // Regardless of whether the query was successfully handled or not,
+                                // update the time spent so far. If needed, we can separate out the
+                                // success times and failure times.
+                                GLOBAL_QUERY_TIME.update(EnvironmentEdgeManager.currentTimeMillis()
+                                        - startTime);
+                                long
+                                        executeQueryTimeSpent =
+                                        EnvironmentEdgeManager.currentTimeMillis() - startTime;
+                                if (tableName != null) {
+
+                                    TableMetricsManager
+                                            .updateMetricsMethod(tableName, SELECT_SQL_COUNTER, 1);
+                                    TableMetricsManager
+                                            .updateMetricsMethod(tableName, SELECT_SQL_QUERY_TIME,
+                                                    executeQueryTimeSpent);
+                                    if (success) {
+                                        TableMetricsManager.updateMetricsMethod(tableName,
+                                                SELECT_SUCCESS_SQL_COUNTER, 1);
+                                        TableMetricsManager.updateMetricsMethod(tableName,
+                                                pointLookup ?
+                                                        SELECT_POINTLOOKUP_SUCCESS_SQL_COUNTER :
+                                                        SELECT_SCAN_SUCCESS_SQL_COUNTER, 1);
+                                    } else {
+                                        TableMetricsManager.updateMetricsMethod(tableName,
+                                                SELECT_FAILED_SQL_COUNTER, 1);
+                                        TableMetricsManager.updateMetricsMethod(tableName,
+                                                SELECT_AGGREGATE_FAILURE_SQL_COUNTER, 1);
+                                        TableMetricsManager.updateMetricsMethod(tableName,
+                                                pointLookup ?
+                                                        SELECT_POINTLOOKUP_FAILED_SQL_COUNTER :
+                                                        SELECT_SCAN_FAILED_SQL_COUNTER, 1);
+                                    }
+                                }
+                                if (rs != null) {
+                                    rs.setQueryTime(executeQueryTimeSpent);
+                                }
                             }
+                            return rs;
                         }
-                        throw e;
-                    }catch (RuntimeException e) {
-                        
-                        // FIXME: Expression.evaluate does not throw SQLException
-                        // so this will unwrap throws from that.
-                        if (e.getCause() instanceof SQLException) {
-                            throw (SQLException) e.getCause();
-                        }
-                        throw e;
-                    } finally {
-                        // Regardless of whether the query was successfully handled or not, 
-                        // update the time spent so far. If needed, we can separate out the
-                        // success times and failure times.
-                        GLOBAL_QUERY_TIME.update(EnvironmentEdgeManager.currentTimeMillis() - startTime);
-                    }
-                }
-                }, PhoenixContextExecutor.inContext());
-        }catch (Exception e) {
+                    }, PhoenixContextExecutor.inContext());
+        } catch (Exception e) {
             if (queryLogger.isDebugEnabled()) {
-                queryLogger.log(QueryLogInfo.EXCEPTION_TRACE_I, Throwables.getStackTraceAsString(e));
+                queryLogger
+                        .log(QueryLogInfo.EXCEPTION_TRACE_I, Throwables.getStackTraceAsString(e));
                 queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.FAILED.toString());
                 queryLogger.sync(null, null);
             }
@@ -423,16 +509,30 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         new CallRunner.CallableThrowable<Integer, SQLException>() {
                         @Override
                             public Integer call() throws SQLException {
+                            boolean success = false;
+                            String tableName = null;
+                            boolean isUpsert = false;
+                            boolean isDelete = false;
+                            MutationState state = null;
+                            MutationPlan plan = null;
+                            final long startExecuteMutationTime = EnvironmentEdgeManager.currentTimeMillis();
                             try {
                                 PhoenixConnection conn = getConnection();
                                 if (conn.getQueryServices().isUpgradeRequired() && !conn.isRunningUpgrade()
                                         && stmt.getOperation() != Operation.UPGRADE) {
                                     throw new UpgradeRequiredException();
                                 }
-                                MutationState state = connection.getMutationState();
-                                MutationPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.VALIDATE_SEQUENCE);
-                                if (plan.getTargetRef() != null && plan.getTargetRef().getTable() != null && plan.getTargetRef().getTable().isTransactional()) {
-                                    state.startTransaction(plan.getTargetRef().getTable().getTransactionProvider());
+                                state = connection.getMutationState();
+                                plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.VALIDATE_SEQUENCE);
+                                isUpsert = stmt instanceof ExecutableUpsertStatement;
+                                isDelete = stmt instanceof ExecutableDeleteStatement;
+                                if (plan.getTargetRef() != null && plan.getTargetRef().getTable() != null) {
+                                    if(!Strings.isNullOrEmpty(plan.getTargetRef().getTable().getPhysicalName().toString())) {
+                                        tableName = plan.getTargetRef().getTable().getPhysicalName().toString();
+                                    }
+                                    if (plan.getTargetRef().getTable().isTransactional()) {
+                                        state.startTransaction(plan.getTargetRef().getTable().getTransactionProvider());
+                                    }
                                 }
                                 Iterator<TableRef> tableRefs = plan.getSourceRefs().iterator();
                                 state.sendUncommitted(tableRefs);
@@ -458,6 +558,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                     queryLogger.syncAudit();
                                 }
 
+                                success = true;
                                 return lastUpdateCount;
                             }
                             //Force update cache and retry if meta not found error occurs
@@ -479,6 +580,37 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                     throw (SQLException) e.getCause();
                                 }
                                 throw e;
+                            } finally {
+                                // Regardless of whether the mutation was successfully handled or not,
+                                // update the time spent so far. If needed, we can separate out the
+                                // success times and failure times.
+                                if (tableName != null) {
+                                    // Counts for both ddl and dml
+                                    TableMetricsManager.updateMetricsMethod(tableName,
+                                            MUTATION_SQL_COUNTER, 1);
+                                    // Only count dml operations
+                                    if (isUpsert || isDelete) {
+                                        long executeMutationTimeSpent =
+                                                EnvironmentEdgeManager.currentTimeMillis() - startExecuteMutationTime;
+
+                                        TableMetricsManager.updateMetricsMethod(tableName, isUpsert ?
+                                                UPSERT_SQL_COUNTER : DELETE_SQL_COUNTER, 1);
+                                        TableMetricsManager.updateMetricsMethod(tableName, isUpsert ?
+                                                UPSERT_SQL_QUERY_TIME : DELETE_SQL_QUERY_TIME, executeMutationTimeSpent);
+
+                                        if (success) {
+                                            TableMetricsManager.updateMetricsMethod(tableName, isUpsert ?
+                                                    UPSERT_SUCCESS_SQL_COUNTER : DELETE_SUCCESS_SQL_COUNTER, 1);
+                                        } else {
+                                            TableMetricsManager.updateMetricsMethod(tableName, isUpsert ?
+                                                    UPSERT_FAILED_SQL_COUNTER : DELETE_FAILED_SQL_COUNTER, 1);
+                                            //Failures are updated for executeMutation phase and for autocommit=true case here.
+                                            TableMetricsManager.updateMetricsMethod(tableName, isUpsert ? UPSERT_AGGREGATE_FAILURE_SQL_COUNTER:
+                                                    DELETE_AGGREGATE_FAILURE_SQL_COUNTER, 1);
+                                        }
+                                    }
+                                }
+
                             }
                         }
                     }, PhoenixContextExecutor.inContext(),

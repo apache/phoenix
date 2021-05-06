@@ -35,10 +35,16 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQ
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SPOOL_FILE_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_END_TO_END_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_EXECUTION_TIME;
+import static org.apache.phoenix.monitoring.MetricType.COUNT_MILLS_BETWEEN_NEXTS;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_CHUNK_BYTES;
+import static org.apache.phoenix.monitoring.MetricType.MUTATION_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_TIMEOUT_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.TASK_END_TO_END_TIME;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTION_TIME;
+import static org.apache.phoenix.monitoring.MetricType.TASK_QUEUE_WAIT_TIME;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_COMMIT_TIME;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB;
 import static org.junit.Assert.assertEquals;
@@ -47,11 +53,13 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -63,8 +71,13 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.metrics2.AbstractMetric;
+import org.apache.hbase.thirdparty.com.google.common.base.Joiner;
+import org.apache.hbase.thirdparty.com.google.common.collect.Lists;
+import org.apache.hbase.thirdparty.com.google.common.collect.Sets;
+import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -81,10 +94,6 @@ import org.mockito.internal.util.reflection.Whitebox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
-
 /**
  * Tests that
  * 1. Phoenix Global metrics are exposed via
@@ -95,6 +104,40 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixMetricsIT.class);
+
+    private static final String DDL = "CREATE TABLE IF NOT EXISTS %s ("
+            + "  A CHAR(18) NOT NULL, "
+            + "  B VARCHAR(30) NOT NULL, "
+            + "  C VARCHAR(255) NOT NULL, "
+            + "  D VARCHAR(255) NOT NULL, "
+            + "  E VARBINARY, "
+            + "  F INTEGER, "
+            + "  G BOOLEAN, "
+            + "  H VARCHAR(30), "
+            + "  I DATE, "
+            + "  J DATE, "
+            + "  CONSTRAINT PK PRIMARY KEY (A, B, C, D))"
+            + " IMMUTABLE_ROWS=true, VERSIONS=1, MULTI_TENANT=true,"
+            + " DISABLE_TABLE_SOR=true, TTL=864000";
+    private static final String UPSERT_VALUES_DML = "UPSERT INTO %s (A, B, C, D, F, G, I)"
+            + " VALUES (?, ?, ?, ?, ?, ?, ?)";
+    private static final String UPSERT_SELECT_DML = "UPSERT INTO %s (A, B, C, D)"
+            + " SELECT A, B, C, D FROM %s";
+    private static final String POINT_DELETE_DML =
+            "DELETE FROM %s WHERE A=? AND B=? AND C=? AND D=? AND G=FALSE";
+    private static final String DELETE_ALL_DML = "DELETE FROM %s";
+
+    private static final List<MetricType> mutationMetricsToSkip =
+            Lists.newArrayList(MUTATION_COMMIT_TIME, UPSERT_COMMIT_TIME, DELETE_COMMIT_TIME);
+    private static final List<MetricType> readMetricsToSkip =
+            Lists.newArrayList(TASK_QUEUE_WAIT_TIME, TASK_EXECUTION_TIME, TASK_END_TO_END_TIME,
+                    COUNT_MILLS_BETWEEN_NEXTS);
+    private static final String CUSTOM_URL_STRING = "SESSION";
+    private static final AtomicInteger numConnections = new AtomicInteger(0);
+    static final String POINT_LOOKUP_SELECT_QUERY = "SELECT J, G, E, (NOW() - I)*24*60*60*1000 FROM"
+            + " %s WHERE A='keyA1' AND B='keyB1' AND C='keyC1' AND D='keyD1'";
+    static final String RANGE_SCAN_SELECT_QUERY = "SELECT A, B, C FROM"
+            + " %s WHERE A='keyA1' AND B='keyB1' AND C > 'keyC0'";
 
     private static class MyClock extends EnvironmentEdge {
         private long time;
@@ -127,7 +170,9 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     @Test
     public void testGlobalPhoenixMetricsForQueries() throws Exception {
         String tableName = generateUniqueName();
-        createTableAndInsertValues(tableName, true);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createTableAndInsertValues(tableName, true, false, 10, true, conn, false);
+        }
         resetGlobalMetrics(); // we want to count metrics related only to the below query
         Connection conn = DriverManager.getConnection(getUrl());
         String query = "SELECT * FROM " + tableName;
@@ -163,7 +208,9 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     @Test
     public void testGlobalPhoenixMetricsForMutations() throws Exception {
         String tableName = generateUniqueName();
-        createTableAndInsertValues(tableName, true);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createTableAndInsertValues(tableName, true, false, 10, true, conn, false);
+        }
         assertEquals(10, GLOBAL_MUTATION_BATCH_SIZE.getMetric().getValue());
         assertEquals(10, GLOBAL_MUTATION_SQL_COUNTER.getMetric().getValue());
         assertTrue(GLOBAL_MUTATION_BYTES.getMetric().getValue() > 0);
@@ -184,15 +231,18 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     public void testGlobalPhoenixMetricsForUpsertSelect() throws Exception {
         String tableFrom = generateUniqueName();
         String tableTo = generateUniqueName();
-        createTableAndInsertValues(tableFrom, true);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createTableAndInsertValues(tableFrom, true, false, 10, true, conn, false);
+        }
         resetGlobalMetrics();
-        String ddl = "CREATE TABLE " + tableTo + "  (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
-        Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute(ddl);
-        resetGlobalMetrics();
-        String dml = "UPSERT INTO " + tableTo + " (K, V) SELECT K, V FROM " + tableFrom;
-        conn.createStatement().executeUpdate(dml);
-        conn.commit();
+        String ddl = String.format(DDL, tableTo);
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute(ddl);
+            resetGlobalMetrics();
+            stmt.executeUpdate(String.format(UPSERT_SELECT_DML, tableTo, tableFrom));
+            conn.commit();
+        }
         assertEquals(10, GLOBAL_MUTATION_BATCH_SIZE.getMetric().getValue());
         assertEquals(1, GLOBAL_MUTATION_SQL_COUNTER.getMetric().getValue());
         assertEquals(1, GLOBAL_NUM_PARALLEL_SCANS.getMetric().getValue());
@@ -216,7 +266,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         assertTrue(verifyMetricsFromSink());
     }
 
-    private static void resetGlobalMetrics() {
+    static void resetGlobalMetrics() {
         for (GlobalMetric m : PhoenixRuntime.getGlobalPhoenixClientMetrics()) {
             m.reset();
         }
@@ -266,30 +316,76 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             }
         }
         assertEquals("Metric expected but not present in Hadoop Metrics Sink "
-                        + "(GlobalPhoenixMetricsTestSink)", 0, expectedMetrics.size());
+                + "(GlobalPhoenixMetricsTestSink)", 0, expectedMetrics.size());
         return true;
     }
 
-    private static void createTableAndInsertValues(String tableName,
-            boolean resetGlobalMetricsAfterTableCreate) throws SQLException {
-        String ddl = String.format("CREATE TABLE %s (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)",
-                tableName);
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Statement stmt = conn.createStatement()) {
-            stmt.execute(ddl);
-            if (resetGlobalMetricsAfterTableCreate) {
-                resetGlobalMetrics();
-            }
-            // executing 10 upserts/mutations.
-            String dml = String.format("UPSERT INTO %s VALUES (?, ?)", tableName);
-            try(PreparedStatement prepStmt = conn.prepareStatement(dml)) {
-                for (int i = 1; i <= 10; i++) {
-                    prepStmt.setString(1, "key" + i);
-                    prepStmt.setString(2, "value" + i);
-                    prepStmt.executeUpdate();
+    static void createTableAndInsertValues(String tableName,
+            boolean resetGlobalMetricsAfterTableCreate, boolean resetTableMetricsAfterTableCreate,
+            int numRows, boolean commit, Connection conn, boolean batchUpserts) throws SQLException {
+
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute(String.format(DDL, tableName));
+        }
+        conn.commit();
+        if (resetGlobalMetricsAfterTableCreate) {
+            resetGlobalMetrics();
+        }
+
+        if (resetTableMetricsAfterTableCreate) {
+            PhoenixRuntime.clearTableLevelMetrics();
+        }
+        // executing upserts/mutations.
+        try (PreparedStatement stmt = conn.prepareStatement(
+                String.format(UPSERT_VALUES_DML, tableName))) {
+            for (int i = 1; i <= numRows; i++) {
+                stmt.setString(1, "keyA" + i);
+                stmt.setString(2, "keyB" + i);
+                stmt.setString(3, "keyC" + i);
+                stmt.setString(4, "keyD" + i);
+                stmt.setBoolean(6, false);
+                // Set non-null for just half of the rows to ensure there's no problem with a null
+                // date when we query using the SELECT_QUERY
+                if (i % 2 == 0) {
+                    stmt.setInt(5, i);
+                    stmt.setDate(7, new Date(System.currentTimeMillis()));
+                } else {
+                    stmt.setNull(5, Types.INTEGER);
+                    stmt.setNull(7, Types.DATE);
+                }
+                if (batchUpserts) {
+                    stmt.addBatch();
+                    if (i % 3 == 0) {
+                        stmt.executeBatch();
+                    }
+                } else {
+                    stmt.executeUpdate();
                 }
             }
-            conn.commit();
+            // Explicitly execute the batch to make sure we haven't missed any batches above
+            if (batchUpserts) {
+                stmt.executeBatch();
+            }
+            if (commit) {
+                conn.commit();
+            }
+        }
+    }
+
+    static void doPointDeleteFromTable(String tableName, Connection conn) throws SQLException {
+        try (PreparedStatement stmt = conn.prepareStatement(
+                String.format(POINT_DELETE_DML, tableName))) {
+            stmt.setString(1, "keyA1");
+            stmt.setString(2, "keyB1");
+            stmt.setString(3, "keyC1");
+            stmt.setString(4, "keyD1");
+            stmt.executeUpdate();
+        }
+    }
+
+    static void doDeleteAllFromTable(String tableName, Connection conn) throws SQLException {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate(String.format(DELETE_ALL_DML, tableName));
         }
     }
 
@@ -321,9 +417,10 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     public void testMetricsForSelectFetchResultsTimeout() throws SQLException {
         String tableName = generateUniqueName();
         final int queryTimeout = 10; //seconds
-        createTableAndInsertValues(tableName, true);
+
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Statement stmt = conn.createStatement()) {
+            createTableAndInsertValues(tableName, true, true, 10, true, conn, false);
             stmt.setQueryTimeout(queryTimeout);
             ResultSet rs = stmt.executeQuery(String.format("SELECT * FROM %s", tableName));
             // Make the query time out with a longer delay than the set query timeout value (in ms)
@@ -366,7 +463,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         resultSetBeingTested.close();
         Set<String> expectedTableNames = Sets.newHashSet(tableName);
         assertReadMetricValuesForSelectSql(Lists.newArrayList(numRows), Lists.newArrayList(numExpectedTasks),
-            resultSetBeingTested, expectedTableNames);
+                resultSetBeingTested, expectedTableNames);
     }
 
     @Test
@@ -385,13 +482,13 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             String t = entry.getKey();
             assertEquals("Table names didn't match!", tableName, t);
             Map<MetricType, Long> p = entry.getValue();
-            assertEquals("There should have been five metrics", 5, p.size());
+            assertEquals("There should have been five metrics", 15, p.size());
             boolean mutationBatchSizePresent = false;
             boolean mutationCommitTimePresent = false;
             boolean mutationBytesPresent = false;
             boolean mutationBatchFailedPresent = false;
             for (Entry<MetricType, Long> metric : p.entrySet()) {
-            	MetricType metricType = metric.getKey();
+                MetricType metricType = metric.getKey();
                 long metricValue = metric.getValue();
                 if (metricType.equals(MetricType.MUTATION_BATCH_SIZE)) {
                     assertEquals("Mutation batch sizes didn't match!", numRows, metricValue);
@@ -441,7 +538,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
 
         Map<String, Map<MetricType, Long>> mutationMetrics = PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(pConn);
-        assertMutationMetrics(tableName2, numRows, mutationMetrics);
+        assertMutationMetrics(tableName2, numRows, true, mutationMetrics);
         Map<String, Map<MetricType, Long>> readMetrics = PhoenixRuntime.getReadMetricInfoForMutationsSinceLastReset(pConn);
         assertReadMetricsForMutatingSql(tableName1, table1SaltBuckets, readMetrics);
     }
@@ -452,21 +549,20 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         long tableSaltBuckets = 6;
         String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = "
                 + tableSaltBuckets;
-        Connection ddlConn = DriverManager.getConnection(getUrl());
-        ddlConn.createStatement().execute(ddl);
-        ddlConn.close();
+        try(Connection ddlConn = DriverManager.getConnection(getUrl())) {
+            ddlConn.createStatement().execute(ddl);
+        }
         int numRows = 10;
         insertRowsInTable(tableName, numRows);
-        Connection conn = DriverManager.getConnection(getUrl());
-        String delete = "DELETE FROM " + tableName;
-        conn.createStatement().execute(delete);
-        conn.commit();
-        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
-        Map<String, Map<MetricType, Long>> mutationMetrics = PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(pConn);
-        assertMutationMetrics(tableName, numRows, mutationMetrics);
-
-        Map<String, Map<MetricType, Long>> readMetrics = PhoenixRuntime.getReadMetricInfoForMutationsSinceLastReset(pConn);
-        assertReadMetricsForMutatingSql(tableName, tableSaltBuckets, readMetrics);
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            String delete = "DELETE FROM " + tableName;
+            conn.createStatement().execute(delete);
+            conn.commit();
+            Map<String, Map<MetricType, Long>> mutationMetrics = PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn);
+            assertMutationMetrics(tableName, numRows, false, mutationMetrics);
+            Map<String, Map<MetricType, Long>> readMetrics = PhoenixRuntime.getReadMetricInfoForMutationsSinceLastReset(conn);
+            assertReadMetricsForMutatingSql(tableName, tableSaltBuckets, readMetrics);
+        }
     }
 
     @Test
@@ -685,11 +781,11 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     public void testMutationMetricsWhenUpsertingToMultipleTables() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String table1 = generateUniqueName();
-            createTableAndInsertValues(true, 10, conn, table1);
+            createTableAndInsertValues(table1, false, false, 10, true, conn, false);
             String table2 = generateUniqueName();
-            createTableAndInsertValues(true, 10, conn, table2);
+            createTableAndInsertValues(table2, false, false, 10, true, conn, false);
             String table3 = generateUniqueName();
-            createTableAndInsertValues(true, 10, conn, table3);
+            createTableAndInsertValues(table3, false, false, 10, true, conn, false);
             Map<String, Map<MetricType, Long>> mutationMetrics = PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn);
             assertTrue("Mutation metrics not present for " + table1, mutationMetrics.get(table1) != null);
             assertTrue("Mutation metrics not present for " + table2, mutationMetrics.get(table2) != null);
@@ -719,7 +815,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         Connection conn = null;
         try {
             conn = DriverManager.getConnection(getUrl());
-            createTableAndInsertValues(true, 10, conn, generateUniqueName());
+            createTableAndInsertValues(generateUniqueName(), false, false, 10, true, conn, false);
             assertTrue("Mutation metrics not present", PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn).size() > 0);
         } finally {
             if (conn != null) {
@@ -817,7 +913,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         assertTrue("The two metrics have different or unequal number of metric names ", metricNameValueMap1.keySet()
                 .equals(metricNameValueMap2.keySet()));
         for (Entry<MetricType, Long> entry : metricNameValueMap1.entrySet()) {
-        	MetricType metricType = entry.getKey();
+            MetricType metricType = entry.getKey();
             if (!metricsToSkip.contains(metricType)) {
                 assertEquals("Unequal values for metric " + metricType, entry.getValue(),
                         metricNameValueMap2.get(metricType));
@@ -845,7 +941,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             boolean taskExecutionTimeMetricsPresent = false;
             boolean memoryMetricsPresent = false;
             for (Entry<MetricType, Long> pair : metricValues.entrySet()) {
-            	MetricType metricType = pair.getKey();
+                MetricType metricType = pair.getKey();
                 long metricValue = pair.getValue();
                 long numTask = numExpectedTasks.get(counter);
                 if (metricType.equals(TASK_EXECUTED_COUNTER)) {
@@ -955,7 +1051,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         List<Connection> connections = Lists.newArrayList();
         String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
         String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum +
-        ':' +  CUSTOM_URL_STRING + '=' + "throttletest";
+                ':' +  CUSTOM_URL_STRING + '=' + "throttletest";
 
         Properties props = new Properties();
         props.setProperty(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, Integer.toString(maxConnections));
@@ -982,7 +1078,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         assertEquals(1, GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.getMetric().getValue());
         assertEquals(maxConnections, connections.size());
         assertTrue("Not all connections were attempted!",
-            attemptedPhoenixConnections <= GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().getValue());
+                attemptedPhoenixConnections <= GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().getValue());
         connections.clear();
         //now check that we decremented the counter for the connections we just released
         try {
@@ -1090,6 +1186,6 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             return c;
         }
     }
-    
+
 
 }

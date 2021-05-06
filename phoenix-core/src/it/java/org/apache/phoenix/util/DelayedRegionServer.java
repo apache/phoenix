@@ -21,13 +21,15 @@ package org.apache.phoenix.util;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoordinatedStateManager;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
-import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos.GetRequest;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos.GetResponse;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos.MutateRequest;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos.MutateResponse;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos.MultiResponse;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos.MultiRequest;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos.ScanRequest;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos.ScanResponse;
 import org.apache.hbase.thirdparty.com.google.protobuf.RpcController;
@@ -50,6 +52,7 @@ public class DelayedRegionServer extends MiniHBaseCluster.MiniHBaseClusterRegion
     private static int DELAY_GET = 0;
     private static int DELAY_SCAN = 30000;
     private static int DELAY_MUTATE = 0;
+    private static int DELAY_MULTI_OP = 0;
 
     public static void setDelayEnabled(boolean delay) {
         doDelay = delay;
@@ -65,6 +68,10 @@ public class DelayedRegionServer extends MiniHBaseCluster.MiniHBaseClusterRegion
 
     public static void setDelayMutate(int delayMutate) {
         DELAY_MUTATE = delayMutate;
+    }
+
+    public static void setDelayMultiOp(int delayMultiOp) {
+        DELAY_MULTI_OP = delayMultiOp;
     }
 
     public DelayedRegionServer(Configuration conf)
@@ -108,6 +115,19 @@ public class DelayedRegionServer extends MiniHBaseCluster.MiniHBaseClusterRegion
             }
             return super.mutate(rpcc, request);
         }
+
+        @Override public MultiResponse multi(final RpcController rpcc,
+                final MultiRequest request) throws ServiceException {
+            try {
+                if (doDelay) {
+                    Thread.sleep(DELAY_MULTI_OP);
+                }
+            } catch (InterruptedException e) {
+                LOGGER.error("Sleep interrupted during multi operation", e);
+            }
+            return super.multi(rpcc, request);
+        }
+
 
         @Override public ScanResponse scan(final RpcController controller,
                 ScanRequest request) throws ServiceException {
