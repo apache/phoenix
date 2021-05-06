@@ -1357,6 +1357,35 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
       desc.addCoprocessor(IndexRegionObserver.class.getName(), null, priority, properties);
   }
 
+  private void extractExpressionsAndColumns(DataInputStream input,
+                              List<Pair<PTable, List<Expression>>> operations,
+                              final Set<ColumnReference> colsReadInExpr) throws IOException {
+      while (true) {
+          ExpressionVisitor<Void> visitor = new StatelessTraverseAllExpressionVisitor<Void>() {
+              @Override
+              public Void visit(KeyValueColumnExpression expression) {
+                  colsReadInExpr.add(new ColumnReference(expression.getColumnFamily(), expression.getColumnQualifier()));
+                  return null;
+              }
+          };
+          try {
+              int nExpressions = WritableUtils.readVInt(input);
+              List<Expression> expressions = Lists.newArrayListWithExpectedSize(nExpressions);
+              for (int i = 0; i < nExpressions; i++) {
+                  Expression expression = ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
+                  expression.readFields(input);
+                  expressions.add(expression);
+                  expression.accept(visitor);
+              }
+              PTableProtos.PTable tableProto = PTableProtos.PTable.parseDelimitedFrom(input);
+              PTable table = PTableImpl.createFromProto(tableProto);
+              operations.add(new Pair<>(table, expressions));
+          } catch (EOFException e) {
+              break;
+          }
+      }
+  }
+
     /**
      * This function has been adapted from PhoenixIndexBuilder#executeAtomicOp().
      * The critical difference being that the code in PhoenixIndexBuilder#executeAtomicOp()
@@ -1376,13 +1405,9 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
       }
       Put put = null;
       Delete delete = null;
-      // We cannot neither use the time stamp in the Increment to set the Get time range
-      // nor set the Put/Delete time stamp and have this be atomic as HBase does not
-      // handle that. Though we disallow using ON DUPLICATE KEY clause when the
-      // CURRENT_SCN is set, we still may have a time stamp set as of when the table
-      // was resolved on the client side. We need to ignore this as well due to limitations
-      // in HBase, but this isn't too bad as the time will be very close the the current
-      // time anyway.
+
+      // mutations returned by this function will have the LATEST timestamp
+      // later these timestamps will be updated by the IndexRegionObserver#setTimestamps() function
       long ts = HConstants.LATEST_TIMESTAMP;
 
       byte[] rowKey = atomicPut.getRow();
@@ -1403,37 +1428,13 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
       DataInputStream input = new DataInputStream(stream);
       boolean skipFirstOp = input.readBoolean();
       short repeat = input.readShort();
-      final int[] estimatedSizeHolder = {0};
-      List<Pair<PTable, List<Expression>>> operations = Lists.newArrayListWithExpectedSize(3);
 
-      // store the columns that need to be read in the conditional expressions
+      List<Pair<PTable, List<Expression>>> operations = Lists.newArrayListWithExpectedSize(3);
       final Set<ColumnReference> colsReadInExpr = new HashSet<>();
-      while (true) {
-          ExpressionVisitor<Void> visitor = new StatelessTraverseAllExpressionVisitor<Void>() {
-              @Override
-              public Void visit(KeyValueColumnExpression expression) {
-                  colsReadInExpr.add(new ColumnReference(expression.getColumnFamily(), expression.getColumnQualifier()));
-                  estimatedSizeHolder[0]++;
-                  return null;
-              }
-          };
-          try {
-              int nExpressions = WritableUtils.readVInt(input);
-              List<Expression> expressions = Lists.newArrayListWithExpectedSize(nExpressions);
-              for (int i = 0; i < nExpressions; i++) {
-                  Expression expression = ExpressionType.values()[WritableUtils.readVInt(input)].newInstance();
-                  expression.readFields(input);
-                  expressions.add(expression);
-                  expression.accept(visitor);
-              }
-              PTableProtos.PTable tableProto = PTableProtos.PTable.parseDelimitedFrom(input);
-              PTable table = PTableImpl.createFromProto(tableProto);
-              operations.add(new Pair<>(table, expressions));
-          } catch (EOFException e) {
-              break;
-          }
-      }
-      int estimatedSize = estimatedSizeHolder[0];
+      // deserialize the conditional update expressions and
+      // extract the columns that are read in the conditional expressions
+      extractExpressionsAndColumns(input, operations, colsReadInExpr);
+      int estimatedSize = colsReadInExpr.size();
 
       // initialized to either the incoming new row or the current row
       // stores the intermediate values as we apply conditional update expressions

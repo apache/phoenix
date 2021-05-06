@@ -458,9 +458,7 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testOnDuplicateUpsertWithIndex() throws Exception {
-        if (this.isImmutable) {
-            return; // on duplicate is not supported for immutable tables
-        }
+        Assume.assumeFalse(this.isImmutable); // on duplicate is not supported for immutable tables
         Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         SchemaBuilder builder = new SchemaBuilder(getUrl());
         try (Connection conn = getConnection()) {

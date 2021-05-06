@@ -705,6 +705,46 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testComplexDuplicateKeyExpression() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "create table " + tableName +
+                "(pk varchar primary key, counter1 bigint, counter2 bigint, approval varchar)";
+            conn.createStatement().execute(ddl);
+            createIndex(conn, tableName);
+            String dml;
+            dml = String.format("UPSERT INTO %s VALUES('abc', 0, 100, 'NONE')", tableName);
+            conn.createStatement().execute(dml);
+            conn.commit();
+            dml = String.format("UPSERT INTO %s(pk, counter1, counter2) VALUES ('abc', 0, 10) " +
+                "ON DUPLICATE KEY UPDATE " +
+                "counter1 = counter1 + counter2," +
+                "approval = CASE WHEN counter1 < 100 THEN 'NONE' " +
+                "WHEN counter1 < 1000 THEN 'MANAGER_APPROVAL' " +
+                "ELSE 'VP_APPROVAL' END", tableName);
+            conn.createStatement().execute(dml);
+            conn.commit();
+            String dql = "SELECT * from " + tableName;
+            ResultSet rs = conn.createStatement().executeQuery(dql);
+            assertTrue(rs.next());
+            assertEquals("abc", rs.getString("pk"));
+            assertEquals(100, rs.getInt("counter1"));
+            assertEquals(100, rs.getInt("counter2"));
+            assertEquals("NONE", rs.getString("approval"));
+
+            conn.createStatement().execute(dml);
+            conn.commit();
+            rs = conn.createStatement().executeQuery(dql);
+            assertTrue(rs.next());
+            assertEquals("abc", rs.getString("pk"));
+            assertEquals(200, rs.getInt("counter1"));
+            assertEquals(100, rs.getInt("counter2"));
+            assertEquals("MANAGER_APPROVAL", rs.getString("approval"));
+        }
+    }
+
     private void assertRow(Connection conn, String tableName, String expectedPK, int expectedCol1, String expectedCol2) throws SQLException {
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
         assertTrue(rs.next());
