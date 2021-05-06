@@ -221,8 +221,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
                     && !Strings.isNullOrEmpty(
                     context.getCurrentTable().getTable().getPhysicalName().getString())) {
                 boolean isPointLookup = context.getScanRanges().isPointLookup();
-                String
-                        tableName =
+                String tableName =
                         context.getCurrentTable().getTable().getPhysicalName().toString();
                 updateTableLevelReadMetrics(tableName, isPointLookup);
             }
