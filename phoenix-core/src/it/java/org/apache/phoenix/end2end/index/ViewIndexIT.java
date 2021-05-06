@@ -54,6 +54,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.end2end.CreateTableIT;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.SplitSystemCatalogIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
@@ -802,6 +803,30 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
             } else {
                 fail();
             }
+        }
+    }
+
+    @Test
+    public void testCreateViewSchemaVersion() throws Exception {
+        Properties props = new Properties();
+        final String schemaName = generateUniqueName();
+        final String tableName = generateUniqueName();
+        final String viewName = generateUniqueName();
+        final String viewIndexName = generateUniqueName();
+        final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
+        final String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
+        final String viewIndexFullName = SchemaUtil.getTableName(schemaName, viewIndexName);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String version = "V1.0";
+            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, version);
+            String createViewSql = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName +
+                    " SCHEMA_VERSION='" + version + "'";
+            conn.createStatement().execute(createViewSql);
+            String createViewIndexSql = "CREATE INDEX " + viewIndexName + " ON "
+                    + viewFullName + " (ID2) INCLUDE (ID1) SCHEMA_VERSION='" + version + "'";
+            conn.createStatement().execute(createViewIndexSql);
+            PTable viewIndex = PhoenixRuntime.getTableNoCache(conn, viewIndexFullName);
+            assertEquals(version, viewIndex.getSchemaVersion());
         }
     }
 

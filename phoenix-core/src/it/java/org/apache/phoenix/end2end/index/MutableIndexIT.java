@@ -34,10 +34,15 @@ import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Threads;
+import org.apache.phoenix.end2end.CreateTableIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -736,8 +741,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           assertEquals(1, rs.getInt(2));
           assertEquals(0.5F, rs.getFloat(1), 0.0);
           assertEquals("foo", rs.getString(3));
-      } 
-  }
+      }
+    }
 
     @Test
     public void testUpsertingDeletedRowWithNullCoveredColumn() throws Exception {
@@ -913,6 +918,25 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
                 conn.prepareStatement("DELETE FROM " + indexTableFullName + " WHERE \"0:VAL1\" > 6");
             assertEquals(5, deleteStmt.executeUpdate());
             conn.commit();
+        }
+    }
+
+    @Test
+    public void testCreateIndexSchemaVersion() throws Exception {
+        Properties props = new Properties();
+        final String schemaName = generateUniqueName();
+        final String tableName = generateUniqueName();
+        final String indexName = generateUniqueName();
+        final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
+        final String indexFullName = SchemaUtil.getTableName(schemaName, indexName);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String version = "V1.0";
+            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, version);
+            String createIndexSql = "CREATE INDEX " + indexName + " ON " + dataTableFullName +
+                    " (ID2) INCLUDE (ID1) SCHEMA_VERSION='" + version + "'";
+            conn.createStatement().execute(createIndexSql);
+            PTable index = PhoenixRuntime.getTableNoCache(conn, indexFullName);
+            assertEquals(version, index.getSchemaVersion());
         }
     }
 

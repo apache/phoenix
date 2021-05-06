@@ -203,6 +203,7 @@ public class PTableImpl implements PTable {
     private final Long lastDDLTimestamp;
     private final boolean isChangeDetectionEnabled;
     private Map<String, String> propertyValues;
+    private String schemaVersion;
 
     public static class Builder {
         private PTableKey key;
@@ -264,6 +265,7 @@ public class PTableImpl implements PTable {
         private Long lastDDLTimestamp;
         private boolean isChangeDetectionEnabled = false;
         private Map<String, String> propertyValues = new HashMap<>();
+        private String schemaVersion;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -625,6 +627,13 @@ public class PTableImpl implements PTable {
             return this;
         }
 
+        public Builder setSchemaVersion(String schemaVersion) {
+            if (schemaVersion != null) {
+                this.schemaVersion = schemaVersion;
+            }
+            return this;
+        }
+
         /**
          * Populate derivable attributes of the PTable
          * @return PTableImpl.Builder object
@@ -892,6 +901,7 @@ public class PTableImpl implements PTable {
         this.propertyValues = builder.propertyValues;
         this.lastDDLTimestamp = builder.lastDDLTimestamp;
         this.isChangeDetectionEnabled = builder.isChangeDetectionEnabled;
+        this.schemaVersion = builder.schemaVersion;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -967,7 +977,8 @@ public class PTableImpl implements PTable {
                 .setPhoenixTTL(table.getPhoenixTTL())
                 .setPhoenixTTLHighWaterMark(table.getPhoenixTTLHighWaterMark())
                 .setLastDDLTimestamp(table.getLastDDLTimestamp())
-                .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled());
+                .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled())
+                .setSchemaVersion(table.getSchemaVersion());
     }
 
     @Override
@@ -1858,6 +1869,10 @@ public class PTableImpl implements PTable {
         if (table.hasChangeDetectionEnabled()) {
             isChangeDetectionEnabled = table.getChangeDetectionEnabled();
         }
+        String schemaVersion = null;
+        if (table.hasSchemaVersion()) {
+            schemaVersion = (String) PVarchar.INSTANCE.toObject(table.getSchemaVersion().toByteArray());
+        }
         try {
             return new PTableImpl.Builder()
                     .setType(tableType)
@@ -1911,6 +1926,7 @@ public class PTableImpl implements PTable {
                     .setViewModifiedPhoenixTTL(viewModifiedPhoenixTTL)
                     .setLastDDLTimestamp(lastDDLTimestamp)
                     .setIsChangeDetectionEnabled(isChangeDetectionEnabled)
+                    .setSchemaVersion(schemaVersion)
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -2037,6 +2053,7 @@ public class PTableImpl implements PTable {
             builder.setLastDDLTimestamp(table.getLastDDLTimestamp());
         }
         builder.setChangeDetectionEnabled(table.isChangeDetectionEnabled());
+        builder.setSchemaVersion(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getSchemaVersion())));
         return builder.build();
     }
 
@@ -2162,6 +2179,11 @@ public class PTableImpl implements PTable {
     @Override
     public boolean isChangeDetectionEnabled() {
         return isChangeDetectionEnabled;
+    }
+
+    @Override
+    public String getSchemaVersion() {
+        return schemaVersion;
     }
 
     private static final class KVColumnFamilyQualifier {

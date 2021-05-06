@@ -113,6 +113,7 @@ message PTable {
   optional bool changeDetectionEnabled = 46;
   optional bytes physicalTableNameBytes = 47;
   optional bytes baseTableLogicalNameBytes = 48;
+  optional bytes schemaVersion = 49;
 }
 
 message EncodedCQCounter {
