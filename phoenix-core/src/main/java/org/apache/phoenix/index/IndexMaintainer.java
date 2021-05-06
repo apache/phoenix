@@ -68,6 +68,7 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.SingleCellConstructorExpression;
 import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
+import org.apache.phoenix.hbase.index.AbstractValueGetter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -585,8 +586,18 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                                     cf == null ? dataTable.getColumnForColumnQualifier(null, cq)
                                             : dataTable.getColumnFamily(cf)
                                                     .getPColumnForColumnQualifier(cq);
-                            indexedColumnsInfo.add(new Pair<>(dataColumn.getFamilyName()
-                                    .getString(), dataColumn.getName().getString()));
+                            if (dataColumn == null) {
+                                if (Bytes.compareTo(cf, dataEmptyKeyValueCF) == 0
+                                        && Bytes.compareTo(cq, EncodedColumnsUtil.getEmptyKeyValueInfo(dataEncodingScheme).getFirst()) == 0) {
+                                    return null;
+                                } else {
+                                    throw new ColumnNotFoundException(dataTable.getSchemaName().getString(),
+                                            dataTable.getTableName().getString(), Bytes.toString(cf), Bytes.toString(cq));
+                                }
+                            } else {
+                                indexedColumnsInfo.add(new Pair<>(dataColumn.getFamilyName()
+                                        .getString(), dataColumn.getName().getString()));
+                            }
                         } catch (ColumnNotFoundException | ColumnFamilyNotFoundException
                                 | AmbiguousColumnException e) {
                             throw new RuntimeException(e);
@@ -1032,7 +1043,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         Put put = null;
         // New row being inserted: add the empty key value
         ImmutableBytesWritable latestValue = null;
-        if (valueGetter==null || (latestValue = valueGetter.getLatestValue(indexEmptyKeyValueRef, ts)) == null || latestValue == ValueGetter.HIDDEN_BY_DELETE) {
+        if (valueGetter==null ||
+                this.getCoveredColumns().isEmpty() ||
+                (latestValue = valueGetter.getLatestValue(indexEmptyKeyValueRef, ts)) == null ||
+                latestValue == ValueGetter.HIDDEN_BY_DELETE) {
             // We need to track whether or not our empty key value is hidden by a Delete Family marker at the same timestamp.
             // If it is, these Puts will be masked so should not be emitted.
             if (latestValue == ValueGetter.HIDDEN_BY_DELETE) {
@@ -1953,7 +1967,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             ImmutableBytesPtr value = new ImmutableBytesPtr(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
             valueMap.put(new ColumnReference(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength()), value);
         }
-        return new ValueGetter() {
+        return new AbstractValueGetter() {
             @Override
             public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) {
                 if(ref.equals(indexEmptyKeyValueRef)) return null;

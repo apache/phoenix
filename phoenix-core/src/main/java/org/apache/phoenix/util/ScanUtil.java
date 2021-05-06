@@ -1168,7 +1168,6 @@ public class ScanUtil {
         if (scan.getAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS) == null) {
             BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
         }
-        addEmptyColumnToScan(scan, emptyCF, emptyCQ);
     }
 
     public static void setScanAttributesForPhoenixTTL(Scan scan, PTable table,
@@ -1231,8 +1230,32 @@ public class ScanUtil {
                         HConstants.EMPTY_BYTE_ARRAY,
                         scan.getStartRow(), scan.getStopRow());
             }
-            addEmptyColumnToScan(scan, emptyColumnFamilyName, emptyColumnName);
         }
+    }
+
+    public static void setScanAttributesForClient(Scan scan, PTable table,
+                                                  PhoenixConnection phoenixConnection) throws SQLException {
+        setScanAttributesForIndexReadRepair(scan, table, phoenixConnection);
+        setScanAttributesForPhoenixTTL(scan, table, phoenixConnection);
+        byte[] emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME);
+        byte[] emptyCQ = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME);
+        if (emptyCF != null && emptyCQ != null) {
+            addEmptyColumnToScan(scan, emptyCF, emptyCQ);
+        }
+        if (phoenixConnection.getQueryServices().getProps().getBoolean(
+                QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB,
+                QueryServicesOptions.DEFAULT_PHOENIX_SERVER_PAGING_ENABLED)) {
+            long pageSizeMs = phoenixConnection.getQueryServices().getProps()
+                    .getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
+            if (pageSizeMs == -1) {
+                // Use the half of the HBase RPC timeout value as the the server page size to make sure that the HBase
+                // region server will be able to send a heartbeat message to the client before the client times out
+                pageSizeMs = (long) (phoenixConnection.getQueryServices().getProps()
+                        .getLong(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT) * 0.5);
+            }
+            scan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS, Bytes.toBytes(Long.valueOf(pageSizeMs)));
+        }
+
     }
 
     public static void getDummyResult(byte[] rowKey, List<Cell> result) {

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.end2end.index.IndexCoprocIT.INDEXER_CONFIG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
@@ -30,15 +31,26 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.BitSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.hbase.index.Indexer;
+import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.index.GlobalIndexChecker;
+import org.apache.phoenix.index.PhoenixIndexBuilder;
+import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -53,6 +65,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
+import org.junit.Assert;
 
 public class IndexTestUtil {
 
@@ -165,4 +178,100 @@ public class IndexTestUtil {
         return row.toRowMutations();
     }
 
+    public static void downgradeCoprocs(String physicalTableName,
+            String physicalIndexName, Admin admin) throws Exception {
+        HTableDescriptor baseDescriptor =
+                admin.getTableDescriptor(TableName.valueOf(physicalTableName));
+
+        assertCoprocsContains(IndexRegionObserver.class, baseDescriptor);
+        removeCoproc(IndexRegionObserver.class, baseDescriptor, admin);
+
+        if (physicalIndexName != null) {
+            HTableDescriptor indexDescriptor = admin.getTableDescriptor(
+                    TableName.valueOf(physicalIndexName));
+            assertCoprocsContains(GlobalIndexChecker.class, indexDescriptor);
+
+            removeCoproc(IndexRegionObserver.class, indexDescriptor, admin);
+            removeCoproc(GlobalIndexChecker.class, indexDescriptor, admin);
+        }
+
+        Map<String, String> props = new HashMap<String, String>();
+        props.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY,
+                PhoenixIndexCodec.class.getName());
+        Indexer.enableIndexing(baseDescriptor, PhoenixIndexBuilder.class,
+                props, QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
+        admin.modifyTable(baseDescriptor.getTableName(), baseDescriptor);
+        baseDescriptor = admin.getTableDescriptor(
+                TableName.valueOf(physicalTableName));
+        HTableDescriptor indexDescriptor = null;
+        if (physicalIndexName != null) {
+            indexDescriptor = admin.getTableDescriptor(TableName.valueOf(physicalIndexName));
+        }
+        assertUsingOldCoprocs(baseDescriptor, indexDescriptor);
+    }
+
+    public static void assertCoprocsContains(Class clazz, HTableDescriptor descriptor) {
+        String expectedCoprocName = clazz.getName();
+        boolean foundCoproc = isCoprocPresent(descriptor, expectedCoprocName);
+        Assert.assertTrue("Could not find coproc " + expectedCoprocName +
+                " in descriptor " + descriptor,foundCoproc);
+    }
+
+    private static boolean isCoprocPresent(HTableDescriptor descriptor, String expectedCoprocName) {
+        boolean foundCoproc = false;
+        for (String coprocName : descriptor.getCoprocessors()){
+            if (coprocName.equals(expectedCoprocName)){
+                foundCoproc = true;
+                break;
+            }
+        }
+        return foundCoproc;
+    }
+
+    public static void removeCoproc(Class clazz, HTableDescriptor descriptor,
+            Admin admin) throws Exception {
+        descriptor.removeCoprocessor(clazz.getName());
+        admin.modifyTable(descriptor.getTableName(), descriptor);
+    }
+
+    public static void assertUsingOldCoprocs(HTableDescriptor baseDescriptor,
+            HTableDescriptor indexDescriptor) {
+        assertCoprocsContains(Indexer.class, baseDescriptor);
+        assertCoprocConfig(baseDescriptor, Indexer.class.getName(),
+                INDEXER_CONFIG);
+        assertCoprocsNotContains(IndexRegionObserver.class, baseDescriptor);
+        if (indexDescriptor != null) {
+            assertCoprocsNotContains(IndexRegionObserver.class, indexDescriptor);
+            assertCoprocsNotContains(GlobalIndexChecker.class, indexDescriptor);
+        }
+    }
+
+    public static void assertCoprocConfig(HTableDescriptor indexDesc,
+            String className, String expectedConfigValue){
+        boolean foundConfig = false;
+        for (Map.Entry<ImmutableBytesWritable, ImmutableBytesWritable> entry :
+                indexDesc.getValues().entrySet()){
+            String propKey = Bytes.toString(entry.getKey().get());
+            String propValue = Bytes.toString(entry.getValue().get());
+            //Unfortunately, a good API to read coproc properties didn't show up until
+            //HBase 2.0. Doing this the painful String-matching way to be compatible with 1.x
+            if (propKey.contains("coprocessor")){
+                if (propValue.contains(className)){
+                    Assert.assertEquals(className + " is configured incorrectly",
+                            expectedConfigValue,
+                            propValue);
+                    foundConfig = true;
+                    break;
+                }
+            }
+        }
+        Assert.assertTrue("Couldn't find config for " + className, foundConfig);
+    }
+
+    static void assertCoprocsNotContains(Class clazz, HTableDescriptor descriptor) {
+        String expectedCoprocName = clazz.getName();
+        boolean foundCoproc = isCoprocPresent(descriptor, expectedCoprocName);
+        Assert.assertFalse("Could find coproc " + expectedCoprocName +
+                " in descriptor " + descriptor,foundCoproc);
+    }
 }

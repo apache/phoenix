@@ -22,15 +22,18 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
 import org.apache.hadoop.hbase.replication.ChainWALEntryFilter;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.wal.WAL;
 import org.apache.hadoop.hbase.wal.WALKey;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
@@ -66,11 +69,12 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
       + NONTENANT_VIEW_NAME + "(" + VIEW_COLUMN_NAME + " varchar)  AS SELECT * FROM "
       + TestUtil.ENTITY_HISTORY_TABLE_NAME  + " WHERE OLD_VALUE like 'E%'";
 
-  private static final String DROP_TENANT_VIEW_SQL = "DROP VIEW IF EXISTS " + TENANT_VIEW_NAME;
-  private static final String DROP_NONTENANT_VIEW_SQL = "DROP VIEW IF EXISTS " + NONTENANT_VIEW_NAME;
+  private static final String DROP_TENANT_VIEW_SQL = "DROP VIEW IF EXISTS " + SCHEMA_NAME + "." + TENANT_VIEW_NAME;
+  private static final String DROP_NONTENANT_VIEW_SQL = "DROP VIEW IF EXISTS " + SCHEMA_NAME + "." + NONTENANT_VIEW_NAME;
   private static PTable catalogTable;
   private static PTable childLinkTable;
-  private static WALKey walKey = null;
+  private static WALKey walKeyCatalog = null;
+  private static WALKey walKeyChildLink = null;
   private static TableName systemCatalogTableName =
       TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
   private static TableName systemChildLinkTableName =
@@ -89,27 +93,19 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
       connection.createStatement().execute(CREATE_TENANT_VIEW_SQL);
       catalogTable = PhoenixRuntime.getTable(connection, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
       childLinkTable = PhoenixRuntime.getTable(connection, PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME);
-      walKey = new WALKey(REGION, TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME), 0, 0, uuid);
+      walKeyCatalog = new WALKey(REGION, TableName.valueOf(
+        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME), 0, 0, uuid);
+      walKeyChildLink = new WALKey(REGION, TableName.valueOf(
+        PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME), 0, 0, uuid);
     };
     Assert.assertNotNull(catalogTable);
-    try (java.sql.Connection connection =
-             ConnectionUtil.getInputConnection(getUtility().getConfiguration(), new Properties())) {
-      connection.createStatement().execute(CREATE_NONTENANT_VIEW_SQL);
-    };
+    createNonTenantView();
   }
 
   @AfterClass
   public static synchronized void tearDown() throws Exception {
-    Properties tenantProperties = new Properties();
-    tenantProperties.setProperty("TenantId", TENANT_ID);
-    try (java.sql.Connection connection =
-             ConnectionUtil.getInputConnection(getUtility().getConfiguration(), tenantProperties)) {
-      connection.createStatement().execute(DROP_TENANT_VIEW_SQL);
-    }
-    try (java.sql.Connection connection =
-             ConnectionUtil.getInputConnection(getUtility().getConfiguration(), new Properties())) {
-      connection.createStatement().execute(DROP_NONTENANT_VIEW_SQL);
-    }
+    dropTenantView();
+    dropNonTenantView();
   }
 
   @Test
@@ -124,43 +120,131 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
 
   @Test
   public void testSystemCatalogWALEntryFilter() throws Exception {
+    // now create WAL.Entry objects that refer to cells in those view rows in
+    // System.Catalog
+    Get tenantGetCatalog = getGet(catalogTable, TENANT_BYTES, TENANT_VIEW_NAME);
+    Get nonTenantGetCatalog = getGet(catalogTable, DEFAULT_TENANT_BYTES, NONTENANT_VIEW_NAME);
 
-    //now create WAL.Entry objects that refer to cells in those view rows in System.Catalog
-
-    Get tenantGet = getGet(catalogTable, TENANT_BYTES, TENANT_VIEW_NAME);
-    Get nonTenantGet = getGet(catalogTable, DEFAULT_TENANT_BYTES, NONTENANT_VIEW_NAME);
-
-    WAL.Entry nonTenantEntry = getEntry(systemCatalogTableName, nonTenantGet);
-    WAL.Entry tenantEntry = getEntry(systemCatalogTableName, tenantGet);
+    WAL.Entry nonTenantEntryCatalog = getEntry(systemCatalogTableName, nonTenantGetCatalog);
+    WAL.Entry tenantEntryCatalog = getEntry(systemCatalogTableName, tenantGetCatalog);
+    int tenantRowCount = getAndAssertCountInEdit(tenantEntryCatalog, true);
+    Assert.assertTrue(tenantRowCount > 0);
 
     //verify that the tenant view WAL.Entry passes the filter and the non-tenant view does not
     SystemCatalogWALEntryFilter filter = new SystemCatalogWALEntryFilter();
     // Chain the system catalog WAL entry filter to ChainWALEntryFilter
     ChainWALEntryFilter chainWALEntryFilter = new ChainWALEntryFilter(filter);
     // Asserting the WALEdit for non tenant has cells before getting filtered
-    Assert.assertTrue(nonTenantEntry.getEdit().size() > 0);
+    Assert.assertTrue(nonTenantEntryCatalog.getEdit().size() > 0);
     // All the cells will get removed by the filter since they do not belong to tenant
     Assert.assertTrue("Non tenant edits for system catalog should not get filtered",
-        chainWALEntryFilter.filter(nonTenantEntry).getEdit().isEmpty());
-    WAL.Entry filteredTenantEntry = chainWALEntryFilter.filter(tenantEntry);
-    Assert.assertNotNull("Tenant view was filtered when it shouldn't be!", filteredTenantEntry);
-    Assert.assertEquals("filtered entry is not correct",
-        tenantEntry.getEdit().size(), filteredTenantEntry.getEdit().size());
+        chainWALEntryFilter.filter(nonTenantEntryCatalog).getEdit().isEmpty());
+
+    WAL.Entry filteredTenantEntryCatalog = chainWALEntryFilter.filter(tenantEntryCatalog);
+    Assert.assertNotNull("Tenant view was filtered when it shouldn't be!",
+        filteredTenantEntryCatalog);
+    Assert.assertEquals("Not all data for replicated for tenant", tenantRowCount,
+        getAndAssertCountInEdit(filteredTenantEntryCatalog, true));
 
     //now check that a WAL.Entry with cells from both a tenant and a non-tenant
     //catalog row only allow the tenant cells through
     WALEdit comboEdit = new WALEdit();
-    comboEdit.getCells().addAll(nonTenantEntry.getEdit().getCells());
-    comboEdit.getCells().addAll(tenantEntry.getEdit().getCells());
-    WAL.Entry comboEntry = new WAL.Entry(walKey, comboEdit);
+    nonTenantEntryCatalog = getEntry(systemCatalogTableName, nonTenantGetCatalog);
+    tenantEntryCatalog = getEntry(systemCatalogTableName, tenantGetCatalog);
+    comboEdit.getCells().addAll(nonTenantEntryCatalog.getEdit().getCells());
+    comboEdit.getCells().addAll(tenantEntryCatalog.getEdit().getCells());
+    WAL.Entry comboEntry = new WAL.Entry(walKeyCatalog, comboEdit);
 
-    Assert.assertEquals(tenantEntry.getEdit().size() + nonTenantEntry.getEdit().size()
+    Assert.assertEquals(tenantEntryCatalog.getEdit().size() + nonTenantEntryCatalog.getEdit().size()
         , comboEntry.getEdit().size());
-    Assert.assertEquals(tenantEntry.getEdit().size(),
+    Assert.assertEquals(tenantEntryCatalog.getEdit().size(),
         chainWALEntryFilter.filter(comboEntry).getEdit().size());
   }
 
-  public Get getGet(PTable catalogTable, byte[] tenantId, String viewName) {
+  @Test
+  public void testSystemChildLinkWALEntryFilter() throws Exception {
+    // now create WAL.Entry objects that refer to cells in those view rows in
+    // System.Child_Link
+    Get tenantGetChildLink = getGetChildLink(childLinkTable, TENANT_BYTES, TENANT_VIEW_NAME);
+    Get nonTenantGetChildLink = getGetChildLink(childLinkTable, DEFAULT_TENANT_BYTES, NONTENANT_VIEW_NAME);
+
+    WAL.Entry tenantEntryChildLink = getEntry(systemChildLinkTableName, tenantGetChildLink);
+    WAL.Entry nonTenantEntryChildLink = getEntry(systemChildLinkTableName, nonTenantGetChildLink);
+    int tenantRowCount = getAndAssertCountInEdit(tenantEntryChildLink, true);
+    Assert.assertTrue(tenantRowCount > 0);
+
+    //verify that the tenant view WAL.Entry passes the filter and the non-tenant view does not
+    SystemCatalogWALEntryFilter filter = new SystemCatalogWALEntryFilter();
+    // Chain the system catalog WAL entry filter to ChainWALEntryFilter
+    ChainWALEntryFilter chainWALEntryFilter = new ChainWALEntryFilter(filter);
+    // Asserting the WALEdit for non tenant has cells before getting filtered
+    Assert.assertTrue(nonTenantEntryChildLink.getEdit().size() > 0);
+    // All the cells will get removed by the filter since they do not belong to tenant
+    Assert.assertTrue("Non tenant edits for system child link should not get filtered",
+        chainWALEntryFilter.filter(nonTenantEntryChildLink).getEdit().isEmpty());
+
+    WAL.Entry filteredTenantEntryChildLink = chainWALEntryFilter.filter(tenantEntryChildLink);
+    Assert.assertNotNull("Tenant view was filtered when it shouldn't be!",
+        filteredTenantEntryChildLink);
+    Assert.assertEquals("Not all data for replicated for tenant", tenantRowCount,
+        getAndAssertCountInEdit(filteredTenantEntryChildLink, true));
+
+    //now check that a WAL.Entry with cells from both a tenant and a non-tenant
+    // child link row only allow the tenant cells through
+    WALEdit comboEdit = new WALEdit();
+    comboEdit.getCells().addAll(nonTenantEntryChildLink.getEdit().getCells());
+    comboEdit.getCells().addAll(tenantEntryChildLink.getEdit().getCells());
+    WAL.Entry comboEntry = new WAL.Entry(walKeyChildLink, comboEdit);
+
+    Assert.assertEquals(tenantEntryChildLink.getEdit().size() + nonTenantEntryChildLink.getEdit().size()
+        , comboEntry.getEdit().size());
+    Assert.assertEquals(tenantEntryChildLink.getEdit().size(),
+        chainWALEntryFilter.filter(comboEntry).getEdit().size());
+  }
+
+  /**
+   * Validates the behavior for parent-child link's delete marker via SystemCatalogWalEntryFilter.
+   * 1. Filtered for non-tenant views.
+   * 2. Not filtered for tenant views.
+   * */
+  @Test
+  public void testDeleteMarkerForParentChildLink() throws Exception{
+    // Since for 4.16+ all parent-child links are stored in SYSTEM.CHILD_LINK, only
+    // checking for that table in this test.
+
+    // Make sure link row exists.
+    WAL.Entry childLinkEntry = getEntry(systemChildLinkTableName, new Scan(),
+        false);
+    int tenantRowCount = getAndAssertCountInEdit(childLinkEntry, true);
+    int nonTenantRowCount = getAndAssertCountInEdit(childLinkEntry, false);
+    Assert.assertTrue(tenantRowCount > 0 && nonTenantRowCount > 0 );
+
+    // Drop both tenant and non-tenant view.
+    dropTenantView();
+    dropNonTenantView();
+
+    // Delete Marker for non-tenant view should get filtered and for tenant-view it should not.
+    SystemCatalogWALEntryFilter filter = new SystemCatalogWALEntryFilter();
+    // Chain the system catalog WAL entry filter to ChainWALEntryFilter
+    ChainWALEntryFilter chainWALEntryFilter = new ChainWALEntryFilter(filter);
+    childLinkEntry = getEntry(systemChildLinkTableName, new Scan(),
+        false);
+    int tenantDeleteCountBeforeFilter = getDeleteFamilyCellCountInEntry(childLinkEntry, true);
+    int nonTenantDeleteCountBeforeFilter = getDeleteFamilyCellCountInEntry(childLinkEntry, false);
+    // Make sure both tenant and non-tenant delete marker exists before filtering
+    Assert.assertTrue(tenantDeleteCountBeforeFilter > 0 && nonTenantDeleteCountBeforeFilter > 0 );
+
+    WAL.Entry filteredEntry = chainWALEntryFilter.filter(childLinkEntry);
+    int tenantDeleteCountAfterFilter = getDeleteFamilyCellCountInEntry(filteredEntry, true);
+    int nonTenantDeleteCountAfterFilter = getDeleteFamilyCellCountInEntry(filteredEntry, false);
+    Assert.assertTrue(tenantDeleteCountAfterFilter == tenantDeleteCountBeforeFilter  && nonTenantDeleteCountAfterFilter == 0 );
+
+    // setup views again.
+    createTenantView();
+    createNonTenantView();
+  }
+
+  private Get getGet(PTable catalogTable, byte[] tenantId, String viewName) {
     byte[][] tenantKeyParts = new byte[5][];
     tenantKeyParts[0] = tenantId;
     tenantKeyParts[1] = Bytes.toBytes(SCHEMA_NAME.toUpperCase());
@@ -174,7 +258,75 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
     return new Get(key.copyBytes());
   }
 
-  public WAL.Entry getEntry(TableName tableName, Get get) throws IOException {
+  private Get getGetChildLink(PTable catalogTable, byte[] tenantId, String viewName) {
+    byte[][] tenantKeyParts = new byte[5][];
+    tenantKeyParts[0] = ByteUtil.EMPTY_BYTE_ARRAY;
+    tenantKeyParts[1] = ByteUtil.EMPTY_BYTE_ARRAY;
+    tenantKeyParts[2] = Bytes.toBytes(TestUtil.ENTITY_HISTORY_TABLE_NAME);
+    tenantKeyParts[3] = tenantId;
+    tenantKeyParts[4] = Bytes.toBytes(SCHEMA_NAME + "." +viewName.toUpperCase());;
+    ImmutableBytesWritable key = new ImmutableBytesWritable();
+    catalogTable.newKey(key, tenantKeyParts);
+    //the backing byte array of key might have extra space at the end.
+    // need to just slice "the good parts" which we do by calling copyBytes
+    return new Get(key.copyBytes());
+  }
+
+  private boolean isTenantOwnedCell(Cell cell, String tenantId) {
+    String row = Bytes.toString(cell.getRowArray(), cell.getRowOffset(),
+      cell.getRowLength());
+    boolean isTenantIdLeading = row.startsWith(tenantId);
+    boolean isChildLinkForTenantId = row.contains(tenantId)
+      && CellUtil.matchingQualifier(cell,
+      PhoenixDatabaseMetaData.LINK_TYPE_BYTES);
+    boolean isDeleteMarkerForLinkRow = row.contains(tenantId) && CellUtil.isDeleteFamily(cell);
+    return isTenantIdLeading || isChildLinkForTenantId || isDeleteMarkerForLinkRow;
+  }
+
+  /**
+   * Asserts and returns cell count in the WAL.Entry. if tenantOwned is true, tenant owned cell count is
+   * returned else non-tenant cell count.
+   * @Param entry {@link WAL.Entry}
+   * @Param tenantOwned {@link Boolean}
+   * */
+  private int getAndAssertCountInEdit(WAL.Entry entry, boolean tenantOwned) {
+    int tenantCount = 0;
+    int nonTenantCount = 0;
+    for (Cell cell : entry.getEdit().getCells()) {
+      if (isTenantOwnedCell(cell, TENANT_ID)) {
+        tenantCount = tenantCount + 1;
+      } else {
+        nonTenantCount = nonTenantCount + 1;
+      }
+    }
+    int count = tenantOwned ? tenantCount : nonTenantCount;
+    Assert.assertTrue(count > 0);
+    return count;
+  }
+
+  /**
+   * Returns delete family cell count in the WAL.Entry. if tenantOwned is true, tenant owned cell count is
+   * returned else non-tenant cell count.
+   * @Param entry {@link WAL.Entry}
+   * @Param tenantOwned {@link Boolean}
+   * */
+  private int getDeleteFamilyCellCountInEntry(WAL.Entry entry, boolean tenantOwned) {
+    int tenantCount = 0;
+    int nonTenantCount = 0;
+    for (Cell cell : entry.getEdit().getCells()) {
+      if (CellUtil.isDeleteFamily(cell)) {
+        if (isTenantOwnedCell(cell, TENANT_ID)) {
+          tenantCount = tenantCount + 1;
+        } else {
+          nonTenantCount = nonTenantCount + 1;
+        }
+      }
+    }
+    return tenantOwned ? tenantCount : nonTenantCount;
+  }
+
+
+  private WAL.Entry getEntry(TableName tableName, Get get) throws IOException {
     WAL.Entry entry = null;
     try(Connection conn = ConnectionFactory.createConnection(getUtility().getConfiguration())){
       Table htable = conn.getTable(tableName);
@@ -182,15 +334,81 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
       WALEdit edit = new WALEdit();
       if (result != null) {
         List<Cell> cellList = result.listCells();
-        Assert.assertNotNull("Didn't retrieve any cells from SYSTEM.CATALOG", cellList);
+        Assert.assertNotNull(String.format("Didn't retrieve any cells from table %s",
+          tableName.getNameAsString()), cellList);
         for (Cell c : cellList) {
           edit.add(c);
         }
       }
-      Assert.assertTrue("Didn't retrieve any cells from SYSTEM.CATALOG", edit.getCells().size() > 0);
+      Assert.assertTrue(String.format("Didn't retrieve any cells from table %s",
+        tableName.getNameAsString()), edit.getCells().size() > 0);
       WALKey key = new WALKey(REGION, tableName, 0, 0, uuid);
       entry = new WAL.Entry(key, edit);
     }
     return entry;
+  }
+
+  private WAL.Entry getEntry(TableName tableName, Scan scan, boolean addIndexedKeyValueCell)
+      throws IOException {
+    WAL.Entry entry = null;
+    try(HConnection conn = HConnectionManager.createConnection(getUtility().getConfiguration())) {
+      HTableInterface htable = conn.getTable(tableName);
+      scan.setRaw(true);
+      ResultScanner scanner = htable.getScanner(scan);
+      WALEdit edit = new WALEdit();
+      if (addIndexedKeyValueCell) {
+        // add IndexedKeyValue type cell as the first cell
+        edit.add(new IndexedKeyValue());
+      }
+
+      for (Result r : scanner) {
+        if (r != null) {
+          List<Cell> cellList = r.listCells();
+          for (Cell c : cellList) {
+            edit.add(c);
+          }
+        }
+      }
+      Assert.assertFalse("No WALEdits were loaded!", edit.isEmpty());
+      HLogKey key = new HLogKey(REGION, tableName, 0, 0, uuid);
+      entry = new WAL.Entry(key, edit);
+    }
+    return entry;
+  }
+
+  private static void dropTenantView() throws Exception {
+    Properties tenantProperties = new Properties();
+    tenantProperties.setProperty("TenantId", TENANT_ID);
+    try (java.sql.Connection connection =
+        ConnectionUtil.getInputConnection(getUtility().getConfiguration(), tenantProperties)) {
+      connection.createStatement().execute(DROP_TENANT_VIEW_SQL);
+      connection.commit();
+    }
+  }
+
+  private static void dropNonTenantView() throws Exception {
+    try (java.sql.Connection connection =
+        ConnectionUtil.getInputConnection(getUtility().getConfiguration(), new Properties())) {
+
+      connection.createStatement().execute(DROP_NONTENANT_VIEW_SQL);
+    }
+  }
+
+  private static void createTenantView() throws Exception {
+    Properties tenantProperties = new Properties();
+    tenantProperties.setProperty("TenantId", TENANT_ID);
+    try (java.sql.Connection connection =
+        ConnectionUtil.getInputConnection(getUtility().getConfiguration(), tenantProperties)) {
+      connection.createStatement().execute(CREATE_TENANT_VIEW_SQL);
+      connection.commit();
+    }
+  }
+
+  private static void createNonTenantView() throws Exception {
+    try (java.sql.Connection connection =
+        ConnectionUtil.getInputConnection(getUtility().getConfiguration(), new Properties())) {
+      connection.createStatement().execute(CREATE_NONTENANT_VIEW_SQL);
+      connection.commit();
+    }
   }
 }

@@ -25,6 +25,7 @@ import java.util.Map;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.hbase.index.AbstractValueGetter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.filter.ApplyAndFilterDeletesFilter.DeleteTracker;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -36,7 +37,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
  * {@link ValueGetter} that uses lazy initialization to get the value for the given
  * {@link ColumnReference}. Once stored, the mapping for that reference is retained.
  */
-public class LazyValueGetter implements ValueGetter {
+public class LazyValueGetter extends AbstractValueGetter {
 
     private CoveredDeleteScanner scan;
     private volatile Map<ColumnReference, ImmutableBytesWritable> values;

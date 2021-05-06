@@ -83,6 +83,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
@@ -371,12 +372,15 @@ public class Indexer extends BaseRegionObserver {
   public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
           MiniBatchOperationInProgress<Mutation> miniBatchOp) throws Throwable {
 
+      // Need to add cell tags to Delete Marker before we do any index processing
+      // since we add tags to tables which doesn't have indexes also.
+      IndexUtil.setDeleteAttributes(miniBatchOp);
       // first group all the updates for a single row into a single update to be processed
-      Map<ImmutableBytesPtr, MultiMutation> mutationsMap =
-              new HashMap<ImmutableBytesPtr, MultiMutation>();
+      Map<ImmutableBytesPtr, MultiMutation> mutationsMap
+            = new HashMap<ImmutableBytesPtr, MultiMutation>();
           
       Durability defaultDurability = Durability.SYNC_WAL;
-      if(c.getEnvironment().getRegion() != null) {
+      if (c.getEnvironment().getRegion() != null) {
           defaultDurability = c.getEnvironment().getRegion().getTableDesc().getDurability();
           defaultDurability = (defaultDurability == Durability.USE_DEFAULT) ? 
                   Durability.SYNC_WAL : defaultDurability;
@@ -518,7 +522,7 @@ public class Indexer extends BaseRegionObserver {
           byte[] tableName = c.getEnvironment().getRegion().getTableDesc().getTableName().getName();
           Iterator<Pair<Mutation, byte[]>> indexUpdatesItr = indexUpdates.iterator();
           List<Mutation> localUpdates = new ArrayList<Mutation>(indexUpdates.size());
-          while(indexUpdatesItr.hasNext()) {
+          while (indexUpdatesItr.hasNext()) {
               Pair<Mutation, byte[]> next = indexUpdatesItr.next();
               if (Bytes.compareTo(next.getSecond(), tableName) == 0) {
                   localUpdates.add(next.getFirst());

@@ -490,7 +490,6 @@
     <dependency>
         <groupId>org.jruby.joni</groupId>
         <artifactId>joni</artifactId>
-        <version>${joni.version}</version>
     </dependency>
     <dependency>
       <groupId>com.clearspring.analytics</groupId>

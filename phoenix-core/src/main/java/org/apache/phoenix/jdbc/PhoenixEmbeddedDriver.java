@@ -347,7 +347,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             }
             if(principal == null){
                 if (!isConnectionless) {
-                   principal = props.get(QueryServices.HBASE_CLIENT_PRINCIPAL);
+                    principal = props.get(QueryServices.HBASE_CLIENT_PRINCIPAL);
                 }
             }
             if(keytab == null){
