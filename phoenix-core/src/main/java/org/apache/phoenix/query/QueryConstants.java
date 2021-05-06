@@ -113,6 +113,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REMARKS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCAN_METRICS_JSON;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCOPE_CATALOG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCOPE_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCOPE_TABLE;
@@ -311,8 +312,9 @@ public interface QueryConstants {
             VIEW_INDEX_ID_DATA_TYPE + " INTEGER,\n" +
             PHOENIX_TTL + " BIGINT,\n" +
             PHOENIX_TTL_HWM + " BIGINT,\n" +
-            LAST_DDL_TIMESTAMP + " BIGINT, " +
-            CHANGE_DETECTION_ENABLED + " BOOLEAN, " +
+            LAST_DDL_TIMESTAMP + " BIGINT, \n" +
+            CHANGE_DETECTION_ENABLED + " BOOLEAN, \n" +
+            SCHEMA_VERSION + " VARCHAR, \n" +
             // Column metadata (will be null for table row)
             DATA_TYPE + " INTEGER," +
             COLUMN_SIZE + " INTEGER," +

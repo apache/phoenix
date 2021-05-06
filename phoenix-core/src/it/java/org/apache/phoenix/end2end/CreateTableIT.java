@@ -1167,6 +1167,31 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testCreateTableSchemaVersion() throws Exception {
+        Properties props = new Properties();
+        final String schemaName = generateUniqueName();
+        final String tableName = generateUniqueName();
+        final String version = "V1.0";
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            testCreateTableSchemaVersionHelper(conn, schemaName, tableName, version);
+        }
+    }
+
+    public static void testCreateTableSchemaVersionHelper(Connection conn, String schemaName, String tableName,
+                                                          String dataTableVersion)
+            throws Exception {
+        final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
+        String ddl =
+                "CREATE TABLE " + dataTableFullName + " (\n" + "ID1 VARCHAR(15) NOT NULL,\n"
+                        + "ID2 VARCHAR(15) NOT NULL,\n" + "CREATED_DATE DATE,\n"
+                        + "CREATION_TIME BIGINT,\n" + "LAST_USED DATE,\n"
+                        + "CONSTRAINT PK PRIMARY KEY (ID1, ID2)) SCHEMA_VERSION='" + dataTableVersion + "'";
+        conn.createStatement().execute(ddl);
+        PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+        assertEquals(dataTableVersion, table.getSchemaVersion());
+    }
+
+    @Test
     public void testCreateTableDDLTimestamp() throws Exception {
         Properties props = new Properties();
         final String schemaName = generateUniqueName();
