@@ -1465,6 +1465,30 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
 
     }
 
-
+    @Test
+    public void testCreateViewSchemaVersion() throws Exception {
+        Properties props = new Properties();
+        final String schemaName = generateUniqueName();
+        final String tableName = generateUniqueName();
+        final String viewName = generateUniqueName();
+        final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
+        final String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String oldVersion = "V1.0";
+            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, oldVersion);
+            String createViewSql = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName +
+                    " SCHEMA_VERSION='" + oldVersion + "'";
+            conn.createStatement().execute(createViewSql);
+            PTable view = PhoenixRuntime.getTableNoCache(conn, viewFullName);
+            assertEquals(oldVersion, view.getSchemaVersion());
+            String newVersion = "V1.1";
+            String alterViewSql = "ALTER VIEW " + viewFullName + " SET SCHEMA_VERSION='" + newVersion + "'";
+            conn.createStatement().execute(alterViewSql);
+            PTable view2 = PhoenixRuntime.getTableNoCache(conn, viewFullName);
+            assertEquals(newVersion, view2.getSchemaVersion());
+            PTable baseTable = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+            assertEquals(oldVersion, baseTable.getSchemaVersion());
+        }
+    }
 
 }
