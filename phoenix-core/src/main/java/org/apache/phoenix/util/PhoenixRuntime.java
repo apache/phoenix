@@ -267,10 +267,14 @@ public class PhoenixRuntime {
                 System.out.println("Starting upgrading table:" + srcTable + "... please don't kill it in between!!");
                 UpgradeUtil.upgradeTable(conn, srcTable);
             } else if (execCmd.isUpgrade()) {
-                if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) { throw new SQLException(
-                        "May not specify the CURRENT_SCN property when upgrading"); }
-                if (conn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB) != null) { throw new SQLException(
-                        "May not specify the TENANT_ID_ATTRIB property when upgrading"); }
+                if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) {
+                    throw new SQLException(
+                        "May not specify the CURRENT_SCN property when upgrading");
+                }
+                if (conn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB) != null) {
+                    throw new SQLException(
+                        "May not specify the TENANT_ID_ATTRIB property when upgrading");
+                }
                 if (execCmd.getInputFiles().isEmpty()) {
                     List<String> tablesNeedingUpgrade = UpgradeUtil.getPhysicalTablesWithDescRowKey(conn);
                     if (tablesNeedingUpgrade.isEmpty()) {
@@ -290,14 +294,13 @@ public class PhoenixRuntime {
                 } else {
                     UpgradeUtil.upgradeDescVarLengthRowKeys(conn, execCmd.getInputFiles(), execCmd.isBypassUpgrade());
                 }
-            } else if(execCmd.isLocalIndexUpgrade()) {
+            } else if (execCmd.isLocalIndexUpgrade()) {
                 UpgradeUtil.upgradeLocalIndexes(conn);
             } else {
                 for (String inputFile : execCmd.getInputFiles()) {
                     if (inputFile.endsWith(SQL_FILE_EXT)) {
                         PhoenixRuntime.executeStatements(conn, new FileReader(inputFile), Collections.emptyList());
                     } else if (inputFile.endsWith(CSV_FILE_EXT)) {
-
                         String tableName = execCmd.getTableName();
                         if (tableName == null) {
                             tableName = SchemaUtil.normalizeIdentifier(
@@ -344,7 +347,7 @@ public class PhoenixRuntime {
      * @throws IOException
      * @throws SQLException
      */
-    public static int executeStatements(Connection conn, Reader reader, List<Object> binds) throws IOException,SQLException {
+    public static int executeStatements(Connection conn, Reader reader, List<Object> binds) throws IOException, SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         // Turn auto commit to true when running scripts in case there's DML
         pconn.setAutoCommit(true);
@@ -360,7 +363,7 @@ public class PhoenixRuntime {
      */
     @Deprecated
     public static List<Cell> getUncommittedData(Connection conn) throws SQLException {
-        Iterator<Pair<byte[],List<Cell>>> iterator = getUncommittedDataIterator(conn);
+        Iterator<Pair<byte[], List<Cell>>> iterator = getUncommittedDataIterator(conn);
         if (iterator.hasNext()) {
             return iterator.next().getSecond();
         }
@@ -374,7 +377,7 @@ public class PhoenixRuntime {
      * @return the list of HBase mutations for uncommitted data
      * @throws SQLException
      */
-    public static Iterator<Pair<byte[],List<Cell>>> getUncommittedDataIterator(Connection conn) throws SQLException {
+    public static Iterator<Pair<byte[], List<Cell>>> getUncommittedDataIterator(Connection conn) throws SQLException {
         return getUncommittedDataIterator(conn, false);
     }
 
@@ -385,10 +388,10 @@ public class PhoenixRuntime {
      * @return the list of HBase mutations for uncommitted data
      * @throws SQLException
      */
-    public static Iterator<Pair<byte[],List<Cell>>> getUncommittedDataIterator(Connection conn, boolean includeMutableIndexes) throws SQLException {
+    public static Iterator<Pair<byte[], List<Cell>>> getUncommittedDataIterator(Connection conn, boolean includeMutableIndexes) throws SQLException {
         final PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        final Iterator<Pair<byte[],List<Mutation>>> iterator = pconn.getMutationState().toMutations(includeMutableIndexes);
-        return new Iterator<Pair<byte[],List<Cell>>>() {
+        final Iterator<Pair<byte[], List<Mutation>>> iterator = pconn.getMutationState().toMutations(includeMutableIndexes);
+        return new Iterator<Pair<byte[], List<Cell>>>() {
 
             @Override
             public boolean hasNext() {
@@ -397,7 +400,7 @@ public class PhoenixRuntime {
 
             @Override
             public Pair<byte[], List<Cell>> next() {
-                Pair<byte[],List<Mutation>> pair = iterator.next();
+                Pair<byte[], List<Mutation>> pair = iterator.next();
                 List<Cell> keyValues = Lists.newArrayListWithExpectedSize(pair.getSecond().size() * 5); // Guess-timate 5 key values per row
                 for (Mutation mutation : pair.getSecond()) {
                     for (List<Cell> keyValueList : mutation.getFamilyCellMap().values()) {
@@ -407,7 +410,7 @@ public class PhoenixRuntime {
                     }
                 }
                 Collections.sort(keyValues, pconn.getKeyValueBuilder().getKeyValueComparator());
-                return new Pair<byte[], List<Cell>>(pair.getFirst(),keyValues);
+                return new Pair<byte[], List<Cell>>(pair.getFirst(), keyValues);
             }
 
             @Override
@@ -424,12 +427,11 @@ public class PhoenixRuntime {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         MetaDataMutationResult result = new MetaDataClient(pconn).updateCache(pconn.getTenantId(),
                 schemaName, tableName, true);
-        if(result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+        if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
             throw new TableNotFoundException(schemaName, tableName);
         }
 
         return result.getTable();
-
     }
     
     /**
@@ -447,6 +449,10 @@ public class PhoenixRuntime {
      */
     public static PTable getTable(Connection conn, String name) throws SQLException {
         PTable table = null;
+        // remove "", beacause system.catalog include in no Quotation
+        if (name != null) {
+            name = name.replace("\"", "");
+        }
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         try {
             table = pconn.getTable(new PTableKey(pconn.getTenantId(), name));
@@ -535,10 +541,10 @@ public class PhoenixRuntime {
         Set<String> unresolvedColumnNames = new TreeSet<String>();
         if (columns == null || columns.isEmpty()) {
             // use all columns in the table
-        	int offset = (table.getBucketNum() == null ? 0 : 1);
-        	for (int i = offset; i < table.getColumns().size(); i++) {
-        	   PColumn pColumn = table.getColumns().get(i);
-               columnInfoList.add(PhoenixRuntime.getColumnInfo(pColumn)); 
+            int offset = (table.getBucketNum() == null ? 0 : 1);
+            for (int i = offset; i < table.getColumns().size(); i++) {
+                PColumn pColumn = table.getColumns().get(i);
+                columnInfoList.add(PhoenixRuntime.getColumnInfo(pColumn));
             }
         } else {
             // Leave "null" as indication to skip b/c it doesn't exist
@@ -555,25 +561,31 @@ public class PhoenixRuntime {
             }
         }
         // if there exists columns that cannot be resolved, error out.
-        if (unresolvedColumnNames.size()>0) {
+        if (unresolvedColumnNames.size() > 0) {
                 StringBuilder exceptionMessage = new StringBuilder();
                 boolean first = true;
                 exceptionMessage.append("Unable to resolve these column names:\n");
                 for (String col : unresolvedColumnNames) {
-                    if (first) first = false;
-                    else exceptionMessage.append(",");
+                    if (first) {
+                        first = false;
+                    } else {
+                        exceptionMessage.append(",");
+                    }
                     exceptionMessage.append(col);
                 }
                 exceptionMessage.append("\nAvailable columns with column families:\n");
                 first = true;
                 for (PColumn pColumn : table.getColumns()) {
-                    if (first) first = false;
-                    else exceptionMessage.append(",");
+                    if (first) {
+                        first = false;
+                    } else {
+                        exceptionMessage.append(",");
+                    }
                     exceptionMessage.append(pColumn.toString());
                 }
                 throw new SQLException(exceptionMessage.toString());
-      }
-       return columnInfoList;
+        }
+        return columnInfoList;
     }
 
     /**
@@ -585,17 +597,17 @@ public class PhoenixRuntime {
      * @throws SQLException if parameters are null or if column is not found or if column is ambiguous.
      */
     public static ColumnInfo getColumnInfo(PTable table, String columnName) throws SQLException {
-        if (table==null) {
+        if (table == null) {
             throw new SQLException("Table must not be null.");
         }
-        if (columnName==null) {
+        if (columnName == null) {
             throw new SQLException("columnName must not be null.");
         }
         PColumn pColumn = null;
         if (columnName.contains(QueryConstants.NAME_SEPARATOR)) {
             String[] tokens = columnName.split(QueryConstants.NAME_SEPARATOR_REGEX);
-            if (tokens.length!=2) {
-                throw new SQLException(String.format("Unable to process column %s, expected family-qualified name.",columnName));
+            if (tokens.length != 2) {
+                throw new SQLException(String.format("Unable to process column %s, expected family-qualified name.", columnName));
             }
             String familyName = tokens[0];
             String familyColumn = tokens[1];
@@ -682,8 +694,8 @@ public class PhoenixRuntime {
                     "but instead have always provided data up to the full max length of the column. See PHOENIX-2067 " +
                     "and PHOENIX-2120 for more information. ");
             Option mapNamespaceOption = new Option("m", "map-namespace", true,
-                    "Used to map table to a namespace matching with schema, require "+ QueryServices.IS_NAMESPACE_MAPPING_ENABLED +
-                    " to be enabled");
+                    "Used to map table to a namespace matching with schema, require " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
+                        + " to be enabled");
             Option localIndexUpgradeOption = new Option("l", "local-index-upgrade", false,
                 "Used to upgrade local index data by moving index data from separate table to "
                 + "separate column families in the same table.");
@@ -711,7 +723,7 @@ public class PhoenixRuntime {
 
             ExecutionCommand execCmd = new ExecutionCommand();
             execCmd.connectionString = "";
-            if(cmdLine.hasOption(mapNamespaceOption.getOpt())){
+            if (cmdLine.hasOption(mapNamespaceOption.getOpt())) {
                 execCmd.mapNamespace = true;
                 execCmd.srcTable = validateTableName(cmdLine.getOptionValue(mapNamespaceOption.getOpt()));
             }
@@ -758,7 +770,7 @@ public class PhoenixRuntime {
                 }
                 execCmd.isBypassUpgrade = true;
             }
-            if(cmdLine.hasOption(localIndexUpgradeOption.getOpt())) {
+            if (cmdLine.hasOption(localIndexUpgradeOption.getOpt())) {
                 execCmd.localIndexUpgrade = true;
             }
 
@@ -797,7 +809,6 @@ public class PhoenixRuntime {
             } else {
                 return tableName;
             }
-
         }
 
         private static char getCharacter(String s) {
@@ -1028,11 +1039,11 @@ public class PhoenixRuntime {
 
     private static String appendMaxLengthAndScale(@Nullable Integer maxLength, @Nullable Integer scale, String sqlTypeName) {
         if (maxLength != null) {
-             sqlTypeName = sqlTypeName + "(" + maxLength;
-             if (scale != null) {
-               sqlTypeName = sqlTypeName + "," + scale; // has both max length and scale. For ex- decimal(10,2)
-             }       
-             sqlTypeName = sqlTypeName + ")";
+            sqlTypeName = sqlTypeName + "(" + maxLength;
+            if (scale != null) {
+                sqlTypeName = sqlTypeName + "," + scale; // has both max length and scale. For ex- decimal(10,2)
+            }
+            sqlTypeName = sqlTypeName + ")";
         }
         return sqlTypeName;
     }
@@ -1139,8 +1150,8 @@ public class PhoenixRuntime {
         kvSchema.iterator(ptr);
         int i = 0;
         List<Object> values = new ArrayList<Object>();
-        while(hasValue = kvSchema.next(ptr, i, maxOffset, valueSet) != null) {
-            if(hasValue) {
+        while (hasValue = kvSchema.next(ptr, i, maxOffset, valueSet) != null) {
+            if (hasValue) {
                 values.add(kvSchema.getField(i).getDataType().toObject(ptr));
             }
             i++;
@@ -1203,8 +1214,8 @@ public class PhoenixRuntime {
         kvSchema.iterator(ptr);
         int i = 0;
         List<Object> values = new ArrayList<Object>();
-        while(hasValue = kvSchema.next(ptr, i, maxOffset, valueSet) != null) {
-            if(hasValue) {
+        while (hasValue = kvSchema.next(ptr, i, maxOffset, valueSet) != null) {
+            if (hasValue) {
                 values.add(kvSchema.getField(i).getDataType().toObject(ptr));
             }
             i++;
@@ -1249,10 +1260,10 @@ public class PhoenixRuntime {
     
     @Deprecated
     private static PColumn getPColumn(PTable table, @Nullable String familyName, String columnName) throws SQLException {
-        if (table==null) {
+        if (table == null) {
             throw new SQLException("Table must not be null.");
         }
-        if (columnName==null) {
+        if (columnName == null) {
             throw new SQLException("columnName must not be null.");
         }
         // normalize and remove quotes from family and column names before looking up.
@@ -1284,10 +1295,10 @@ public class PhoenixRuntime {
     }
 
     private static PColumn getColumn(PTable table, @Nullable String familyName, String columnName) throws SQLException {
-        if (table==null) {
+        if (table == null) {
             throw new SQLException("Table must not be null.");
         }
-        if (columnName==null) {
+        if (columnName == null) {
             throw new SQLException("columnName must not be null.");
         }
         // normalize and remove quotes from family and column names before looking up.
@@ -1377,22 +1388,22 @@ public class PhoenixRuntime {
     }
     
     private static Map<String, Long> createMetricMap(Map<MetricType, Long> metricInfoMap) {
-    	Map<String, Long> metricMap = Maps.newHashMapWithExpectedSize(metricInfoMap.size());
-    	for (Entry<MetricType, Long> entry : metricInfoMap.entrySet()) {
-    		metricMap.put(entry.getKey().shortName(), entry.getValue());
-    	}
-    	return metricMap;
-	}
+        Map<String, Long> metricMap = Maps.newHashMapWithExpectedSize(metricInfoMap.size());
+        for (Entry<MetricType, Long> entry : metricInfoMap.entrySet()) {
+            metricMap.put(entry.getKey().shortName(), entry.getValue());
+        }
+        return metricMap;
+    }
     
-	private static Map<String, Map<String, Long>> transformMetrics(Map<String, Map<MetricType, Long>> metricMap) {
-		Function<Map<MetricType, Long>, Map<String, Long>> func = new Function<Map<MetricType, Long>, Map<String, Long>>() {
-			@Override
-			public Map<String, Long> apply(Map<MetricType, Long> map) {
-				return createMetricMap(map);
-			}
-		};
-		return Maps.transformValues(metricMap, func);
-	}
+    private static Map<String, Map<String, Long>> transformMetrics(Map<String, Map<MetricType, Long>> metricMap) {
+        Function<Map<MetricType, Long>, Map<String, Long>> func = new Function<Map<MetricType, Long>, Map<String, Long>>() {
+            @Override
+            public Map<String, Long> apply(Map<MetricType, Long> map) {
+                return createMetricMap(map);
+            }
+        };
+        return Maps.transformValues(metricMap, func);
+    }
     
     /**
      * Method to expose the metrics associated with performing reads using the passed result set. A typical pattern is:
