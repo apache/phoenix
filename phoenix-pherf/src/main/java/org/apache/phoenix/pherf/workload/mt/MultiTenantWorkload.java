@@ -17,30 +17,65 @@
  */
 
 package org.apache.phoenix.pherf.workload.mt;
-
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
+import org.apache.phoenix.pherf.workload.Workload;
+import org.apache.phoenix.pherf.workload.mt.generators.LoadEventGenerator;
+import org.apache.phoenix.pherf.workload.mt.generators.TenantOperationInfo;
+import org.apache.phoenix.pherf.workload.mt.handlers.PherfWorkHandler;
+import org.apache.phoenix.pherf.workload.mt.generators.TenantLoadEventGeneratorFactory;
+import org.apache.phoenix.pherf.workload.mt.handlers.TenantOperationWorkHandler;
+import org.apache.phoenix.pherf.workload.mt.operations.TenantOperationFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.Callable;
 
-public interface MultiTenantWorkload {
-    /**
-     * Initializes and readies the processor for continuous queue based workloads
-     */
-    void start();
+/**
+ * This class creates workload for tenant based load profiles.
+ * It uses @see {@link TenantOperationFactory} in conjunction with
+ * @see {@link LoadEventGenerator} to generate the load events.
+ * It then publishes these events onto a RingBuffer based queue.
+ * The @see {@link TenantOperationWorkHandler} drains the events from the queue and executes them.
+ * Reference for RingBuffer based queue http://lmax-exchange.github.io/disruptor/
+ */
 
-    /**
-     * Stop the processor and cleans up the workload queues.
-     */
-    void stop();
+public class MultiTenantWorkload implements Workload {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MultiTenantWorkload.class);
+    private final TenantLoadEventGeneratorFactory evtGeneratorFactory
+            = new TenantLoadEventGeneratorFactory();
+    private final LoadEventGenerator<TenantOperationInfo> generator;
 
 
-    PhoenixUtil getPhoenixUtil();
+    public MultiTenantWorkload(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario,
+            Properties properties) {
+        this.generator =  evtGeneratorFactory.newLoadEventGenerator(phoenixUtil,
+                model, scenario, properties);
+    }
 
-    Scenario getScenario();
+    public MultiTenantWorkload(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario,
+            List<PherfWorkHandler> workHandlers, Properties properties) throws Exception {
+        this.generator =  evtGeneratorFactory.newLoadEventGenerator(phoenixUtil,
+                model, scenario, workHandlers, properties);
+    }
 
-    DataModel getModel();
+    @Override public Callable<Void> execute() throws Exception {
+        return new Callable<Void>() {
+            @Override public Void call() throws Exception {
+                generator.start();
+                return null;
+            }
+        };
+    }
 
-    Properties getProperties();
+    @Override public void complete() {
+        try {
+            generator.stop();
+        } catch (Exception e) {
+            LOGGER.error(e.getMessage());
+        }
+    }
 }
