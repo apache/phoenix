@@ -45,6 +45,7 @@ public class Scenario {
     private LoadProfile loadProfile = null;
 
     private String name;
+    private String generatorName;
     private String tenantId;
     private List<Ddl> preScenarioDdls;
     private List<Ddl> postScenarioDdls;
@@ -86,6 +87,20 @@ public class Scenario {
 
     public void setTableName(String tableName) {
         this.tableName = tableName;
+    }
+
+    /**
+     * Generator name for a scenario
+     *
+     * @return
+     */
+    @XmlAttribute()
+    public String getGeneratorName() {
+        return generatorName;
+    }
+
+    public void setGeneratorName(String name) {
+        this.generatorName = name;
     }
 
     /**

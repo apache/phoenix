@@ -230,7 +230,17 @@
         </column>
     </datamapping>
     <scenarios>
-        <scenario tableName="PHERF.Z11" name="scenario_11">
+        <scenario tableName="PHERF.Z11" name="scenario_11" generatorName="UNIFORM">
+            <phoenixProperties>
+                <entry>
+                    <key>pherf.mt.handlers_per_scenario</key>
+                    <value>2</value>
+                </entry>
+                <entry>
+                    <key>pherf.mt.uniform.benchmark_mode</key>
+                    <value>true</value>
+                </entry>
+            </phoenixProperties>
             <loadProfile>
                 <batchSize>1</batchSize>
                 <numOperations>1000</numOperations>

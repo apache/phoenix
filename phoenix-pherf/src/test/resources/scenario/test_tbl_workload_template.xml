@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one
+  ~   or more contributor license agreements.  See the NOTICE file
+  ~   distributed with this work for additional information
+  ~   regarding copyright ownership.  The ASF licenses this file
+  ~   to you under the Apache License, Version 2.0 (the
+  ~   "License"); you may not use this file except in compliance
+  ~   with the License.  You may obtain a copy of the License at
+  ~
+  ~   http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~   Unless required by applicable law or agreed to in writing, software
+  ~   distributed under the License is distributed on an "AS IS" BASIS,
+  ~   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~   See the License for the specific language governing permissions and
+  ~   limitations under the License.
+  -->
+
+<datamodel name="TEST_MT_TABLE_MODEL">
+    <datamapping>
+        <column>
+            <type>CHAR</type>
+            <length>2</length>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <name>HOST</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <!-- ["NA","CS","EU"] -->
+                <datavalue distribution="34">
+                    <value>NA</value>
+                </datavalue>
+                <datavalue distribution="33">
+                    <value>CS</value>
+                </datavalue>
+                <datavalue distribution="33">
+                    <value>EU</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>VARCHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <name>DOMAIN</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <!-- ["Salesforce.com","Apple.com","Google.com","Amazon.com"]-->
+                <datavalue distribution="25">
+                    <value>Salesforce.com</value>
+                </datavalue>
+                <datavalue distribution="25">
+                    <value>Apple.com</value>
+                </datavalue>
+                <datavalue distribution="25">
+                    <value>Google.com</value>
+                </datavalue>
+                <datavalue distribution="25">
+                    <value>Amazon.com</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>VARCHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <name>FEATURE</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <!-- ["Login","Report","Dashboard","Sales","UI"]-->
+                <datavalue distribution="20">
+                    <value>Login</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>Report</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>Dashboard</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>Sales</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>UI</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>DATE</type>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <name>DATE</name>
+        </column>
+        <column>
+            <type>DATE</type>
+            <userDefined>true</userDefined>
+            <!--SEQUENTIAL is unsupported for DATE -->
+            <dataSequence>RANDOM</dataSequence>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <minValue>2020</minValue>
+            <maxValue>2025</maxValue>
+            <name>DATE_O</name>
+        </column>
+
+        <column>
+            <type>BIGINT</type>
+            <dataSequence>RANDOM</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>100</maxValue>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <name>USAGE.CORE</name>
+        </column>
+        <column>
+            <type>BIGINT</type>
+            <dataSequence>RANDOM</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>2000</maxValue>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <name>USAGE.DB</name>
+        </column>
+        <column>
+            <type>INTEGER</type>
+            <dataSequence>RANDOM</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>10000</maxValue>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <name>STATS.ACTIVE_VISITOR</name>
+        </column>
+    </datamapping>
+    <scenarios>
+        <scenario tableName="PHERF.TEST_MULTI_TENANT_TABLE" name="TEST_TABLE_WRITE" generatorName="WEIGHTED">
+            <loadProfile>
+                <numOperations>1</numOperations>
+                <tenantDistribution useGlobalConnection="true"/>
+                <opDistribution id="upsertOp" weight="100"/>
+            </loadProfile>
+
+            <upserts>
+                <upsert id="upsertOp" useGlobalConnection="true" upsertGroup="write"/>
+            </upserts>
+        </scenario>
+        <scenario tableName="PHERF.TEST_MULTI_TENANT_TABLE" name="TEST_TABLE_READ" generatorName="WEIGHTED">
+            <loadProfile>
+                <numOperations>1</numOperations>
+                <tenantDistribution useGlobalConnection="true"/>
+                <opDistribution id="queryOp1" weight="50"/>
+                <opDistribution id="queryOp2" weight="50"/>
+            </loadProfile>
+
+            <querySet>
+                <query id="queryOp1" useGlobalConnection="true" statement="select count(*) from PHERF.TEST_MULTI_TENANT_TABLE" queryGroup="Aggregation"/>
+                <query id="queryOp2" useGlobalConnection="true" statement="select * from PHERF.TEST_MULTI_TENANT_TABLE LIMIT 100" queryGroup="LIMIT"/>
+            </querySet>
+        </scenario>
+    </scenarios>
+</datamodel>

@@ -24,12 +24,25 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
-import org.apache.phoenix.pherf.rules.RulesApplier;
+import org.apache.phoenix.pherf.configuration.Column;
+import org.apache.phoenix.pherf.configuration.DataOverride;
+import org.apache.phoenix.pherf.configuration.DataSequence;
+import org.apache.phoenix.pherf.configuration.DataTypeMapping;
+import org.apache.phoenix.pherf.configuration.Ddl;
+import org.apache.phoenix.pherf.configuration.ExecutionType;
+import org.apache.phoenix.pherf.configuration.Query;
+import org.apache.phoenix.pherf.configuration.QuerySet;
+import org.apache.phoenix.pherf.configuration.WriteParams;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
-import org.apache.phoenix.pherf.configuration.*;
+import org.apache.phoenix.pherf.configuration.DataModel;
+import org.apache.phoenix.pherf.configuration.LoadProfile;
+import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.rules.DataValue;
+import org.apache.phoenix.pherf.workload.mt.generators.TenantLoadEventGeneratorFactory;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -140,6 +153,15 @@ public class ConfigurationParserTest extends ResultBaseTest {
         }
 
         Scenario testScenarioWithLoadProfile = scenarioList.get(0);
+        Map<String, String> props = testScenarioWithLoadProfile.getPhoenixProperties();
+        assertEquals("Number of properties(size) not as expected: ",
+                2, props.size());
+        TenantLoadEventGeneratorFactory.GeneratorType
+                type = TenantLoadEventGeneratorFactory.GeneratorType.valueOf(
+                        testScenarioWithLoadProfile.getGeneratorName());
+        assertEquals("Unknown generator type: ",
+                TenantLoadEventGeneratorFactory.GeneratorType.UNIFORM, type);
+
         LoadProfile loadProfile = testScenarioWithLoadProfile.getLoadProfile();
         assertEquals("batch size not as expected: ",
                 1, loadProfile.getBatchSize());
