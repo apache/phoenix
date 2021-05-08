@@ -236,6 +236,7 @@
 								<include>commons-io:commons-io</include>
 								<include>com.google.code.gson:gson</include>
 								<include>com.lmax:disruptor</include>
+								<include>commons-io:commons-io</include>
 							</includes>
 						</artifactSet>
 						<filters>
