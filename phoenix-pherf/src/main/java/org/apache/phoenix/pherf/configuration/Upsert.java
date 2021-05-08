@@ -22,8 +22,6 @@ import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 import javax.xml.bind.annotation.XmlAttribute;
-import javax.xml.bind.annotation.XmlElement;
-import javax.xml.bind.annotation.XmlElementWrapper;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
