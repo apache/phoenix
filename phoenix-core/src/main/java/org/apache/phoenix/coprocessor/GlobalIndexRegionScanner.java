@@ -129,6 +129,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     protected byte[][] viewConstants;
     protected IndexVerificationOutputRepository verificationOutputRepository = null;
     protected boolean skipped = false;
+    protected boolean shouldRetry = false;
     protected boolean shouldVerifyCheckDone = false;
     final protected RegionCoprocessorEnvironment env;
     protected byte[][] regionEndKeys;
@@ -379,7 +380,14 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         if(verificationResultTemp != null) {
             verificationResult = verificationResultTemp;
         }
+
         shouldVerifyCheckDone = true;
+        if (verificationResult != null && verificationResult.getShouldRetry()) {
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("ShouldRetry is true. " + region.getRegionInfo().getRegionNameAsString());
+            }
+            return true;
+        }
         return verificationResultTemp == null;
     }
 
@@ -414,7 +422,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             try {
                 if (verificationResultRepository != null) {
                     verificationResultRepository.logToIndexToolResultTable(verificationResult,
-                            verifyType, region.getRegionInfo().getRegionName(), skipped);
+                            verifyType, region.getRegionInfo().getRegionName(), skipped, shouldRetry);
                 }
             } finally {
                 this.pool.stop("IndexRegionObserverRegionScanner is closing");
