@@ -301,6 +301,22 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testSetPropertySchemaVersion() throws Exception {
+        Properties props = new Properties();
+        final String schemaName = generateUniqueName();
+        final String tableName = generateUniqueName();
+        final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, "V1.0");
+            String version = "V1.1";
+            String alterSql = "ALTER TABLE " + dataTableFullName + " SET SCHEMA_VERSION='" + version + "'";
+            conn.createStatement().execute(alterSql);
+            PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+            assertEquals(version, table.getSchemaVersion());
+        }
+    }
+
 
     @Test
     public void testDropColumnFromSaltedTable() throws Exception {

@@ -325,6 +325,25 @@ public class ViewIT extends SplitSystemCatalogIT {
     }
 
     @Test
+    public void testCreateViewSchemaVersion() throws Exception {
+        Properties props = new Properties();
+        final String schemaName = generateUniqueName();
+        final String tableName = generateUniqueName();
+        final String viewName = generateUniqueName();
+        final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
+        final String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String version = "V1.0";
+            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, version);
+            String createViewSql = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName +
+                    " SCHEMA_VERSION='" + version + "'";
+            conn.createStatement().execute(createViewSql);
+            PTable view = PhoenixRuntime.getTableNoCache(conn, viewFullName);
+            assertEquals(version, view.getSchemaVersion());
+        }
+    }
+
+    @Test
     public void testCreateViewTimestamp() throws Exception {
         String tenantId = null;
         createViewTimestampHelper(tenantId);
