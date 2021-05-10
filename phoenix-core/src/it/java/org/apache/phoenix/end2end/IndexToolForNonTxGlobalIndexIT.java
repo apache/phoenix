@@ -591,6 +591,49 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
     }
 
     @Test
+    public void testIndexToolFailedMapperNotRecordToResultTable() throws Exception {
+        if (mutable != true || singleCell != true ) {
+            return;
+        }
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String schemaName = generateUniqueName();
+            String dataTableName = generateUniqueName();
+            String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+            String indexTableName = generateUniqueName();
+            String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
+            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
+                    + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
+                    + tableDDLOptions);
+            conn.commit();
+            // Insert a row
+            conn.createStatement().execute("upsert into " + dataTableFullName + " values (1, 'Phoenix', 12345)");
+            conn.commit();
+            // Configure IndexRegionObserver to fail the first write phase. This should not
+            // lead to any change on index and thus the index verify during index rebuild should fail
+            IndexRebuildRegionScanner.setThrowExceptionForRebuild(true);
+            conn.createStatement().execute(String.format(
+                    "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC " + this.indexDDLOptions, indexTableName, dataTableFullName));
+            // Run the index MR job and verify that the index table rebuild fails
+            IndexTool it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                    null, -1, IndexTool.IndexVerifyType.BEFORE);
+            Assert.assertEquals(PIndexState.BUILDING, TestUtil.getIndexState(conn, indexTableFullName));
+
+            // Now there is no exception, so the second partial build should retry
+            Long scn = it.getJob().getConfiguration().getLong(CURRENT_SCN_VALUE, 1L);
+            IndexRebuildRegionScanner.setThrowExceptionForRebuild(false);
+            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                    null, 0, IndexTool.IndexVerifyType.BEFORE,"-rv", Long.toString(scn));
+            Assert.assertEquals(PIndexState.ACTIVE, TestUtil.getIndexState(conn, indexTableFullName));
+            ResultSet rs =
+                    conn.createStatement()
+                            .executeQuery("SELECT COUNT(*) FROM " + indexTableFullName);
+            rs.next();
+            assertEquals(1, rs.getInt(1));
+        }
+    }
+
+    @Test
     public void testIndexToolOnlyVerifyOption() throws Exception {
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();

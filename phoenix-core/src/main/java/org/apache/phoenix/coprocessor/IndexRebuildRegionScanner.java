@@ -70,8 +70,9 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexRebuildRegionScanner.class);
     private static boolean ignoreIndexRebuildForTesting  = false;
-
+    private static boolean throwExceptionForRebuild  = false;
     public static void setIgnoreIndexRebuildForTesting(boolean ignore) { ignoreIndexRebuildForTesting = ignore; }
+    public static void setThrowExceptionForRebuild(boolean throwException) { throwExceptionForRebuild = throwException; }
     private int singleRowRebuildReturnCode;
 
 
@@ -143,6 +144,9 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                                     IndexToolVerificationResult verificationResult) throws IOException {
         if (ignoreIndexRebuildForTesting) {
             return;
+        }
+        if (throwExceptionForRebuild) {
+            throw new IOException("Exception for testing. Something happened");
         }
         updateIndexRows(indexMutationMap, indexRowsToBeDeleted, verificationResult);
     }
@@ -357,6 +361,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         } catch (Throwable e) {
             LOGGER.error("Exception in IndexRebuildRegionScanner for region "
                     + region.getRegionInfo().getRegionNameAsString(), e);
+            this.shouldRetry = true;
             throw e;
         } finally {
             region.closeRegionOperation();
