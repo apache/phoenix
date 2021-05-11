@@ -20,6 +20,11 @@ package org.apache.phoenix.monitoring;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * TableMetricsManager will be replaced by this case
+ * incase of tableMetrics flag is set to  false.
+ */
+
 public class NoOpTableMetricsManager extends TableMetricsManager {
 
     public static NoOpTableMetricsManager noOpsTableMetricManager = new NoOpTableMetricsManager();

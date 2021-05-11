@@ -26,6 +26,11 @@ import org.apache.hadoop.hbase.metrics.MetricRegistryInfo;
 
 import java.util.Map;
 
+/**
+ * This class implements the JMX based default Metric publishing
+ * of Metrics to JMX end point.
+ * This class is defined in phoenix/phoenix-core/src/main/resources/META-INF/services/org.apache.phoenix.monitoring.MetricPublisherSupplierFactory
+ */
 public class JmxMetricProvider implements MetricPublisherSupplierFactory {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(JmxMetricProvider.class);
@@ -75,7 +80,11 @@ public class JmxMetricProvider implements MetricPublisherSupplierFactory {
     }
 
     @Override public void unRegisterMetrics(TableClientMetrics tInstance) {
-
+        for (Map.Entry<MetricType, PhoenixTableMetric> entry : tInstance.getMetricRegistry()
+                .entrySet()) {
+            metricRegistry
+                    .remove(getMetricNameFromMetricType(entry.getKey(), tInstance.getTableName()));
+        }
     }
 
 }

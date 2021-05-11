@@ -38,7 +38,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
-
 /**
  * Queue that tracks various writes/mutations related phoenix request metrics.
  */
@@ -227,7 +226,6 @@ public class MutationMetricQueue {
             this.deleteBatchFailedSize.combine(other.deleteBatchFailedSize);
             this.deleteBatchFailedCounter.combine(other.deleteBatchFailedCounter);
         }
-
 
     }
 

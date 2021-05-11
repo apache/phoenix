@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
+import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.slf4j.Logger;
@@ -119,7 +120,7 @@ public class TableMetricsManager {
         return localRef;
     }
 
-   public static void setInstance(TableMetricsManager metricsManager) {
+    @VisibleForTesting public static void setInstance(TableMetricsManager metricsManager) {
         tableMetricsManager = metricsManager;
     }
 
@@ -156,7 +157,7 @@ public class TableMetricsManager {
         }
     }
 
-    public static Long getMetricValue(String tableName, MetricType type) {
+    @VisibleForTesting public static Long getMetricValue(String tableName, MetricType type) {
         TableClientMetrics tableMetrics = getInstance().getTableClientMetrics(tableName);
         if (tableMetrics == null) {
             return null;

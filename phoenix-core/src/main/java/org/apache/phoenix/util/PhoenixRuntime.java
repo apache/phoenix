@@ -44,6 +44,7 @@ import java.util.TreeSet;
 
 import javax.annotation.Nullable;
 
+import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.monitoring.PhoenixTableMetric;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
@@ -1382,6 +1383,7 @@ public class PhoenixRuntime {
     /**
      * This is only used in testcases to reset the tableLevel Metrics data
      */
+    @VisibleForTesting
     public static void clearTableLevelMetrics(){
         TableMetricsManager.clearTableLevelMetricsMethod();
     }

@@ -23,9 +23,7 @@ import static org.junit.Assert.assertTrue;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.junit.Test;
-import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -66,7 +64,6 @@ import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.upsertMuta
 import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.tableNames;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 
 /**
  * This test does UT for TableClientMetrics class
