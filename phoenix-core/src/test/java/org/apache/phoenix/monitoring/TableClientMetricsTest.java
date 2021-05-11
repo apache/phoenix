@@ -23,9 +23,7 @@ import static org.junit.Assert.assertTrue;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.junit.Test;
-import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 
