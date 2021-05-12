@@ -34,6 +34,11 @@ import java.util.Map;
 public class JmxMetricProvider implements MetricPublisherSupplierFactory {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(JmxMetricProvider.class);
+    private static final String metricsName = "PHOENIX-TableLevel";
+    private static final String metricsDesc = "Phoenix Client Metrics";
+    private static final String metricsjmxContext = "phoenixTableLevel";
+    private static final String metricsContext = "Phoenix,sub=CLIENT";
+
     private MetricRegistry metricRegistry;
 
     @Override public void registerMetricProvider() {
@@ -47,10 +52,9 @@ public class JmxMetricProvider implements MetricPublisherSupplierFactory {
 
     private  MetricRegistry createMetricRegistry() {
         LOGGER.info("Creating Metric Registry for Phoenix Table Level Metrics");
-        MetricRegistryInfo
-                registryInfo =
-                new MetricRegistryInfo("PHOENIX-TableLevel", "Phoenix Client Metrics",
-                        "phoenixTableLevel", "Phoenix,sub=CLIENT", true);
+        MetricRegistryInfo registryInfo =
+                new MetricRegistryInfo(metricsName, metricsDesc,
+                        metricsjmxContext, metricsContext, true);
         return MetricRegistries.global().create(registryInfo);
     }
 
