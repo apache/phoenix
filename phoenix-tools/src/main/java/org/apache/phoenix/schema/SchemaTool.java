@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
+import org.apache.hadoop.yarn.webapp.hamlet.HamletSpec;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
@@ -35,13 +36,18 @@ import org.apache.hadoop.util.ToolRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class SchemaExtractionTool extends Configured implements Tool {
+public class SchemaTool extends Configured implements Tool {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(SchemaExtractionTool.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SchemaTool.class);
     private static final Option HELP_OPTION = new Option("h", "help",
             false, "Help");
+    private static final Option MODE_OPTION = new Option("m", "mode", true,
+            "[Required] Takes either synth or extract value");
+    private static final Option DDL_OPTION = new Option("d", "ddl", true,
+            "[Required with synth mode] SQL file that has one or more ddl statements"
+                    + " for the same entity");
     private static final Option TABLE_OPTION = new Option("tb", "table", true,
-            "[Required] Table name ex. table1");
+            "[Required with extract mode] Table name ex. table1");
     private static final Option SCHEMA_OPTION = new Option("s", "schema", true,
             "[Optional] Schema name ex. schema");
     private static final Option TENANT_OPTION = new Option("t", "tenant", true,
@@ -50,18 +56,27 @@ public class SchemaExtractionTool extends Configured implements Tool {
     private String pTableName;
     private String pSchemaName;
     private String tenantId;
+    private Enum mode;
 
-    public static Configuration conf;
+    protected static Configuration conf;
     private String output;
+    private String ddlFile;
+    private String alterDDLFile;
 
     @Override
     public int run(String[] args) throws Exception {
         populateToolAttributes(args);
-        conf = HBaseConfiguration.addHbaseResources(getConf());
-        SchemaExtractionProcessor processor = new SchemaExtractionProcessor(tenantId,
-                conf, pSchemaName, pTableName);
+        SchemaProcessor processor=null;
+        if(Mode.SYNTH.equals(mode)) {
+            processor = new SchemaSynthesisProcessor(ddlFile);
+        } else if(Mode.EXTRACT.equals(mode)) {
+            conf = HBaseConfiguration.addHbaseResources(getConf());
+            processor = new SchemaExtractionProcessor(tenantId, conf, pSchemaName, pTableName);
+        } else {
+            throw new Exception(mode+" is not accepted, provide [synth or extract]");
+        }
         output = processor.process();
-        LOGGER.info("Extracted DDL: " + output);
+        LOGGER.info("Effective DDL with " + mode.toString() +": " + output);
         return 0;
     }
 
@@ -72,10 +87,12 @@ public class SchemaExtractionTool extends Configured implements Tool {
     private void populateToolAttributes(String[] args) {
         try {
             CommandLine cmdLine = parseOptions(args);
+            mode = Mode.valueOf(cmdLine.getOptionValue(MODE_OPTION.getOpt()));
+            ddlFile = cmdLine.getOptionValue(DDL_OPTION.getOpt());
             pTableName = cmdLine.getOptionValue(TABLE_OPTION.getOpt());
             pSchemaName = cmdLine.getOptionValue(SCHEMA_OPTION.getOpt());
             tenantId = cmdLine.getOptionValue(TENANT_OPTION.getOpt());
-            LOGGER.info("Schema Extraction Tool initiated: " + StringUtils.join( args, ","));
+            LOGGER.info("Schema Tool initiated: " + StringUtils.join( args, ","));
         } catch (IllegalStateException e) {
             printHelpAndExit(e.getMessage(), getOptions());
         }
@@ -91,19 +108,35 @@ public class SchemaExtractionTool extends Configured implements Tool {
             printHelpAndExit("severe parsing command line options: " + e.getMessage(),
                     options);
         }
+        if(cmdLine == null) {
+            printHelpAndExit("parsed command line object is null", options);
+        }
         if (cmdLine.hasOption(HELP_OPTION.getOpt())) {
             printHelpAndExit(options, 0);
         }
-        if (!(cmdLine.hasOption(TABLE_OPTION.getOpt()))) {
-            throw new IllegalStateException("Table name should be passed "
+        if (!(cmdLine.hasOption(TABLE_OPTION.getOpt()))
+                && cmdLine.getOptionValue(MODE_OPTION.getOpt()).equalsIgnoreCase(Mode.EXTRACT.toString())) {
+            throw new IllegalStateException("Table name should be passed with EXTRACT mode"
                     +TABLE_OPTION.getLongOpt());
         }
+        if ((!(cmdLine.hasOption(DDL_OPTION.getOpt())))
+                && cmdLine.getOptionValue(MODE_OPTION.getOpt()).equalsIgnoreCase(Mode.SYNTH.toString())) {
+            throw new IllegalStateException("ddl option should be passed with SYNTH mode"
+                    + DDL_OPTION.getLongOpt());
+        }
         return cmdLine;
+    }
+
+    enum Mode {
+        SYNTH,
+        EXTRACT
     }
 
     private Options getOptions() {
         final Options options = new Options();
         options.addOption(TABLE_OPTION);
+        options.addOption(MODE_OPTION);
+        options.addOption(DDL_OPTION);
         SCHEMA_OPTION.setOptionalArg(true);
         options.addOption(SCHEMA_OPTION);
         TENANT_OPTION.setOptionalArg(true);
@@ -123,7 +156,7 @@ public class SchemaExtractionTool extends Configured implements Tool {
     }
 
     public static void main (String[] args) throws Exception {
-        int result = ToolRunner.run(new SchemaExtractionTool(), args);
+        int result = ToolRunner.run(new SchemaTool(), args);
         System.exit(result);
     }
 }
