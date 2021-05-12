@@ -19,6 +19,7 @@ package org.apache.phoenix.parse;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Pair;
 
@@ -37,5 +38,20 @@ public class IndexKeyConstraint {
 
     public List<Pair<ParseNode, SortOrder>> getParseNodeAndSortOrderList() {
         return columnNameToSortOrder;
+    }
+
+    @Override
+    public String toString() {
+        StringBuffer sb = new StringBuffer();
+        for(Pair<ParseNode, SortOrder> entry : columnNameToSortOrder) {
+            if(sb.length()!=0) {
+                sb.append(", ");
+            }
+            sb.append(entry.getFirst().toString());
+            if(entry.getSecond() != SortOrder.getDefault()) {
+                sb.append(" "+entry.getSecond());
+            }
+        }
+        return sb.toString();
     }
 }
