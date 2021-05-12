@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.monitoring;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -25,12 +26,13 @@ import java.util.Map;
  * incase of tableMetrics flag is set to  false.
  */
 
+
 public class NoOpTableMetricsManager extends TableMetricsManager {
 
-    public static NoOpTableMetricsManager noOpsTableMetricManager = new NoOpTableMetricsManager();
+    public static final NoOpTableMetricsManager noOpsTableMetricManager = new NoOpTableMetricsManager();
 
     private NoOpTableMetricsManager() {
-
+        super();
     }
 
     @Override public void updateMetrics(String tableName, MetricType type, long value) {
@@ -46,6 +48,6 @@ public class NoOpTableMetricsManager extends TableMetricsManager {
     }
 
     @Override public Map<String, List<PhoenixTableMetric>> getTableLevelMetrics() {
-        return null;
+        return Collections.emptyMap();
     }
 }
