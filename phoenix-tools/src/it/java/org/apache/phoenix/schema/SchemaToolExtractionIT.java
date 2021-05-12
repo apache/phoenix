@@ -46,7 +46,7 @@ import java.util.Properties;
 import static junit.framework.TestCase.fail;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
-public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
+public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
 
     @BeforeClass
     public static synchronized void setup() throws Exception {
@@ -479,14 +479,14 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
         if (tenantId == null) {
             try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
                 executeCreateStatements(conn, queries);
-                String [] args = {"-tb", tableName, "-s", schemaName};
-                output = extractSchema(conn, args);
+                String [] args = {"-m", "EXTRACT", "-tb", tableName, "-s", schemaName};
+                output = runSchemaTool(conn, args);
             }
         } else {
             try (Connection conn = getTenantConnection(getUrl(), tenantId)) {
                 executeCreateStatements(conn, queries);
-                String [] args = {"-tb", tableName, "-s", schemaName, "-t", tenantId};
-                output = extractSchema(conn, args);
+                String [] args = {"-m", "EXTRACT","-tb", tableName, "-s", schemaName, "-t", tenantId};
+                output = runSchemaTool(conn, args);
             }
         }
         return output;
@@ -499,9 +499,11 @@ public class SchemaExtractionToolIT extends ParallelStatsEnabledIT {
         conn.commit();
     }
 
-    private String extractSchema(Connection conn, String [] args) throws Exception {
-        SchemaExtractionTool set = new SchemaExtractionTool();
-        set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
+    public static String runSchemaTool(Connection conn, String [] args) throws Exception {
+        SchemaTool set = new SchemaTool();
+        if(conn!=null) {
+            set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
+        }
         set.run(args);
         return set.getOutput();
     }

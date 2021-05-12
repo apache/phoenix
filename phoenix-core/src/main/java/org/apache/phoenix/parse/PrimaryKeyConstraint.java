@@ -91,5 +91,19 @@ public class PrimaryKeyConstraint extends NamedNode {
     public boolean equals(Object obj) {
         return super.equals(obj);
     }
-    
+
+    @Override
+    public String toString() {
+        StringBuffer sb = new StringBuffer();
+        for(Map.Entry<ColumnName, Pair<ColumnName, SortOrder>> entry : columnNameToSortOrder.entrySet()) {
+            if(sb.length()!=0) {
+                sb.append(", ");
+            }
+            sb.append(entry.getKey());
+            if(entry.getValue().getSecond() != SortOrder.getDefault()) {
+                sb.append(" "+entry.getValue().getSecond());
+            }
+        }
+        return sb.toString();
+    }
 }

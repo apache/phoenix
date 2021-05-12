@@ -59,7 +59,21 @@ public class CreateTableStatement extends MutableStatement {
         this.whereClause = createTable.whereClause;
         this.immutableRows = createTable.immutableRows;
     }
-    
+
+    public CreateTableStatement(CreateTableStatement createTable, ListMultimap<String,Pair<String,Object>>  props, List<ColumnDef> columns) {
+        this.tableName = createTable.tableName;
+        this.tableType = createTable.tableType;
+        this.columns = ImmutableList.copyOf(columns);
+        this.pkConstraint = createTable.pkConstraint;
+        this.splitNodes = createTable.splitNodes;
+        this.bindCount = createTable.bindCount;
+        this.props = props;
+        this.ifNotExists = createTable.ifNotExists;
+        this.baseTableName = createTable.baseTableName;
+        this.whereClause = createTable.whereClause;
+        this.immutableRows = createTable.immutableRows;
+    }
+
     protected CreateTableStatement(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint,
             List<ParseNode> splitNodes, PTableType tableType, boolean ifNotExists, 
             TableName baseTableName, ParseNode whereClause, int bindCount, Boolean immutableRows) {
@@ -75,7 +89,7 @@ public class CreateTableStatement extends MutableStatement {
         this.whereClause = whereClause;
         this.immutableRows = immutableRows;
     }
-    
+
     public ParseNode getWhereClause() {
         return whereClause;
     }
