@@ -224,6 +224,12 @@ public interface QueryServices extends SQLCloseable {
     public static final String DEFAULT_TRANSACTION_PROVIDER_ATTRIB = "phoenix.table.transaction.provider.default";
     public static final String GLOBAL_METRICS_ENABLED = "phoenix.query.global.metrics.enabled";
 
+    public static final String TABLE_LEVEL_METRICS_ENABLED = "phoenix.monitoring.tableMetrics.enabled";
+    public static final String METRIC_PUBLISHER_ENABLED = "phoenix.monitoring.metricsPublisher.enabled";
+    public static final String METRIC_PUBLISHER_CLASS_NAME = "phoenix.monitoring.metricProvider.className";
+    public static final String ALLOWED_LIST_FOR_TABLE_LEVEL_METRICS = "phoenix.monitoring.allowedTableNames.list";
+
+
     // Tag Name to determine the Phoenix Client Type
     public static final String CLIENT_METRICS_TAG = "phoenix.client.metrics.tag";
     

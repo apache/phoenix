@@ -45,6 +45,7 @@ public class DelayedRegionServer extends MiniHBaseCluster.MiniHBaseClusterRegion
     private static int DELAY_GET = 0;
     private static int DELAY_SCAN = 30000;
     private static int DELAY_MUTATE = 0;
+    private static int DELAY_MULTI_OP = 0;
 
     public static void setDelayEnabled(boolean delay) {
         doDelay = delay;
@@ -60,6 +61,10 @@ public class DelayedRegionServer extends MiniHBaseCluster.MiniHBaseClusterRegion
 
     public static void setDelayMutate(int delayMutate) {
         DELAY_MUTATE = delayMutate;
+    }
+
+    public static void setDelayMultiOp(int delayMultiOp) {
+        DELAY_MULTI_OP = delayMultiOp;
     }
 
     public DelayedRegionServer(Configuration conf, CoordinatedStateManager cp)
@@ -102,6 +107,19 @@ public class DelayedRegionServer extends MiniHBaseCluster.MiniHBaseClusterRegion
                 LOGGER.error("Sleep interrupted during mutate operation", e);
             }
             return super.mutate(rpcc, request);
+        }
+
+        @Override
+        public ClientProtos.MultiResponse multi(RpcController rpcc,
+                ClientProtos.MultiRequest request) throws ServiceException {
+            try {
+                if (doDelay) {
+                    Thread.sleep(DELAY_MULTI_OP);
+                }
+            } catch (InterruptedException e) {
+                LOGGER.error("Sleep interrupted during multi operation", e);
+            }
+            return super.multi(rpcc, request);
         }
 
         @Override public ClientProtos.ScanResponse scan(RpcController controller,
