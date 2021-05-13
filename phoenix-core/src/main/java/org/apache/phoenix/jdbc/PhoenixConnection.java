@@ -79,6 +79,7 @@ import org.apache.phoenix.iterate.TableResultIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -713,6 +714,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
             return;
         }
         try {
+            TableMetricsManager.pushMetricsFromConnInstanceMethod(getMutationMetrics());
             clearMetrics();
             try {
                 if (traceScope != null) {

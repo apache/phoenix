@@ -114,7 +114,7 @@ public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
         loggedConn.commit();
         assertTrue("Mutation write metrics for not found for " + tableName2,
                 mutationWriteMetricsMap.get(tableName2).size() > 0);
-        assertMutationMetrics(tableName2, NUM_ROWS, mutationWriteMetricsMap);
+        assertMutationMetrics(tableName2, NUM_ROWS, true, mutationWriteMetricsMap);
         assertTrue("Mutation read metrics for not found for " + tableName1,
                 mutationReadMetricsMap.get(tableName1).size() > 0);
         assertReadMetricsForMutatingSql(tableName1, 1, mutationReadMetricsMap);

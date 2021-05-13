@@ -44,6 +44,9 @@ import java.util.TreeSet;
 
 import javax.annotation.Nullable;
 
+import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.monitoring.PhoenixTableMetric;
+import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
@@ -1366,6 +1369,23 @@ public class PhoenixRuntime {
      */
     public static Collection<GlobalMetric> getGlobalPhoenixClientMetrics() {
         return GlobalClientMetrics.getMetrics();
+    }
+
+    /**
+     * This function will be called mainly in Metric Publisher methods.
+     * Its the only way Metric publisher will be able to access the metrics in phoenix system.
+     * @return map of TableName to List of GlobalMetric's.
+     */
+    public static Map<String,List<PhoenixTableMetric>> getPhoenixTableClientMetrics() {
+        return TableMetricsManager.getTableMetricsMethod();
+    }
+
+    /**
+     * This is only used in testcases to reset the tableLevel Metrics data
+     */
+    @VisibleForTesting
+    public static void clearTableLevelMetrics(){
+        TableMetricsManager.clearTableLevelMetricsMethod();
     }
     
     /**
