@@ -18,6 +18,10 @@
 package org.apache.phoenix.execute;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_FAILURE_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_SUCCESS_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_FAILURE_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER;
 import static org.apache.phoenix.query.QueryServices.SOURCE_OPERATION_ATTRIB;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_FAILED_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_SIZE;
@@ -30,6 +34,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUE
 import java.io.IOException;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -43,6 +48,8 @@ import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -76,6 +83,7 @@ import org.apache.phoenix.monitoring.MutationMetricQueue;
 import org.apache.phoenix.monitoring.MutationMetricQueue.MutationMetric;
 import org.apache.phoenix.monitoring.MutationMetricQueue.NoOpMutationMetricsQueue;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
+import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -155,6 +163,15 @@ public class MutationState implements SQLCloseable {
 
     private final MutationMetricQueue mutationMetricQueue;
     private ReadMetricQueue readMetricQueue;
+
+    private static boolean allUpsertsMutations = true;
+    private static boolean allDeletesMutations = true;
+
+    @VisibleForTesting
+    public static void resetAllMutationState(){
+        allDeletesMutations = true;
+        allUpsertsMutations = true;
+    }
 
     public MutationState(int maxSize, long maxSizeBytes, PhoenixConnection connection) {
         this(maxSize, maxSizeBytes, connection, false, null);
@@ -933,15 +950,33 @@ public class MutationState implements SQLCloseable {
         return serverTimeStamp == QueryConstants.UNSET_TIMESTAMP ? HConstants.LATEST_TIMESTAMP : serverTimeStamp;
     }
 
-    private static long calculateMutationSize(List<Mutation> mutations) {
+    static MutationBytes  calculateMutationSize(List<Mutation> mutations,  boolean updateGlobalClientMetrics ) {
         long byteSize = 0;
+        long tempSize;
+        long deleteSize = 0, deleteCounter = 0;
+        long upsertsize = 0, upsertCounter = 0;
         if (GlobalClientMetrics.isMetricsEnabled()) {
             for (Mutation mutation : mutations) {
-                byteSize += KeyValueUtil.calculateMutationDiskSize(mutation);
+                tempSize  = KeyValueUtil.calculateMutationDiskSize(mutation);
+                byteSize += tempSize;
+                if(mutation instanceof Delete ) {
+                    deleteSize += tempSize;
+                    deleteCounter++;
+                    allUpsertsMutations = false;
+                }else if(mutation instanceof Put) {
+                    upsertsize += tempSize;
+                    upsertCounter++;
+                    allDeletesMutations = false;
+                } else {
+                    allUpsertsMutations = false;
+                    allDeletesMutations = false;
+                }
             }
         }
-        GLOBAL_MUTATION_BYTES.update(byteSize);
-        return byteSize;
+        if (updateGlobalClientMetrics) {
+            GLOBAL_MUTATION_BYTES.update(byteSize);
+        }
+        return new MutationBytes(deleteCounter, deleteSize, byteSize, upsertCounter, upsertsize);
     }
 
     public long getBatchSizeBytes() {
@@ -950,6 +985,45 @@ public class MutationState implements SQLCloseable {
 
     public long getBatchCount() {
         return batchCount;
+    }
+
+    public static final class MutationBytes {
+
+        private long deleteMutationCounter;
+        private long deleteMutationBytes;
+        private long totalMutationBytes;
+        private long upsertMutationCounter;
+        private long upsertMutationBytes;
+
+        public MutationBytes(long deleteMutationCounter, long deleteMutationBytes, long totalMutationBytes, long
+                upsertMutationCounter, long upsertMutationBytes) {
+            this.deleteMutationCounter = deleteMutationCounter;
+            this.deleteMutationBytes = deleteMutationBytes;
+            this.totalMutationBytes = totalMutationBytes;
+            this.upsertMutationCounter = upsertMutationCounter;
+            this.upsertMutationBytes = upsertMutationBytes;
+        }
+
+
+        public long getDeleteMutationCounter() {
+            return deleteMutationCounter;
+        }
+
+        public long getDeleteMutationBytes() {
+            return deleteMutationBytes;
+        }
+
+        public long getTotalMutationBytes() {
+            return totalMutationBytes;
+        }
+
+        public long getUpsertMutationCounter() {
+            return upsertMutationCounter;
+        }
+
+        public long getUpsertMutationBytes() {
+            return upsertMutationBytes;
+        }
     }
 
     public enum MutationMetadataType {
@@ -1183,6 +1257,7 @@ public class MutationState implements SQLCloseable {
             Entry<TableInfo, List<Mutation>> pair = mutationsIterator.next();
             TableInfo tableInfo = pair.getKey();
             byte[] htableName = tableInfo.getHTableName().getBytes();
+            String htableNameStr = tableInfo.getHTableName().getString();
             List<Mutation> mutationList = pair.getValue();
             List<List<Mutation>> mutationBatchList =
                     getMutationBatchList(batchSize, batchSizeBytes, mutationList);
@@ -1194,12 +1269,13 @@ public class MutationState implements SQLCloseable {
             int retryCount = 0;
             boolean shouldRetry = false;
             long numMutations = 0;
-            long mutationSizeBytes = 0;
             long mutationCommitTime = 0;
             long numFailedMutations = 0;
             long numFailedPhase3Mutations = 0;
 
-            long startTime = 0;
+
+            long startTime = EnvironmentEdgeManager.currentTimeMillis();
+            MutationBytes totalMutationBytesObject = null;
             boolean shouldRetryIndexedMutation = false;
             IndexWriteException iwe = null;
             do {
@@ -1215,6 +1291,8 @@ public class MutationState implements SQLCloseable {
                 shouldRetry = cache != null;
                 SQLException sqlE = null;
                 Table hTable = connection.getQueryServices().getTable(htableName);
+                List<Mutation> currentMutationBatch = null;
+                boolean areAllBatchesSuccessful = false;
                 try {
                     if (table.isTransactional()) {
                         // Track tables to which we've sent uncommitted data
@@ -1231,13 +1309,14 @@ public class MutationState implements SQLCloseable {
                     }
                     numMutations = mutationList.size();
                     GLOBAL_MUTATION_BATCH_SIZE.update(numMutations);
-                    mutationSizeBytes = calculateMutationSize(mutationList);
+                    totalMutationBytesObject = calculateMutationSize(mutationList, true);
 
                     startTime = EnvironmentEdgeManager.currentTimeMillis();
                     child.addTimelineAnnotation("Attempt " + retryCount);
                     Iterator<List<Mutation>> itrListMutation = mutationBatchList.iterator();
                     while (itrListMutation.hasNext()) {
                         final List<Mutation> mutationBatch = itrListMutation.next();
+                        currentMutationBatch = mutationBatch;
                         if (shouldRetryIndexedMutation) {
                             // if there was an index write failure, retry the mutation in a loop
                             final Table finalHTable = hTable;
@@ -1316,8 +1395,8 @@ public class MutationState implements SQLCloseable {
                         // recalculate the estimated size
                         estimatedSize = KeyValueUtil.getEstimatedRowMutationSizeWithBatch(this.mutationsMap);
                     }
+                    areAllBatchesSuccessful = true;
                 } catch (Exception e) {
-                    mutationCommitTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
                     long serverTimestamp = ServerUtil.parseServerTimestamp(e);
                     SQLException inferredE = ServerUtil.parseServerExceptionOrNull(e);
                     if (inferredE != null) {
@@ -1374,9 +1453,45 @@ public class MutationState implements SQLCloseable {
                         GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT.update(numFailedPhase3Mutations);
                     }
                 } finally {
-                    MutationMetric mutationsMetric = new MutationMetric(numMutations, mutationSizeBytes,
-                            mutationCommitTime, numFailedMutations, numFailedPhase3Mutations);
-                    mutationMetricQueue.addMetricsForTable(Bytes.toString(htableName), mutationsMetric);
+                    mutationCommitTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
+                    GLOBAL_MUTATION_COMMIT_TIME.update(mutationCommitTime);
+                    MutationMetric failureMutationMetrics = MutationMetric.EMPTY_METRIC;
+                    if (!areAllBatchesSuccessful) {
+                        failureMutationMetrics =
+                                updateMutationBatchFailureMetrics(currentMutationBatch,
+                                        htableNameStr, numFailedMutations,
+                                        table.isTransactional());
+                    }
+
+                    MutationMetric committedMutationsMetric =
+                            getCommittedMutationsMetric(
+                                    totalMutationBytesObject,
+                                    mutationBatchList,
+                                    numMutations,
+                                    numFailedMutations,
+                                    numFailedPhase3Mutations,
+                                    mutationCommitTime);
+                    // Combine failure mutation metrics with committed ones for the final picture
+                    committedMutationsMetric.combineMetric(failureMutationMetrics);
+                    mutationMetricQueue.addMetricsForTable(htableNameStr, committedMutationsMetric);
+
+                    // updated only for all upsertMutations or all DeleteMutations
+                    if (allUpsertsMutations ^ allDeletesMutations) {
+                        //success cases are updated for both cases autoCommit=true and conn.commit explicit
+                        if(areAllBatchesSuccessful){
+                            TableMetricsManager
+                                    .updateMetricsMethod(htableNameStr, allUpsertsMutations ? UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER :
+                                            DELETE_AGGREGATE_SUCCESS_SQL_COUNTER, 1);
+                        }
+                        //Failures cases are updated only for conn.commit explicit case.
+                        if(!areAllBatchesSuccessful && !connection.getAutoCommit()){
+                            TableMetricsManager.updateMetricsMethod(htableNameStr, allUpsertsMutations ? UPSERT_AGGREGATE_FAILURE_SQL_COUNTER :
+                                    DELETE_AGGREGATE_FAILURE_SQL_COUNTER, 1);
+                        }
+
+                    }
+                    resetAllMutationState();
+
                     try {
                         if (cache != null) cache.close();
                     } finally {
@@ -1394,6 +1509,118 @@ public class MutationState implements SQLCloseable {
                 }
             } while (shouldRetry && retryCount++ < 1);
         }
+    }
+
+    /**
+     * Update metrics related to failed mutations
+     * @param failedMutationBatch the batch of mutations that failed
+     * @param tableName table that was to be mutated
+     * @param numFailedMutations total number of failed mutations
+     * @param isTransactional true if the table is transactional
+     */
+    @VisibleForTesting
+    public static MutationMetricQueue.MutationMetric updateMutationBatchFailureMetrics(
+            List<Mutation> failedMutationBatch,
+            String tableName,
+            long numFailedMutations,
+            boolean isTransactional) {
+        if (failedMutationBatch == null || failedMutationBatch.isEmpty() ||
+                Strings.isNullOrEmpty(tableName)) {
+            return MutationMetricQueue.MutationMetric.EMPTY_METRIC;
+        }
+        long numUpsertMutationsInBatch = 0L;
+        long numDeleteMutationsInBatch = 0L;
+
+        for (Mutation m : failedMutationBatch) {
+            if (m instanceof Put) {
+                numUpsertMutationsInBatch++;
+            } else if (m instanceof Delete) {
+                numDeleteMutationsInBatch++;
+            }
+        }
+        // Update the MUTATION_BATCH_FAILED_SIZE counter with the number of failed delete mutations
+        // in case we are dealing with all deletes for a non-transactional table, since there is a
+        // bug in sendMutations where we don't get the correct value for numFailedMutations when
+        // we don't use transactions
+        return new MutationMetricQueue.MutationMetric(0, 0, 0, 0, 0,
+                allDeletesMutations && !isTransactional ? numDeleteMutationsInBatch : numFailedMutations,
+                0, 0, 0, 0,
+                numUpsertMutationsInBatch,
+                allUpsertsMutations ? 1 : 0,
+                numDeleteMutationsInBatch,
+                allDeletesMutations ? 1 : 0);
+    }
+
+    /**
+     * Get mutation metrics that correspond to committed mutations only
+     * @param totalMutationBytesObject MutationBytes object corresponding to all the mutations we
+     *                                 attempted to commit including those that failed, those that
+     *                                 were already sent and those that were unsent
+     * @param unsentMutationBatchList list of mutation batches that are unsent
+     * @param numMutations total number of mutations
+     * @param numFailedMutations number of failed mutations in the most recent failed batch
+     * @param numFailedPhase3Mutations number of mutations failed in phase 3 of index commits
+     * @param mutationCommitTime time taken for committing all mutations
+     * @return mutation metric object just accounting for mutations that are already
+     * successfully committed
+     */
+    @VisibleForTesting
+    static MutationMetric getCommittedMutationsMetric(
+            MutationBytes totalMutationBytesObject, List<List<Mutation>> unsentMutationBatchList,
+            long numMutations, long numFailedMutations,
+            long numFailedPhase3Mutations, long mutationCommitTime) {
+        long committedUpsertMutationBytes = totalMutationBytesObject == null ? 0 :
+                totalMutationBytesObject.getUpsertMutationBytes();
+        long committedDeleteMutationBytes = totalMutationBytesObject == null ? 0 :
+                totalMutationBytesObject.getDeleteMutationBytes();
+        long committedUpsertMutationCounter = totalMutationBytesObject == null ? 0 :
+                totalMutationBytesObject.getUpsertMutationCounter();
+        long committedDeleteMutationCounter = totalMutationBytesObject == null ? 0 :
+                totalMutationBytesObject.getDeleteMutationCounter();
+        long committedTotalMutationBytes = totalMutationBytesObject == null ? 0 :
+                totalMutationBytesObject.getTotalMutationBytes();
+        long upsertMutationCommitTime = 0L;
+        long deleteMutationCommitTime = 0L;
+
+        if (totalMutationBytesObject != null && numFailedMutations != 0) {
+            List<Mutation> uncommittedMutationsList = new ArrayList<>();
+            for (List<Mutation> mutationBatch : unsentMutationBatchList) {
+                uncommittedMutationsList.addAll(mutationBatch);
+            }
+            // Calculate the uncommitted mutations
+            MutationBytes uncommittedMutationBytesObject =
+                    calculateMutationSize(uncommittedMutationsList, false);
+            committedUpsertMutationBytes -=
+                    uncommittedMutationBytesObject.getUpsertMutationBytes();
+            committedDeleteMutationBytes -=
+                    uncommittedMutationBytesObject.getDeleteMutationBytes();
+            committedUpsertMutationCounter -=
+                    uncommittedMutationBytesObject.getUpsertMutationCounter();
+            committedDeleteMutationCounter -=
+                    uncommittedMutationBytesObject.getDeleteMutationCounter();
+            committedTotalMutationBytes -=
+                    uncommittedMutationBytesObject.getTotalMutationBytes();
+        }
+
+        if (committedTotalMutationBytes > 0) {
+            upsertMutationCommitTime =
+                    (long)Math.floor((double)(committedUpsertMutationBytes * mutationCommitTime)/
+                            committedTotalMutationBytes);
+            deleteMutationCommitTime =
+                    (long)Math.ceil((double)(committedDeleteMutationBytes * mutationCommitTime)/
+                            committedTotalMutationBytes);
+        }
+        return new MutationMetric(numMutations,
+                committedUpsertMutationBytes,
+                committedDeleteMutationBytes,
+                upsertMutationCommitTime,
+                deleteMutationCommitTime,
+                0, // num failed mutations have been counted already in updateMutationBatchFailureMetrics()
+                committedUpsertMutationCounter,
+                committedDeleteMutationCounter,
+                committedTotalMutationBytes,
+                numFailedPhase3Mutations,
+                0, 0, 0, 0 );
     }
 
     private void filterIndexCheckerMutations(Map<TableInfo, List<Mutation>> mutationMap,
