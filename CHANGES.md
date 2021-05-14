@@ -26,10 +26,8 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
-| [PHOENIX-6357](https://issues.apache.org/jira/browse/PHOENIX-6357) | Change all command line tools to use the fixed commons-cli constructor |  Major | core |
 | [PHOENIX-6435](https://issues.apache.org/jira/browse/PHOENIX-6435) | Fix ViewTTLIT test flapper |  Blocker | . |
 | [PHOENIX-6434](https://issues.apache.org/jira/browse/PHOENIX-6434) | Secondary Indexes on PHOENIX\_ROW\_TIMESTAMP() |  Major | . |
-| [PHOENIX-6422](https://issues.apache.org/jira/browse/PHOENIX-6422) | Remove CorrelatePlan |  Minor | core |
 | [PHOENIX-6409](https://issues.apache.org/jira/browse/PHOENIX-6409) | Include local index uncovered columns merge in explain plan. |  Minor | . |
 | [PHOENIX-6385](https://issues.apache.org/jira/browse/PHOENIX-6385) | Not to use Scan#setSmall for HBase 2.x versions |  Major | . |
 | [PHOENIX-6402](https://issues.apache.org/jira/browse/PHOENIX-6402) | Allow using local indexes with uncovered columns in the WHERE clause |  Blocker | . |
@@ -43,13 +41,10 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
-| [PHOENIX-6442](https://issues.apache.org/jira/browse/PHOENIX-6442) | Phoenix should depend on the appropriate tephra-hbase-compat-x.y module |  Major | core, tephra |
 | [PHOENIX-6348](https://issues.apache.org/jira/browse/PHOENIX-6348) | java.lang.NoClassDefFoundError: when running with hbase-1.6 |  Blocker | . |
-| [PHOENIX-6427](https://issues.apache.org/jira/browse/PHOENIX-6427) | Create sequence fails in lowercase schema |  Major | core |
 | [PHOENIX-6424](https://issues.apache.org/jira/browse/PHOENIX-6424) | SELECT cf1.\* FAILS with a WHERE clause including cf2. |  Major | . |
 | [PHOENIX-6421](https://issues.apache.org/jira/browse/PHOENIX-6421) | Selecting an indexed array value from an uncovered column with local index returns NULL |  Major | . |
 | [PHOENIX-6423](https://issues.apache.org/jira/browse/PHOENIX-6423) | Wildcard queries fail with mixed default and explicit column families. |  Critical | . |
-| [PHOENIX-6419](https://issues.apache.org/jira/browse/PHOENIX-6419) | Unused getResolverForQuery() in QueryCompiler.verifySCN() |  Trivial | core |
 | [PHOENIX-6400](https://issues.apache.org/jira/browse/PHOENIX-6400) | Do no use local index with uncovered columns in the WHERE clause. |  Blocker | . |
 | [PHOENIX-6370](https://issues.apache.org/jira/browse/PHOENIX-6370) | 4.x branch still includes the phoenix-pig example files |  Trivial | . |
 | [PHOENIX-6386](https://issues.apache.org/jira/browse/PHOENIX-6386) | Bulkload generates unverified index rows |  Major | core |
