@@ -46,7 +46,7 @@ import java.util.ArrayList;
 
 import static org.apache.phoenix.util.MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES;
 
-public class SchemaExtractionProcessor {
+public class SchemaExtractionProcessor implements SchemaProcessor {
     Map<String, String> defaultProps = new HashMap<>();
     Map<String, String> definedProps = new HashMap<>();
 
@@ -67,6 +67,7 @@ public class SchemaExtractionProcessor {
         this.table = getPTable(pSchemaName, pTableName);
     }
 
+    @Override
     public String process() throws Exception {
         if (ddl != null) {
             return ddl;

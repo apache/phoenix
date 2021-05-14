@@ -117,7 +117,7 @@ public class CreateTableCompiler {
             }
         }
         if (overideColumnDefs != null) {
-            create = new CreateTableStatement (create,overideColumnDefs);
+            create = new CreateTableStatement(create,overideColumnDefs);
         }
         final CreateTableStatement finalCreate = create;
         
