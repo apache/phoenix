@@ -730,7 +730,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
             @Override
             public Void call() throws SQLException {
                 checkOpen();
-                mutationState.commit();
+                try {
+                    mutationState.commit();
+                } finally {
+                    mutationState.resetExecuteMutationTimeMap();
+                }
                 return null;
             }
         }, Tracing.withTracing(this, "committing mutations"));

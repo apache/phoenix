@@ -162,6 +162,7 @@
     <!-- JaCoCo thresholds which we can override in each sub-module if required -->
     <jacoco.instruction.coverage.percentage>0.700</jacoco.instruction.coverage.percentage>
     <jacoco.branch.coverage.percentage>0.600</jacoco.branch.coverage.percentage>
+    <hdrhistogram.version>2.1.12</hdrhistogram.version>
 
     <maven-owasp-plugin.version>6.3.1</maven-owasp-plugin.version>
     <protobuf.plugin.version>0.6.1</protobuf.plugin.version>
@@ -943,6 +944,11 @@
         <groupId>org.apache.hbase.thirdparty</groupId>
         <artifactId>hbase-shaded-protobuf</artifactId>
         <version>${hbase.thirdparty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.hdrhistogram</groupId>
+        <artifactId>HdrHistogram</artifactId>
+        <version>${hdrhistogram.version}</version>
       </dependency>
 
       <!-- HBase test dependencies -->

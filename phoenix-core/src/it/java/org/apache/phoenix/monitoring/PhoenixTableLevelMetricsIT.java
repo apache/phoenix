@@ -57,6 +57,9 @@ import static org.apache.phoenix.exception.SQLExceptionCode.GET_TABLE_REGIONS_FA
 import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
 import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SCAN_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_SUCCESS_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_BATCH_FAILED_COUNTER;
@@ -401,6 +404,50 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                                 DELETE_BATCH_FAILED_COUNTER), CompareOp.EQ);
             }
         }
+    }
+
+    private void assertHistogramMetricsForMutations(String tableName, boolean isUpsert,
+            long ltCount, long szCount, boolean verifyMetricValues) {
+        LatencyHistogram ltHisto;
+        SizeHistogram szHisto;
+        if (isUpsert) {
+            ltHisto = TableMetricsManager.getUpsertLatencyHistogramForTable(tableName);
+            szHisto = TableMetricsManager.getUpsertSizeHistogramForTable(tableName);
+        } else {
+            ltHisto = TableMetricsManager.getDeleteLatencyHistogramForTable(tableName);
+            szHisto = TableMetricsManager.getDeleteSizeHistogramForTable(tableName);
+        }
+        assertNotNull(ltHisto);
+        assertNotNull(szHisto);
+        assertEquals(ltCount, ltHisto.getHistogram().getTotalCount());
+        assertEquals(szCount, szHisto.getHistogram().getTotalCount());
+
+        // If we are just comparing one data point then we can compare with table metrics
+        // or global metrics but if there are multiple data points then we can't compare histogram
+        // data points with global metrics.
+        if (verifyMetricValues) {
+            long sqlTime;
+            if (isUpsert) {
+                sqlTime = getMetricFromTableMetrics(tableName, MetricType.UPSERT_SQL_QUERY_TIME);
+            } else {
+                sqlTime = getMetricFromTableMetrics(tableName, MetricType.DELETE_SQL_QUERY_TIME);
+
+            }
+            long commitTime = getMetricFromTableMetrics(tableName, MetricType.MUTATION_COMMIT_TIME);
+            // Latency metric for mutation is sum of time spent in executeMutation
+            // and PhoenixConnection#commit time.
+            long totalCommitTimeFromMetrics = sqlTime + commitTime;
+
+            // Histogram#maxValue is the last value in the bucket. So we can't compare directly
+            // maxValue with totalCommitTimeFromMetrics.
+            Assert.assertTrue(ltHisto.getHistogram().valuesAreEquivalent(totalCommitTimeFromMetrics,
+                    ltHisto.getHistogram().getMaxValue()));
+
+            long mutationBytesFromGlobalMetrics = GLOBAL_MUTATION_BYTES.getMetric().getValue();
+            Assert.assertTrue(szHisto.getHistogram().valuesAreEquivalent(mutationBytesFromGlobalMetrics,
+                    szHisto.getHistogram().getMaxValue()));
+        }
+
     }
 
     /**
@@ -1159,7 +1206,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         Connection conn = null;
         Throwable exception = null;
         int numAtomicUpserts = 4;
-        try {
+        try {x
             conn = getConnFromTestDriver();
             String ddl = "create table " + tableName + "(pk varchar primary key, counter1 bigint)";
             conn.createStatement().execute(ddl);
@@ -1196,6 +1243,148 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             assertEquals(numAtomicUpserts, getMetricFromTableMetrics(tableName, ATOMIC_UPSERT_SQL_COUNTER));
             assertTrue(getMetricFromTableMetrics(tableName, ATOMIC_UPSERT_COMMIT_TIME) > 0);
         }
+
+    @Test
+    public void testHistogramMetricsForMutations() throws Exception {
+        String tableName = generateUniqueName();
+        // Reset table level metrics to capture histogram metrics for upsert.
+        try (Connection conn =  getConnFromTestDriver()) {
+            createTableAndInsertValues(tableName, true, true, 10, true, conn, false);
+        }
+        // Metrics will be reset after creation of table so below we will get latency
+        // just for upsert queries.
+        // Since we are recording latency histograms after every executeMutation method and
+        // since we are not batch upserting, it will record histogram event after every upsert.
+        assertHistogramMetricsForMutations(tableName, true, 1, 1, true);
+
+        // Reset table histograms as well as global metrics
+        PhoenixRuntime.clearTableLevelMetrics();
+        PhoenixMetricsIT.resetGlobalMetrics();
+        try (Connection connection = getConnFromTestDriver();
+                Statement statement = connection.createStatement()) {
+            String delete = "DELETE FROM " + tableName;
+            statement.execute(delete);
+            connection.commit();
+        }
+        // Verify metrics for delete mutations
+        assertHistogramMetricsForMutations(tableName, false, 1, 1, true);
+        PhoenixRuntime.clearTableLevelMetrics();
+    }
+
+    @Test
+    public void testHistogramMetricsForMutationsAutoCommitTrue() throws Exception {
+        String tableName = generateUniqueName();
+        // Reset table level metrics to capture histogram metrics for upsert.
+        try (Connection conn =  getConnFromTestDriver()) {
+            conn.setAutoCommit(true);
+            createTableAndInsertValues(tableName, true, true, 10, false, conn, false);
+        }
+        // Metrics will be reset after creation of table so below we will get latency
+        // just for upsert queries.
+        // Since we are recording latency histograms after every executeMutation method and
+        // since we are not batch upserting, it will record histogram event after every upsert.
+        assertHistogramMetricsForMutations(tableName, true, 10, 10, false);
+
+        // Reset table histograms as well as global metrics
+        PhoenixRuntime.clearTableLevelMetrics();
+        PhoenixMetricsIT.resetGlobalMetrics();
+        try (Connection connection = getConnFromTestDriver();
+                Statement statement = connection.createStatement()) {
+            connection.setAutoCommit(true);
+            String delete = "DELETE FROM " + tableName;
+            statement.execute(delete);
+        }
+        // Verify metrics for delete mutations. We won't get any data point for
+        // size histogram since delete happened on server side using ServerSelectDeleteMutationPlan.
+        assertHistogramMetricsForMutations(tableName, false,1, 0, false);
+        PhoenixRuntime.clearTableLevelMetrics();
+    }
+
+    @Test
+    public void testHistogramMetricsForQueries() throws Exception {
+        String tableName = generateUniqueName();
+        // Reset table level metrics to capture histogram metrics for select queries.
+        try (Connection conn = getConnFromTestDriver()) {
+            createTableAndInsertValues(tableName, true, true, 10, true, conn, true);
+        }
+        // Reset table metrics as well as global metrics
+        PhoenixRuntime.clearTableLevelMetrics();
+        PhoenixMetricsIT.resetGlobalMetrics();
+        DelayedOrFailingRegionServer.setDelayEnabled(true);
+        DelayedOrFailingRegionServer.setDelayScan(30);
+        try (Connection conn =  getConnFromTestDriver();
+                Statement statement = conn.createStatement()) {
+            String select = "SELECT * FROM " + tableName;
+            ResultSet resultSet = statement.executeQuery(select);
+            while (resultSet.next()) {
+                // do nothing
+            }
+            resultSet.close();
+        } // conn close will close the rs at which point we will increment the scan_bytes counter
+
+        // Verify that value from histogram is equal to metric from global metrics.
+        LatencyHistogram ltHisto = TableMetricsManager.getQueryLatencyHistogramForTable(tableName);
+        SizeHistogram szHisto = TableMetricsManager.getQuerySizeHistogramForTable(tableName);
+
+        assertHistogramMetricsForQueries(tableName, ltHisto, szHisto, 1, 1);
+    }
+
+    @Test
+    public void testHistogramMetricsForRangeScan() throws Exception {
+        String tableName = generateUniqueName();
+        // Reset table level metrics to capture histogram metrics for select queries.
+        try (Connection conn = getConnFromTestDriver()) {
+            createTableAndInsertValues(tableName, true, true, 10, true, conn, true);
+        }
+        // Reset global metrics and table level metrics.
+        PhoenixMetricsIT.resetGlobalMetrics();
+        PhoenixRuntime.clearTableLevelMetrics();
+        try (Connection conn =  getConnFromTestDriver();
+                Statement statement = conn.createStatement()) {
+            String select = "SELECT * FROM " + tableName;
+            ResultSet resultSet = statement.executeQuery(select);
+            while (resultSet.next()) {
+                // do nothing
+            }
+        } // conn close will close the rs at which point we will increment the scan_bytes counter
+
+        // Make sure that point lookup histograms are empty since this is a range scan query.
+        LatencyHistogram pointLookupLtHisto =
+                TableMetricsManager.getPointLookupLatencyHistogramForTable(tableName);
+        SizeHistogram pointLookupSzHisto =
+                TableMetricsManager.getPointLookupSizeHistogramForTable(tableName);
+        Assert.assertEquals(0, pointLookupLtHisto.getHistogram().getTotalCount());
+        Assert.assertEquals(0, pointLookupSzHisto.getHistogram().getTotalCount());
+
+        LatencyHistogram ltHistogram =
+                TableMetricsManager.getRangeScanLatencyHistogramForTable(tableName);
+        Assert.assertEquals(1, ltHistogram.getHistogram().getTotalCount());
+        SizeHistogram sizeHistogram =
+                TableMetricsManager.getRangeScanSizeHistogramForTable(tableName);
+        Assert.assertEquals(1, sizeHistogram.getHistogram().getTotalCount());
+
+        // Verify that value from histogram is equal to metric from global metrics.
+        assertHistogramMetricsForQueries(tableName, ltHistogram, sizeHistogram, 1, 1);
+    }
+
+    // Verify that there is a histogram counter for the operation and verify with table level metrics
+    private void assertHistogramMetricsForQueries(String tableName, LatencyHistogram ltHistogram,
+            SizeHistogram sizeHistogram, int ltCount, int szCount) {
+        Assert.assertEquals(ltCount, ltHistogram.getHistogram().getTotalCount());
+        Assert.assertEquals(szCount, sizeHistogram.getHistogram().getTotalCount());
+
+        // Get latency metrics from table level metrics
+        Long queryTime = GLOBAL_QUERY_TIME.getMetric().getValue();
+        long rsNextTime = getMetricFromTableMetrics(tableName, MetricType.RESULT_SET_TIME_MS);
+        // Latency for queries is sum of time spent in executeQuery phase and rs.next phase.
+        long totalLatency = queryTime + rsNextTime;
+        long maxLtValue = ltHistogram.getHistogram().getMaxValue();
+        Assert.assertTrue(ltHistogram.getHistogram().valuesAreEquivalent(totalLatency, maxLtValue));
+
+        Long scanBytes = GLOBAL_SCAN_BYTES.getMetric().getValue();
+        long maxSzValue = sizeHistogram.getHistogram().getMaxValue();
+        Assert.assertTrue(sizeHistogram.getHistogram().valuesAreEquivalent(scanBytes, maxSzValue));
+>>>>>>> PHOENIX-5838 Add Histograms for Table level Metrics
     }
 
     private Connection getConnFromTestDriver() throws SQLException {

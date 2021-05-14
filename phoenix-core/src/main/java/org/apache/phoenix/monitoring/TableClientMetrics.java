@@ -16,6 +16,8 @@
 
 package org.apache.phoenix.monitoring;
 
+import org.apache.hadoop.conf.Configuration;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -139,14 +141,16 @@ public class TableClientMetrics {
 
     private final String tableName;
     private Map<MetricType, PhoenixTableMetric> metricRegister;
+    private TableHistograms tableHistograms;
 
-    public TableClientMetrics(final String tableName) {
+    public TableClientMetrics(final String tableName, Configuration conf) {
         this.tableName = tableName;
         metricRegister = new HashMap<>();
         for (TableMetrics tableMetric : TableMetrics.values()) {
             tableMetric.metric = new PhoenixTableMetricImpl(tableMetric.metricType);
             metricRegister.put(tableMetric.metricType, tableMetric.metric);
         }
+        tableHistograms = new TableHistograms(tableName, conf);
     }
 
     /**
@@ -185,4 +189,7 @@ public class TableClientMetrics {
         return metricRegister;
     }
 
+    public TableHistograms getTableHistograms() {
+        return tableHistograms;
+    }
 }
