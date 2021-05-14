@@ -50,4 +50,8 @@ public class NoOpTableMetricsManager extends TableMetricsManager {
     @Override public Map<String, List<PhoenixTableMetric>> getTableLevelMetrics() {
         return Collections.emptyMap();
     }
+
+    @Override public TableClientMetrics getTableClientMetrics(String tableName) {
+        return null;
+    }
 }
