@@ -48,6 +48,7 @@ import java.util.TreeSet;
 import javax.annotation.Nullable;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.monitoring.HistogramDistribution;
 import org.apache.phoenix.monitoring.PhoenixTableMetric;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
@@ -1388,6 +1389,14 @@ public class PhoenixRuntime {
      */
     public static Map<String,List<PhoenixTableMetric>> getPhoenixTableClientMetrics() {
         return TableMetricsManager.getTableMetricsMethod();
+    }
+
+    public static Map<String, List<HistogramDistribution>> getLatencyHistograms() {
+        return TableMetricsManager.getLatencyHistogramsForAllTables();
+    }
+
+    public static Map<String, List<HistogramDistribution>> getSizeHistograms() {
+        return TableMetricsManager.getSizeHistogramsForAllTables();
     }
 
     /**

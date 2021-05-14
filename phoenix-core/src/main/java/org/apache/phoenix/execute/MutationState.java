@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -164,6 +165,7 @@ public class MutationState implements SQLCloseable {
     private final MutationMetricQueue mutationMetricQueue;
     private ReadMetricQueue readMetricQueue;
 
+    private Map<String, Long> timeInExecuteMutationMap = new HashMap<>();
     private static boolean allUpsertsMutations = true;
     private static boolean allDeletesMutations = true;
 
@@ -1496,6 +1498,16 @@ public class MutationState implements SQLCloseable {
                             TableMetricsManager.updateMetricsMethod(htableNameStr, allUpsertsMutations ? UPSERT_AGGREGATE_FAILURE_SQL_COUNTER :
                                     DELETE_AGGREGATE_FAILURE_SQL_COUNTER, 1);
                         }
+                        // Update size and latency histogram metrics.
+                        TableMetricsManager.updateSizeHistogramMetricsForMutations(htableNameStr,
+                                committedMutationsMetric.getMutationsSizeBytes().getValue(), allUpsertsMutations);
+                        Long latency = timeInExecuteMutationMap.get(htableNameStr);
+                        if (latency == null) {
+                            latency = 0l;
+                        }
+                        latency += mutationCommitTime;
+                        TableMetricsManager.updateLatencyHistogramForMutations(htableNameStr,
+                                latency, allUpsertsMutations);
 
                     }
                     resetAllMutationState();
@@ -2172,6 +2184,19 @@ public class MutationState implements SQLCloseable {
 
     public MutationMetricQueue getMutationMetricQueue() {
         return mutationMetricQueue;
+    }
+
+    public void addExecuteMutationTime(long time, String tableName) {
+        Long timeSpent = timeInExecuteMutationMap.get(tableName);
+        if (timeSpent == null) {
+            timeSpent = 0l;
+        }
+        timeSpent += time;
+        timeInExecuteMutationMap.put(tableName, timeSpent);
+    }
+
+    public void resetExecuteMutationTimeMap() {
+        timeInExecuteMutationMap.clear();
     }
 
 }
