@@ -230,7 +230,7 @@ public class TableMetricsManager {
      * @param tableName
      * @return TableClientMetrics object
      */
-    private TableClientMetrics getTableClientMetrics(String tableName) {
+    public TableClientMetrics getTableClientMetrics(String tableName) {
 
         if (Strings.isNullOrEmpty(tableName)) {
             LOGGER.debug("Phoenix Table metrics TableName cannot be null or empty");
