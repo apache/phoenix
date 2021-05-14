@@ -21,6 +21,14 @@
 These release notes cover new developer and user-facing incompatibilities, important issues, features, and major improvements.
 
 
+---
+
+* [PHOENIX-6357](https://issues.apache.org/jira/browse/PHOENIX-6357) | *Major* | **Change all command line tools to use the fixed commons-cli constructor**
+
+Fixed command line parsing of double quoted identifiers.
+The previous workaround of using double doublequotes as a workaround is no longer supported.
+
+
 
 # PHOENIX  4.16.0 Release Notes
 
