@@ -508,6 +508,10 @@
       <artifactId>curator-framework</artifactId>
       <version>${curator.version}</version>
     </dependency>
+    <dependency>
+      <groupId>org.hdrhistogram</groupId>
+      <artifactId>HdrHistogram</artifactId>
+    </dependency>
   </dependencies>
 
   <profiles>
