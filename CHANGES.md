@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 4.16.1 - Unreleased (as of 2021-05-14)
+## Release 4.16.1 - Unreleased (as of 2021-05-15)
 
 
 
@@ -41,6 +41,7 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-6471](https://issues.apache.org/jira/browse/PHOENIX-6471) | Revert PHOENIX-5387 to remove unneeded CPL 1.0 license |  Blocker | . |
 | [PHOENIX-6348](https://issues.apache.org/jira/browse/PHOENIX-6348) | java.lang.NoClassDefFoundError: when running with hbase-1.6 |  Blocker | . |
 | [PHOENIX-6424](https://issues.apache.org/jira/browse/PHOENIX-6424) | SELECT cf1.\* FAILS with a WHERE clause including cf2. |  Major | . |
 | [PHOENIX-6421](https://issues.apache.org/jira/browse/PHOENIX-6421) | Selecting an indexed array value from an uncovered column with local index returns NULL |  Major | . |
