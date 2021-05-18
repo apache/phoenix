@@ -36,7 +36,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -63,6 +67,12 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
         });
         testCases.add(new String[] {
                 "create local index %s_IDX on %s(counter1, counter2)",
+        });
+        testCases.add(new String[] {
+                "create index %s_IDX on %s(counter1) include (counter2)",
+        });
+        testCases.add(new String[] {
+                "create index %s_IDX on %s(counter1, counter2)",
         });
         return testCases;
     }
@@ -498,18 +508,29 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
         exec.shutdownNow();
 
         int finalResult = nThreads * nCommits * nIncrementsPerCommit;
-        //assertEquals(finalResult,resultHolder[0]);
-        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName + " WHERE counter1 >= 0");
+        boolean isIndexCreated = this.indexDDL != null && this.indexDDL.length() > 0;
+
+        ResultSet rs;
+        String selectSql = "SELECT * FROM " + tableName + " WHERE counter1 >= 0";
+        if (isIndexCreated) {
+            rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
+            String actualExplainPlan = QueryUtil.getExplainPlan(rs);
+            IndexToolIT.assertExplainPlan(this.indexDDL.contains("local"), actualExplainPlan,
+                tableName, tableName + "_IDX");
+        }
+        rs = conn.createStatement().executeQuery(selectSql);
         assertTrue(rs.next());
         assertEquals("a",rs.getString(1));
         assertEquals(finalResult,rs.getInt(2));
         assertFalse(rs.next());
 
-        rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ * FROM " + tableName + " WHERE counter1 >= 0");
-        assertTrue(rs.next());
-        assertEquals("a",rs.getString(1));
-        assertEquals(finalResult,rs.getInt(2));
-        assertFalse(rs.next());
+        if (isIndexCreated) {
+            rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ * FROM " + tableName + " WHERE counter1 >= 0");
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals(finalResult, rs.getInt(2));
+            assertFalse(rs.next());
+        }
         
         conn.close();
     }
@@ -645,6 +666,82 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
                 "UPSERT INTO %s (pk, counter2) VALUES ('a', 'bar')", tableName));
             conn.commit();
             assertRow(conn, tableName, "a", 11, "bar");
+        }
+    }
+
+    @Test
+    public void testMultiplePartialUpdatesInSameBatch() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "create table " + tableName + "(pk varchar primary key, counter1 bigint, counter2 bigint)";
+            conn.createStatement().execute(ddl);
+            createIndex(conn, tableName);
+            String dml;
+            ResultSet rs;
+            // first commit
+            dml = String.format("UPSERT INTO %s VALUES('a',0,0)", tableName);
+            conn.createStatement().execute(dml);
+            conn.commit();
+            // batch multiple conditional updates (partial) in a single batch
+            dml = String.format(
+                "UPSERT INTO %s VALUES('a',2,3) ON DUPLICATE KEY UPDATE counter1 = counter1 + 1", tableName);
+            conn.createStatement().execute(dml);
+            dml = String.format(
+                "UPSERT INTO %s VALUES('a',2,3) ON DUPLICATE KEY UPDATE counter2 = counter2 + 2", tableName);
+            conn.createStatement().execute(dml);
+            dml = String.format(
+                "UPSERT INTO %s VALUES('a',2,3) ON DUPLICATE KEY UPDATE counter1 = counter1 + 100", tableName);
+            conn.createStatement().execute(dml);
+            dml = String.format(
+                "UPSERT INTO %s VALUES('a',2,3) ON DUPLICATE KEY UPDATE counter2 = counter2 + 200", tableName);
+            conn.createStatement().execute(dml);
+            conn.commit();
+            String dql = String.format("SELECT counter1, counter2 FROM %s WHERE counter1 > 0", tableName);
+            rs = conn.createStatement().executeQuery(dql);
+            assertTrue(rs.next());
+            assertEquals(101, rs.getInt(1));
+            assertEquals(202, rs.getInt(2));
+        }
+    }
+
+    @Test
+    public void testComplexDuplicateKeyExpression() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "create table " + tableName +
+                "(pk varchar primary key, counter1 bigint, counter2 bigint, approval varchar)";
+            conn.createStatement().execute(ddl);
+            createIndex(conn, tableName);
+            String dml;
+            dml = String.format("UPSERT INTO %s VALUES('abc', 0, 100, 'NONE')", tableName);
+            conn.createStatement().execute(dml);
+            conn.commit();
+            dml = String.format("UPSERT INTO %s(pk, counter1, counter2) VALUES ('abc', 0, 10) " +
+                "ON DUPLICATE KEY UPDATE " +
+                "counter1 = counter1 + counter2," +
+                "approval = CASE WHEN counter1 < 100 THEN 'NONE' " +
+                "WHEN counter1 < 1000 THEN 'MANAGER_APPROVAL' " +
+                "ELSE 'VP_APPROVAL' END", tableName);
+            conn.createStatement().execute(dml);
+            conn.commit();
+            String dql = "SELECT * from " + tableName;
+            ResultSet rs = conn.createStatement().executeQuery(dql);
+            assertTrue(rs.next());
+            assertEquals("abc", rs.getString("pk"));
+            assertEquals(100, rs.getInt("counter1"));
+            assertEquals(100, rs.getInt("counter2"));
+            assertEquals("NONE", rs.getString("approval"));
+
+            conn.createStatement().execute(dml);
+            conn.commit();
+            rs = conn.createStatement().executeQuery(dql);
+            assertTrue(rs.next());
+            assertEquals("abc", rs.getString("pk"));
+            assertEquals(200, rs.getInt("counter1"));
+            assertEquals(100, rs.getInt("counter2"));
+            assertEquals("MANAGER_APPROVAL", rs.getString("approval"));
         }
     }
 

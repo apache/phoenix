@@ -1022,6 +1022,34 @@ public class GlobalIndexCheckerIT extends BaseUniqueNamesOwnClusterIT {
         }
     }
 
+    @Test
+    public void testOnDuplicateKeyWithIndex() throws Exception {
+        if (async || encoded) { // run only once with single cell encoding enabled
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            String indexTableName = generateUniqueName();
+            populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (val1) include (val2, val3)" + this.indexDDLOptions);
+            conn.commit();
+            String upsertSql = "UPSERT INTO " + dataTableName + " VALUES ('a') ON DUPLICATE KEY UPDATE " +
+                "val1 = val1 || val1, val2 = val2 || val2";
+            conn.createStatement().execute(upsertSql);
+            conn.commit();
+            String selectSql = "SELECT * from " + dataTableName + " WHERE val1 = 'abab'";
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals("abab", rs.getString(2));
+            assertEquals("abcabc", rs.getString(3));
+            assertEquals("abcd", rs.getString(4));
+            assertFalse(rs.next());
+        }
+    }
+
     static private void commitWithException(Connection conn) {
         try {
             conn.commit();

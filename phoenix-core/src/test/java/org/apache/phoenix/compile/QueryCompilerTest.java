@@ -2851,21 +2851,6 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
-    public void testOnDupKeyWithGlobalIndex() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        try {
-            conn.createStatement().execute("CREATE TABLE t1 (k integer not null primary key, v bigint)");
-            conn.createStatement().execute("CREATE INDEX idx ON t1 (v)");
-            conn.createStatement().execute("UPSERT INTO t1 VALUES(0,0) ON DUPLICATE KEY UPDATE v = v + 1");
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_USE_ON_DUP_KEY_WITH_GLOBAL_IDX.getErrorCode(), e.getErrorCode());
-        } finally {
-            conn.close();
-        }
-    }
-
-    @Test
     public void testUpdatePKOnDupKey() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         try {
