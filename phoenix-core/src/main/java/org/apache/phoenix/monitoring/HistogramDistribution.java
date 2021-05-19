@@ -29,4 +29,5 @@ public interface HistogramDistribution {
     public String getHistoName();
 
     public Map<String, Long> getRangeDistributionMap();
+
 }
