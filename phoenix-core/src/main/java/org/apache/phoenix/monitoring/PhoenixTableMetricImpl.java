@@ -74,4 +74,5 @@ public class PhoenixTableMetricImpl implements PhoenixTableMetric {
         metric.decrement();
         numberOfSamples.incrementAndGet();
     }
+
 }
