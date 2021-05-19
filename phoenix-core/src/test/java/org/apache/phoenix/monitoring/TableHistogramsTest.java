@@ -43,4 +43,5 @@ public class TableHistogramsTest {
         Assert.assertEquals(5, tableHistograms.getTableLatencyHistogramsDistribution().size());
         Assert.assertEquals(5, tableHistograms.getTableSizeHistogramsDistribution().size());
     }
+
 }

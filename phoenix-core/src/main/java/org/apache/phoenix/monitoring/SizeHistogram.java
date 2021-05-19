@@ -40,4 +40,5 @@ public class SizeHistogram extends RangeHistogram {
                 QueryServices.PHOENIX_HISTOGRAM_SIZE_RANGES);
         return ranges != null ? ranges : DEFAULT_RANGE;
     }
+
 }
