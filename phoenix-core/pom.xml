@@ -211,7 +211,7 @@
               <goal>compile</goal>
             </goals>
             <configuration>
-              <protocArtifact>com.google.protobuf:protoc:${protobuf-java.version}:exe:${os.detected.classifier}</protocArtifact>
+              <protocArtifact>${protobuf.group}:protoc:${protoc.version}:exe:${os.detected.classifier}</protocArtifact>
               <protoSourceRoot>${basedir}/src/main/protobuf/</protoSourceRoot>
               <clearOutputDirectory>false</clearOutputDirectory>
               <checkStaleness>true</checkStaleness>
