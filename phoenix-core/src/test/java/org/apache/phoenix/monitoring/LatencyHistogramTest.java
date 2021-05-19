@@ -91,4 +91,5 @@ public class LatencyHistogramTest {
         expectedMap.put("300000,600000", 1l);
         Assert.assertEquals(expectedMap, distribution);
     }
+
 }

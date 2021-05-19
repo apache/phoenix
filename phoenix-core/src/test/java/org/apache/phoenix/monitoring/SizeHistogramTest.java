@@ -76,4 +76,5 @@ public class SizeHistogramTest {
         expectedMap.put("10000000,100000000", 1l);
         Assert.assertEquals(expectedMap, distribution);
     }
+
 }
