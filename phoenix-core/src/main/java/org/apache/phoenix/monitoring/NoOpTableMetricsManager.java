@@ -54,4 +54,5 @@ public class NoOpTableMetricsManager extends TableMetricsManager {
     @Override public TableClientMetrics getTableClientMetrics(String tableName) {
         return null;
     }
+
 }

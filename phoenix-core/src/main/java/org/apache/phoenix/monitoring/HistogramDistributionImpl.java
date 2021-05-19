@@ -70,4 +70,5 @@ public class HistogramDistributionImpl implements HistogramDistribution {
     public Map<String, Long> getRangeDistributionMap() {
         return rangeDistribution;
     }
+
 }

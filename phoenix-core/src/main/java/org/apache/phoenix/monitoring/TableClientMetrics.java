@@ -192,4 +192,5 @@ public class TableClientMetrics {
     public TableHistograms getTableHistograms() {
         return tableHistograms;
     }
+
 }

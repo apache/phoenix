@@ -110,4 +110,5 @@ public class RangeHistogram {
         }
         return map;
     }
+
 }

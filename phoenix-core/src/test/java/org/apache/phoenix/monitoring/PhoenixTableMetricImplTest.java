@@ -95,4 +95,5 @@ public class PhoenixTableMetricImplTest {
         metric.change(10);
         assertEquals(10, metric.getValue());
     }
+
 }
