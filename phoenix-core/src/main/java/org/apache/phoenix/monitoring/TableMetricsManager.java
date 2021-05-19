@@ -461,4 +461,5 @@ public class TableMetricsManager {
             tableMetrics.getTableHistograms().getDeleteLatencyHisto().add(elapsedTime);
         }
     }
+
 }

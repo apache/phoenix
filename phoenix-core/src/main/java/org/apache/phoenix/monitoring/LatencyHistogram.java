@@ -41,4 +41,5 @@ public class LatencyHistogram extends RangeHistogram {
                 QueryServices.PHOENIX_HISTOGRAM_LATENCY_RANGES);
         return  ranges != null ? ranges : DEFAULT_RANGE;
     }
+
 }

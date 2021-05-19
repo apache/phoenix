@@ -116,4 +116,5 @@ public class TableHistograms {
                 pointLookupSizeHisto.getRangeHistogramDistribution(), rangeScanSizeHisto.getRangeHistogramDistribution()));
         return Collections.unmodifiableList(list);
     }
+
 }

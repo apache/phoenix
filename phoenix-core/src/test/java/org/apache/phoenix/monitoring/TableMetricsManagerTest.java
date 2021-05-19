@@ -428,4 +428,5 @@ public class TableMetricsManagerTest {
         TableMetricsManager.setInstance(tableMetricsManager);
         Assert.assertNull(TableMetricsManager.getQueryLatencyHistogramForTable(badTableName));
     }
+
 }

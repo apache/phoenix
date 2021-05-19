@@ -214,4 +214,5 @@ public class TableClientMetricsTest {
         }
         assertTrue(verifyTableName());
     }
+
 }
