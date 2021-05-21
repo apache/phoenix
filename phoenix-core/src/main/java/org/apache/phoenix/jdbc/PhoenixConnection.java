@@ -79,6 +79,7 @@ import org.apache.phoenix.iterate.TableResultIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -172,6 +173,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private TableResultIteratorFactory tableResultIteratorFactory;
     private boolean isRunningUpgrade;
     private LogLevel logLevel;
+    private LogLevel auditLogLevel;
     private Double logSamplingRate;
     private String sourceOfOperation;
 
@@ -381,6 +383,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         };
         this.logLevel= LogLevel.valueOf(this.services.getProps().get(QueryServices.LOG_LEVEL,
                 QueryServicesOptions.DEFAULT_LOGGING_LEVEL));
+        this.auditLogLevel= LogLevel.valueOf(this.services.getProps().get(QueryServices.AUDIT_LOG_LEVEL,
+                QueryServicesOptions.DEFAULT_AUDIT_LOGGING_LEVEL));
         this.isRequestLevelMetricsEnabled = JDBCUtil.isCollectingRequestLevelMetricsEnabled(url, info,
                 this.services.getProps());
         this.mutationState = mutationState == null ? newMutationState(maxSize,
@@ -710,6 +714,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
             return;
         }
         try {
+            TableMetricsManager.pushMetricsFromConnInstanceMethod(getMutationMetrics());
             clearMetrics();
             try {
                 if (traceScope != null) {
@@ -1357,6 +1362,10 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     public LogLevel getLogLevel(){
         return this.logLevel;
+    }
+
+    public LogLevel getAuditLogLevel(){
+        return this.auditLogLevel;
     }
     
     public Double getLogSamplingRate(){

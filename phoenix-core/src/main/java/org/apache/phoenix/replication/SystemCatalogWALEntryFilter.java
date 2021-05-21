@@ -90,7 +90,8 @@ public class SystemCatalogWALEntryFilter implements
    * tenant id, system.child_link table have tenant owned data for parent child
    * links. In this case, the column qualifier is
    * {@code PhoenixDatabaseMetaData#LINK_TYPE_BYTES} and value is
-   * {@code PTable.LinkType.CHILD_TABLE}.
+   * {@code PTable.LinkType.CHILD_TABLE}. For corresponding delete markers the
+   * KeyValue type {@code KeyValue.Type} is {@code KeyValue.Type.DeleteFamily}
    * @param cell hbase cell
    * @return true if the cell is tenant owned
    */
@@ -103,18 +104,20 @@ public class SystemCatalogWALEntryFilter implements
     if (!isTenantRowCell) {
       boolean isChildLink = CellUtil.matchingQualifier(
         cell, PhoenixDatabaseMetaData.LINK_TYPE_BYTES);
-      if (isChildLink) {
-        if (CellUtil.matchingValue(cell, CHILD_TABLE_BYTES)) {
+      // Check if cell is of type LINK_TYPE with value 4 or DeleteFamily
+      if ((isChildLink && CellUtil.matchingValue(cell, CHILD_TABLE_BYTES)) ||
+          CellUtil.isDeleteFamily(cell) ) {
           byte[][] rowViewKeyMetadata = new byte[NUM_COLUMNS_PRIMARY_KEY][];
           SchemaUtil.getVarChars(key.get(), key.getOffset(),
             key.getLength(), 0, rowViewKeyMetadata);
-          // if the child link is to a tenant-owned view,
-          // the COLUMN_NAME field will be the byte[] of the tenant
-          //otherwise, it will be an empty byte array
-          // (NOT QueryConstants.SEPARATOR_BYTE, but a byte[0])
+          /** if the child link is to a tenant-owned view, the COLUMN_NAME field will be
+           * the byte[] of the tenant otherwise, it will be an empty byte array
+           * (NOT QueryConstants.SEPARATOR_BYTE, but a byte[0]). This assumption is also
+           * true for child link's delete markers in SYSTEM.CHILD_LINK as it only contains link
+           * rows and does not deal with other type of rows like column rows that also has
+           * COLUMN_NAME populated with actual column name.**/
           isChildLinkToTenantView =
             rowViewKeyMetadata[COLUMN_NAME_INDEX].length != 0;
-        }
       }
     }
     return isTenantRowCell || isChildLinkToTenantView;

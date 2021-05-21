@@ -224,6 +224,12 @@ public interface QueryServices extends SQLCloseable {
     public static final String DEFAULT_TRANSACTION_PROVIDER_ATTRIB = "phoenix.table.transaction.provider.default";
     public static final String GLOBAL_METRICS_ENABLED = "phoenix.query.global.metrics.enabled";
 
+    public static final String TABLE_LEVEL_METRICS_ENABLED = "phoenix.monitoring.tableMetrics.enabled";
+    public static final String METRIC_PUBLISHER_ENABLED = "phoenix.monitoring.metricsPublisher.enabled";
+    public static final String METRIC_PUBLISHER_CLASS_NAME = "phoenix.monitoring.metricProvider.className";
+    public static final String ALLOWED_LIST_FOR_TABLE_LEVEL_METRICS = "phoenix.monitoring.allowedTableNames.list";
+
+
     // Tag Name to determine the Phoenix Client Type
     public static final String CLIENT_METRICS_TAG = "phoenix.client.metrics.tag";
     
@@ -309,9 +315,11 @@ public interface QueryServices extends SQLCloseable {
     public static final String WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB =
             "phoenix.query.wildcard.dynamicColumns";
     public static final String LOG_LEVEL = "phoenix.log.level";
+    public static final String AUDIT_LOG_LEVEL = "phoenix.audit.log.level";
     public static final String LOG_BUFFER_SIZE = "phoenix.log.buffer.size";
     public static final String LOG_BUFFER_WAIT_STRATEGY = "phoenix.log.wait.strategy";
     public static final String LOG_SAMPLE_RATE = "phoenix.log.sample.rate";
+    public static final String LOG_HANDLER_COUNT = "phoenix.log.handler.count";
 
 	public static final String SYSTEM_CATALOG_SPLITTABLE = "phoenix.system.catalog.splittable";
 

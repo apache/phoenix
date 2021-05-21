@@ -26,11 +26,11 @@ import com.google.common.base.Strings;
 import com.google.inject.Inject;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.HelpFormatter;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
-import org.apache.phoenix.thirdparty.org.apache.commons.cli.PosixParser;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -170,7 +170,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
     private CommandLine parseOptions(String[] args) {
         final Options options = getOptions();
 
-        CommandLineParser parser = new PosixParser();
+        CommandLineParser parser = new DefaultParser(false, false);
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);

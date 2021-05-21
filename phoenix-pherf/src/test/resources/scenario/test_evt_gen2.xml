@@ -28,7 +28,7 @@
         </column>
     </datamapping>
     <scenarios>
-        <scenario tableName="PHERF.EVT_GEN2" name="EVT_GEN2">
+        <scenario tableName="PHERF.EVT_GEN2" name="EVT_GEN2" generatorName="WEIGHTED">
             <loadProfile>
                 <batchSize>1</batchSize>
                 <numOperations>1000</numOperations>
@@ -39,12 +39,12 @@
                 <opDistribution id="upsertOp" weight="40"></opDistribution>
                 <opDistribution id="queryOp1" weight="10"></opDistribution>
                 <opDistribution id="queryOp2" weight="10"></opDistribution>
-                <opDistribution id="queryOp3" weight="0"></opDistribution>
-                <opDistribution id="queryOp4" weight="0"></opDistribution>
-                <opDistribution id="queryOp5" weight="0"></opDistribution>
-                <opDistribution id="queryOp6" weight="0"></opDistribution>
-                <opDistribution id="queryOp7" weight="0"></opDistribution>
-                <opDistribution id="queryOp8" weight="0"></opDistribution>
+                <opDistribution id="queryOp3"></opDistribution>
+                <opDistribution id="queryOp4"></opDistribution>
+                <opDistribution id="queryOp5"></opDistribution>
+                <opDistribution id="queryOp6"></opDistribution>
+                <opDistribution id="queryOp7"></opDistribution>
+                <opDistribution id="queryOp8"></opDistribution>
                 <opDistribution id="idleOp" weight="10"></opDistribution>
                 <opDistribution id="udfOp" weight="10"></opDistribution>
             </loadProfile>
@@ -58,14 +58,14 @@
             </upserts>
 
             <querySet>
-                <query id="queryOp1" statement="select count(*) from PHERF.Z11"/>
-                <query id="queryOp2" statement="select sum(SOME_INT) from PHERF.Z11"/>
-                <query id="queryOp3" statement="select sum(SOME_INT) +3 from PHERF.Z11"/>
-                <query id="queryOp4" statement="select sum(SOME_INT) +4 from PHERF.Z11"/>
-                <query id="queryOp5" statement="select sum(SOME_INT) +5 from PHERF.Z11"/>
-                <query id="queryOp6" statement="select sum(SOME_INT) +6 from PHERF.Z11"/>
-                <query id="queryOp7" statement="select sum(SOME_INT) +7 from PHERF.Z11"/>
-                <query id="queryOp8" statement="select sum(SOME_INT) +8 from PHERF.Z11"/>
+                <query id="queryOp1" statement="select count(*) from PHERF.EVT_GEN2"/>
+                <query id="queryOp2" statement="select sum(SOME_INT) from PHERF.EVT_GEN2"/>
+                <query id="queryOp3" statement="select sum(SOME_INT) +3 from PHERF.EVT_GEN2"/>
+                <query id="queryOp4" statement="select sum(SOME_INT) +4 from PHERF.EVT_GEN2"/>
+                <query id="queryOp5" statement="select sum(SOME_INT) +5 from PHERF.EVT_GEN2"/>
+                <query id="queryOp6" statement="select sum(SOME_INT) +6 from PHERF.EVT_GEN2"/>
+                <query id="queryOp7" statement="select sum(SOME_INT) +7 from PHERF.EVT_GEN2"/>
+                <query id="queryOp8" statement="select sum(SOME_INT) +8 from PHERF.EVT_GEN2"/>
             </querySet>
             <idleTimes>
                 <idleTime id="idleOp" idleTime="50"></idleTime>

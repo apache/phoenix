@@ -303,7 +303,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-hbase-compat-1.4</artifactId>
+      <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
     </dependency>
   
     <!-- Make sure we have all the antlr dependencies -->
@@ -513,46 +513,82 @@
   <profiles>
     <!-- See the parent pom for profile selection -->
     <profile>
-      <id>phoenix-hbase-compat-1.5.0-default</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.hbase</groupId>
-          <artifactId>hbase-metrics-api</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hbase</groupId>
-          <artifactId>hbase-metrics</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>phoenix-hbase-compat-1.5.0</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.hbase</groupId>
-          <artifactId>hbase-metrics-api</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hbase</groupId>
-          <artifactId>hbase-metrics</artifactId>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
-      <id>phoenix-hbase-compat-1.4.0</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.hbase</groupId>
-          <artifactId>hbase-metrics-api</artifactId>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.hbase</groupId>
-          <artifactId>hbase-metrics</artifactId>
-        </dependency>
-      </dependencies>
+      <id>phoenix-hbase-compat-1.6.0-default</id>
+      <activation>
+        <property>
+          <name>!hbase.profile</name>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>1.6</hbase.profile>
+        <hadoop-two.version>2.8.5</hadoop-two.version>
+        <!-- We are using the 1.5 compat module for 1.6 -->
+        <hbase.compat.version>1.5.0</hbase.compat.version>
+        <hbase.version>${hbase-1.6.runtime.version}</hbase.version>
+        <tephra.hbase.compat.version>1.6</tephra.hbase.compat.version>
+      </properties>
     </profile>
     <profile>
       <id>phoenix-hbase-compat-1.3.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>1.3</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>1.3</hbase.profile>
+        <hbase.compat.version>1.3.0</hbase.compat.version>
+        <hbase.version>${hbase-1.3.runtime.version}</hbase.version>
+        <tephra.hbase.compat.version>1.3</tephra.hbase.compat.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-1.4.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>1.4</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>1.4</hbase.profile>
+        <hbase.compat.version>1.4.0</hbase.compat.version>
+        <hbase.version>${hbase-1.4.runtime.version}</hbase.version>
+        <tephra.hbase.compat.version>1.4</tephra.hbase.compat.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-1.5.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>1.5</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>1.5</hbase.profile>
+        <hbase.compat.version>1.5.0</hbase.compat.version>
+        <hbase.version>${hbase-1.5.runtime.version}</hbase.version>
+        <tephra.hbase.compat.version>1.5</tephra.hbase.compat.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>phoenix-hbase-compat-1.6.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>1.6</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>1.6</hbase.profile>
+        <hadoop-two.version>2.8.5</hadoop-two.version>
+        <!-- We are using the 1.5 compat module for 1.6 -->
+        <hbase.compat.version>1.5.0</hbase.compat.version>
+        <hbase.version>${hbase-1.6.runtime.version}</hbase.version>
+        <tephra.hbase.compat.version>1.6</tephra.hbase.compat.version>
+      </properties>
     </profile>
   </profiles>
 </project>

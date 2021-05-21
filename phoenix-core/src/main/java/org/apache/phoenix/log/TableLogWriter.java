@@ -96,6 +96,10 @@ public class TableLogWriter implements LogWriter {
             }
         }
 
+        if (connection.isReadOnly()) {
+            return;
+        }
+
         ImmutableMap<QueryLogInfo, Object> queryInfoMap = event.getQueryInfo();
         for (QueryLogInfo info : QueryLogInfo.values()) {
             if (queryInfoMap.containsKey(info) && info.logLevel.ordinal() <= event.getConnectionLogLevel().ordinal()) {

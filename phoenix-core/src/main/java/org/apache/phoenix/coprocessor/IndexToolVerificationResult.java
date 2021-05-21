@@ -17,10 +17,12 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import com.sun.org.apache.xpath.internal.operations.Bool;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.types.PBoolean;
 
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT_BYTES;
@@ -48,11 +50,16 @@ import static org.apache.phoenix.mapreduce.index.IndexVerificationResultReposito
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.REBUILT_INDEX_ROW_COUNT_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_COLUMN_FAMILY;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.SCANNED_DATA_ROW_COUNT_BYTES;
+import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.SHOULD_RETRY_BYTES;
 
 public class IndexToolVerificationResult {
 
     public void setScannedDataRowCount(long scannedDataRowCount) {
         this.scannedDataRowCount = scannedDataRowCount;
+    }
+
+    public void setShouldRetry(boolean shouldRetry) {
+        this.shouldRetry = shouldRetry;
     }
 
     public void setRebuiltIndexRowCount(long rebuiltIndexRowCount) {
@@ -351,6 +358,7 @@ public class IndexToolVerificationResult {
     private byte[] stopRow;
     private long scanMaxTs;
     private byte[] region;
+    private boolean shouldRetry = false;
     private PhaseResult before = new PhaseResult();
     private PhaseResult after = new PhaseResult();
 
@@ -366,6 +374,10 @@ public class IndexToolVerificationResult {
 
     public long getScannedDataRowCount() {
         return scannedDataRowCount;
+    }
+
+    public boolean getShouldRetry() {
+        return shouldRetry;
     }
 
     public long getRebuiltIndexRowCount() {
@@ -567,6 +579,9 @@ public class IndexToolVerificationResult {
             addScannedDataRowCount(getValue(cell));
         } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, REBUILT_INDEX_ROW_COUNT_BYTES)) {
             addRebuiltIndexRowCount(getValue(cell));
+        } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, SHOULD_RETRY_BYTES)) {
+            setShouldRetry((boolean) PBoolean.INSTANCE.toObject(cell.getValueArray(),
+                    cell.getValueOffset(), cell.getValueLength()));
         } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_VALID_INDEX_ROW_COUNT_BYTES)) {
             addBeforeRebuildValidIndexRowCount(getValue(cell));
         } else if (CellUtil.matchingColumn(cell, RESULT_TABLE_COLUMN_FAMILY, BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT_BYTES)) {

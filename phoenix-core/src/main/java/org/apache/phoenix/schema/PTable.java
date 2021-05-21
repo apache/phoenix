@@ -846,6 +846,13 @@ public interface PTable extends PMetaDataEntity {
      * annotate write-ahead logs with additional metadata
      */
     boolean isChangeDetectionEnabled();
+
+    /**
+     * @return User-provided string identifying the application version that last created or modified this schema
+     * object. Used only on tables, views, and indexes.
+     */
+    String getSchemaVersion();
+
     /**
      * Class to help track encoded column qualifier counters per column family.
      */

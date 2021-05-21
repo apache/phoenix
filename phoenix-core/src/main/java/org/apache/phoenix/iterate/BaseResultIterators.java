@@ -93,6 +93,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
@@ -1394,15 +1395,27 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             success = true;
             return iterators;
         } catch (TimeoutException e) {
-            context.getOverallQueryMetrics().queryTimedOut();
+            OverAllQueryMetrics overAllQueryMetrics = context.getOverallQueryMetrics();
+            overAllQueryMetrics.queryTimedOut();
+            if (context.getScanRanges().isPointLookup()) {
+                overAllQueryMetrics.queryPointLookupTimedOut();
+            } else {
+                overAllQueryMetrics.queryScanTimedOut();
+            }
             GLOBAL_QUERY_TIMEOUT_COUNTER.increment();
             // thrown when a thread times out waiting for the future.get() call to return
-            toThrow = new SQLExceptionInfo.Builder(OPERATION_TIMED_OUT)
-                    .setMessage(". Query couldn't be completed in the allotted time: "
-                            + queryTimeOut + " ms").setRootCause(e).build().buildException();
+            toThrow = new SQLExceptionInfo.Builder(OPERATION_TIMED_OUT).setMessage(
+                    ". Query couldn't be completed in the allotted time: " + queryTimeOut + " ms")
+                    .setRootCause(e).build().buildException();
         } catch (SQLException e) {
             if (e.getErrorCode() == OPERATION_TIMED_OUT.getErrorCode()) {
-                context.getOverallQueryMetrics().queryTimedOut();
+                OverAllQueryMetrics overAllQueryMetrics = context.getOverallQueryMetrics();
+                overAllQueryMetrics.queryTimedOut();
+                if (context.getScanRanges().isPointLookup()) {
+                    overAllQueryMetrics.queryPointLookupTimedOut();
+                } else {
+                    overAllQueryMetrics.queryScanTimedOut();
+                }
                 GLOBAL_QUERY_TIMEOUT_COUNTER.increment();
             }
             toThrow = e;
@@ -1434,7 +1447,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             } finally {
                 if (toThrow != null) {
                     GLOBAL_FAILED_QUERY_COUNTER.increment();
-                    context.getOverallQueryMetrics().queryFailed();
+                    OverAllQueryMetrics overAllQueryMetrics = context.getOverallQueryMetrics();
+                    overAllQueryMetrics.queryFailed();
+                    if (context.getScanRanges().isPointLookup()) {
+                        overAllQueryMetrics.queryPointLookupFailed();
+                    } else {
+                        overAllQueryMetrics.queryScanFailed();
+                    }
                     throw toThrow;
                 }
             }
