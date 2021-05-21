@@ -955,6 +955,7 @@ public class MutationState implements SQLCloseable {
         long tempSize;
         long deleteSize = 0, deleteCounter = 0;
         long upsertsize = 0, upsertCounter = 0;
+        long atomicUpsertsize = 0;
         if (GlobalClientMetrics.isMetricsEnabled()) {
             for (Mutation mutation : mutations) {
                 tempSize  = KeyValueUtil.calculateMutationDiskSize(mutation);
@@ -966,6 +967,9 @@ public class MutationState implements SQLCloseable {
                 }else if(mutation instanceof Put) {
                     upsertsize += tempSize;
                     upsertCounter++;
+                    if (mutation.getAttribute(PhoenixIndexBuilder.ATOMIC_OP_ATTRIB) != null) {
+                        atomicUpsertsize += tempSize;
+                    }
                     allDeletesMutations = false;
                 } else {
                     allUpsertsMutations = false;
@@ -976,7 +980,7 @@ public class MutationState implements SQLCloseable {
         if (updateGlobalClientMetrics) {
             GLOBAL_MUTATION_BYTES.update(byteSize);
         }
-        return new MutationBytes(deleteCounter, deleteSize, byteSize, upsertCounter, upsertsize);
+        return new MutationBytes(deleteCounter, deleteSize, byteSize, upsertCounter, upsertsize, atomicUpsertsize);
     }
 
     public long getBatchSizeBytes() {
@@ -994,14 +998,16 @@ public class MutationState implements SQLCloseable {
         private long totalMutationBytes;
         private long upsertMutationCounter;
         private long upsertMutationBytes;
+        private long atomicUpsertMutationBytes; // needed to calculate atomic upsert commit time
 
-        public MutationBytes(long deleteMutationCounter, long deleteMutationBytes, long totalMutationBytes, long
-                upsertMutationCounter, long upsertMutationBytes) {
+        public MutationBytes(long deleteMutationCounter, long deleteMutationBytes, long totalMutationBytes,
+                             long upsertMutationCounter, long upsertMutationBytes, long atomicUpsertMutationBytes) {
             this.deleteMutationCounter = deleteMutationCounter;
             this.deleteMutationBytes = deleteMutationBytes;
             this.totalMutationBytes = totalMutationBytes;
             this.upsertMutationCounter = upsertMutationCounter;
             this.upsertMutationBytes = upsertMutationBytes;
+            this.atomicUpsertMutationBytes = atomicUpsertMutationBytes;
         }
 
 
@@ -1024,6 +1030,8 @@ public class MutationState implements SQLCloseable {
         public long getUpsertMutationBytes() {
             return upsertMutationBytes;
         }
+
+        public long getAtomicUpsertMutationBytes() { return atomicUpsertMutationBytes; }
     }
 
     public enum MutationMetadataType {
@@ -1542,7 +1550,7 @@ public class MutationState implements SQLCloseable {
         // in case we are dealing with all deletes for a non-transactional table, since there is a
         // bug in sendMutations where we don't get the correct value for numFailedMutations when
         // we don't use transactions
-        return new MutationMetricQueue.MutationMetric(0, 0, 0, 0, 0,
+        return new MutationMetricQueue.MutationMetric(0, 0, 0, 0, 0, 0,
                 allDeletesMutations && !isTransactional ? numDeleteMutationsInBatch : numFailedMutations,
                 0, 0, 0, 0,
                 numUpsertMutationsInBatch,
@@ -1571,6 +1579,8 @@ public class MutationState implements SQLCloseable {
             long numFailedPhase3Mutations, long mutationCommitTime) {
         long committedUpsertMutationBytes = totalMutationBytesObject == null ? 0 :
                 totalMutationBytesObject.getUpsertMutationBytes();
+        long committedAtomicUpsertMutationBytes = totalMutationBytesObject == null ? 0:
+                totalMutationBytesObject.getAtomicUpsertMutationBytes();
         long committedDeleteMutationBytes = totalMutationBytesObject == null ? 0 :
                 totalMutationBytesObject.getDeleteMutationBytes();
         long committedUpsertMutationCounter = totalMutationBytesObject == null ? 0 :
@@ -1580,6 +1590,7 @@ public class MutationState implements SQLCloseable {
         long committedTotalMutationBytes = totalMutationBytesObject == null ? 0 :
                 totalMutationBytesObject.getTotalMutationBytes();
         long upsertMutationCommitTime = 0L;
+        long atomicUpsertMutationCommitTime = 0L;
         long deleteMutationCommitTime = 0L;
 
         if (totalMutationBytesObject != null && numFailedMutations != 0) {
@@ -1592,6 +1603,8 @@ public class MutationState implements SQLCloseable {
                     calculateMutationSize(uncommittedMutationsList, false);
             committedUpsertMutationBytes -=
                     uncommittedMutationBytesObject.getUpsertMutationBytes();
+            committedAtomicUpsertMutationBytes -=
+                    uncommittedMutationBytesObject.getAtomicUpsertMutationBytes();
             committedDeleteMutationBytes -=
                     uncommittedMutationBytesObject.getDeleteMutationBytes();
             committedUpsertMutationCounter -=
@@ -1606,6 +1619,9 @@ public class MutationState implements SQLCloseable {
             upsertMutationCommitTime =
                     (long)Math.floor((double)(committedUpsertMutationBytes * mutationCommitTime)/
                             committedTotalMutationBytes);
+            atomicUpsertMutationCommitTime =
+                (long)Math.floor((double)(committedAtomicUpsertMutationBytes * mutationCommitTime)/
+                            committedTotalMutationBytes);
             deleteMutationCommitTime =
                     (long)Math.ceil((double)(committedDeleteMutationBytes * mutationCommitTime)/
                             committedTotalMutationBytes);
@@ -1614,6 +1630,7 @@ public class MutationState implements SQLCloseable {
                 committedUpsertMutationBytes,
                 committedDeleteMutationBytes,
                 upsertMutationCommitTime,
+                atomicUpsertMutationCommitTime,
                 deleteMutationCommitTime,
                 0, // num failed mutations have been counted already in updateMutationBatchFailureMetrics()
                 committedUpsertMutationCounter,
