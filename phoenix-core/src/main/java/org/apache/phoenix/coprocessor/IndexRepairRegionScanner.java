@@ -326,6 +326,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
             for (int i = 0; i < dataRowKeysSetList.size(); ++i) {
                 if (dataRowKeysSetList.get(i).contains(dataRowKey)) {
                     mapList.get(i).put(indexRowKey, actualMutationList);
+                    break;
                 }
             }
         }
