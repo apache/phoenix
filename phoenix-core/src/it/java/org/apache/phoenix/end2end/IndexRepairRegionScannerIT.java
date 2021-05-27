@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.CounterGroup;
 import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.IndexRepairRegionScanner;
@@ -63,6 +64,8 @@ import org.junit.experimental.categories.Category;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -97,6 +100,7 @@ import static org.junit.Assert.fail;
 @RunWith(Parameterized.class)
 public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(IndexRepairRegionScannerIT.class);
     private final String tableDDLOptions;
     private final String indexDDLOptions;
     private boolean mutable;
@@ -137,6 +141,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
         props.put(ScanInfoUtil.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0));
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
+        // to force multiple verification tasks to be spawned so that we can exercise the page splitting logic
         props.put(GlobalIndexRegionScanner.INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY, Long.toString(2));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
@@ -226,6 +231,13 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         getUtility().getHBaseAdmin().truncateTable(TableName.valueOf(RESULT_TABLE_NAME), true);
     }
 
+    private void dumpIndexToolMRJobCounters(IndexTool indexTool) throws IOException {
+        CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
+        for (Counter counter : mrJobCounters) {
+            LOGGER.info(String.format("%s=%d", counter.getName(), counter.getValue()));
+        }
+    }
+
     private void assertExtraCounters(IndexTool indexTool, long extraVerified, long extraUnverified,
             boolean isBefore) throws IOException {
         CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
@@ -243,7 +255,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private void assertDisableLogging(Connection conn, int expectedRows,
+    private void assertDisableLogging(Connection conn, int expectedExtraRows, int expectedPITRows,
         IndexTool.IndexVerifyType verifyType,
         IndexTool.IndexDisableLoggingType disableLoggingType,
         byte[] expectedPhase,
@@ -256,19 +268,32 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             null,
             expectedStatus, verifyType, disableLoggingType, "-fi");
         assertNotNull(tool);
-        byte[] indexTableFullNameBytes = Bytes.toBytes(indexTableFullName);
 
+        try {
+            assertExtraCounters(tool, expectedExtraRows, 0, true);
+        } catch (AssertionError e) {
+            dumpIndexToolMRJobCounters(tool);
+            throw e;
+        }
+
+        byte[] indexTableFullNameBytes = Bytes.toBytes(indexTableFullName);
         IndexVerificationOutputRepository outputRepository =
             new IndexVerificationOutputRepository(indexTableFullNameBytes, conn);
         List<IndexVerificationOutputRow> rows =
             outputRepository.getAllOutputRows();
         try {
-            assertEquals(expectedRows, rows.size());
+            if (expectedPITRows == 0) {
+                assertTrue(rows.isEmpty());
+            } else {
+                // https://issues.apache.org/jira/browse/HBASE-17361 HTable#Put() is not threadsafe
+                // in releases < HBase 2.0 so occasionally we may fail to add some rows to PIT table
+                assertTrue(expectedPITRows >= rows.size());
+            }
         } catch (AssertionError e) {
             TestUtil.dumpTable(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
             throw e;
         }
-        if (expectedRows > 0) {
+        if (expectedPITRows > 0) {
             assertArrayEquals(expectedPhase, rows.get(0).getPhaseValue());
         }
     }
@@ -799,20 +824,20 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             // run the index MR job as ONLY so the index doesn't get rebuilt. Should be NROWS number
             // of extra rows. We pass in --disable-logging BEFORE to silence the output logging to
             // PHOENIX_INDEX_TOOL
-            assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.ONLY,
+            assertDisableLogging(conn, NROWS, 0, IndexTool.IndexVerifyType.ONLY,
                 IndexTool.IndexDisableLoggingType.BEFORE, null, schemaName, dataTableName, indexTableName,
                 indexTableFullName, 0);
             truncateIndexToolTables();
 
             // logging to PHOENIX_INDEX_TOOL enabled
-            assertDisableLogging(conn, NROWS, IndexTool.IndexVerifyType.ONLY,
+            assertDisableLogging(conn, NROWS, NROWS, IndexTool.IndexVerifyType.ONLY,
                 IndexTool.IndexDisableLoggingType.NONE,
                 IndexVerificationOutputRepository.PHASE_BEFORE_VALUE,schemaName,
                 dataTableName, indexTableName,
                 indexTableFullName, 0);
             truncateIndexToolTables();
 
-            assertDisableLogging(conn, 0, IndexTool.IndexVerifyType.BEFORE,
+            assertDisableLogging(conn, NROWS, 0, IndexTool.IndexVerifyType.BEFORE,
                 IndexTool.IndexDisableLoggingType.BEFORE,
                 null, schemaName,
                 dataTableName, indexTableName,

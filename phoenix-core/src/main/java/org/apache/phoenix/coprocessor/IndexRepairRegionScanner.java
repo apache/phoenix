@@ -306,6 +306,12 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         return dataRowKeys;
     }
 
+    /**
+     * @param indexMutationMap actual index mutations for a page
+     * @param dataRowKeysSetList List of per-task data row keys
+     * @return For each set of data row keys, split the acutal index mutation map into
+     * a per-task index mutation map and return the list of all index mutation maps.
+     */
     private List<Map<byte[], List<Mutation>>> getPerTaskIndexMutationMap(
             Map<byte[], List<Mutation>> indexMutationMap, List<Set<byte[]>> dataRowKeysSetList) {
         List<Map<byte[], List<Mutation>>> mapList = Lists.newArrayListWithExpectedSize(dataRowKeysSetList.size());
