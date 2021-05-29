@@ -140,6 +140,7 @@ public class Pherf {
             command = parser.parse(options, args);
         } catch (ParseException e) {
             hf.printHelp("Pherf", options);
+            LOGGER.error("Something went wrong while parsing.", e);
             System.exit(1);
         }
 
@@ -237,6 +238,7 @@ public class Pherf {
             new Pherf(args).run();
         } catch (Exception e) {
             e.printStackTrace();
+            LOGGER.error("Something went wrong.", e);
             System.exit(1);
         }
     }
