@@ -103,6 +103,7 @@ public class AuditLoggingIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
             rs.close();
 
+            Thread.sleep(4000);
             ResultSet rs2 = conn.createStatement().executeQuery(getLogsQuery);
             assertTrue(rs2.next());
             assertEquals(rs2.getString(7), createqQery);
@@ -136,6 +137,7 @@ public class AuditLoggingIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
             rs.close();
 
+            Thread.sleep(4000);
             ResultSet rs2 = conn.createStatement().executeQuery(getLogsQuery);
             assertTrue(rs2.next());
             assertEquals(rs2.getString(7), createqQery);
@@ -185,6 +187,7 @@ public class AuditLoggingIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
             rs.close();
 
+            Thread.sleep(4000);
             ResultSet rs2 = conn.createStatement().executeQuery(getLogsQuery);
             assertTrue(rs2.next());
             assertTrue(rs2.next());
