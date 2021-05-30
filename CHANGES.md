@@ -18,6 +18,73 @@
 -->
 # PHOENIX Changelog
 
+## Release 5.1.2 - Unreleased (as of 2021-05-30)
+
+
+
+### IMPROVEMENTS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-6444](https://issues.apache.org/jira/browse/PHOENIX-6444) | Extend Cell Tags to Delete object for Indexer coproc |  Major | core |
+| [PHOENIX-6357](https://issues.apache.org/jira/browse/PHOENIX-6357) | Change all command line tools to use the fixed commons-cli constructor |  Major | core |
+| [PHOENIX-6422](https://issues.apache.org/jira/browse/PHOENIX-6422) | Remove CorrelatePlan |  Minor | core |
+| [PHOENIX-6435](https://issues.apache.org/jira/browse/PHOENIX-6435) | Fix ViewTTLIT test flapper |  Blocker | . |
+| [PHOENIX-6434](https://issues.apache.org/jira/browse/PHOENIX-6434) | Secondary Indexes on PHOENIX\_ROW\_TIMESTAMP() |  Major | . |
+
+
+### BUG FIXES:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-6479](https://issues.apache.org/jira/browse/PHOENIX-6479) | Duplicate commons-io dependency in phoenix-pherf |  Trivial | . |
+| [PHOENIX-6475](https://issues.apache.org/jira/browse/PHOENIX-6475) | Build failure on Linux ARM64 |  Major | core |
+| [PHOENIX-6420](https://issues.apache.org/jira/browse/PHOENIX-6420) | Wrong result when conditional and regular upserts are passed in the same commit batch |  Major | . |
+| [PHOENIX-6471](https://issues.apache.org/jira/browse/PHOENIX-6471) | Revert PHOENIX-5387 to remove unneeded CPL 1.0 license |  Blocker | . |
+| [PHOENIX-6442](https://issues.apache.org/jira/browse/PHOENIX-6442) | Phoenix should depend on the appropriate tephra-hbase-compat-x.y module |  Major | core, tephra |
+| [PHOENIX-6437](https://issues.apache.org/jira/browse/PHOENIX-6437) | Delete marker for parent-child rows does not get replicated via SystemCatalogWALEntryFilter |  Major | core |
+| [PHOENIX-6351](https://issues.apache.org/jira/browse/PHOENIX-6351) | PhoenixMRJobUtil getActiveResourceManagerAddress logic fails on pseudodistributed cluster |  Minor | core |
+| [PHOENIX-6447](https://issues.apache.org/jira/browse/PHOENIX-6447) | Add support for SYSTEM.CHILD\_LINK table in systemcatalogwalentryfilter |  Major | core |
+| [PHOENIX-6452](https://issues.apache.org/jira/browse/PHOENIX-6452) | cache-apache-client-artifact.sh stopped working |  Critical | core |
+| [PHOENIX-6427](https://issues.apache.org/jira/browse/PHOENIX-6427) | Create sequence fails in lowercase schema |  Major | core |
+| [PHOENIX-6424](https://issues.apache.org/jira/browse/PHOENIX-6424) | SELECT cf1.\* FAILS with a WHERE clause including cf2. |  Major | . |
+| [PHOENIX-6421](https://issues.apache.org/jira/browse/PHOENIX-6421) | Selecting an indexed array value from an uncovered column with local index returns NULL |  Major | . |
+| [PHOENIX-6423](https://issues.apache.org/jira/browse/PHOENIX-6423) | Wildcard queries fail with mixed default and explicit column families. |  Critical | . |
+| [PHOENIX-6419](https://issues.apache.org/jira/browse/PHOENIX-6419) | Unused getResolverForQuery() in QueryCompiler.verifySCN() |  Trivial | core |
+
+
+### TESTS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-6483](https://issues.apache.org/jira/browse/PHOENIX-6483) | Flakes in BasePermissionsIT and AuditLoggingIT |  Major | . |
+| [PHOENIX-6482](https://issues.apache.org/jira/browse/PHOENIX-6482) | PherfMainIT#testPherfMain is consistently failing |  Major | . |
+
+
+### SUB-TASKS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-6417](https://issues.apache.org/jira/browse/PHOENIX-6417) | Fix PHERF ITs that are failing in the local builds |  Minor | . |
+| [PHOENIX-6118](https://issues.apache.org/jira/browse/PHOENIX-6118) | Multi Tenant Workloads using PHERF |  Major | . |
+| [PHOENIX-6429](https://issues.apache.org/jira/browse/PHOENIX-6429) | Add support for global connections and sequential data generators |  Major | . |
+| [PHOENIX-6430](https://issues.apache.org/jira/browse/PHOENIX-6430) | Add support for full row update for tables when no columns specfied in scenario |  Major | . |
+| [PHOENIX-6431](https://issues.apache.org/jira/browse/PHOENIX-6431) | Add support for auto assigning pmfs |  Major | . |
+| [PHOENIX-6432](https://issues.apache.org/jira/browse/PHOENIX-6432) | Add support for additional load generators |  Major | . |
+
+
+### OTHER:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-6436](https://issues.apache.org/jira/browse/PHOENIX-6436) | OrderedResultIterator overestimates memory requirements. |  Major | . |
+| [PHOENIX-6456](https://issues.apache.org/jira/browse/PHOENIX-6456) | Support query logging for DDL and DML |  Major | core |
+| [PHOENIX-6451](https://issues.apache.org/jira/browse/PHOENIX-6451) | Update joni and jcodings versions |  Major | . |
+| [PHOENIX-6446](https://issues.apache.org/jira/browse/PHOENIX-6446) | Bump default HBase version on 2.3 profile to 2.3.5 |  Major | . |
+| [PHOENIX-6418](https://issues.apache.org/jira/browse/PHOENIX-6418) | Bump default HBase version on 2.4 profile to 2.4.2 |  Major | . |
+
+
+
 ## Release 5.1.1 - Unreleased (as of 2021-03-16)
 
 
