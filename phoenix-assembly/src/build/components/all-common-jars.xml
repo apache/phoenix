@@ -31,6 +31,13 @@
       </includes>
     </fileSet>
     <fileSet>
+      <directory>${project.basedir}/../phoenix-client-parent/phoenix-client-embedded/target</directory>
+      <outputDirectory>/</outputDirectory>
+      <includes>
+        <include>phoenix-client-embedded-${hbase.suffix}-${project.version}.jar</include>
+      </includes>
+    </fileSet>
+    <fileSet>
       <directory>${project.basedir}/../phoenix-server/target</directory>
       <outputDirectory>/</outputDirectory>
       <includes>
