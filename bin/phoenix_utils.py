@@ -77,10 +77,16 @@ def findClasspath(command_name):
     return tryDecode(subprocess.Popen(command, shell=True, stdout=subprocess.PIPE).stdout.read())
 
 def setPath():
-    PHOENIX_CLIENT_JAR_PATTERN = "phoenix-client-hbase-*[!s].jar"
+    PHOENIX_CLIENT_EMBEDDED_JAR_PATTERN = "phoenix-client-embedded-hbase-*[!s].jar"
     PHOENIX_TRACESERVER_JAR_PATTERN = "phoenix-tracing-webapp-*-runnable.jar"
     PHOENIX_TESTS_JAR_PATTERN = "phoenix-core-*-tests*.jar"
     PHOENIX_PHERF_JAR_PATTERN = "phoenix-pherf-*[!s].jar"
+    SLF4J_LOG4J12_JAR_PATTERN = "slf4j-log4j12-*[!s].jar"
+    SQLLINE_WITH_DEPS_PATTERN = "sqlline-*-jar-with-dependencies.jar"
+
+
+    OVERRIDE_SLF4J_BACKEND = "OVERRIDE_SLF4J_BACKEND_JAR_LOCATION"
+    OVERRIDE_SQLLINE = "OVERRIDE_SQLLINE_JAR_LOCATION"
 
     # Backward support old env variable PHOENIX_LIB_DIR replaced by PHOENIX_CLASS_PATH
     global phoenix_class_path
@@ -113,15 +119,15 @@ def setPath():
     if pherf_properties_file == "":
         pherf_conf_path = os.path.join(current_dir, "..", "phoenix-pherf", "config")
 
-    global phoenix_jar_path
-    phoenix_jar_path = os.path.join(current_dir, "..", "phoenix-client-parent" , "phoenix-client", "target","*")
+    global phoenix_embedded_jar_path
+    phoenix_embedded_jar_path = os.path.join(current_dir, "..", "phoenix-client-parent" , "phoenix-client-embedded", "target","*")
 
-    global phoenix_client_jar
-    phoenix_client_jar = find(PHOENIX_CLIENT_JAR_PATTERN, phoenix_jar_path)
-    if phoenix_client_jar == "":
-        phoenix_client_jar = findFileInPathWithoutRecursion(PHOENIX_CLIENT_JAR_PATTERN, os.path.join(current_dir, ".."))
-    if phoenix_client_jar == "":
-        phoenix_client_jar = find(PHOENIX_CLIENT_JAR_PATTERN, phoenix_class_path)
+    global phoenix_client_embedded_jar
+    phoenix_client_embedded_jar = find(PHOENIX_CLIENT_EMBEDDED_JAR_PATTERN, phoenix_embedded_jar_path)
+    if phoenix_client_embedded_jar == "":
+        phoenix_client_embedded_jar = findFileInPathWithoutRecursion(PHOENIX_CLIENT_EMBEDDED_JAR_PATTERN, os.path.join(current_dir, ".."))
+    if phoenix_client_embedded_jar == "":
+        phoenix_client_embedded_jar = find(PHOENIX_CLIENT_EMBEDDED_JAR_PATTERN, phoenix_class_path)
 
     global phoenix_test_jar_path
     phoenix_test_jar_path = os.path.join(current_dir, "..", "phoenix-core", "target","*")
@@ -176,6 +182,16 @@ def setPath():
     if phoenix_pherf_jar == "":
         phoenix_pherf_jar = findFileInPathWithoutRecursion(PHOENIX_PHERF_JAR_PATTERN, os.path.join(current_dir, ".."))
 
+    global sqlline_with_deps_jar
+    sqlline_with_deps_jar = os.environ.get(OVERRIDE_SQLLINE)
+    if sqlline_with_deps_jar is None or sqlline_with_deps_jar == "":
+        sqlline_with_deps_jar = findFileInPathWithoutRecursion(SQLLINE_WITH_DEPS_PATTERN, os.path.join(current_dir, "..","lib"))
+
+    global slf4j_backend_jar
+    slf4j_backend_jar = os.environ.get(OVERRIDE_SLF4J_BACKEND)
+    if slf4j_backend_jar is None or slf4j_backend_jar == "":
+        slf4j_backend_jar = findFileInPathWithoutRecursion(SLF4J_LOG4J12_JAR_PATTERN, os.path.join(current_dir, "..","lib"))
+
     return ""
 
 def shell_quote(args):
@@ -204,15 +220,14 @@ if __name__ == "__main__":
     print("hbase_conf_dir:", hbase_conf_dir)
     print("hbase_conf_path:", hbase_conf_path)
     print("current_dir:", current_dir)
-    print("phoenix_jar_path:", phoenix_jar_path)
-    print("phoenix_client_jar:", phoenix_client_jar)
+    print("phoenix_embedded_jar_path:", phoenix_embedded_jar_path)
+    print("phoenix_client_embedded_jar:", phoenix_client_embedded_jar)
     print("phoenix_test_jar_path:", phoenix_test_jar_path)
     print("hadoop_common_jar_path:", hadoop_common_jar_path)
     print("hadoop_common_jar:", hadoop_common_jar)
     print("hadoop_hdfs_jar_path:", hadoop_hdfs_jar_path)
     print("hadoop_hdfs_jar:", hadoop_hdfs_jar)
     print("testjar:", testjar)
-    print("phoenix_queryserver_jar:", phoenix_queryserver_jar)
-    print("phoenix_loadbalancer_jar:", phoenix_loadbalancer_jar)
-    print("phoenix_thin_client_jar:", phoenix_thin_client_jar)
     print("hadoop_classpath:", hadoop_classpath)
+    print("sqlline_with_deps_jar:", sqlline_with_deps_jar)
+    print("slf4j_backend_jar:", slf4j_backend_jar)
