@@ -81,10 +81,5 @@
       <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
       <optional>false</optional>
     </dependency>
-    <dependency>
-      <groupId>sqlline</groupId>
-      <artifactId>sqlline</artifactId>
-      <scope>runtime</scope>
-    </dependency>
   </dependencies>
 </project>
