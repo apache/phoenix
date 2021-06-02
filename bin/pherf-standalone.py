@@ -32,7 +32,7 @@ args = phoenix_utils.shell_quote(sys.argv[1:])
 
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
-hbase_config_path = os.getenv('HBASE_CONF_DIR', phoenix_utils.current_dir)
+hbase_config_path = phoenix_utils.hbase_conf_dir
 
 java_home = os.getenv('JAVA_HOME')
 
@@ -64,7 +64,7 @@ if java_home:
 else:
     java = 'java'
 
-java_cmd = java +' -Xms512m -Xmx3072m  -cp "' + phoenix_utils.pherf_conf_path + os.pathsep + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_client_jar + os.pathsep + phoenix_utils.phoenix_pherf_jar + \
+java_cmd = java +' -Xms512m -Xmx3072m  -cp "' + phoenix_utils.pherf_conf_path + os.pathsep + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.slf4j_backend_jar + os.pathsep + phoenix_utils.phoenix_client_embedded_jar + os.pathsep + phoenix_utils.phoenix_pherf_jar + \
     '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " org.apache.phoenix.pherf.Pherf " + args 

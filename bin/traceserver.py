@@ -119,9 +119,9 @@ else:
 #    " -Xdebug -Xrunjdwp:transport=dt_socket,address=5005,server=y,suspend=n " + \
 #    " -XX:+UnlockCommercialFeatures -XX:+FlightRecorder -XX:FlightRecorderOptions=defaultrecording=true,dumponexit=true" + \
 java_cmd = '%(java)s  ' + \
-    '-cp ' + hbase_config_path + os.pathsep + phoenix_utils.phoenix_traceserver_jar + os.pathsep + \
-    phoenix_utils.phoenix_client_jar + os.pathsep + phoenix_utils.phoenix_queryserver_jar + \
-    os.pathsep + phoenix_utils.hadoop_classpath + \
+    '-cp ' + hbase_config_path + os.pathsep + phoenix_utils.hadoop_conf + os.pathsep + \
+    phoenix_utils.phoenix_traceserver_jar + os.pathsep + phoenix_utils.slf4j_backend_jar + os.pathsep + \
+    phoenix_utils.phoenix_client_embedded_jar + os.pathsep + phoenix_utils.phoenix_queryserver_jar + \
     " -Dproc_phoenixtraceserver" + \
     " -Dlog4j.configuration=file:" + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " -Dpsql.root.logger=%(root_logger)s" + \
