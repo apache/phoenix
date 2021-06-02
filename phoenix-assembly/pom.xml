@@ -134,6 +134,10 @@
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-client-embedded-${hbase.suffix}</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-pherf</artifactId>
     </dependency>
     <dependency>
@@ -144,6 +148,12 @@
       <groupId>org.apache.omid</groupId>
       <artifactId>omid-hbase-tools-hbase1.x</artifactId>
       <version>${omid.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>sqlline</groupId>
+      <artifactId>sqlline</artifactId>
+      <version>${sqlline.version}</version>
+      <classifier>jar-with-dependencies</classifier>
     </dependency>
   </dependencies>
 </project>
