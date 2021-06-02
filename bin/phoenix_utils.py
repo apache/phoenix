@@ -107,8 +107,6 @@ def setPath():
         else:
             # Try to provide something valid
             hbase_conf_dir = '.'
-    global hbase_conf_path # keep conf_path around for backward compatibility
-    hbase_conf_path = hbase_conf_dir
 
     global current_dir
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -148,18 +146,6 @@ def setPath():
         hadoop_classpath = findClasspath('hadoop').rstrip()
     else:
         hadoop_classpath = os.getenv('HADOOP_CLASSPATH', '').rstrip()
-
-    global hadoop_common_jar_path
-    hadoop_common_jar_path = os.path.join(current_dir, "..", "phoenix-client", "target","*").rstrip()
-
-    global hadoop_common_jar
-    hadoop_common_jar = find("hadoop-common*.jar", hadoop_common_jar_path)
-
-    global hadoop_hdfs_jar_path
-    hadoop_hdfs_jar_path = os.path.join(current_dir, "..", "phoenix-client", "target","*").rstrip()
-
-    global hadoop_hdfs_jar
-    hadoop_hdfs_jar = find("hadoop-hdfs*.jar", hadoop_hdfs_jar_path)
 
     global testjar
     testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_test_jar_path)
@@ -218,15 +204,10 @@ if __name__ == "__main__":
     setPath()
     print("phoenix_class_path:", phoenix_class_path)
     print("hbase_conf_dir:", hbase_conf_dir)
-    print("hbase_conf_path:", hbase_conf_path)
     print("current_dir:", current_dir)
     print("phoenix_embedded_jar_path:", phoenix_embedded_jar_path)
     print("phoenix_client_embedded_jar:", phoenix_client_embedded_jar)
     print("phoenix_test_jar_path:", phoenix_test_jar_path)
-    print("hadoop_common_jar_path:", hadoop_common_jar_path)
-    print("hadoop_common_jar:", hadoop_common_jar)
-    print("hadoop_hdfs_jar_path:", hadoop_hdfs_jar_path)
-    print("hadoop_hdfs_jar:", hadoop_hdfs_jar)
     print("testjar:", testjar)
     print("hadoop_classpath:", hadoop_classpath)
     print("sqlline_with_deps_jar:", sqlline_with_deps_jar)
