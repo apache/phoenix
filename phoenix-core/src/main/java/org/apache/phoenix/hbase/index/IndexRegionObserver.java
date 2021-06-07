@@ -1101,19 +1101,26 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
         lockRows(context);
 
         boolean hasAtomic = hasAtomicUpdate(miniBatchOp);
+        long onDupCheckTime = 0;
+
         if (hasAtomic || hasGlobalIndex(indexMetaData)) {
             // Retrieve the current row states from the data table while holding the lock.
             // This is needed for both atomic mutations and global indexes
+            long start = EnvironmentEdgeManager.currentTimeMillis();
             getCurrentRowStates(c, context);
+            onDupCheckTime += (EnvironmentEdgeManager.currentTimeMillis() - start);
         }
 
         if (hasAtomic) {
+            long start = EnvironmentEdgeManager.currentTimeMillis();
             // add the mutations for conditional updates to the mini batch
             addOnDupMutationsToBatch(miniBatchOp, context);
 
             // release locks for ON DUPLICATE KEY IGNORE since we won't be changing those rows
             // this is needed so that we can exit early
             releaseLocksForOnDupIgnoreMutations(miniBatchOp, context);
+            onDupCheckTime += (EnvironmentEdgeManager.currentTimeMillis() - start);
+            metricSource.updateDuplicateKeyCheckTime(dataTableName, onDupCheckTime);
 
             // early exit if we are not changing any rows
             if (context.rowsToLock.isEmpty()) {

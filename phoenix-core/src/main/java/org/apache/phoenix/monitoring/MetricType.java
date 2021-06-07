@@ -56,6 +56,12 @@ public enum MetricType {
             + " autoCommit is true, the total time taken for executeMutation + conn.commit",
             LogLevel.OFF, PLong.INSTANCE),
 
+    ATOMIC_UPSERT_SQL_COUNTER("auc", "Counter for number of atomic upsert sql queries", LogLevel.OFF, PLong.INSTANCE),
+    ATOMIC_UPSERT_COMMIT_TIME("aut", "Time it took to commit a batch of atomic upserts", LogLevel.OFF, PLong.INSTANCE),
+    ATOMIC_UPSERT_SQL_QUERY_TIME("auqt", "Time taken by atomic upsert sql queries inside executeMutation or if"
+        + " autoCommit is true, the total time taken for executeMutation + conn.commit",
+        LogLevel.OFF, PLong.INSTANCE),
+
     // delete-specific metrics updated during executeMutation
     DELETE_SQL_COUNTER("dc", "Counter for number of delete sql queries", LogLevel.OFF, PLong.INSTANCE),
     DELETE_SUCCESS_SQL_COUNTER("dssc", "Counter for number of delete sql queries that successfully"
