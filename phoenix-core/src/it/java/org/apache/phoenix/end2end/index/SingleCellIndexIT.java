@@ -30,8 +30,6 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -425,15 +423,6 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
         return DriverManager.getConnection(getUrl(), tenantProps);
     }
 
-    private void assertMetadata(Connection conn, PTable.ImmutableStorageScheme expectedStorageScheme, PTable.QualifierEncodingScheme
-            expectedColumnEncoding, String tableName)
-            throws Exception {
-        PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
-        PTable table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), tableName));
-        assertEquals(expectedStorageScheme, table.getImmutableStorageScheme());
-        assertEquals(expectedColumnEncoding, table.getEncodingScheme());
-    }
-
     private void createTableAndIndex(Connection conn, String tableName, String indexName, String tableDDL, boolean async, int numOfRows)
             throws SQLException {
         String createTableSql = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, INT_PK INTEGER NOT NULL, V1 VARCHAR, V2 INTEGER, V3 INTEGER, V4 VARCHAR, V5 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(PK1, INT_PK)) "
@@ -467,7 +456,7 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
                     hTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName.getBytes());
             Scan scan = new Scan();
             scan.setRaw(true);
-            LOGGER.debug("***** Table Name : " + tableName);
+            LOGGER.info("***** Table Name : " + tableName);
             ResultScanner scanner = hTable.getScanner(scan);
             for (Result result = scanner.next(); result != null; result = scanner.next()) {
                 for (Cell cell : result.rawCells()) {
@@ -476,7 +465,7 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
                             .entrySet()) {
                         byte[] family = entryF.getKey();
                     }
-                    LOGGER.debug(cellString + " ****** value : " + Bytes.toStringBinary(CellUtil.cloneValue(cell)));
+                    LOGGER.info(cellString + " ****** value : " + Bytes.toStringBinary(CellUtil.cloneValue(cell)));
                 }
             }
         }

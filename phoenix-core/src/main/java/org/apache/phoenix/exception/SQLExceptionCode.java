@@ -562,7 +562,10 @@ public enum SQLExceptionCode {
     INVALID_REGION_SPLIT_POLICY(908, "43M19",
         "REGION SPLIT POLICY is incorrect."),
     ERROR_WRITING_TO_SCHEMA_REGISTRY(909, "4320",
-            "Error writing DDL change to external schema registry");
+            "Error writing DDL change to external schema registry"),
+
+    CANNOT_TRANSFORM_ALREADY_TRANSFORMING_TABLE(910, "43M21",
+                                        "Cannot transform an index or a table who is already going through a transform.");
 
     private final int errorCode;
     private final String sqlState;
