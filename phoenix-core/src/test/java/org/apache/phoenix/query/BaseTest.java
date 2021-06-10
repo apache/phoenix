@@ -148,6 +148,8 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -779,6 +781,15 @@ public abstract class BaseTest {
         }
         SEQ_COUNTER.incrementAndGet();
         return "S" + Integer.toString(MAX_SEQ_SUFFIX_VALUE + nextName).substring(1);
+    }
+
+    public static void assertMetadata(Connection conn, PTable.ImmutableStorageScheme expectedStorageScheme, PTable.QualifierEncodingScheme
+            expectedColumnEncoding, String tableName)
+            throws Exception {
+        PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+        PTable table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), tableName));
+        assertEquals(expectedStorageScheme, table.getImmutableStorageScheme());
+        assertEquals(expectedColumnEncoding, table.getEncodingScheme());
     }
 
     public static synchronized void freeResourcesIfBeyondThreshold() throws Exception {

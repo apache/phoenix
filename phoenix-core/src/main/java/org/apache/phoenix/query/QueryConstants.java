@@ -94,13 +94,18 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LOGICAL_PARENT_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LOGICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NEW_METADATA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NEW_PHYS_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NO_OF_RESULTS_ITERATED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_ARGS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_PREC_RADIX;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.OLD_METADATA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM;
@@ -137,6 +142,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TRANSFORM_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
@@ -151,6 +157,14 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_END_TS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_FUNCTION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_JOB_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_RETRY_COUNT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_START_TS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_STATUS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_TABLE_TTL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_NAME;
@@ -526,6 +540,35 @@ public interface QueryConstants {
             HColumnDescriptor.TTL + "=" + TASK_TABLE_TTL + ",\n" +     // 10 days
             HTableDescriptor.SPLIT_POLICY + "='"
                 + SystemTaskSplitPolicy.class.getName() + "',\n" +
+            TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
+            STORE_NULLS + "=" + Boolean.TRUE;
+
+
+    String CREATE_TRANSFORM_METADATA = "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\""
+            + SYSTEM_TRANSFORM_TABLE + "\"(\n" +
+            // PK columns
+            TENANT_ID + " VARCHAR NULL,\n" +
+            TABLE_SCHEM + " VARCHAR NULL," +
+            LOGICAL_TABLE_NAME + " VARCHAR NOT NULL,\n" +
+            NEW_PHYS_TABLE_NAME + " VARCHAR NOT NULL,\n" +
+            TRANSFORM_TYPE + " INTEGER NOT NULL," +
+            // Non-PK columns
+            LOGICAL_PARENT_NAME + " VARCHAR NULL,\n" + // If this is an index, Logical_Parent_Name is the data table name. Index name is not unique.
+            TRANSFORM_STATUS + " VARCHAR NULL," +
+            TRANSFORM_JOB_ID + " VARCHAR NULL," +
+            TRANSFORM_RETRY_COUNT + " INTEGER NULL," +
+            TRANSFORM_START_TS + " TIMESTAMP NULL," +
+            TRANSFORM_END_TS + " TIMESTAMP NULL," +
+            OLD_METADATA + " VARCHAR NULL,\n" +
+            NEW_METADATA + " VARCHAR NULL,\n" +
+            TRANSFORM_FUNCTION + " VARCHAR NULL\n" +
+            "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
+            TENANT_ID + "," + TABLE_SCHEM + "," + LOGICAL_TABLE_NAME + "," + NEW_PHYS_TABLE_NAME + "," + TRANSFORM_TYPE + "))\n" +
+            HConstants.VERSIONS + "=%s,\n" +
+            HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n" +
+            HColumnDescriptor.TTL + "=" + TRANSFORM_TABLE_TTL + ",\n" +     // 10 days
+            HTableDescriptor.SPLIT_POLICY + "='"
+            + SystemTaskSplitPolicy.class.getName() + "',\n" +
             TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
             STORE_NULLS + "=" + Boolean.TRUE;
 }

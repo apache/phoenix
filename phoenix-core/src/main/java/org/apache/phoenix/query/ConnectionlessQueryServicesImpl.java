@@ -196,6 +196,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         return setSystemDDLProperties(QueryConstants.CREATE_TASK_METADATA);
     }
 
+    protected String getTransformDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_TRANSFORM_METADATA);
+    }
+
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
           props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS),
@@ -415,6 +419,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 try {
                     metaConnection.createStatement()
                             .executeUpdate(getTaskDDL());
+                } catch (NewerTableAlreadyExistsException ignore) {
+                }
+                try {
+                    metaConnection.createStatement()
+                            .executeUpdate(getTransformDDL());
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
             } catch (SQLException e) {

@@ -137,6 +137,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String TABLE_CAT = "TABLE_CAT";
     public static final String TABLE_CATALOG = "TABLE_CATALOG";
     public static final String TABLE_SCHEM = "TABLE_SCHEM";
+    public static final String LOGICAL_TABLE_NAME = "LOGICAL_TABLE_NAME";
+    public static final String LOGICAL_PARENT_NAME = "LOGICAL_PARENT_NAME";
     public static final String REMARKS = "REMARKS";
     public static final String TYPE_SCHEM = "TYPE_SCHEM";
     public static final String SELF_REFERENCING_COL_NAME = "SELF_REFERENCING_COL_NAME";
@@ -212,6 +214,18 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String TASK_PRIORITY = "TASK_PRIORITY";
     public static final String TASK_DATA = "TASK_DATA";
     public static final String TASK_TABLE_TTL = "864000";
+    public static final String NEW_PHYS_TABLE_NAME = "NEW_PHYS_TABLE_NAME";
+    public static final String TRANSFORM_TYPE = "TRANSFORM_TYPE";
+    public static final String TRANSFORM_STATUS = "STATUS";
+    public static final String TRANSFORM_JOB_ID = "JOB_ID";
+    public static final String TRANSFORM_RETRY_COUNT = "RETRY_COUNT";
+    public static final String TRANSFORM_START_TS = "START_TS";
+    public static final String TRANSFORM_END_TS = "END_TS";
+    public static final String OLD_METADATA = "OLD_METADATA";
+    public static final String NEW_METADATA = "NEW_METADATA";
+    public static final String TRANSFORM_FUNCTION = "TRANSFORM_FUNCTION";
+    public static final String TRANSFORM_TABLE_TTL = "864000";
+
     public static final int TTL_FOR_MUTEX = 15 * 60; // 15min
     public static final String ARRAY_SIZE = "ARRAY_SIZE";
     public static final byte[] ARRAY_SIZE_BYTES = Bytes.toBytes(ARRAY_SIZE);
@@ -391,6 +405,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String SYSTEM_TASK_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_TASK_TABLE);
     public static final byte[] SYSTEM_TASK_NAME_BYTES = Bytes.toBytes(SYSTEM_TASK_NAME);
     public static final TableName SYSTEM_TASK_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_TASK_NAME);
+
+    public static final String SYSTEM_TRANSFORM_TABLE = "TRANSFORM";
+    public static final String SYSTEM_TRANSFORM_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_TRANSFORM_TABLE);
+
     //SYSTEM:LOG
     public static final String SYSTEM_LOG_TABLE = "LOG";
     public static final String QUERY_ID = "QUERY_ID";

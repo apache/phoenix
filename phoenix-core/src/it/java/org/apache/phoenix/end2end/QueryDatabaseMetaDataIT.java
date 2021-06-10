@@ -195,6 +195,10 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE, rs.getString("TABLE_NAME"));
             assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
             assertTrue(rs.next());
+            assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
+            assertEquals(PhoenixDatabaseMetaData.SYSTEM_TRANSFORM_TABLE, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
             assertEquals(null, rs.getString("TABLE_SCHEM"));
             assertEquals(tableAName, rs.getString("TABLE_NAME"));
             assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
@@ -398,7 +402,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
                 tables.add(rs.getString("TABLE_NAME"));
                 assertEquals("SYSTEM", rs.getString("TABLE_SCHEM"));
             }
-            assertEquals(8, tables.size());
+            assertEquals(9, tables.size());
             assertTrue(tables.contains("CATALOG"));
             assertTrue(tables.contains("FUNCTION"));
 
