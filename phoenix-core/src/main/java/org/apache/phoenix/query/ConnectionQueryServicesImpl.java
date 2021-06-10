@@ -3293,6 +3293,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return setSystemDDLProperties(QueryConstants.CREATE_TASK_METADATA);
     }
 
+    protected String getTransformDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_TRANSFORM_METADATA);
+    }
+
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
           props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS),
@@ -3567,8 +3571,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try {
             metaConnection.createStatement().executeUpdate(getTaskDDL());
         } catch (TableAlreadyExistsException ignore) {}
-
-        // Catch the IOException to log the error message and then bubble it up for the client to retry.
+        try {
+            metaConnection.createStatement().executeUpdate(getTransformDDL());
+        } catch (TableAlreadyExistsException ignore) {}
     }
 
     /**
@@ -4144,6 +4149,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         metaConnection = upgradeSystemTask(metaConnection,
             systemTableToSnapshotMap);
         metaConnection = upgradeSystemFunction(metaConnection);
+        metaConnection = upgradeSystemTransform(metaConnection, systemTableToSnapshotMap);
         metaConnection = upgradeSystemLog(metaConnection);
         return upgradeSystemMutex(metaConnection);
     }
@@ -4350,6 +4356,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 throw new SQLException(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME
                     + " Upgrade is not confirmed");
             }
+        }
+        return metaConnection;
+    }
+
+    private PhoenixConnection upgradeSystemTransform(
+            PhoenixConnection metaConnection,
+            Map<String, String> systemTableToSnapshotMap)
+            throws SQLException {
+        try (Statement statement = metaConnection.createStatement()) {
+            statement.executeUpdate(getTransformDDL());
+        } catch (TableAlreadyExistsException ignored) {
+
         }
         return metaConnection;
     }
