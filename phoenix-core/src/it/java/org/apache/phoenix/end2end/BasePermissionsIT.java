@@ -102,11 +102,11 @@ public abstract class BasePermissionsIT extends BaseTest {
     private static HBaseTestingUtility testUtil;
     private static final Set<String> PHOENIX_SYSTEM_TABLES =
             new HashSet<>(Arrays.asList("SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS",
-                "SYSTEM.FUNCTION", "SYSTEM.MUTEX", "SYSTEM.CHILD_LINK"));
+                "SYSTEM.FUNCTION", "SYSTEM.MUTEX", "SYSTEM.CHILD_LINK", "SYSTEM.TRANSFORM"));
 
     private static final Set<String> PHOENIX_SYSTEM_TABLES_IDENTIFIERS =
             new HashSet<>(Arrays.asList("SYSTEM.\"CATALOG\"", "SYSTEM.\"SEQUENCE\"",
-                "SYSTEM.\"STATS\"", "SYSTEM.\"FUNCTION\"", "SYSTEM.\"MUTEX\"", "SYSTEM.\"CHILD_LINK\""));
+                "SYSTEM.\"STATS\"", "SYSTEM.\"FUNCTION\"", "SYSTEM.\"MUTEX\"", "SYSTEM.\"CHILD_LINK\"", "SYSTEM.\"TRANSFORM\""));
 
     private static final String SYSTEM_SEQUENCE_IDENTIFIER =
             QueryConstants.SYSTEM_SCHEMA_NAME + "." + "\"" + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE+ "\"";
@@ -116,7 +116,7 @@ public abstract class BasePermissionsIT extends BaseTest {
                     + PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME + "\"";
 
     static final Set<String> PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES = new HashSet<>(Arrays.asList(
-            "SYSTEM:CATALOG", "SYSTEM:SEQUENCE", "SYSTEM:STATS", "SYSTEM:FUNCTION", "SYSTEM:MUTEX", "SYSTEM:CHILD_LINK"));
+            "SYSTEM:CATALOG", "SYSTEM:SEQUENCE", "SYSTEM:STATS", "SYSTEM:FUNCTION", "SYSTEM:MUTEX", "SYSTEM:CHILD_LINK","SYSTEM:TRANSFORM"));
 
     // Create Multiple users so that we can use Hadoop UGI to run tasks as various users
     // Permissions can be granted or revoke by superusers and admins only

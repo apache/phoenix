@@ -170,7 +170,7 @@ public class ImmutableTablePropertiesIT extends ParallelStatsDisabledIT {
                     + PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
             stmt.execute(ddl);
             
-            // changing the storage scheme from/to ONCE_CELL_PER_COLUMN should fail
+            // changing the storage scheme from/to ONE_CELL_PER_COLUMN should fail
             try {
                 stmt.execute("ALTER TABLE " + immutableDataTableFullName1 + " SET IMMUTABLE_STORAGE_SCHEME=" + PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS);
                 fail();
@@ -187,5 +187,34 @@ public class ImmutableTablePropertiesIT extends ParallelStatsDisabledIT {
             }
         } 
     }
-    
+
+    @Test
+    public void testAlterImmutableStorageSchemeProp_Index() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = SchemaUtil.getTableName("", generateUniqueName());
+        String indexName = SchemaUtil.getTableName("", "IDX_" + generateUniqueName());
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            Statement stmt = conn.createStatement();
+            // create an immutable table with  ONE_CELL_PER_COLUMN storage scheme
+            String ddl = "CREATE IMMUTABLE TABLE  " + tableName +
+                    "  (a_string varchar not null, col1 integer, col2 varchar " +
+                    "  CONSTRAINT pk PRIMARY KEY (a_string)) COLUMN_ENCODED_BYTES=0, IMMUTABLE_STORAGE_SCHEME="
+                    + PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
+            stmt.execute(ddl);
+
+            ddl = "CREATE INDEX " + indexName + " ON " + tableName +
+                    "  (col1) INCLUDE (col2)";
+            stmt.execute(ddl);
+
+            // changing the storage scheme from/to ONE_CELL_PER_COLUMN should fail
+            try {
+                stmt.execute("ALTER INDEX " + indexName + " ON " + tableName +
+                        " ACTIVE SET IMMUTABLE_STORAGE_SCHEME=" + PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS);
+                fail();
+            }
+            catch (SQLException e) {
+                assertEquals(SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE.getErrorCode(), e.getErrorCode());
+            }
+        }
+    }
 }
