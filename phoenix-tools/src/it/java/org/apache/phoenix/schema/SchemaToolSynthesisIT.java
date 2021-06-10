@@ -39,11 +39,11 @@ public class SchemaToolSynthesisIT {
     // Adding new column RELATED_COMMAND
     public void testCreateTableStatement_addColumn() throws Exception {
         String expected = "CREATE TABLE IF NOT EXISTS TEST.SAMPLE_TABLE\n"
-                + "(ORG_ID CHAR(15) NOT NULL,\n" + "SOME_ANOTHER_ID BIGINT NOT NULL,\n"
+                + "(ORG_ID CHAR(15) NOT NULL,\n" + "SOME_ANOTHER_ID BIGINT NOT NULL,\n" + "SECOND_ID BIGINT NOT NULL,\n"
                 + "TYPE VARCHAR,\n" + "STATUS VARCHAR,\n" + "START_TIMESTAMP BIGINT,\n"
                 + "END_TIMESTAMP BIGINT,\n" + "PARAMS VARCHAR,\n" + "RESULT VARCHAR,\n"
-                + "RELATED_COMMAND BIGINT\n"
-                + "CONSTRAINT PK PRIMARY KEY (ORG_ID, SOME_ANOTHER_ID))\n"
+                + "RELATED_COMMAND BIGINT DEFAULT 100\n"
+                + "CONSTRAINT PK PRIMARY KEY (ORG_ID, SOME_ANOTHER_ID, SECOND_ID))\n"
                 + "VERSIONS=1,MULTI_TENANT=false,REPLICATION_SCOPE=1,TTL=31536000";
         String baseDDL = filePath+"/alter_table_add.sql";
         runAndVerify(expected, baseDDL);
@@ -53,10 +53,10 @@ public class SchemaToolSynthesisIT {
     // Dropping TYPE column
     public void testCreateTableStatement_dropColumn() throws Exception {
         String expected = "CREATE TABLE IF NOT EXISTS TEST.SAMPLE_TABLE\n"
-                + "(ORG_ID CHAR(15) NOT NULL,\n" + "SOME_ANOTHER_ID BIGINT NOT NULL,\n"
+                + "(ORG_ID CHAR(15) NOT NULL,\n" + "SOME_ANOTHER_ID BIGINT NOT NULL,\n" + "SECOND_ID BIGINT NOT NULL,\n"
                 + "STATUS VARCHAR,\n" + "START_TIMESTAMP BIGINT,\n" + "END_TIMESTAMP BIGINT,\n"
                 + "PARAMS VARCHAR,\n" + "RESULT VARCHAR\n"
-                + "CONSTRAINT PK PRIMARY KEY (ORG_ID, SOME_ANOTHER_ID))\n"
+                + "CONSTRAINT PK PRIMARY KEY (ORG_ID, SOME_ANOTHER_ID, SECOND_ID))\n"
                 + "VERSIONS=1,MULTI_TENANT=false,REPLICATION_SCOPE=1,TTL=31536000";
         String baseDDL = filePath+"/alter_table_drop.sql";
         runAndVerify(expected, baseDDL);
@@ -66,10 +66,10 @@ public class SchemaToolSynthesisIT {
     // Changing REPLICATION SCOPE from 1 to 0
     public void testCreateTableStatement_changeProperty() throws Exception {
         String expected = "CREATE TABLE IF NOT EXISTS TEST.SAMPLE_TABLE\n"
-                + "(ORG_ID CHAR(15) NOT NULL,\n" + "SOME_ANOTHER_ID BIGINT NOT NULL,\n"
+                + "(ORG_ID CHAR(15) NOT NULL,\n" + "SOME_ANOTHER_ID BIGINT NOT NULL,\n" + "SECOND_ID BIGINT NOT NULL,\n"
                 + "TYPE VARCHAR,\n" + "STATUS VARCHAR,\n" + "START_TIMESTAMP BIGINT,\n"
                 + "END_TIMESTAMP BIGINT,\n" + "PARAMS VARCHAR,\n" + "RESULT VARCHAR\n"
-                + "CONSTRAINT PK PRIMARY KEY (ORG_ID, SOME_ANOTHER_ID))\n"
+                + "CONSTRAINT PK PRIMARY KEY (ORG_ID, SOME_ANOTHER_ID, SECOND_ID))\n"
                 + "MULTI_TENANT=false,REPLICATION_SCOPE=0,TTL=31536000,VERSIONS=1";
         String baseDDL = filePath+"/alter_change_property.sql";
         runAndVerify(expected, baseDDL);
@@ -79,10 +79,10 @@ public class SchemaToolSynthesisIT {
     // Adding DISABLE_MIGRATION property
     public void testCreateTableStatement_addProperty() throws Exception {
         String expected = "CREATE TABLE IF NOT EXISTS TEST.SAMPLE_TABLE\n"
-                + "(ORG_ID CHAR(15) NOT NULL,\n" + "SOME_ANOTHER_ID BIGINT NOT NULL,\n"
+                + "(ORG_ID CHAR(15) NOT NULL,\n" + "SOME_ANOTHER_ID BIGINT NOT NULL,\n" + "SECOND_ID BIGINT NOT NULL,\n"
                 + "TYPE VARCHAR,\n" + "STATUS VARCHAR,\n" + "START_TIMESTAMP BIGINT,\n"
                 + "END_TIMESTAMP BIGINT,\n" + "PARAMS VARCHAR,\n" + "RESULT VARCHAR\n"
-                + "CONSTRAINT PK PRIMARY KEY (ORG_ID, SOME_ANOTHER_ID))\n"
+                + "CONSTRAINT PK PRIMARY KEY (ORG_ID, SOME_ANOTHER_ID, SECOND_ID))\n"
                 + "DISABLE_MIGRATION=true,MULTI_TENANT=false,REPLICATION_SCOPE=1,TTL=31536000,VERSIONS=1";
         String baseDDL = filePath+"/alter_add_property.sql";
         runAndVerify(expected, baseDDL);
@@ -96,7 +96,7 @@ public class SchemaToolSynthesisIT {
                 + "SOME_ID CHAR(15) NOT NULL,\n" + "DOUBLE1 DECIMAL(12,3),\n"
                 + "IS_BOOLEAN BOOLEAN,\n" + "RELATE CHAR(15),\n" + "TEXT1 VARCHAR,\n"
                 + "TEXT_READ_ONLY VARCHAR,\n" + "NEW_COLUMN VARCHAR(20)\n"
-                + "CONSTRAINT PKVIEW PRIMARY KEY (DATE_TIME1 DESC, SOME_ID, INT1))\n"
+                + "CONSTRAINT PKVIEW PRIMARY KEY (DATE_TIME1 DESC, INT1, SOME_ID))\n"
                 + "AS SELECT * FROM TEST.SAMPLE_TABLE_VIEW WHERE FILTER_PREFIX = 'abc'";
         String baseDDL = filePath+"/alter_view_add.sql";
         runAndVerify(expected, baseDDL);
@@ -109,7 +109,7 @@ public class SchemaToolSynthesisIT {
                 + "(DATE_TIME1 DATE NOT NULL,\n" + "INT1 BIGINT NOT NULL,\n"
                 + "SOME_ID CHAR(15) NOT NULL,\n" + "IS_BOOLEAN BOOLEAN,\n" + "RELATE CHAR(15),\n"
                 + "TEXT1 VARCHAR,\n" + "TEXT_READ_ONLY VARCHAR\n"
-                + "CONSTRAINT PKVIEW PRIMARY KEY (DATE_TIME1 DESC, SOME_ID, INT1))\n"
+                + "CONSTRAINT PKVIEW PRIMARY KEY (DATE_TIME1 DESC, INT1, SOME_ID))\n"
                 + "AS SELECT * FROM TEST.SAMPLE_TABLE_VIEW WHERE FILTER_PREFIX = 'abc'";
         String baseDDL = filePath+"/alter_view_drop.sql";
         runAndVerify(expected, baseDDL);
@@ -145,6 +145,28 @@ public class SchemaToolSynthesisIT {
 
     @Test
     // drop table
+    public void testCreateTableStatement_dropRecreateTable() throws Exception {
+        String expected = "CREATE TABLE IF NOT EXISTS TEST.SAMPLE_TABLE (\n"
+                + "   ORG_ID CHAR(15) NOT NULL,\n" + "   SOME_ANOTHER_ID BIGINT NOT NULL,\n"
+                + "   TYPE VARCHAR,\n" + "   STATUS VARCHAR,\n" + "   START_TIMESTAMP BIGINT,\n"
+                + "   END_TIMESTAMP BIGINT,\n" + "   PARAMS VARCHAR,   RESULT VARCHAR\n"
+                + "   CONSTRAINT PK PRIMARY KEY (ORG_ID, SOME_ANOTHER_ID)\n"
+                + ") VERSIONS=1,MULTI_TENANT=FALSE,REPLICATION_SCOPE=1,TTL=31536000";
+        String baseDDL = filePath+"/drop_create_table.sql";
+        runAndVerify(expected, baseDDL);
+    }
+
+    @Test
+    // drop table
+    public void testCreateTableStatement_add_pk() throws Exception {
+        String expected = "CREATE TABLE IF NOT EXISTS TEST.TABLE_1\n" + "(STATE CHAR(1) NOT NULL,\n"
+                + "SOME_ID VARCHAR\n" + "CONSTRAINT PK PRIMARY KEY (STATE, SOME_ID))";
+        String baseDDL = filePath+"/alter_table_add_pk.sql";
+        runAndVerify(expected, baseDDL);
+    }
+
+    @Test
+    // drop table
     public void testCreateIndexStatement_dropIndex() throws Exception {
         String expected = "";
         String baseDDL = filePath+"/drop_index.sql";
@@ -161,11 +183,11 @@ public class SchemaToolSynthesisIT {
     // Alter DDL file can have multiple alter statements
     public void testMultipleAlterDDL() throws Exception {
         String expected = "CREATE TABLE IF NOT EXISTS TEST.SAMPLE_TABLE\n"
-                + "(ORG_ID CHAR(15) NOT NULL,\n" + "SOME_ANOTHER_ID BIGINT NOT NULL,\n"
+                + "(ORG_ID CHAR(15) NOT NULL,\n" + "SOME_ANOTHER_ID BIGINT NOT NULL,\n" + "SECOND_ID BIGINT NOT NULL,\n"
                 + "TYPE VARCHAR,\n" + "STATUS VARCHAR,\n" + "START_TIMESTAMP BIGINT,\n"
                 + "END_TIMESTAMP BIGINT,\n" + "PARAMS VARCHAR,\n" + "RESULT VARCHAR,\n"
                 + "SOME_NEW_COLUMN BIGINT\n"
-                + "CONSTRAINT PK PRIMARY KEY (ORG_ID, SOME_ANOTHER_ID))\n"
+                + "CONSTRAINT PK PRIMARY KEY (ORG_ID, SOME_ANOTHER_ID, SECOND_ID))\n"
                 + "MULTI_TENANT=false,REPLICATION_SCOPE=1,TTL=2000,VERSIONS=1";
         String baseDDL = filePath+"/alter_table_multiple.sql";
         runAndVerify(expected, baseDDL);
