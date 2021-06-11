@@ -67,7 +67,7 @@ public class SchemaSQLUtil {
         sb.append(createStmt.getIndexTableName().getTableName()).append("\n")
                 .append("ON "+createStmt.getTable().getName())
                 .append("("+createStmt.getIndexConstraint().toString()).append(")");
-        if (createStmt.getIncludeColumns()!=null) {
+        if (createStmt.getIncludeColumns()!=null && !createStmt.getIncludeColumns().isEmpty()) {
             sb.append("\nINCLUDE ");
             sb.append(getColumnListToString(createStmt.getIncludeColumns()));
         }
@@ -136,6 +136,10 @@ public class SchemaSQLUtil {
         if (!cDef.isNull()) {
             buf.append(' ');
             buf.append("NOT NULL");
+        }
+        if(cDef.getExpression()!=null) {
+            buf.append(" DEFAULT ");
+            buf.append(cDef.getExpression());
         }
 
         return buf.toString();
