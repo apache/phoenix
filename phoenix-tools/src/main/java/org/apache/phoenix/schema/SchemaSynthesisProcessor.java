@@ -25,12 +25,14 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.BindableStatement;
 import org.apache.phoenix.parse.ColumnDef;
+import org.apache.phoenix.parse.ColumnDefInPkConstraint;
 import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.DropColumnStatement;
 import org.apache.phoenix.parse.DropIndexStatement;
 import org.apache.phoenix.parse.DropTableStatement;
+import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.SQLParser;
 
 import java.io.BufferedReader;
@@ -161,18 +163,16 @@ public class SchemaSynthesisProcessor implements SchemaProcessor {
             for(Pair<ColumnName, SortOrder> entry : oldPKConstraint.getColumnNames()) {
                 ColumnDefInPkConstraint cd = new
                         ColumnDefInPkConstraint(entry.getFirst(), entry.getSecond(), oldPKConstraint.isColumnRowTimestamp(entry
-                .getFirst()));
+                        .getFirst()));
                 pkList.add(cd);
             }
             for(ColumnDef cd : addStmt.getColumnDefs()) {
                 if(cd.isPK()) {
-                    ColumnDefInPkConstraint cdpk = new
-                            ColumnDefInPkConstraint(cd.getColumnDefName(), cd.getSortOrder(), cd.isRowTimestamp());
+                    ColumnDefInPkConstraint cdpk = new ColumnDefInPkConstraint(cd.getColumnDefName(), cd.getSortOrder(), cd.isRowTimestamp());
                     pkList.add(cdpk);
                 }
             }
-            PrimaryKeyConstraint pkConstraint = new
-                    PrimaryKeyConstraint(oldPKConstraint.getName(), pkList);
+            PrimaryKeyConstraint pkConstraint = new PrimaryKeyConstraint(oldPKConstraint.getName(), pkList);
             newCreateStmt = new CreateTableStatement(createStmt, pkConstraint, newColDef);
         }
         return newCreateStmt;

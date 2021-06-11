@@ -137,6 +137,10 @@ public class SchemaSQLUtil {
             buf.append(' ');
             buf.append("NOT NULL");
         }
+        if(cDef.getExpression()!=null) {
+            buf.append(" DEFAULT ");
+            buf.append(cDef.getExpression());
+        }
 
         return buf.toString();
     }
