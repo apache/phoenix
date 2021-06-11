@@ -60,6 +60,21 @@ public class CreateTableStatement extends MutableStatement {
         this.immutableRows = createTable.immutableRows;
     }
 
+    public CreateTableStatement(CreateTableStatement createTable, PrimaryKeyConstraint pkConstraint,
+            List<ColumnDef> columns) {
+        this.tableName = createTable.tableName;
+        this.tableType = createTable.tableType;
+        this.columns = ImmutableList.copyOf(columns);
+        this.pkConstraint = pkConstraint;
+        this.splitNodes = createTable.splitNodes;
+        this.bindCount = createTable.bindCount;
+        this.props = createTable.props;
+        this.ifNotExists = createTable.ifNotExists;
+        this.baseTableName = createTable.baseTableName;
+        this.whereClause = createTable.whereClause;
+        this.immutableRows = createTable.immutableRows;
+    }
+
     public CreateTableStatement(CreateTableStatement createTable, ListMultimap<String,Pair<String,Object>>  props, List<ColumnDef> columns) {
         this.tableName = createTable.tableName;
         this.tableType = createTable.tableType;
