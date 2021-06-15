@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
+package org.apache.phoenix.schema.tool;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -23,9 +23,9 @@ import org.junit.Test;
 import java.io.File;
 import java.net.URL;
 
-import static org.apache.phoenix.schema.SchemaSynthesisProcessor.ENTITY_NAME_IN_BASE_AND_ALTER_DDL_DON_T_MATCH;
-import static org.apache.phoenix.schema.SchemaSynthesisProcessor.UNSUPPORTED_DDL_EXCEPTION;
-import static org.apache.phoenix.schema.SchemaToolExtractionIT.runSchemaTool;
+import static org.apache.phoenix.schema.tool.SchemaSynthesisProcessor.ENTITY_NAME_IN_BASE_AND_ALTER_DDL_DON_T_MATCH;
+import static org.apache.phoenix.schema.tool.SchemaSynthesisProcessor.UNSUPPORTED_DDL_EXCEPTION;
+import static org.apache.phoenix.schema.tool.SchemaToolExtractionIT.runSchemaTool;
 
 public class SchemaToolSynthesisIT {
 

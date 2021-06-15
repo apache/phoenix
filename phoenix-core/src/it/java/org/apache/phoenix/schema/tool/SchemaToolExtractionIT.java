@@ -15,12 +15,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
+package org.apache.phoenix.schema.tool;
 
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.ParseException;
 import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -43,6 +44,8 @@ import java.util.HashSet;
 import java.util.Arrays;
 import java.util.Properties;
 
+import static junit.framework.TestCase.assertEquals;
+import static junit.framework.TestCase.assertTrue;
 import static junit.framework.TestCase.fail;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
@@ -89,6 +92,35 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
 
         String result = runSchemaExtractionTool(schemaName, indexName2, null, queries);
         Assert.assertEquals(createIndexStatement2.toUpperCase(), result.toUpperCase());
+    }
+
+    @Test
+    public void testDDLsWithDefaults() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        String schemaName = generateUniqueName();
+        String indexName = generateUniqueName();
+        String properties = "COLUMN_ENCODED_BYTES=4";
+        String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+        String pIndexFullName = SchemaUtil.getQualifiedTableName(schemaName, indexName);
+        String createTableStatement = "CREATE TABLE "+pTableFullName + "(k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)";
+        String createIndexStatement = "CREATE INDEX "+indexName + " ON "+pTableFullName+"(v1 DESC) INCLUDE (v2)" + properties;
+
+        List<String> queries = new ArrayList<String>(){};
+        queries.add(createTableStatement);
+        queries.add(createIndexStatement);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            executeCreateStatements(conn, queries);
+            PTable pData = PhoenixRuntime.getTable(conn, pTableFullName);
+            PTable pIndex = PhoenixRuntime.getTable(conn, pIndexFullName);
+            SchemaExtractionProcessor schemaExtractionProcessor = new SchemaExtractionProcessor(null, config, pData, true);
+            String tableDDL = schemaExtractionProcessor.process();
+            assertTrue(tableDDL.contains("IMMUTABLE_STORAGE_SCHEME"));
+            SchemaExtractionProcessor schemaExtractionProcessorIndex = new SchemaExtractionProcessor(null, config, pIndex, true);
+            String indexDDL = schemaExtractionProcessorIndex.process();
+            assertTrue(indexDDL.contains("IMMUTABLE_STORAGE_SCHEME"));
+            assertTrue(indexDDL.contains("ENCODING_SCHEME='FOUR_BYTE_QUALIFIERS'"));
+        }
     }
 
     @Test
