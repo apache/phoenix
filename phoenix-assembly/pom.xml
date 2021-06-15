@@ -123,26 +123,6 @@
               </arguments>
             </configuration>
           </execution>
-          <execution>
-            <id>tools without version</id>
-            <phase>compile</phase>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <configuration>
-              <executable>ln</executable>
-              <workingDirectory>${project.basedir}/../phoenix-tools/target</workingDirectory>
-              <arguments>
-                <argument>-fnsv</argument>
-                <argument>
-                  phoenix-tools-${project.version}.jar
-                </argument>
-                <argument>
-                  phoenix-tools.jar
-                </argument>
-              </arguments>
-            </configuration>
-          </execution>
         </executions>
       </plugin>
       <!-- No jars created for this module -->
@@ -203,10 +183,6 @@
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-tracing-webapp</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-tools</artifactId>
     </dependency>
 
     <dependency>
