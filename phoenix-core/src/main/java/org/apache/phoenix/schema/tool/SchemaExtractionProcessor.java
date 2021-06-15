@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schematool;
+package org.apache.phoenix.schema.tool;
 
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -62,6 +62,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
     private Configuration conf;
     private String ddl = null;
     private String tenantId;
+    private boolean shouldGenerateWithDefaults = false;
 
     public SchemaExtractionProcessor(String tenantId, Configuration conf,
             String pSchemaName, String pTableName)
@@ -69,6 +70,15 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         this.tenantId = tenantId;
         this.conf = conf;
         this.table = getPTable(pSchemaName, pTableName);
+    }
+
+    public SchemaExtractionProcessor(String tenantId, Configuration conf,
+            PTable pTable, boolean shouldGenerateWithDefaults)
+            throws SQLException {
+        this.tenantId = tenantId;
+        this.conf = conf;
+        this.table = pTable;
+        this.shouldGenerateWithDefaults = shouldGenerateWithDefaults;
     }
 
     @Override
@@ -87,7 +97,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
     }
 
     protected String extractCreateIndexDDL(PTable indexPTable)
-            throws SQLException {
+            throws SQLException, IOException {
         String quotedIndexTableName = SchemaUtil
                 .getFullTableNameWithQuotes(null, indexPTable.getTableName().getString());
 
@@ -101,9 +111,16 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         String defaultCF = SchemaUtil.getEmptyColumnFamilyAsString(indexPTable);
         String indexedColumnsString = getIndexedColumnsString(indexPTable, dataPTable, defaultCF);
         String coveredColumnsString = getCoveredColumnsString(indexPTable, defaultCF);
-
+        if (shouldGenerateWithDefaults) {
+            populateDefaultProperties(indexPTable);
+            setPTableProperties(indexPTable);
+            ConnectionQueryServices cqsi = getCQSIObject();
+            HTableDescriptor htd = getTableDescriptor(cqsi, table);
+            setHTableProperties(htd);
+        }
+        String propertiesString = convertPropertiesToString();
         return generateIndexDDLString(quotedBaseTableFullName, indexedColumnsString, coveredColumnsString,
-                indexPTable.getIndexType().equals(PTable.IndexType.LOCAL), quotedIndexTableName);
+                indexPTable.getIndexType().equals(PTable.IndexType.LOCAL), quotedIndexTableName, propertiesString);
     }
 
     //TODO: Indexed on an expression
@@ -198,7 +215,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
     }
 
     protected String generateIndexDDLString(String quotedBaseTableFullName, String indexedColumnString,
-            String coveredColumnString, boolean local, String quotedIndexTableName) {
+            String coveredColumnString, boolean local, String quotedIndexTableName, String properties) {
         StringBuilder outputBuilder = new StringBuilder(String.format(CREATE_INDEX,
                 local ? "LOCAL " : "", quotedIndexTableName, quotedBaseTableFullName));
         outputBuilder.append("(");
@@ -209,6 +226,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             outputBuilder.append(coveredColumnString);
             outputBuilder.append(")");
         }
+        outputBuilder.append(properties);
         return outputBuilder.toString();
     }
 
@@ -363,7 +381,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
                 key = colPropKey[1];
             }
 
-            if(value!=null && defaultProps.get(key) != null && !value.equals(defaultProps.get(key))) {
+            if(value!=null && (shouldGenerateWithDefaults || (defaultProps.get(key) != null && !value.equals(defaultProps.get(key))))) {
                 if (optionBuilder.length() != 0) {
                     optionBuilder.append(", ");
                 }

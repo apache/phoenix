@@ -100,8 +100,8 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schematool.SchemaExtractionProcessor;
-import org.apache.phoenix.schematool.SchemaProcessor;
+import org.apache.phoenix.schema.tool.SchemaExtractionProcessor;
+import org.apache.phoenix.schema.tool.SchemaProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
