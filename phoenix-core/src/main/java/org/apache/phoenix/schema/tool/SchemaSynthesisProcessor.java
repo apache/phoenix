@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
+package org.apache.phoenix.schema.tool;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
@@ -32,6 +32,7 @@ import org.apache.phoenix.parse.DropIndexStatement;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.schema.SortOrder;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -42,8 +43,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.apache.phoenix.schema.SchemaSQLUtil.getCreateIndexSQL;
-import static org.apache.phoenix.schema.SchemaSQLUtil.getCreateTableSQL;
+import static org.apache.phoenix.schema.tool.SchemaSQLUtil.getCreateIndexSQL;
+import static org.apache.phoenix.schema.tool.SchemaSQLUtil.getCreateTableSQL;
 
 public class SchemaSynthesisProcessor implements SchemaProcessor {
     public static final String
