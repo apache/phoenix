@@ -906,6 +906,20 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         metricsFromOverallQuery.put(tableName, overAllReadMetrics);
         TableMetricsManager.pushMetricsFromConnInstanceMethod(metricsFromOverallQuery);
         if (readMetrics.get(tableName) != null) {
+            Long scanBytes = readMetrics.get(tableName).get(MetricType.SCAN_BYTES);
+            if (scanBytes == null) {
+                scanBytes = 0L;
+            }
+            TableMetricsManager.updateHistogramMetricsForQueryScanBytes(
+                    scanBytes, tableName, isPointLookup);
+            Long timeSpentInRSNext = overAllReadMetrics.get(MetricType.RESULT_SET_TIME_MS);
+
+            if (timeSpentInRSNext == null) {
+                timeSpentInRSNext = 0l;
+            }
+            timeSpentInRSNext += queryTime;
+            TableMetricsManager.updateHistogramMetricsForQueryLatency(tableName, timeSpentInRSNext, isPointLookup);
+
             TableMetricsManager.updateMetricsMethod(tableName, this.exception == null ?
                     MetricType.SELECT_AGGREGATE_SUCCESS_SQL_COUNTER :
                     MetricType.SELECT_AGGREGATE_FAILURE_SQL_COUNTER, 1);
