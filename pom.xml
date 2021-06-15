@@ -52,7 +52,6 @@
     <module>phoenix-client-parent/phoenix-client-embedded</module>
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
-    <module>phoenix-tools</module>
     <module>phoenix-tracing-webapp</module>
   </modules>
 
@@ -700,11 +699,6 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-pherf</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-tools</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
