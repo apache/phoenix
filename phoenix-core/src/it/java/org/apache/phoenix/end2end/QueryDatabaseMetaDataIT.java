@@ -426,6 +426,12 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(rs.getString(2), null);
             assertFalse(rs.next());
 
+            rs = dbmd.getSchemas(null, "");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), null);
+            assertEquals(rs.getString(2), null);
+            assertFalse(rs.next());
+
             rs = dbmd.getSchemas(null, null);
             assertTrue(rs.next());
             assertEquals(null, rs.getString("TABLE_SCHEM"));
