@@ -545,8 +545,10 @@ public final class QueryUtil {
                 " where " + COLUMN_NAME + " is null");
         addTenantIdFilter(connection, buf, catalog, parameterValues);
         if (schemaPattern != null) {
-            buf.append(" and " + TABLE_SCHEM + " like ?");
-            parameterValues.add(schemaPattern);
+            buf.append(" and " + TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like ?"));
+            if(schemaPattern.length() > 0) {
+                parameterValues.add(schemaPattern);
+            }
         }
         if (SchemaUtil.isNamespaceMappingEnabled(null, connection.getQueryServices().getProps())) {
             buf.append(" and " + TABLE_NAME + " = '" + MetaDataClient.EMPTY_TABLE + "'");
