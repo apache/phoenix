@@ -459,6 +459,40 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
         tenantViewHelper(true);
     }
 
+    @Test
+    public void testOnDuplicateUpsertWithIndex() throws Exception {
+        Assume.assumeFalse(this.isImmutable); // on duplicate is not supported for immutable tables
+        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
+        SchemaBuilder builder = new SchemaBuilder(getUrl());
+        try (Connection conn = getConnection()) {
+            SchemaBuilder.TableOptions tableOptions = getTableOptions();
+            builder.withTableOptions(tableOptions).withTableIndexDefaults().build();
+            PTable table = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTableName());
+            assertEquals("Change Detection Enabled is false!", true, table.isChangeDetectionEnabled());
+            Long ddlTimestamp = table.getLastDDLTimestamp();
+            String upsertSql = "UPSERT INTO " + builder.getEntityTableName() + " VALUES" +
+                " ('a', 'b', 'c', 'd')";
+            conn.createStatement().execute(upsertSql);
+            conn.commit();
+            List<String> columns = builder.getTableOptions().getTableColumns();
+            assertTrue(columns.size() >= 2);
+            String col1 = columns.get(0);
+            String col2 = columns.get(1);
+            // col1 = col1 || col1, col2 = null
+            String onDupClause = String.format("%s = %s || %s, %s = null", col1, col1, col1, col2);
+            // this will result in one Put and one Delete (because of null) mutation
+            upsertSql = "UPSERT INTO " + builder.getEntityTableName() + " VALUES" +
+                " ('a', 'b', 'c', 'd') ON DUPLICATE KEY UPDATE " + onDupClause;
+            conn.createStatement().execute(upsertSql);
+            conn.commit();
+            assertAnnotation(2, builder.getPhysicalTableName(false), null,
+                builder.getTableOptions().getSchemaName(),
+                builder.getDataOptions().getTableName(), PTableType.TABLE, ddlTimestamp);
+            assertAnnotation(0, builder.getPhysicalTableIndexName(false),
+                null, null, null, null, ddlTimestamp);
+        }
+    }
+
     private List<Map<String, byte[]>> getEntriesForTable(TableName tableName) throws IOException {
         AnnotatedWALObserver c = getTestCoprocessor(tableName);
         List<Map<String, byte[]>> entries = c.getWalAnnotationsByTable(tableName);
