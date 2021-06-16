@@ -113,7 +113,7 @@ public class BasePhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             String t = entry.getKey();
             assertEquals("Table names didn't match!", tableName, t);
             Map<MetricType, Long> p = entry.getValue();
-            assertEquals("There should have been fifteen metrics", 15, p.size());
+            assertEquals("There should have been sixteen metrics", 16, p.size());
             boolean mutationBatchSizePresent = false;
             boolean mutationCommitTimePresent = false;
             boolean mutationBytesPresent = false;

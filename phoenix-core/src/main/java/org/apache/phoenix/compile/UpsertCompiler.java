@@ -864,12 +864,6 @@ public class UpsertCompiler {
                 .setTableName(table.getTableName().getString())
                 .build().buildException();
             }
-            if (SchemaUtil.hasGlobalIndex(table)) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_USE_ON_DUP_KEY_WITH_GLOBAL_IDX)
-                .setSchemaName(table.getSchemaName().getString())
-                .setTableName(table.getTableName().getString())
-                .build().buildException();
-            }
             if (onDupKeyPairs.isEmpty()) { // ON DUPLICATE KEY IGNORE
                 onDupKeyBytesToBe = PhoenixIndexBuilder.serializeOnDupKeyIgnore();
             } else {                       // ON DUPLICATE KEY UPDATE;

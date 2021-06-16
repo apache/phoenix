@@ -256,26 +256,30 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         }
         @Override
         public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) {
-            List<Cell> cellList = put.get(ref.getFamily(), ref.getQualifier());
-            if (cellList == null || cellList.isEmpty()) {
+            Cell cell = getLatestCell(ref, ts);
+            if (cell == null) {
                 return null;
             }
-            Cell cell = cellList.get(0);
             valuePtr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
             return valuePtr;
         }
-        @Override
-        public KeyValue getLatestKeyValue(ColumnReference ref, long ts) {
+        public Cell getLatestCell(ColumnReference ref, long ts) {
             List<Cell> cellList = put.get(ref.getFamily(), ref.getQualifier());
             if (cellList == null || cellList.isEmpty()) {
                 return null;
             }
-            Cell cell = cellList.get(0);
-            return new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
+            return cellList.get(0);
+        }
+        @Override
+        public KeyValue getLatestKeyValue(ColumnReference ref, long ts) {
+            Cell cell = getLatestCell(ref, ts);
+            KeyValue kv = cell == null ? null :
+                new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
                     cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
                     cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
                     cell.getTimestamp(), KeyValue.Type.codeToType(cell.getTypeByte()),
                     cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+            return kv;
         }
         @Override
         public byte[] getRowKey() {
