@@ -47,7 +47,7 @@
     <module>phoenix-pherf</module>
     <module>phoenix-client-parent</module>
     <module>phoenix-client-parent/phoenix-client</module>
-    <!-- phoenix-client-embedded is added in profile "embedded" -->
+    <module>phoenix-client-parent/phoenix-client-embedded</module>
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tools</module>
@@ -1336,17 +1336,6 @@
           </plugin>
         </plugins>
       </build>
-    </profile>
-    <profile>
-      <id>embedded</id>
-      <activation>
-        <property>
-            <name>!skip.embedded</name>
-        </property>
-      </activation>
-      <modules>
-        <module>phoenix-client-parent/phoenix-client-embedded</module>
-      </modules>
     </profile>
     <profile>
       <id>spotbugs-site</id>
