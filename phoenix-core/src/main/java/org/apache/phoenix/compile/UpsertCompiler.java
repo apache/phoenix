@@ -182,8 +182,14 @@ public class UpsertCompiler {
                 ptr.set(ScanRanges.prefixKey(ptr.get(), 0, ptr.getLength(), regionPrefix,
                     regionPrefix.length));
             }
-        } 
-        mutation.put(ptr, new RowMutationState(columnValues, columnValueSize, statement.getConnection().getStatementExecutionCounter(), rowTsColInfo, onDupKeyBytes));
+        }
+        RowMutationState
+                rowMutationState =
+                new RowMutationState(columnValues, columnValueSize,
+                        statement.getConnection().getStatementExecutionCounter(), rowTsColInfo,
+                        onDupKeyBytes);
+        rowMutationState.setQueryId(statement.getQueryId());
+        mutation.put(ptr, rowMutationState);
     }
 
     public static String getExceedMaxHBaseClientKeyValueAllowanceRowkeyAndColumnInfo(
