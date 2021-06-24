@@ -111,11 +111,10 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.DelegateDatum;
-import org.apache.phoenix.schema.LocalIndexDataColumnRef;
+import org.apache.phoenix.schema.IndexDataColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
@@ -370,9 +369,9 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             // Rather than not use a local index when a column not contained by it is referenced, we
             // join back to the data table in our coprocessor since this is a relatively cheap
             // operation given that we know the join is local.
-            if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL) {
+            if (context.getCurrentTable().getTable().getType() == PTableType.INDEX) {
                 try {
-                    return new LocalIndexDataColumnRef(context, context.getCurrentTable(), node.getName());
+                    return new IndexDataColumnRef(context, context.getCurrentTable(), node.getName());
                 } catch (ColumnFamilyNotFoundException c) {
                     throw e;
                 }

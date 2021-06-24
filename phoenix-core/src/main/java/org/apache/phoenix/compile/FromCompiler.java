@@ -1123,13 +1123,13 @@ public class FromCompiler {
     }
     
     private static class ProjectedTableColumnResolver extends MultiTableColumnResolver {
-        private final boolean isLocalIndex;
+        private final boolean isIndex;
         private final List<TableRef> theTableRefs;
         private final Map<ColumnRef, Integer> columnRefMap;
         private ProjectedTableColumnResolver(PTable projectedTable, PhoenixConnection conn, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
             super(conn, 0, udfParseNodes, null);
             Preconditions.checkArgument(projectedTable.getType() == PTableType.PROJECTED);
-            this.isLocalIndex = projectedTable.getIndexType() == IndexType.LOCAL;
+            this.isIndex = (projectedTable.getIndexType() == IndexType.LOCAL || projectedTable.getIndexType() == IndexType.GLOBAL);
             this.columnRefMap = new HashMap<ColumnRef, Integer>();
             long ts = Long.MAX_VALUE;
             for (int i = projectedTable.getBucketNum() == null ? 0 : 1; i < projectedTable.getColumns().size(); i++) {
@@ -1168,8 +1168,8 @@ public class FromCompiler {
                 colRef = super.resolveColumn(schemaName, tableName, colName);
             } catch (ColumnNotFoundException e) {
                 // This could be a ColumnRef for local index data column.
-                TableRef tableRef = isLocalIndex ? super.getTables().get(0) : super.resolveTable(schemaName, tableName);
-                if (tableRef.getTable().getIndexType() == IndexType.LOCAL) {
+                TableRef tableRef = isIndex ? super.getTables().get(0) : super.resolveTable(schemaName, tableName);
+                if (tableRef.getTable().getType() == PTableType.INDEX) {
                     try {
                         TableRef parentTableRef = super.resolveTable(
                                 tableRef.getTable().getSchemaName().getString(),

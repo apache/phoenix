@@ -198,11 +198,9 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
                 "    SERVER FILTER BY FIRST KEY ONLY",
                 QueryUtil.getExplainPlan(rs));
         
-        // Won't use index b/c v1 is not in index, but should optimize out k2 still from the order by
-        // K2 will still be referenced in the filter, as these are automatically tacked on to the where clause.
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT v1 FROM v WHERE v2 > 'a' ORDER BY k2");
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['me']\n" + 
-                "    SERVER FILTER BY (V2 > 'a' AND K2 = 'a')",
+        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]\n" +
+                "    SERVER MERGE [0.V1]\n" + "    SERVER FILTER BY FIRST KEY ONLY",
                 QueryUtil.getExplainPlan(rs));
 
         // If we match K2 against a constant not equal to it's view constant, we should get a degenerate plan

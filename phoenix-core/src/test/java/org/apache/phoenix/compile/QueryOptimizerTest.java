@@ -157,8 +157,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
         QueryPlan plan = stmt.optimizeQuery("SELECT v1,v2 FROM t WHERE v1 = 'bar'");
-        // Choose T because v2 is not in index
-        assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
+        assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
     }
     
     @Test

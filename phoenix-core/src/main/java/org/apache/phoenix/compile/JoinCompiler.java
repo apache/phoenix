@@ -75,7 +75,7 @@ import org.apache.phoenix.parse.TableNodeVisitor;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.LocalIndexDataColumnRef;
+import org.apache.phoenix.schema.IndexDataColumnRef;
 import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PNameFactory;
@@ -1127,7 +1127,7 @@ public class JoinCompiler {
                     if (columnRef.getTableRef().equals(tableRef)
                             && (!retainPKColumns || !SchemaUtil.isPKColumn(columnRef.getColumn()))) {
                         if (columnRef instanceof LocalIndexColumnRef) {
-                            sourceColumns.add(new LocalIndexDataColumnRef(context, tableRef, IndexUtil.getIndexColumnName(columnRef.getColumn())));
+                            sourceColumns.add(new IndexDataColumnRef(context, tableRef, IndexUtil.getIndexColumnName(columnRef.getColumn())));
                         } else {
                             sourceColumns.add(columnRef);
                         }

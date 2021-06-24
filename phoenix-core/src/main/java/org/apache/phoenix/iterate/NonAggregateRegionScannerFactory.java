@@ -56,6 +56,7 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.memory.MemoryManager;
@@ -137,8 +138,9 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         localIndexBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD);
       }
       int clientVersion = ScanUtil.getClientVersion(scan);
+      byte[] md = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
       List<IndexMaintainer> indexMaintainers =
-          localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes, useProto);
+          localIndexBytes == null ? IndexMaintainer.deserialize(md, true) : IndexMaintainer.deserialize(localIndexBytes, useProto);
       indexMaintainer = indexMaintainers.get(0);
       viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
       byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
