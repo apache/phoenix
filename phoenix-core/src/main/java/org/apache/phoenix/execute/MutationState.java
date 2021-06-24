@@ -681,9 +681,22 @@ public class MutationState implements SQLCloseable {
             }
             annotateMutationsWithMetadata(table, rowMutations);
             mutationList.addAll(rowMutations);
-            if (mutationsPertainingToIndex != null) mutationsPertainingToIndex.addAll(rowMutationsPertainingToIndex);
+            if (mutationsPertainingToIndex != null){
+                mutationsPertainingToIndex.addAll(rowMutationsPertainingToIndex);
+            }
+            addQueryIdToRowMutation(state.getQueryId(), rowMutations);
+            addQueryIdToRowMutation(state.getQueryId(), mutationsPertainingToIndex);
         }
         values.putAll(modifiedValues);
+    }
+
+    private void addQueryIdToRowMutation(String queryId, List<Mutation> mutations) {
+        if (mutations == null || queryId == null) {
+            return;
+        }
+        for (Mutation mutation : mutations) {
+            mutation.setId(queryId);
+        }
     }
 
     private void annotateMutationsWithMetadata(PTable table, List<Mutation> rowMutations) {
@@ -1710,6 +1723,7 @@ public class MutationState implements SQLCloseable {
         public Collection<RowMutationState> values() {
             return rowKeyToRowMutationState.values();
         }
+
     }
 
     public static class RowMutationState {
@@ -1720,6 +1734,7 @@ public class MutationState implements SQLCloseable {
         private final RowTimestampColInfo rowTsColInfo;
         private byte[] onDupKeyBytes;
         private long colValuesSize;
+        private String queryId;
 
         public RowMutationState(@Nonnull Map<PColumn, byte[]> columnValues, long colValuesSize, int statementIndex,
                 @Nonnull RowTimestampColInfo rowTsColInfo, byte[] onDupKeyBytes) {
@@ -1773,6 +1788,14 @@ public class MutationState implements SQLCloseable {
         @Nonnull
         RowTimestampColInfo getRowTimestampColInfo() {
             return rowTsColInfo;
+        }
+
+        public String getQueryId() {
+            return queryId;
+        }
+
+        public void setQueryId(String queryId) {
+            this.queryId = queryId;
         }
 
     }
