@@ -133,9 +133,13 @@ public abstract class RegionScannerFactory {
       long extraLimit = -1;
 
       {
-          // for local indexes construct the row filter for uncovered columns if it exists
-          if (ScanUtil.isLocalIndex(scan)) {
-              byte[] expBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER);
+          // for indexes construct the row filter for uncovered columns if it exists
+          if (ScanUtil.isLocalOrUncoveredGlobalIndex(scan)) {
+              byte[] expBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_FILTER);
+              if (expBytes == null) {
+                  // For older clients
+                  expBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER);
+              }
               if (expBytes != null) {
                   try {
                       ByteArrayInputStream stream = new ByteArrayInputStream(expBytes);
@@ -147,7 +151,11 @@ public abstract class RegionScannerFactory {
                       throw new RuntimeException(io);
                   }
               }
-              byte[] limitBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_LIMIT);
+              byte[] limitBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_LIMIT);
+              if (limitBytes == null) {
+                  // For older clients
+                  limitBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_LIMIT);
+              }
               if (limitBytes != null) {
                   extraLimit = Bytes.toLong(limitBytes);
               }
@@ -215,7 +223,8 @@ public abstract class RegionScannerFactory {
           if (result.size() == 0) {
             return next;
           }
-          if (ScanUtil.isLocalIndex(scan) && !ScanUtil.isAnalyzeTable(scan)) {
+          if ((ScanUtil.isLocalOrUncoveredGlobalIndex(scan))
+                  && !ScanUtil.isAnalyzeTable(scan)) {
             if(actualStartKey!=null) {
               next = scanTillScanStartRow(s, arrayKVRefs, arrayFuncRefs, result,
                   null);
@@ -227,8 +236,8 @@ public abstract class RegionScannerFactory {
             dataRegion will never be null in case of non-coprocessor call,
             therefore no need to refactor
              */
-            IndexUtil.wrapResultUsingOffset(env, result, offset, dataColumns,
-                tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
+            IndexUtil.wrapResultUsingOffset(env, result, scan, offset, dataColumns,
+                   tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
 
             if (extraWhere != null) {
                 Tuple merged = useQualifierAsListIndex ? new PositionBasedResultTuple(result) :

@@ -133,8 +133,19 @@ public class ScanUtil {
         scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX, PDataType.TRUE_BYTES);
     }
 
+    public static void setUncoveredGlobalIndex(Scan scan) {
+        scan.setAttribute(BaseScannerRegionObserver.UNCOVERED_GLOBAL_INDEX, PDataType.TRUE_BYTES);
+    }
+
     public static boolean isLocalIndex(Scan scan) {
         return scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX) != null;
+    }
+    public static boolean isUncoveredGlobalIndex(Scan scan) {
+        return scan.getAttribute(BaseScannerRegionObserver.UNCOVERED_GLOBAL_INDEX) != null;
+    }
+
+    public static boolean isLocalOrUncoveredGlobalIndex(Scan scan) {
+        return isLocalIndex(scan) || isUncoveredGlobalIndex(scan);
     }
 
     public static boolean isNonAggregateScan(Scan scan) {

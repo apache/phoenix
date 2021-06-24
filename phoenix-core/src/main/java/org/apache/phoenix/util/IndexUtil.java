@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LOCAL_INDEX_BUILD;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LOCAL_INDEX_BUILD_PROTO;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
@@ -49,6 +52,7 @@ import org.apache.hadoop.hbase.RawCell;
 import org.apache.hadoop.hbase.Tag;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
@@ -459,6 +463,25 @@ public class IndexUtil {
         }
     }
 
+    public static List<IndexMaintainer> deSerializeIndexMaintainersFromScan(Scan scan) {
+        boolean useProto = false;
+        byte[] indexBytes = scan.getAttribute(LOCAL_INDEX_BUILD_PROTO);
+        useProto = indexBytes != null;
+        if (indexBytes == null) {
+            indexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
+        }
+        if (indexBytes == null) {
+            indexBytes = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
+            useProto = indexBytes != null;
+        }
+        if (indexBytes == null) {
+            indexBytes = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
+        }
+        List<IndexMaintainer> indexMaintainers =
+                indexBytes == null ? null : IndexMaintainer.deserialize(indexBytes, useProto);
+        return indexMaintainers;
+    }
+
     public static byte[][] deserializeViewConstantsFromScan(Scan scan) {
         byte[] bytes = scan.getAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS);
         if (bytes == null) return null;
@@ -556,7 +579,7 @@ public class IndexUtil {
     }
     
     public static void wrapResultUsingOffset(final RegionCoprocessorEnvironment environment,
-            List<Cell> result, final int offset, ColumnReference[] dataColumns,
+            List<Cell> result, final Scan scan, final int offset, ColumnReference[] dataColumns,
             TupleProjector tupleProjector, Region dataRegion, IndexMaintainer indexMaintainer,
             byte[][] viewConstants, ImmutableBytesWritable ptr) throws IOException {
         if (tupleProjector != null) {
@@ -576,20 +599,27 @@ public class IndexUtil {
                 }
             }
             Result joinResult = null;
-            if (dataRegion != null) {
-                joinResult = dataRegion.get(get);
-            } else {
-                TableName dataTable =
-                    TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(environment.getRegion().
-                        getTableDescriptor().getTableName().getNameAsString()));
-                Table table = null;
-                try {
-                    table = environment.getConnection().getTable(dataTable);
+            if (ScanUtil.isLocalIndex(scan)) {
+                if (dataRegion != null) {
+                    joinResult = dataRegion.get(get);
+                } else {
+                    TableName dataTable =
+                            TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(
+                                    environment.getRegion().getTableDescriptor().getTableName().
+                                            getNameAsString()));
+                    try (Table table = environment.getConnection().getTable(dataTable)) {
+                        joinResult = table.get(get);
+                    }
+                }
+            } else if (ScanUtil.isUncoveredGlobalIndex(scan)) {
+                byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
+                try (Table table = ServerUtil.ConnectionFactory.getConnection(
+                        ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION, environment).
+                        getTable(TableName.valueOf(dataTableName))) {
                     joinResult = table.get(get);
-                } finally {
-                    if (table != null) table.close();
                 }
             }
+
             // at this point join result has data from the data table. We now need to take this result and
             // add it to the cells that we are returning. 
             // TODO: handle null case (but shouldn't happen)
@@ -875,6 +905,13 @@ public class IndexUtil {
                 d.addDeleteMarker(cell);
             }
         }
+    }
+
+    public static boolean isHintedGlobalIndex(final TableRef tableRef) {
+        PTable table = tableRef.getTable();
+        return table.getType() == PTableType.INDEX
+                && table.getIndexType() == PTable.IndexType.GLOBAL
+                && tableRef.isHinted();
     }
 
     /**

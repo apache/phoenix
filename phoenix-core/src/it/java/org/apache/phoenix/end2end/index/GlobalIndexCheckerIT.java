@@ -304,6 +304,44 @@ public class GlobalIndexCheckerIT extends BaseTest {
             assertEquals("ae", rs.getString(1));
             assertEquals("efg", rs.getString(2));
             assertFalse(rs.next());
+            conn.createStatement().execute("DROP INDEX " + indexTableName + " on " +
+                    dataTableName);
+            // Run the previous test on an uncovered global index
+            indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (PHOENIX_ROW_TIMESTAMP())" +
+                    (async ? "ASYNC" : "")+ this.indexDDLOptions);
+            if (async) {
+                // Run the index MR job to rebuild the index and verify that index is built correctly
+                IndexToolIT.runIndexTool(false, null, dataTableName,
+                        indexTableName, null, 0, IndexTool.IndexVerifyType.AFTER);
+            }
+            // Verify that without hint, the index table is not selected
+            assertIndexTableNotSelected(conn, dataTableName, indexTableName, query);
+
+            // Verify that we will read from the index table with the index hint
+            query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ " +
+                    "val1, val2, PHOENIX_ROW_TIMESTAMP() from " + dataTableName + " WHERE " +
+                    "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + initial.toString() + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
+
+            assertExplainPlan(conn, query, dataTableName, indexTableName);
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("ab", rs.getString(1));
+            assertEquals("abc", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("bc", rs.getString(1));
+            assertEquals("bcd", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("bc", rs.getString(1));
+            assertEquals("ccc", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("de", rs.getString(1));
+            assertEquals("def", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("ae", rs.getString(1));
+            assertEquals("efg", rs.getString(2));
+            assertFalse(rs.next());
         }
     }
 
@@ -425,6 +463,90 @@ public class GlobalIndexCheckerIT extends BaseTest {
             // Add rows and check everything is still okay
             verifyTableHealth(conn, dataTableName, indexTableName);
 
+        }
+    }
+
+    private void assertIndexTableNotSelected(Connection conn, String dataTableName, String indexTableName, String sql)
+            throws Exception {
+        try {
+            assertExplainPlan(conn, sql, dataTableName, indexTableName);
+            throw new AssertionError("The index table should not be selected without an index hint");
+        } catch (AssertionError error){
+            //expected
+        }
+    }
+
+    @Test
+    public void testUncoveredGlobalIndex() throws Exception {
+        if (async) {
+            return;
+        }
+        String dataTableName = generateUniqueName();
+        populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (val1) include (val2)" + this.indexDDLOptions);
+            // Verify that without hint, the index table is not selected
+            assertIndexTableNotSelected(conn, dataTableName, indexTableName,
+                    "SELECT val3 from " + dataTableName + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')");
+
+            //Verify that with index hint, we will read from the index table even though val3 is not included by the index table
+            String selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ val3 from "
+                    + dataTableName + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')";
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("bcde", rs.getString(1));
+            assertFalse(rs.next());
+            conn.createStatement().execute("DROP INDEX " + indexTableName + " on " + dataTableName);
+            // Create an index does not include any columns
+            indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
+                    dataTableName + " (val1)" + this.indexDDLOptions);
+            conn.commit();
+
+            // Verify that without hint, the index table is not selected
+            assertIndexTableNotSelected(conn, dataTableName, indexTableName,
+                    "SELECT id from " + dataTableName + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')");
+            selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ id from " + dataTableName + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')";
+            //Verify that we will read from the index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+            assertFalse(rs.next());
+
+            // Add another row and run a group by query where the uncovered index should be used
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2, val3) values ('c', 'ab','cde', 'cdef')");
+            conn.commit();
+            // Verify that without hint, the index table is not selected
+            assertIndexTableNotSelected(conn, dataTableName, indexTableName,
+                    "SELECT count(*) from " + dataTableName + " where val1 > '0' GROUP BY val1");
+            selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ count(*) from " + dataTableName + " where val1 > '0' GROUP BY val1";
+            //Verify that we will read from the index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertFalse(rs.next());
+            // Run an order by query where the uncovered index should be used
+            // Verify that without hint, the index table is not selected
+            assertIndexTableNotSelected(conn, dataTableName, indexTableName,
+                    "SELECT val3 from " + dataTableName + " where val1 > '0' ORDER BY val1");
+            selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ val3 from " + dataTableName + " where val1 > '0' ORDER BY val1";
+            //Verify that we will read from the index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("abcd", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("cdef", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("bcde", rs.getString(1));
+            assertFalse(rs.next());
         }
     }
 
