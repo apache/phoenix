@@ -31,17 +31,19 @@ public class PNameImpl implements PName {
         /**  */
         public String stringName;
         /**  */
-        public byte[] bytesName;
+        public final byte[] bytesName;
         /**  */
-        public ImmutableBytesPtr ptr;
+        public volatile ImmutableBytesPtr ptr;
 
         /**
          *
          */
-        public PNameImplData() {
+        public PNameImplData(String stringName, byte[] bytesName) {
+            this.stringName = stringName;
+            this.bytesName = bytesName;
         }
     }
-    private PNameImplData data = new PNameImplData();
+    private PNameImplData data;
 
 
     @Override
@@ -51,13 +53,11 @@ public class PNameImpl implements PName {
     }
 
     PNameImpl(String name) {
-        this.data.stringName = name;
-        this.data.bytesName = Bytes.toBytes(name);
+        this.data = new PNameImplData(name, Bytes.toBytes(name));
     }
 
     PNameImpl(byte[] name) {
-        this.data.stringName = Bytes.toString(name);
-        this.data.bytesName = name;
+        this.data = new PNameImplData(Bytes.toString(name), name);
     }
 
     @Override

@@ -178,7 +178,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private String sourceOfOperation;
 
     private Object queueCreationLock = new Object(); // lock for the lazy init path of childConnections structure
-    private ConcurrentLinkedQueue<PhoenixConnection> childConnections = null;
+    private volatile ConcurrentLinkedQueue<PhoenixConnection> childConnections = null;
 
     //For now just the copy constructor paths will have this as true as I don't want to change the
     //public interfaces.
