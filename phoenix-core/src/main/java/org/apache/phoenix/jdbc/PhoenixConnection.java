@@ -176,8 +176,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private Double logSamplingRate;
     private String sourceOfOperation;
 
-    private Object queueCreationLock = new Object(); // lock for the lazy init path of childConnections structure
-    private ConcurrentLinkedQueue<PhoenixConnection> childConnections = null;
+    private final ConcurrentLinkedQueue<PhoenixConnection> childConnections =
+        new ConcurrentLinkedQueue<>();
 
     //For now just the copy constructor paths will have this as true as I don't want to change the
     //public interfaces.
@@ -466,18 +466,10 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
 
     /**
-     * This method, and *only* this method is thread safe
+     * Add connection to the internal childConnections queue
      * @param connection
      */
     public void addChildConnection(PhoenixConnection connection) {
-        //double check for performance
-        if(childConnections == null) {
-            synchronized (queueCreationLock) {
-                if (childConnections == null) {
-                    childConnections = new ConcurrentLinkedQueue<>();
-                }
-            }
-        }
         childConnections.add(connection);
     }
 
@@ -487,9 +479,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
      * @param connection
      */
     public void removeChildConnection(PhoenixConnection connection) {
-        if (childConnections != null) {
-            childConnections.remove(connection);
-        }
+        childConnections.remove(connection);
     }
 
     /**
@@ -499,10 +489,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
      */
     @VisibleForTesting
     public int getChildConnectionsCount() {
-        if (childConnections != null) {
-            return childConnections.size();
-        }
-        return 0;
+        return childConnections.size();
     }
 
     public Sampler<?> getSampler() {
@@ -719,11 +706,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                     traceScope.close();
                 }
                 closeStatements();
-                synchronized (queueCreationLock) {
-                    if (childConnections != null) {
-                        SQLCloseables.closeAllQuietly(childConnections);
-                    }
-                }
+                SQLCloseables.closeAllQuietly(childConnections);
             } finally {
                 services.removeConnection(this);
             }
