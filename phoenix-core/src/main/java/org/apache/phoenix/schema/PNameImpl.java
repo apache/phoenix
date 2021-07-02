@@ -29,11 +29,11 @@ public class PNameImpl implements PName {
      */
     private static class PNameImplData {
         /**  */
-        public String stringName;
+        private String stringName;
         /**  */
-        public final byte[] bytesName;
+        private final byte[] bytesName;
         /**  */
-        public volatile ImmutableBytesPtr ptr;
+        private volatile ImmutableBytesPtr ptr;
 
         /**
          *
