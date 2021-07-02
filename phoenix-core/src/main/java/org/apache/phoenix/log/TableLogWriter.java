@@ -41,7 +41,7 @@ import com.google.common.collect.ImmutableMap;
  */
 public class TableLogWriter implements LogWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(LogWriter.class);
-    private Connection connection;
+    private volatile Connection connection;
     private boolean isClosed;
     private PreparedStatement upsertStatement;
     private Configuration config;
