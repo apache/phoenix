@@ -33,7 +33,7 @@ public class PNameImpl implements PName {
         /**  */
         public byte[] bytesName;
         /**  */
-        public ImmutableBytesPtr ptr;
+        public volatile ImmutableBytesPtr ptr;
 
         /**
          *
