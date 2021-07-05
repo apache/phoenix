@@ -420,6 +420,13 @@
                       <bannedImport>org.apache.commons.logging.LogFactory</bannedImport>
                     </bannedImports>
                   </restrictImports>
+                  <restrictImports implementation="de.skuzzle.enforcer.restrictimports.rule.RestrictImports">
+                    <includeTestCode>true</includeTestCode>
+                    <reason>Do not use phoenix-thirdparty provided Guava</reason>
+                    <bannedImports>
+                      <bannedImport>org.apache.phoenix.thirdparty.com.google.**</bannedImport>
+                    </bannedImports>
+                  </restrictImports>
                 </rules>
               </configuration>
             </execution>
