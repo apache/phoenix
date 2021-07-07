@@ -19,8 +19,8 @@
 package org.apache.phoenix.pherf.workload.mt.operations;
 
 import org.apache.phoenix.pherf.workload.mt.generators.TenantOperationInfo;
-import org.apache.phoenix.thirdparty.com.google.common.base.Function;
-import org.apache.phoenix.thirdparty.com.google.common.base.Supplier;
+import com.google.common.base.Function;
+import com.google.common.base.Supplier;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.LoadProfile;
 import org.apache.phoenix.pherf.configuration.Scenario;

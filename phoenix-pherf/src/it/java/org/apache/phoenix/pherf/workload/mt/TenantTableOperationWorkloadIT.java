@@ -19,7 +19,7 @@
 
 package org.apache.phoenix.pherf.workload.mt;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import com.google.common.collect.Lists;
 import com.lmax.disruptor.WorkHandler;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;

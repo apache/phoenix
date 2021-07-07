@@ -18,7 +18,7 @@
 
 package org.apache.phoenix.pherf.rules;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import com.google.common.base.Preconditions;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataSequence;
 import org.apache.phoenix.pherf.configuration.DataTypeMapping;

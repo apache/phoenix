@@ -36,7 +36,7 @@ import org.apache.phoenix.pherf.configuration.ExecutionType;
 import org.apache.phoenix.pherf.configuration.Query;
 import org.apache.phoenix.pherf.configuration.QuerySet;
 import org.apache.phoenix.pherf.configuration.WriteParams;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+import com.google.common.collect.Sets;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.LoadProfile;
 import org.apache.phoenix.pherf.configuration.Scenario;

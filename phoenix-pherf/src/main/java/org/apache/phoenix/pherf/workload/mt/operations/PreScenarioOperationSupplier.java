@@ -20,12 +20,12 @@ package org.apache.phoenix.pherf.workload.mt.operations;
 
 import org.apache.phoenix.pherf.configuration.TenantGroup;
 import org.apache.phoenix.pherf.workload.mt.generators.TenantOperationInfo;
-import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import com.google.common.base.Function;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.Ddl;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import com.google.common.base.Preconditions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

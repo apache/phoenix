@@ -29,8 +29,8 @@ import org.apache.phoenix.pherf.workload.mt.generators.TenantOperationInfo;
 import org.apache.phoenix.pherf.workload.mt.operations.Operation;
 import org.apache.phoenix.pherf.workload.mt.operations.OperationStats;
 import org.apache.phoenix.pherf.workload.mt.operations.TenantOperationFactory;
-import org.apache.phoenix.thirdparty.com.google.common.base.Function;
-import org.apache.phoenix.thirdparty.com.google.common.base.Supplier;
+import com.google.common.base.Function;
+import com.google.common.base.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

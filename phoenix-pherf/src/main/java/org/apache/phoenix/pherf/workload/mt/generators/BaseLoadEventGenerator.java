@@ -32,8 +32,8 @@ import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.workload.mt.handlers.PherfWorkHandler;
 import org.apache.phoenix.pherf.workload.mt.operations.TenantOperationFactory;
 import org.apache.phoenix.pherf.workload.mt.handlers.TenantOperationWorkHandler;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

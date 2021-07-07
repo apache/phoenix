@@ -19,7 +19,7 @@
 package org.apache.phoenix.pherf.configuration;
 
 import org.apache.phoenix.pherf.rules.RulesApplier;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import com.google.common.collect.Lists;
 
 import javax.xml.bind.annotation.XmlAttribute;
 import java.util.List;
