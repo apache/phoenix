@@ -5006,7 +5006,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         for (SequenceAllocation sequenceAllocation : sequenceAllocations) {
             SequenceKey key = sequenceAllocation.getSequenceKey();
             Sequence newSequences = new Sequence(key);
-            Sequence sequence = sequenceMap.putIfAbsent(key, newSequences);
+            Sequence sequence = getSequence(sequenceAllocation);
             if (sequence == null) {
                 sequence = newSequences;
             }
@@ -5077,6 +5077,38 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sequence.getLock().unlock();
             }
         }
+    }
+
+    /**
+     * checks if sequenceAllocation's sequence there in sequenceMap, also returns Global Sequences
+     * from Tenant sequenceAllocations
+     * @param sequenceAllocation
+     * @return
+     */
+
+    private Sequence getSequence(SequenceAllocation sequenceAllocation) {
+        SequenceKey key = sequenceAllocation.getSequenceKey();
+        if (key.getTenantId() == null) {
+            return sequenceMap.putIfAbsent(key, new Sequence(key));
+        } else {
+            Sequence sequence = sequenceMap.get(key);
+            if (sequence == null) {
+                for (Map.Entry<SequenceKey,Sequence> entry : sequenceMap.entrySet()) {
+                    if (compareSequenceKeysWithoutTenant(key, entry.getKey())) {
+                        return entry.getValue();
+                    }
+                }
+            } else {
+                return sequence;
+            }
+        }
+        return null;
+    }
+
+    private boolean compareSequenceKeysWithoutTenant(SequenceKey key1, SequenceKey key2) {
+        return key2.getTenantId() == null && (key1.getSchemaName() == null ? key2.getSchemaName() == null :
+                key1.getSchemaName().equals(key2.getSchemaName())) &&
+                key1.getSequenceName().equals(key2.getSequenceName());
     }
 
     @Override
