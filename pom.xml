@@ -422,7 +422,7 @@
                   </restrictImports>
                   <restrictImports implementation="de.skuzzle.enforcer.restrictimports.rule.RestrictImports">
                     <includeTestCode>true</includeTestCode>
-                    <reason>Do not use phoenix-thirdparty provided Guava</reason>
+                    <reason>For Phoenix 4, do not use phoenix-thirdparty provided Guava</reason>
                     <bannedImports>
                       <bannedImport>org.apache.phoenix.thirdparty.com.google.**</bannedImport>
                     </bannedImports>
