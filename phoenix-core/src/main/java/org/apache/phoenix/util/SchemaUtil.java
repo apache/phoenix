@@ -141,8 +141,9 @@ public class SchemaUtil {
         
     };
     public static final RowKeySchema VAR_BINARY_SCHEMA = new RowKeySchemaBuilder(1).addField(VAR_BINARY_DATUM, false, SortOrder.getDefault()).build();
-    public static final String SCHEMA_FOR_DEFAULT_NAMESPACE = "DEFAULT";
-    public static final String HBASE_NAMESPACE = "HBASE";
+    // See PHOENIX-4424
+    public static final String SCHEMA_FOR_DEFAULT_NAMESPACE = "default";
+    public static final String HBASE_NAMESPACE = "hbase";
     public static final List<String> NOT_ALLOWED_SCHEMA_LIST = Arrays.asList(SCHEMA_FOR_DEFAULT_NAMESPACE,
             HBASE_NAMESPACE);
     

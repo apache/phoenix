@@ -184,7 +184,6 @@ public interface QueryConstants {
     enum JoinType {INNER, LEFT_OUTER}
     String SYSTEM_SCHEMA_NAME = "SYSTEM";
     byte[] SYSTEM_SCHEMA_NAME_BYTES = Bytes.toBytes(SYSTEM_SCHEMA_NAME);
-    String HBASE_DEFAULT_SCHEMA_NAME = "default";
     String OFFSET_ROW_KEY = "_OFFSET_";
     byte[] OFFSET_ROW_KEY_BYTES = Bytes.toBytes(OFFSET_ROW_KEY);
     ImmutableBytesPtr OFFSET_ROW_KEY_PTR = new ImmutableBytesPtr(OFFSET_ROW_KEY_BYTES);

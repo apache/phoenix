@@ -462,7 +462,7 @@ create_table_node returns [CreateTableStatement ret]
    
 // Parse a create schema statement.
 create_schema_node returns [CreateSchemaStatement ret]
-    :   CREATE SCHEMA (IF NOT ex=EXISTS)? (DEFAULT | s=identifier)
+    :   CREATE SCHEMA (IF NOT ex=EXISTS)? s=identifier
         {ret = factory.createSchema(s, ex!=null); }
     ;
 
