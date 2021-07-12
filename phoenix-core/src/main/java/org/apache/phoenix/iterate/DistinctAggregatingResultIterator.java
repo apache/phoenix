@@ -42,10 +42,13 @@ import com.google.common.collect.Sets;
  * @since 1.2
  */
 public class DistinctAggregatingResultIterator implements AggregatingResultIterator {
+    /**
+     * Original AggregatingResultIterator
+     */
     private final AggregatingResultIterator targetAggregatingResultIterator;
     private final RowProjector rowProjector;
     /**
-     * cached tuples already seen.
+     * Cached tuples already seen.
      */
     private final Set<ResultEntry> resultEntries =
             Sets.<ResultEntry>newHashSet();
@@ -63,7 +66,8 @@ public class DistinctAggregatingResultIterator implements AggregatingResultItera
 
         ResultEntry(Tuple result) {
             this.result = result;
-            this.columnValues = new ImmutableBytesPtr[rowProjector.getColumnCount()];
+            this.columnValues =
+                    new ImmutableBytesPtr[rowProjector.getColumnCount()];
             int columnIndex = 0;
             for (ColumnProjector columnProjector : rowProjector.getColumnProjectors()) {
                 Expression expression = columnProjector.getExpression();
@@ -134,7 +138,9 @@ public class DistinctAggregatingResultIterator implements AggregatingResultItera
     @Override
     public void explain(List<String> planSteps,
             ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
-        targetAggregatingResultIterator.explain(planSteps, explainPlanAttributesBuilder);
+        targetAggregatingResultIterator.explain(
+                planSteps,
+                explainPlanAttributesBuilder);
         explainPlanAttributesBuilder.setClientDistinctFilter(
             rowProjector.toString());
         planSteps.add("CLIENT DISTINCT ON " + rowProjector.toString());
