@@ -28,6 +28,7 @@ import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.util.SchemaUtil;
 
 
@@ -45,11 +46,13 @@ public class KeyValueColumnExpression extends ColumnExpression {
 
     public KeyValueColumnExpression() {
     }
-    public KeyValueColumnExpression(byte[] cf, byte[] cq) {
+
+    @VisibleForTesting
+    public KeyValueColumnExpression(final byte[] cf, final byte[] cq) {
         this.cf = cf;
         this.cq = cq;
     }
-    
+
     public KeyValueColumnExpression(PColumn column) {
         super(column);
         this.cf = column.getFamilyName().getBytes();

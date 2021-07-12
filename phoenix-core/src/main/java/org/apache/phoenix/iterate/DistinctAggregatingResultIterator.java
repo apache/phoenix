@@ -44,11 +44,21 @@ import com.google.common.collect.Sets;
 public class DistinctAggregatingResultIterator implements AggregatingResultIterator {
     private final AggregatingResultIterator targetAggregatingResultIterator;
     private final RowProjector rowProjector;
-    private final Set<ResultEntry> resultEntries = Sets.<ResultEntry>newHashSet();
+    /**
+     * cached tuples already seen.
+     */
+    private final Set<ResultEntry> resultEntries =
+            Sets.<ResultEntry>newHashSet();
 
     private class ResultEntry {
+        /**
+         * cached hashCode.
+         */
         private final int hashCode;
         private final Tuple result;
+        /**
+         * cached column values.
+         */
         private final ImmutableBytesPtr[] columnValues;
 
         ResultEntry(Tuple result) {
@@ -97,13 +107,13 @@ public class DistinctAggregatingResultIterator implements AggregatingResultItera
 
     @Override
     public Tuple next() throws SQLException {
-        while(true) {
+        while (true) {
             Tuple nextTuple = this.targetAggregatingResultIterator.next();
-            if(nextTuple == null) {
+            if (nextTuple == null) {
                 return null;
             }
             ResultEntry resultEntry = new ResultEntry(nextTuple);
-            if(!this.resultEntries.contains(resultEntry)) {
+            if (!this.resultEntries.contains(resultEntry)) {
                 this.resultEntries.add(resultEntry);
                 return nextTuple;
             }
