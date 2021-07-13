@@ -673,7 +673,7 @@ public class SchemaUtil {
         if (schemaName == null || schemaName.length() == 0) {
             return "\"" + tableName + "\"";
         }
-        return "\"" + schemaName + "\"." + "\"" + tableName + "\"";
+        return "\"" + schemaName + "\"" + QueryConstants.NAME_SEPARATOR + "\"" + tableName + "\"";
     }
 
     protected static PhoenixConnection addMetaDataColumn(PhoenixConnection conn, long scn, String columnDef) throws SQLException {
