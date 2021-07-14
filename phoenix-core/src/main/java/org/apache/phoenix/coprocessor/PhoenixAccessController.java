@@ -285,7 +285,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                     AccessControlClient.grant(conn, TableName.valueOf(table), toUser , null, null,
                             actions);
                 } catch (Throwable e) {
-                    new DoNotRetryIOException(e);
+                    throw new DoNotRetryIOException(e);
                 }
                 return null;
             }
