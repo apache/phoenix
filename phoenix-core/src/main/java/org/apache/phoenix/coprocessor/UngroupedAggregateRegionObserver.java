@@ -863,6 +863,20 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         waitForScansToFinish(c);
     }
 
+    @Override
+    public void preRollBackSplit(ObserverContext<RegionCoprocessorEnvironment> ctx)
+            throws IOException {
+        // We need to reset the state in case of a failed split
+        Region region = ctx.getEnvironment().getRegion();
+        synchronized (lock) {
+            if (isRegionClosingOrSplitting) {
+                if (!region.isClosed() && !region.isClosing()) {
+                    isRegionClosingOrSplitting = false;
+                }
+            }
+        }
+    }
+
     // Don't allow splitting/closing if operations need read and write to same region are going on in the
     // the coprocessors to avoid dead lock scenario. See PHOENIX-3111.
     private void waitForScansToFinish(ObserverContext<RegionCoprocessorEnvironment> c) throws IOException {
