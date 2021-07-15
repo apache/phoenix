@@ -18,18 +18,17 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
-import java.util.Collections;
-import java.util.Iterator;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
@@ -43,27 +42,44 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
  * @since 1.2
  */
 public class DistinctAggregatingResultIterator implements AggregatingResultIterator {
-    private final AggregatingResultIterator delegate;
+    /**
+     * Original AggregatingResultIterator
+     */
+    private final AggregatingResultIterator targetAggregatingResultIterator;
     private final RowProjector rowProjector;
-    private Iterator<ResultEntry> resultIterator;
-    private final ImmutableBytesWritable ptr1 = new ImmutableBytesWritable();
-    private final ImmutableBytesWritable ptr2 = new ImmutableBytesWritable();
+    /**
+     * Cached tuples already seen.
+     */
+    private final Set<ResultEntry> resultEntries =
+            Sets.<ResultEntry>newHashSet();
 
     private class ResultEntry {
+        /**
+         * cached hashCode.
+         */
         private final int hashCode;
         private final Tuple result;
+        /**
+         * cached column values.
+         */
+        private final ImmutableBytesPtr[] columnValues;
 
         ResultEntry(Tuple result) {
-            final int prime = 31;
             this.result = result;
-            int hashCode = 0;
-            for (ColumnProjector column : rowProjector.getColumnProjectors()) {
-                Expression e = column.getExpression();
-                if (e.evaluate(this.result, ptr1)) {
-                    hashCode = prime * hashCode + ptr1.hashCode();
+            this.columnValues =
+                    new ImmutableBytesPtr[rowProjector.getColumnCount()];
+            int columnIndex = 0;
+            for (ColumnProjector columnProjector : rowProjector.getColumnProjectors()) {
+                Expression expression = columnProjector.getExpression();
+                ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+                if (!expression.evaluate(this.result, ptr)) {
+                    columnValues[columnIndex] = null;
+                } else {
+                    columnValues[columnIndex] = ptr;
                 }
+                columnIndex++;
             }
-            this.hashCode = hashCode;
+            this.hashCode = Arrays.hashCode(columnValues);
         }
 
         @Override
@@ -78,91 +94,53 @@ public class DistinctAggregatingResultIterator implements AggregatingResultItera
                 return false;
             }
             ResultEntry that = (ResultEntry) o;
-            for (ColumnProjector column : rowProjector.getColumnProjectors()) {
-                Expression e = column.getExpression();
-                boolean isNull1 = !e.evaluate(this.result, ptr1);
-                boolean isNull2 = !e.evaluate(that.result, ptr2);
-                if (isNull1 && isNull2) {
-                    return true;
-                }
-                if (isNull1 || isNull2) {
-                    return false;
-                }
-                if (ptr1.compareTo(ptr2) != 0) {
-                    return false;
-                }
-            }
-            return true;
+            return Arrays.equals(this.columnValues, that.columnValues);
         }
-        
+
         @Override
         public int hashCode() {
             return hashCode;
         }
-        
-        Tuple getResult() {
-            return result;
-        }
     }
-    
-    protected ResultIterator getDelegate() {
-        return delegate;
-    }
-    
+
     public DistinctAggregatingResultIterator(AggregatingResultIterator delegate,
             RowProjector rowProjector) {
-        this.delegate = delegate;
+        this.targetAggregatingResultIterator = delegate;
         this.rowProjector = rowProjector;
     }
 
     @Override
     public Tuple next() throws SQLException {
-        Iterator<ResultEntry> iterator = getResultIterator();
-        if (iterator.hasNext()) {
-            ResultEntry entry = iterator.next();
-            Tuple tuple = entry.getResult();
-            aggregate(tuple);
-            return tuple;
-        }
-        resultIterator = Collections.emptyIterator();
-        return null;
-    }
-    
-    private Iterator<ResultEntry> getResultIterator() throws SQLException {
-        if (resultIterator != null) {
-            return resultIterator;
-        }
-        
-        Set<ResultEntry> entries = Sets.<ResultEntry>newHashSet(); // TODO: size?
-        try {
-            for (Tuple result = delegate.next(); result != null; result = delegate.next()) {
-                ResultEntry entry = new ResultEntry(result);
-                entries.add(entry);
+        while (true) {
+            Tuple nextTuple = this.targetAggregatingResultIterator.next();
+            if (nextTuple == null) {
+                return null;
             }
-        } finally {
-            delegate.close();
+            ResultEntry resultEntry = new ResultEntry(nextTuple);
+            if (!this.resultEntries.contains(resultEntry)) {
+                this.resultEntries.add(resultEntry);
+                return nextTuple;
+            }
         }
-        
-        resultIterator = entries.iterator();
-        return resultIterator;
     }
 
     @Override
-    public void close()  {
-        resultIterator = Collections.emptyIterator();
-    }
-
+    public void close() throws SQLException {
+        this.targetAggregatingResultIterator.close();
+     }
 
     @Override
     public void explain(List<String> planSteps) {
-        delegate.explain(planSteps);
+        targetAggregatingResultIterator.explain(planSteps);
         planSteps.add("CLIENT DISTINCT ON " + rowProjector.toString());
     }
 
     @Override
     public void explain(List<String> planSteps,
             ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
-        delegate.explain(planSteps, explainPlanAttributesBuilder);
+        targetAggregatingResultIterator.explain(
+                planSteps,
+                explainPlanAttributesBuilder);
         explainPlanAttributesBuilder.setClientDistinctFilter(
             rowProjector.toString());
         planSteps.add("CLIENT DISTINCT ON " + rowProjector.toString());
@@ -170,13 +148,12 @@ public class DistinctAggregatingResultIterator implements AggregatingResultItera
 
     @Override
     public Aggregator[] aggregate(Tuple result) {
-        return delegate.aggregate(result);
+        return targetAggregatingResultIterator.aggregate(result);
     }
 
-	@Override
-	public String toString() {
-		return "DistinctAggregatingResultIterator [delegate=" + delegate
-				+ ", rowProjector=" + rowProjector + ", resultIterator="
-				+ resultIterator + ", ptr1=" + ptr1 + ", ptr2=" + ptr2 + "]";
-	}
+    @Override
+    public String toString() {
+        return "DistinctAggregatingResultIterator [targetAggregatingResultIterator=" + targetAggregatingResultIterator
+                + ", rowProjector=" + rowProjector;
+    }
 }
