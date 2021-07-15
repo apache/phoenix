@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.phoenix.compat.hbase.CompatObserverContext;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -88,7 +89,7 @@ public class UngroupedAggregateRegionObserverSplitFailureIT extends BaseUniqueNa
                 UngroupedAggregateRegionObserver obs =
                         (UngroupedAggregateRegionObserver) region.getCoprocessorHost()
                                 .findCoprocessor(UngroupedAggregateRegionObserver.class.getName());
-                ObserverContext<RegionCoprocessorEnvironment> ctx = new ObserverContext<RegionCoprocessorEnvironment>(null);
+                ObserverContext<RegionCoprocessorEnvironment> ctx = new CompatObserverContext<RegionCoprocessorEnvironment>(null);
                 ctx.prepare((RegionCoprocessorEnvironment) region.getCoprocessorHost()
                         .findCoprocessorEnvironment(
                             UngroupedAggregateRegionObserver.class.getName()));
