@@ -88,7 +88,7 @@ public class UngroupedAggregateRegionObserverSplitFailureIT extends BaseUniqueNa
                 UngroupedAggregateRegionObserver obs =
                         (UngroupedAggregateRegionObserver) region.getCoprocessorHost()
                                 .findCoprocessor(UngroupedAggregateRegionObserver.class.getName());
-                ObserverContext<RegionCoprocessorEnvironment> ctx = new ObserverContext<>(null);
+                ObserverContext<RegionCoprocessorEnvironment> ctx = new ObserverContext<RegionCoprocessorEnvironment>(null);
                 ctx.prepare((RegionCoprocessorEnvironment) region.getCoprocessorHost()
                         .findCoprocessorEnvironment(
                             UngroupedAggregateRegionObserver.class.getName()));
