@@ -45,7 +45,12 @@ public class KeyValueColumnExpression extends ColumnExpression {
 
     public KeyValueColumnExpression() {
     }
-    
+
+    public KeyValueColumnExpression(final byte[] cf, final byte[] cq) {
+        this.cf = cf;
+        this.cq = cq;
+    }
+
     public KeyValueColumnExpression(PColumn column) {
         super(column);
         this.cf = column.getFamilyName().getBytes();
