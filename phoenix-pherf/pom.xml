@@ -217,6 +217,11 @@
       <artifactId>mockito-core</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-testing-util</artifactId>
+      <scope>test</scope>
+    </dependency>
     <!-- Java 11 -->
     <dependency>
       <groupId>javax.activation</groupId>
@@ -282,6 +287,9 @@
             </ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>
               org.apache.phoenix:phoenix-hbase-compat-${hbase.compat.version}
+            </ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>
+              org.apache.hbase:hbase-testing-util
             </ignoredUnusedDeclaredDependency>
           </ignoredUnusedDeclaredDependencies>
           <ignoredUsedUndeclaredDependencies>
