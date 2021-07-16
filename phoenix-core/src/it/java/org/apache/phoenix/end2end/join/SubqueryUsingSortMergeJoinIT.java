@@ -40,7 +40,6 @@ import org.apache.phoenix.execute.TupleProjectionPlan;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -252,7 +251,6 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
         return testCases;
     }    
 
-    @Ignore
     @Test
     public void testInSubquery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -355,8 +353,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
             conn.close();
         }
     }
-   
-    @Ignore
+
     @Test
     public void testExistsSubquery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -405,7 +402,6 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
         }
     }
     
-    @Ignore
     @Test
     public void testComparisonSubquery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -496,7 +492,6 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
         }
     }
     
-    @Ignore
     @Test
     public void testCorrelatedInSubqueryBug6224() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -705,7 +700,6 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
         }
     }
 
-    @Ignore
     @Test
     public void testAnyAllComparisonSubquery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -769,7 +763,6 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
         }
     }
 
-    @Ignore
     @Test
     public void testSubqueryWithUpsert() throws Exception {
         String tempTable = generateUniqueName();
