@@ -376,6 +376,9 @@
                 <ignoredUnusedDeclaredDependency>
                   org.slf4j:slf4j-log4j12
                 </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.hbase:hbase-testing-util
+                </ignoredUnusedDeclaredDependency>
               </ignoredUnusedDeclaredDependencies>
               <ignoredUsedUndeclaredDependencies>
                 <ignoredUsedUndeclaredDependency>
