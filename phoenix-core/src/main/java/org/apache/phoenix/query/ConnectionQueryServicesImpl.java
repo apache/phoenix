@@ -5093,22 +5093,27 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } else {
             Sequence sequence = sequenceMap.get(key);
             if (sequence == null) {
-                for (Map.Entry<SequenceKey,Sequence> entry : sequenceMap.entrySet()) {
-                    if (compareSequenceKeysWithoutTenant(key, entry.getKey())) {
-                        return entry.getValue();
-                    }
-                }
+                return sequenceMap.entrySet().stream()
+                        .filter(entry -> compareSequenceKeysWithoutTenant(key, entry.getKey()))
+                        .findFirst()
+                        .map(Entry::getValue)
+                        .orElse(null);
             } else {
                 return sequence;
             }
         }
-        return null;
     }
 
-    private boolean compareSequenceKeysWithoutTenant(SequenceKey key1, SequenceKey key2) {
-        return key2.getTenantId() == null && (key1.getSchemaName() == null ? key2.getSchemaName() == null :
-                key1.getSchemaName().equals(key2.getSchemaName())) &&
-                key1.getSequenceName().equals(key2.getSequenceName());
+    private boolean compareSequenceKeysWithoutTenant(SequenceKey keyToCompare, SequenceKey availableKey) {
+        if (availableKey.getTenantId() != null) {
+            return false;
+        }
+        boolean sameSchema = keyToCompare.getSchemaName() == null ? availableKey.getSchemaName() == null :
+                keyToCompare.getSchemaName().equals(availableKey.getSchemaName());
+        if (!sameSchema) {
+            return false;
+        }
+        return keyToCompare.getSequenceName().equals(availableKey.getSequenceName());
     }
 
     @Override

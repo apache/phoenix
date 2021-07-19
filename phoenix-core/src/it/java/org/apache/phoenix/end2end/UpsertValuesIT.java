@@ -47,7 +47,12 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.Assert;
 import org.junit.Test;
 
 
@@ -705,10 +710,11 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
             try {
                 executeUpdateStatement.execute(String.format("UPSERT INTO %s ( SERVICE, SEQUENCE_NUMBER) VALUES " +
                         "( 'PHOENIX', NEXT VALUE FOR %s)", tableName, sequenceName));
+                Assert.fail();
             } catch (SequenceNotFoundException e) {
                 assertTrue(true);
             } catch (Exception e) {
-                assertTrue(false);
+                Assert.fail();
             }
         }
     }
@@ -730,10 +736,11 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
             try {
                 executeUpdateStatement.execute(String.format("UPSERT INTO %s ( SEQUENCE_NUMBER) VALUES " +
                         "( NEXT VALUE FOR %s)", tableName, sequenceName));
+                Assert.fail();
             } catch (SequenceNotFoundException e) {
                 assertTrue(true);
             } catch (Exception e) {
-                assertTrue(false);
+                Assert.fail();
             }
         }
     }
