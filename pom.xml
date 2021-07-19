@@ -54,6 +54,7 @@
     <module>phoenix-assembly</module>
     <module>phoenix-tools</module>
     <module>phoenix-tracing-webapp</module>
+    <module>phoenix-zipkin</module>
   </modules>
 
   <repositories>
