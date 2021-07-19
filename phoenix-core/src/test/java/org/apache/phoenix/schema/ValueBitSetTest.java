@@ -62,7 +62,7 @@ public class ValueBitSetTest {
         KeyValueSchema schema = builder.build();
         return schema;
     }
-    
+
     private static void setValueBitSet(KeyValueSchema schema, ValueBitSet valueSet) {
         for (int i = 0; i < schema.getFieldCount() - schema.getMinNullable(); i++) {
             if ((i & 1) == 1) {
@@ -70,7 +70,7 @@ public class ValueBitSetTest {
             }
         }
     }
-    
+
     @Test
     public void testMinNullableIndex() {
         final int minNullableIndex = 4; // first 4 fields are not nullable.
@@ -112,7 +112,7 @@ public class ValueBitSetTest {
         assertTrue(kvSchema.getFields().get(minNullableIndex).isNullable());
         assertTrue(kvSchema.getFields().get(minNullableIndex + 1).isNullable());
     }
-    
+
     @Test
     public void testNullCount() {
         int nFields = 32;
@@ -121,7 +121,7 @@ public class ValueBitSetTest {
         KeyValueSchema schema = generateSchema(nFields, nRepeating, nNotNull);
         ValueBitSet valueSet = ValueBitSet.newInstance(schema);
         setValueBitSet(schema, valueSet);
-        
+
         // From beginning, not spanning longs
         assertEquals(5, valueSet.getNullCount(0, 10));
         // From middle, not spanning longs
@@ -133,7 +133,7 @@ public class ValueBitSetTest {
         // from beginning, spanning long entirely into middle of next long
         assertEquals(64, valueSet.getNullCount(2, 128));
     }
-    
+
     @Test
     public void testSizing() {
         int nFields = 32;
@@ -145,7 +145,7 @@ public class ValueBitSetTest {
         assertEquals(Bytes.SIZEOF_SHORT, valueSet.getEstimatedLength());
         setValueBitSet(schema, valueSet);
         assertEquals(Bytes.SIZEOF_SHORT + Bytes.SIZEOF_LONG * 3, valueSet.getEstimatedLength());
-        
+
         nFields = 18;
         nRepeating = 1;
         nNotNull = 2;
@@ -154,7 +154,7 @@ public class ValueBitSetTest {
         assertEquals(Bytes.SIZEOF_SHORT, valueSet.getEstimatedLength());
         setValueBitSet(schema, valueSet);
         assertEquals(Bytes.SIZEOF_SHORT, valueSet.getEstimatedLength());
-        
+
         nFields = 19;
         nRepeating = 1;
         nNotNull = 2;
@@ -163,14 +163,14 @@ public class ValueBitSetTest {
         assertEquals(Bytes.SIZEOF_SHORT, valueSet.getEstimatedLength());
         setValueBitSet(schema, valueSet);
         assertEquals(Bytes.SIZEOF_SHORT + Bytes.SIZEOF_LONG, valueSet.getEstimatedLength());
-        
+
         nFields = 19;
         nRepeating = 1;
         nNotNull = 19;
         schema = generateSchema(nFields, nRepeating, nNotNull);
         valueSet = ValueBitSet.newInstance(schema);
         assertEquals(0, valueSet.getEstimatedLength());
-        
+
         nFields = 129;
         nRepeating = 1;
         nNotNull = 0;
@@ -182,9 +182,9 @@ public class ValueBitSetTest {
         valueSet.set(128);
         assertEquals(Bytes.SIZEOF_SHORT + Bytes.SIZEOF_LONG * 3, valueSet.getEstimatedLength());
     }
-    
+
     @Test
-    public void testMaxSetBit() {        
+    public void testMaxSetBit() {
         int nFields = 19;
         int nRepeating = 1;
         int nNotNull = 2;
@@ -199,4 +199,25 @@ public class ValueBitSetTest {
         assertTrue(copyValueSet.getMaxSetBit() >= valueSet.getMaxSetBit());
     }
 
+    @Test
+    public void testShortInNegative() {
+        // set 16 columns to true
+        int nFields = 16;
+        int nRepeating = 1;
+        int nNotNull = 0;
+        KeyValueSchema schema = generateSchema(nFields, nRepeating, nNotNull);
+        ValueBitSet valueSet = ValueBitSet.newInstance(schema);
+        for (int i = 0; i < 16; i++) {
+            valueSet.set(i);
+        }
+
+        // load to a new ValueBitSet
+        int length = valueSet.getEstimatedLength();
+        byte[] buf = new byte[length];
+        valueSet.toBytes(buf, 0);
+        ValueBitSet copyValueSet = ValueBitSet.newInstance(schema);
+        copyValueSet.or(new ImmutableBytesWritable(buf), length);
+
+        assertFalse(copyValueSet.get(16));
+    }
 }
