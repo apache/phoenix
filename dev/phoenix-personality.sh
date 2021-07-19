@@ -87,9 +87,11 @@ function personality_globals
 
   # Set docker container to run with 20g. Default is 4g in yetus.
   # See HBASE-19902 for how we arrived at 20g.
-  # TODO Doesn't seem to have effect in Yetus 0.12, set in cli instead
   #shellcheck disable=SC2034
-  DOCKERMEMLIMIT=20g
+  DOCKER_MEMORY=20g
+
+  #Allow some swaping to avoid OOM errors
+  DOCKER_EXTRAARGS+=( "--memory-swap=24g" )
 }
 
 ## @description  Parse extra arguments required by personalities, if any.
