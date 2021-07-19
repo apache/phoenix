@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -493,7 +494,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
         TreeSet<TableRowkeyPair> sorted = new TreeSet<TableRowkeyPair>(tablesStartKeys);
 
         TableRowkeyPair first = sorted.first();
-        if (!first.getRowkey().equals(HConstants.EMPTY_BYTE_ARRAY)) {
+        if (!Arrays.equals(first.getRowkey().get(), HConstants.EMPTY_BYTE_ARRAY)) {
           throw new IllegalArgumentException(
               "First region of table should have empty start key. Instead has: "
               + Bytes.toStringBinary(first.getRowkey().get()));

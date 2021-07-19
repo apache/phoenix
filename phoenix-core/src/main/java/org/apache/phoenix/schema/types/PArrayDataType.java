@@ -339,7 +339,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
             }
             // Coerce to new max length when only max lengths differ
             if (actualType == desiredType && !pArr.isPrimitiveType() && maxLength != null
-                    && maxLength != desiredMaxLength) {
+                    && !maxLength.equals(desiredMaxLength)) {
                 pArr = new PhoenixArray(pArr, desiredMaxLength);
             }
             baseType = desiredBaseType;
