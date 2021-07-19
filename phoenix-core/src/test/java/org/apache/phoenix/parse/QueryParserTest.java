@@ -41,8 +41,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 public class QueryParserTest {
     private void parseQuery(String sql) throws IOException, SQLException {
         SQLParser parser = new SQLParser(new StringReader(sql));
-        BindableStatement stmt = null;
-        stmt = parser.parseStatement();
+        BindableStatement stmt = parser.parseStatement();
         if (stmt.getOperation() != Operation.QUERY) {
             return;
         }
