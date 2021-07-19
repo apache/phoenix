@@ -71,7 +71,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
-import org.apache.phoenix.schema.LocalIndexDataColumnRef;
+import org.apache.phoenix.schema.IndexDataColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDatum;
@@ -232,7 +232,7 @@ public class ProjectionCompiler {
             } catch (ColumnNotFoundException e) {
                 if (index.getIndexType() == IndexType.LOCAL) {
                     try {
-                        ref = new LocalIndexDataColumnRef(context, tableRef, indexColName);
+                        ref = new IndexDataColumnRef(context, tableRef, indexColName);
                         indexColumn = ref.getColumn();
                     } catch (ColumnFamilyNotFoundException c) {
                         throw e;
@@ -305,7 +305,7 @@ public class ProjectionCompiler {
             } catch (ColumnNotFoundException e) {
                 if (index.getIndexType() == IndexType.LOCAL) {
                     try {
-                        ref = new LocalIndexDataColumnRef(context, tableRef, indexColName);
+                        ref = new IndexDataColumnRef(context, tableRef, indexColName);
                         indexColumn = ref.getColumn();
                         indexColumnFamily =
                                 indexColumn.getFamilyName() == null ? null
@@ -702,7 +702,7 @@ public class ProjectionCompiler {
                              PColumn col = expression.getColumn();
                              // hack'ish... For covered columns with local indexes we defer to the server.
                              if (col instanceof ProjectedColumn && ((ProjectedColumn) col)
-                                     .getSourceColumnRef() instanceof LocalIndexDataColumnRef) {
+                                     .getSourceColumnRef() instanceof IndexDataColumnRef) {
                                  return null;
                              }
                              PTable table = context.getCurrentTable().getTable();

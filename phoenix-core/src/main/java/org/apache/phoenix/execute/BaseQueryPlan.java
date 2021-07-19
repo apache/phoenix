@@ -325,9 +325,14 @@ public abstract class BaseQueryPlan implements QueryPlan {
         ScanUtil.setTenantId(scan, tenantIdBytes);
         String customAnnotations = LogUtil.customAnnotationsToString(connection);
         ScanUtil.setCustomAnnotations(scan, customAnnotations == null ? null : customAnnotations.getBytes());
-        // Set local index related scan attributes. 
-        if (table.getIndexType() == IndexType.LOCAL) {
-            ScanUtil.setLocalIndex(scan);
+        // Set index related scan attributes.
+        if (table.getType() == PTableType.INDEX) {
+            if (table.getIndexType() == IndexType.LOCAL) {
+                ScanUtil.setLocalIndex(scan);
+            } else {
+                ScanUtil.setGlobalIndex(scan);
+            }
+
             Set<PColumn> dataColumns = context.getDataColumns();
             // If any data columns to join back from data table are present then we set following attributes
             // 1. data columns to be projected and their key value schema.
@@ -351,11 +356,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);
                 // Set key value schema of the data columns.
                 serializeSchemaIntoScan(scan, schema);
-                
-                // Set index maintainer of the local index.
-                serializeIndexMaintainerIntoScan(scan, dataTable);
-                // Set view constants if exists.
-                serializeViewConstantsIntoScan(scan, dataTable);
+                if (table.getIndexType() == IndexType.LOCAL) {
+                    // Set index maintainer of the local index.
+                    serializeIndexMaintainerIntoScan(scan, dataTable);
+                    // Set view constants if exists.
+                    serializeViewConstantsIntoScan(scan, dataTable);
+                }
             }
         }
         

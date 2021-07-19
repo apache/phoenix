@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
@@ -554,7 +555,7 @@ public class IndexUtil {
     }
     
     public static void wrapResultUsingOffset(final RegionCoprocessorEnvironment environment,
-            List<Cell> result, final int offset, ColumnReference[] dataColumns,
+            List<Cell> result, final Scan scan, final int offset, ColumnReference[] dataColumns,
             TupleProjector tupleProjector, Region dataRegion, IndexMaintainer indexMaintainer,
             byte[][] viewConstants, ImmutableBytesWritable ptr) throws IOException {
         if (tupleProjector != null) {
@@ -574,20 +575,35 @@ public class IndexUtil {
                 }
             }
             Result joinResult = null;
-            if (dataRegion != null) {
-                joinResult = dataRegion.get(get);
-            } else {
-                TableName dataTable =
-                    TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(environment.getRegion().
-                        getTableDescriptor().getTableName().getNameAsString()));
+            if (ScanUtil.isLocalIndex(scan)) {
+                if (dataRegion != null) {
+                    joinResult = dataRegion.get(get);
+                } else {
+                    TableName dataTable =
+                        TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(environment.getRegion().
+                            getTableDescriptor().getTableName().getNameAsString()));
+                    Table table = null;
+                    try {
+                        table = environment.getConnection().getTable(dataTable);
+                        joinResult = table.get(get);
+                    } finally {
+                        if (table != null) table.close();
+                    }
+                }
+            } else if (ScanUtil.isGlobalIndex(scan)) {
+                byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
                 Table table = null;
                 try {
-                    table = environment.getConnection().getTable(dataTable);
+                    table = ServerUtil.ConnectionFactory.
+                            getConnection(ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION, environment).
+                            getTable(TableName.valueOf(dataTableName));
                     joinResult = table.get(get);
                 } finally {
                     if (table != null) table.close();
                 }
+
             }
+
             // at this point join result has data from the data table. We now need to take this result and
             // add it to the cells that we are returning. 
             // TODO: handle null case (but shouldn't happen)

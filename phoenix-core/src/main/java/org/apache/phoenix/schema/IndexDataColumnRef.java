@@ -28,12 +28,12 @@ import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.util.IndexUtil;
 
-public class LocalIndexDataColumnRef extends ColumnRef {
+public class IndexDataColumnRef extends ColumnRef {
     final private int position;
     final private Set<PColumn> columns;
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
 
-    public LocalIndexDataColumnRef(StatementContext context, TableRef tRef, String indexColumnName)
+    public IndexDataColumnRef(StatementContext context, TableRef tRef, String indexColumnName)
             throws MetaDataEntityNotFoundException, SQLException {
         super(FromCompiler.getResolver(
             FACTORY.namedTable(
@@ -48,15 +48,15 @@ public class LocalIndexDataColumnRef extends ColumnRef {
         columns = context.getDataColumns();
     }
 
-    protected LocalIndexDataColumnRef(LocalIndexDataColumnRef localIndexDataColumnRef, long timestamp) {
-        super(localIndexDataColumnRef, timestamp);
-        this.position = localIndexDataColumnRef.position;
-        this.columns = localIndexDataColumnRef.columns;
+    protected IndexDataColumnRef(IndexDataColumnRef indexDataColumnRef, long timestamp) {
+        super(indexDataColumnRef, timestamp);
+        this.position = indexDataColumnRef.position;
+        this.columns = indexDataColumnRef.columns;
     }
 
     @Override
     public ColumnRef cloneAtTimestamp(long timestamp) {
-        return new LocalIndexDataColumnRef(this, timestamp);
+        return new IndexDataColumnRef(this, timestamp);
     }
 
     @Override
