@@ -159,8 +159,9 @@ public class TableClientMetricsTest {
      */
     @Test
     public void testTableClientMetrics() {
+        Configuration conf = new Configuration();
         for (int i = 0; i < tableNames.length; i++) {
-            TableClientMetrics tableClientMetrics = new TableClientMetrics(tableNames[i]);
+            TableClientMetrics tableClientMetrics = new TableClientMetrics(tableNames[i], conf);
             tableMetricsSet.put(tableNames[i], tableClientMetrics);
 
             tableClientMetrics.changeMetricValue(MUTATION_BATCH_SIZE,
@@ -208,9 +209,10 @@ public class TableClientMetricsTest {
     public void testTableClientMetricsforTableName() {
         Configuration conf = new Configuration();
         for (int i = 0; i < tableNames.length; i++) {
-            TableClientMetrics tableClientMetrics = new TableClientMetrics(tableNames[i]);
+            TableClientMetrics tableClientMetrics = new TableClientMetrics(tableNames[i], conf);
             tableMetricsSet.put(tableNames[i], tableClientMetrics);
         }
         assertTrue(verifyTableName());
     }
+
 }
