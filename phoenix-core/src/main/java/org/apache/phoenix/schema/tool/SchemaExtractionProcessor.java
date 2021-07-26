@@ -97,12 +97,15 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
 
     protected String extractCreateIndexDDL(PTable indexPTable)
             throws SQLException, IOException {
-        String pTableName = indexPTable.getTableName().getString();
+        String quotedIndexTableName = SchemaUtil
+                .getFullTableNameWithQuotes(null, indexPTable.getTableName().getString());
 
         String baseTableName = indexPTable.getParentTableName().getString();
-        String baseTableFullName = SchemaUtil
-                .getQualifiedTableName(indexPTable.getSchemaName().getString(), baseTableName);
+        String baseTableFullName = indexPTable.getSchemaName().getString() + "." + baseTableName;
         PTable dataPTable = getPTable(baseTableFullName);
+
+        String quotedBaseTableFullName = SchemaUtil
+                .getFullTableNameWithQuotes(indexPTable.getSchemaName().getString(), baseTableName);
 
         String defaultCF = SchemaUtil.getEmptyColumnFamilyAsString(indexPTable);
         String indexedColumnsString = getIndexedColumnsString(indexPTable, dataPTable, defaultCF);
@@ -115,8 +118,8 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             setHTableProperties(htd);
         }
         String propertiesString = convertPropertiesToString();
-        return generateIndexDDLString(baseTableFullName, indexedColumnsString, coveredColumnsString,
-                indexPTable.getIndexType().equals(PTable.IndexType.LOCAL), pTableName, propertiesString);
+        return generateIndexDDLString(quotedBaseTableFullName, indexedColumnsString, coveredColumnsString,
+                indexPTable.getIndexType().equals(PTable.IndexType.LOCAL), quotedIndexTableName, propertiesString);
     }
 
     //TODO: Indexed on an expression
@@ -181,11 +184,17 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
 
     private String extractIndexColumn(String columnName, String defaultCF) {
         String [] columnNameSplit = columnName.split(":");
-        if(columnNameSplit[0].equals("") || columnNameSplit[0].equalsIgnoreCase(defaultCF)) {
-            return columnNameSplit[1];
+        if(columnNameSplit[0].equals("") || columnNameSplit[0].equalsIgnoreCase(defaultCF) ||
+                (defaultCF.startsWith("L#") && columnNameSplit[0].equalsIgnoreCase(defaultCF.substring(2)))) {
+            return SchemaUtil.formatColumnName(columnNameSplit[1]);
         } else {
-            return columnNameSplit.length > 1 ?
-                    String.format("\"%s\".\"%s\"", columnNameSplit[0], columnNameSplit[1]) : columnNameSplit[0];
+            if (columnNameSplit.length > 1) {
+                String schema = SchemaUtil.formatSchemaName(columnNameSplit[0]);
+                String name = SchemaUtil.formatColumnName(columnNameSplit[1]);
+                return String.format("%s.%s", schema, name);
+            } else {
+                return SchemaUtil.formatColumnName(columnNameSplit[0]);
+            }
         }
     }
 
@@ -204,10 +213,10 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         return coveredColumnsBuilder.toString();
     }
 
-    protected String generateIndexDDLString(String baseTableFullName, String indexedColumnString,
-            String coveredColumnString, boolean local, String pTableName, String properties) {
+    protected String generateIndexDDLString(String quotedBaseTableFullName, String indexedColumnString,
+            String coveredColumnString, boolean local, String quotedIndexTableName, String properties) {
         StringBuilder outputBuilder = new StringBuilder(String.format(CREATE_INDEX,
-                local ? "LOCAL " : "", pTableName, baseTableFullName));
+                local ? "LOCAL " : "", quotedIndexTableName, quotedBaseTableFullName));
         outputBuilder.append("(");
         outputBuilder.append(indexedColumnString);
         outputBuilder.append(")");
@@ -230,7 +239,10 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         String pSchemaName = table.getSchemaName().getString();
         String pTableName = table.getTableName().getString();
         String baseTableName = table.getParentTableName().getString();
-        String baseTableFullName = SchemaUtil.getQualifiedTableName(pSchemaName, baseTableName);
+        String quotedBaseTableName = SchemaUtil
+                .getFullTableNameWithQuotes(pSchemaName, baseTableName);
+
+        String baseTableFullName = pSchemaName + "." + baseTableName;
         PTable baseTable = getPTable(baseTableFullName);
         String columnInfoString = getColumnInfoStringForView(table, baseTable);
 
@@ -238,15 +250,15 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         if(whereClause != null) {
             whereClause = whereClause.substring(whereClause.indexOf("WHERE"));
         }
-        return generateCreateViewDDL(columnInfoString, baseTableFullName,
+        return generateCreateViewDDL(columnInfoString, quotedBaseTableName,
                 whereClause == null ? "" : " "+whereClause, pSchemaName, pTableName);
     }
 
-    private String generateCreateViewDDL(String columnInfoString, String baseTableFullName,
+    private String generateCreateViewDDL(String columnInfoString, String quotedBaseTableName,
             String whereClause, String pSchemaName, String pTableName) {
-        String viewFullName = SchemaUtil.getPTableFullNameWithQuotes(pSchemaName, pTableName);
-        StringBuilder outputBuilder = new StringBuilder(String.format(CREATE_VIEW, viewFullName,
-                columnInfoString, baseTableFullName, whereClause));
+        String quotedViewFullName = SchemaUtil.getFullTableNameWithQuotes(pSchemaName, pTableName);
+        StringBuilder outputBuilder = new StringBuilder(String.format(CREATE_VIEW,
+                quotedViewFullName, columnInfoString, quotedBaseTableName, whereClause));
         return outputBuilder.toString();
     }
 
@@ -270,8 +282,9 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
 
     private String generateTableDDLString(String columnInfoString, String propertiesString,
             String pSchemaName, String pTableName) {
-        String pTableFullName = SchemaUtil.getPTableFullNameWithQuotes(pSchemaName, pTableName);
-        StringBuilder outputBuilder = new StringBuilder(String.format(CREATE_TABLE, pTableFullName));
+        String quotedTableFullName = SchemaUtil.getFullTableNameWithQuotes(pSchemaName, pTableName);
+        StringBuilder outputBuilder = new StringBuilder(String.format(CREATE_TABLE,
+                quotedTableFullName));
         outputBuilder.append(columnInfoString).append(" ").append(propertiesString);
         return outputBuilder.toString();
     }
@@ -455,11 +468,12 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
     }
 
     private String extractColumn(PColumn column) {
-        String colName = column.getName().getString();
+        String colName = SchemaUtil.formatColumnName(column.getName().getString());
         if (column.getFamilyName() != null){
-            String colFamilyName = column.getFamilyName().getString();
+            String colFamilyName = SchemaUtil.formatSchemaName(column.getFamilyName().getString());
             // check if it is default column family name
-            colName = colFamilyName.equals(QueryConstants.DEFAULT_COLUMN_FAMILY)? colName : String.format("\"%s\".\"%s\"", colFamilyName, colName);
+            colName = colFamilyName.equals(QueryConstants.DEFAULT_COLUMN_FAMILY) ? colName :
+                    String.format("%s.%s", colFamilyName, colName);
         }
         boolean isArrayType = column.getDataType().isArrayType();
         String type = column.getDataType().getSqlTypeName();
@@ -524,7 +538,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
     private String extractPKConstraint(List<PColumn> pkColumns) {
         ArrayList<String> colDefs = new ArrayList<>(pkColumns.size());
         for (PColumn pkCol : pkColumns) {
-            colDefs.add(pkCol.getName().getString() + extractPKColumnAttributes(pkCol));
+            colDefs.add(SchemaUtil.formatColumnName(pkCol.getName().getString()) + extractPKColumnAttributes(pkCol));
         }
         return StringUtils.join(colDefs, ", ");
     }
