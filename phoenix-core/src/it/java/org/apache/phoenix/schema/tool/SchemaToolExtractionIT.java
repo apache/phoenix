@@ -71,6 +71,19 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
     }
 
     @Test
+    public void testCreateTableStatementLowerCase() throws Exception {
+        String tableName = "lowecasetbl1";
+        String schemaName = "lowecaseschemaname1";
+        String pTableFullName = SchemaUtil.getEscapedTableName(schemaName, tableName);
+        String createTableStmt = "CREATE TABLE "+ pTableFullName + "(\"smallK\" VARCHAR NOT NULL PRIMARY KEY, "
+                + "\"asd\".V1 VARCHAR, \"foo\".\"bar\" VARCHAR) TTL=2592000, IMMUTABLE_ROWS=true, DISABLE_WAL=true";
+        List<String> queries = new ArrayList<String>(){};
+        queries.add(createTableStmt);
+        String result = runSchemaExtractionTool("\"" + schemaName + "\"", "\"" + tableName + "\"", null, queries);
+        Assert.assertEquals(createTableStmt, result);
+    }
+
+    @Test
     public void testCreateIndexStatement() throws Exception {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
@@ -124,6 +137,42 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
     }
 
     @Test
+    public void testCreateLocalIndexStatement() throws Exception {
+        String tableName = generateUniqueName();
+        String schemaName = generateUniqueName();
+        String indexName = generateUniqueName();
+        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_WAL=true";
+        String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+        String createTableStatement = "CREATE TABLE "+pTableFullName + "(k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"
+                + properties;
+        String createIndexStatement = "CREATE LOCAL INDEX "+indexName + " ON "+pTableFullName+"(v1 DESC, k) INCLUDE (v2)";
+        List<String> queries = new ArrayList<String>(){};
+        queries.add(createTableStatement);
+        queries.add(createIndexStatement);
+
+        String result = runSchemaExtractionTool(schemaName, indexName, null, queries);
+        Assert.assertEquals(createIndexStatement.toUpperCase(), result.toUpperCase());
+    }
+
+    @Test
+    public void testCreateIndexStatementLowerCase() throws Exception {
+        String tableName = "lowercase" + generateUniqueName();
+        String schemaName = "lowercase" + generateUniqueName();
+        String indexName = "\"lowercaseIND" + generateUniqueName() + "\"";
+        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_WAL=true";
+        String pTableFullName = SchemaUtil.getEscapedTableName(schemaName, tableName);
+        String createTableStatement = "CREATE TABLE " + pTableFullName + "(\"k\" VARCHAR NOT NULL PRIMARY KEY, \"a\".V1 VARCHAR, \"v2\" VARCHAR)"
+                + properties;
+        String createIndexStatement = "CREATE INDEX " + indexName + " ON "+ pTableFullName + "(\"a\".V1 DESC, \"k\") INCLUDE (\"v2\")";
+        List<String> queries = new ArrayList<String>(){};
+        queries.add(createTableStatement);
+        queries.add(createIndexStatement);
+
+        String result = runSchemaExtractionTool("\"" + schemaName + "\"",  indexName, null, queries);
+        Assert.assertEquals(createIndexStatement, result);
+    }
+
+    @Test
     public void testCreateViewStatement() throws Exception {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
@@ -145,6 +194,29 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
         String result = runSchemaExtractionTool(schemaName, viewName, null, queries);
         Assert.assertEquals(createView.toUpperCase(), result.toUpperCase());
 
+    }
+
+    @Test
+    public void testCreateViewStatementLowerCase() throws Exception {
+        String tableName = "lowercase" + generateUniqueName();
+        String schemaName = "lowercase" + generateUniqueName();
+        String viewName = "lowercase" + generateUniqueName();
+        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_WAL=true";
+
+        String pTableFullName = SchemaUtil.getEscapedTableName(schemaName, tableName);
+        String createTableStmt = "CREATE TABLE "+pTableFullName + "(\"k\" BIGINT NOT NULL PRIMARY KEY, "
+                + "\"a\".V1 VARCHAR, v2 VARCHAR)"
+                + properties;
+        String viewFullName = SchemaUtil.getEscapedTableName(schemaName, viewName);
+        String createView = "CREATE VIEW "+viewFullName + "(ID1 BIGINT, \"id2\" BIGINT NOT NULL, "
+                + "ID3 VARCHAR NOT NULL CONSTRAINT PKVIEW PRIMARY KEY (\"id2\", ID3 DESC)) "
+                + "AS SELECT * FROM " + pTableFullName + " WHERE \"k\" > 3";
+
+        List<String> queries = new ArrayList<String>(){};
+        queries.add(createTableStmt);
+        queries.add(createView);
+        String result = runSchemaExtractionTool("\"" + schemaName + "\"", "\"" + viewName + "\"", null, queries);
+        Assert.assertEquals(createView, result);
     }
 
     @Test

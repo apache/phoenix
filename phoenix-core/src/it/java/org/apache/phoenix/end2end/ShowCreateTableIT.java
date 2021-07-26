@@ -43,7 +43,6 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
                 rs.getString(1).contains(ddl));
     }
 
-    @Ignore
     @Test
     public void testShowCreateTableLowerCase() throws Exception {
         Properties props = new Properties();
