@@ -240,10 +240,11 @@ public class SubqueryRewriter extends ParseNodeRewriter {
                     LiteralParseNode.ONE));
             this.addNewAliasedNodes(newSubquerySelectAliasedNodes, oldSubqueryAliasedNodes);
             newSubquerySelectAliasedNodes.addAll(extractedAdditionalSelectAliasNodes);
-            extractedJoinConditionParseNode = joinConditionExtractor.getJoinConditionParseNode();
+            extractedJoinConditionParseNode =
+                joinConditionExtractor.getJoinConditionParseNode();
 
             boolean isAggregate = subquerySelectStatementToUse.isAggregate();
-            if(!isAggregate) {
+            if (!isAggregate) {
                 subquerySelectStatementToUse =
                         NODE_FACTORY.select(
                                 subquerySelectStatementToUse,
@@ -358,7 +359,10 @@ public class SubqueryRewriter extends ParseNodeRewriter {
      * </pre>
      */
     @Override
-    public ParseNode visitLeave(ExistsParseNode existsParseNode, List<ParseNode> childParseNodes) throws SQLException {
+    public ParseNode visitLeave(
+        ExistsParseNode existsParseNode,
+        List<ParseNode> childParseNodes) throws SQLException {
+
         boolean isTopNode = topNode == existsParseNode;
         if (isTopNode) {
             topNode = null;
@@ -390,9 +394,9 @@ public class SubqueryRewriter extends ParseNodeRewriter {
             existsParseNode = NODE_FACTORY.exists(subqueryParseNode, existsParseNode.isNegate());
             return super.visitLeave(
                     existsParseNode,
-                    Collections.<ParseNode> singletonList(subqueryParseNode));
+                    Collections.<ParseNode>singletonList(subqueryParseNode));
         }
-        
+
         List<AliasedNode> extractedAdditionalSelectAliasNodes =
                 joinConditionExtractor.getAdditionalSubselectSelectAliasedNodes();
         List<AliasedNode> newSubquerySelectAliasedNodes = Lists.newArrayListWithExpectedSize(
@@ -491,8 +495,10 @@ public class SubqueryRewriter extends ParseNodeRewriter {
             rhsNode = NODE_FACTORY.rowValueConstructor(nodes);
         }
         
-        List<AliasedNode> additionalSelectNodes = conditionExtractor.getAdditionalSubselectSelectAliasedNodes();
-        List<AliasedNode> selectNodes = Lists.newArrayListWithExpectedSize(additionalSelectNodes.size() + 1);        
+        List<AliasedNode> additionalSelectNodes =
+            conditionExtractor.getAdditionalSubselectSelectAliasedNodes();
+        List<AliasedNode> selectNodes =
+            Lists.newArrayListWithExpectedSize(additionalSelectNodes.size() + 1);
         selectNodes.add(NODE_FACTORY.aliasedNode(ParseNodeFactory.createTempAlias(), rhsNode));
         selectNodes.addAll(additionalSelectNodes);
         
@@ -752,8 +758,8 @@ public class SubqueryRewriter extends ParseNodeRewriter {
             this.tableName = NODE_FACTORY.table(null, tableAlias);
             ColumnResolver localResolver = FromCompiler.getResolverForQuery(subquery, connection);
             this.columnResolveVisitor = new ColumnResolveVisitor(localResolver, outerResolver);
-            this.additionalSubselectSelectAliasedNodes = Lists.<AliasedNode> newArrayList();
-            this.joinConditionParseNodes = Lists.<ParseNode> newArrayList();
+            this.additionalSubselectSelectAliasedNodes = Lists.<AliasedNode>newArrayList();
+            this.joinConditionParseNodes = Lists.<ParseNode>newArrayList();
         }
         
         public List<AliasedNode> getAdditionalSubselectSelectAliasedNodes() {
@@ -761,12 +767,14 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         }
         
         public ParseNode getJoinConditionParseNode() {
-            if (this.joinConditionParseNodes.isEmpty())
+            if (this.joinConditionParseNodes.isEmpty()) {
                 return null;
-            
-            if (this.joinConditionParseNodes.size() == 1)
+            }
+
+            if (this.joinConditionParseNodes.size() == 1) {
                 return this.joinConditionParseNodes.get(0);
-            
+            }
+
             return NODE_FACTORY.and(this.joinConditionParseNodes);
         }
 
@@ -800,14 +808,16 @@ public class SubqueryRewriter extends ParseNodeRewriter {
             }
             if (lhsType == ColumnResolveVisitor.ColumnResolveType.LOCAL && rhsType == ColumnResolveVisitor.ColumnResolveType.OUTER) {
                 String alias = ParseNodeFactory.createTempAlias();
-                this.additionalSubselectSelectAliasedNodes.add(NODE_FACTORY.aliasedNode(alias, node.getLHS()));
+                this.additionalSubselectSelectAliasedNodes.add(
+                  NODE_FACTORY.aliasedNode(alias, node.getLHS()));
                 ParseNode lhsNode = NODE_FACTORY.column(tableName, alias, null);
                 this.joinConditionParseNodes.add(NODE_FACTORY.equal(lhsNode, node.getRHS()));
                 return null;
             }        
             if (lhsType == ColumnResolveVisitor.ColumnResolveType.OUTER && rhsType == ColumnResolveVisitor.ColumnResolveType.LOCAL) {
                 String alias = ParseNodeFactory.createTempAlias();
-                this.additionalSubselectSelectAliasedNodes.add(NODE_FACTORY.aliasedNode(alias, node.getRHS()));
+                this.additionalSubselectSelectAliasedNodes.add(
+                  NODE_FACTORY.aliasedNode(alias, node.getRHS()));
                 ParseNode rhsNode = NODE_FACTORY.column(tableName, alias, null);
                 this.joinConditionParseNodes.add(NODE_FACTORY.equal(node.getLHS(), rhsNode));
                 return null;
