@@ -27,10 +27,6 @@
   <name>Phoenix Core</name>
   <description>Core Phoenix codebase</description>
 
-  <properties>
-    <top.dir>${project.basedir}/..</top.dir>
-  </properties>
-
   <build>
     <plugins>
       <!-- Add the ant-generated sources to the source path -->
