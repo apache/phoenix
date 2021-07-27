@@ -30,7 +30,6 @@
   <packaging>pom</packaging>
 
   <properties>
-    <top.dir>${project.basedir}/..</top.dir>
     <maven.test.skip>true</maven.test.skip>
     <source.skip>true</source.skip>
   </properties>

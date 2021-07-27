@@ -34,7 +34,6 @@
     <!-- Don't make a source-jar -->
     <source.skip>true</source.skip>
     <license.bundles.dependencies>true</license.bundles.dependencies>
-    <top.dir>${project.basedir}/..</top.dir>
     <shaded.package>org.apache.phoenix.shaded</shaded.package>
 
   </properties>
