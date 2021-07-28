@@ -813,6 +813,108 @@ public class SubqueryIT extends BaseJoinIT {
     }
 
     @Test
+    public void testCorrelatedExistsSubqueryBug6498() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        final Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        try {
+            String query = "SELECT \"order_id\", name FROM " + tableName4 +
+                    " o JOIN " + tableName1 +
+                    " i ON o.\"item_id\" = i.\"item_id\" WHERE exists " +
+                    "(SELECT 1 FROM " + tableName4 + " q WHERE o.\"item_id\" = q.\"item_id\"" +
+                    " group by q.\"customer_id\" having count(\"order_id\") > 1)";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertFalse(rs.next());
+
+            query = "SELECT \"order_id\", name FROM " + tableName4 +
+                    " o JOIN " + tableName1 +
+                    " i ON o.\"item_id\" = i.\"item_id\" WHERE exists " +
+                    "(SELECT 1 FROM " + tableName4 + " q WHERE o.\"item_id\" = q.\"item_id\"" +
+                    " group by q.\"customer_id\" having count(\"order_id\") >= 1) order by \"order_id\"";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertEquals(rs.getString(2), "T1");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000002");
+            assertEquals(rs.getString(2), "T6");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000003");
+            assertEquals(rs.getString(2), "T2");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertEquals(rs.getString(2), "T6");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertEquals(rs.getString(2), "T3");
+            assertFalse(rs.next());
+
+            query = "SELECT \"order_id\", name FROM " + tableName4 +
+                    " o JOIN " + tableName1 +
+                    " i ON o.\"item_id\" = i.\"item_id\" WHERE exists " +
+                    "(SELECT 1 FROM " + tableName4 + " q WHERE o.\"item_id\" = q.\"item_id\"" +
+                    " and q.price <= 150 group by q.\"customer_id\" having count(\"order_id\") >= 1)"+
+                    " or o.quantity = 5000 order by \"order_id\"";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertEquals(rs.getString(2), "T1");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertEquals(rs.getString(2), "T3");
+            assertFalse(rs.next());
+
+            query = "SELECT \"order_id\" FROM " + tableName4 +
+                    " o WHERE exists (SELECT 1 FROM " + tableName4 +
+                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000004' GROUP BY \"order_id\"" +
+                    " having count(\"customer_id\") >= 1) order by  \"order_id\"";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000002");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000003");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertFalse(rs.next());
+
+            query = "SELECT \"order_id\" FROM " + tableName4 +
+                    " o WHERE exists (SELECT 1 FROM " + tableName4 +
+                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000003' GROUP BY \"order_id\"" +
+                    " having count(\"customer_id\") >= 1) order by  \"order_id\"";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000002");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000004");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertFalse(rs.next());
+
+            query = "SELECT \"order_id\" FROM " + tableName4 +
+                    " o WHERE exists (SELECT 1 FROM " + tableName4 +
+                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000003' GROUP BY \"order_id\"" +
+                    " having count(\"customer_id\") > 1) order by  \"order_id\"";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
     public void testAnyAllComparisonSubquery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
