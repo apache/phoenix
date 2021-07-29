@@ -4949,7 +4949,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         for (SequenceAllocation sequenceAllocation : sequenceAllocations) {
             SequenceKey key = sequenceAllocation.getSequenceKey();
             Sequence newSequences = new Sequence(key);
-            Sequence sequence = sequenceMap.putIfAbsent(key, newSequences);
+            Sequence sequence = getSequence(sequenceAllocation);
             if (sequence == null) {
                 sequence = newSequences;
             }
@@ -5020,6 +5020,44 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sequence.getLock().unlock();
             }
         }
+    }
+
+    /**
+     * checks if sequenceAllocation's sequence there in sequenceMap, also returns Global Sequences
+     * from Tenant sequenceAllocations
+     * @param sequenceAllocation
+     * @return
+     */
+
+    private Sequence getSequence(SequenceAllocation sequenceAllocation) {
+        SequenceKey key = sequenceAllocation.getSequenceKey();
+        if (key.getTenantId() == null) {
+            return sequenceMap.putIfAbsent(key, new Sequence(key));
+        } else {
+            Sequence sequence = sequenceMap.get(key);
+            if (sequence == null) {
+                for (Map.Entry<SequenceKey,Sequence> entry : sequenceMap.entrySet()) {
+                    if (compareSequenceKeysWithoutTenant(key, entry.getKey())) {
+                        return entry.getValue();
+                    }
+                }
+            } else {
+                return sequence;
+            }
+        }
+        return null;
+    }
+
+    private boolean compareSequenceKeysWithoutTenant(SequenceKey keyToCompare, SequenceKey availableKey) {
+        if (availableKey.getTenantId() != null) {
+            return false;
+        }
+        boolean sameSchema = keyToCompare.getSchemaName() == null ? availableKey.getSchemaName() == null :
+                keyToCompare.getSchemaName().equals(availableKey.getSchemaName());
+        if (!sameSchema) {
+            return false;
+        }
+        return keyToCompare.getSequenceName().equals(availableKey.getSequenceName());
     }
 
     @Override
