@@ -15,8 +15,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
+package org.apache.phoenix.schematool;
 
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.parse.ColumnDef;

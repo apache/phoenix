@@ -18,6 +18,9 @@
 package org.apache.phoenix.schema;
 
 import org.apache.hadoop.yarn.webapp.hamlet.HamletSpec;
+import org.apache.phoenix.schematool.SchemaExtractionProcessor;
+import org.apache.phoenix.schematool.SchemaProcessor;
+import org.apache.phoenix.schematool.SchemaSynthesisProcessor;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;

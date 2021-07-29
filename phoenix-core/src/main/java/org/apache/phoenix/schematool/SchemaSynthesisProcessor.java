@@ -15,24 +15,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
+package org.apache.phoenix.schematool;
 
 import org.apache.phoenix.parse.ColumnDefInPkConstraint;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.BindableStatement;
 import org.apache.phoenix.parse.ColumnDef;
-import org.apache.phoenix.parse.ColumnDefInPkConstraint;
 import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.DropColumnStatement;
 import org.apache.phoenix.parse.DropIndexStatement;
 import org.apache.phoenix.parse.DropTableStatement;
-import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.SQLParser;
 
 import java.io.BufferedReader;
@@ -44,8 +43,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.apache.phoenix.schema.SchemaSQLUtil.getCreateIndexSQL;
-import static org.apache.phoenix.schema.SchemaSQLUtil.getCreateTableSQL;
+import static org.apache.phoenix.schematool.SchemaSQLUtil.getCreateIndexSQL;
+import static org.apache.phoenix.schematool.SchemaSQLUtil.getCreateTableSQL;
 
 public class SchemaSynthesisProcessor implements SchemaProcessor {
     public static final String
