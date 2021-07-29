@@ -88,6 +88,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -99,6 +100,8 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.tool.SchemaExtractionProcessor;
+import org.apache.phoenix.schema.tool.SchemaProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -766,6 +769,32 @@ public final class QueryUtil {
         for(int i = 0; i < parameterValues.size(); i++) {
             stmt.setString(i+1, parameterValues.get(i));
         }
+        return stmt;
+    }
+
+    /**
+     * Util that generates a PreparedStatement against syscat to get the table listing in a given schema.
+     */
+    public static PreparedStatement getShowCreateTableStmt(PhoenixConnection connection, String catalog, TableName tn) throws SQLException {
+
+        String output;
+        SchemaProcessor processor = new SchemaExtractionProcessor(null,
+                connection.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration(),
+                tn.getSchemaName() == null ? null : "\"" + tn.getSchemaName()+ "\"",
+                "\"" + tn.getTableName() + "\"");
+        try {
+            output = processor.process();
+        } catch (Exception e) {
+            LOGGER.error(e.getStackTrace().toString());
+            throw new SQLException(e.getMessage());
+        }
+
+        StringBuilder buf = new StringBuilder("select \n" +
+                " ? as \"CREATE STATEMENT\"");
+        PreparedStatement stmt = connection.prepareStatement(buf.toString());
+
+        stmt.setString(1, output);
+
         return stmt;
     }
 

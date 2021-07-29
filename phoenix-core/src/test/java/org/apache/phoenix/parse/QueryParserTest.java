@@ -912,4 +912,20 @@ public class QueryParserTest {
         parseQueryThatShouldFail("show tables in 'foo'");
         parseQueryThatShouldFail("show tables like foo");
     }
+
+    @Test
+    public void testShowCreateTable() throws Exception {
+        // Happy paths
+        parseQuery("SHOW CREATE TABLE FOO");
+        parseQuery("show create table FOO");
+        parseQuery("SHOW CREATE TABLE s.FOO");
+        parseQuery("SHOW CREATE TABLE \"foo\"");
+        parseQuery("SHOW CREATE TABLE s.\"foo\"");
+        parseQuery("SHOW CREATE TABLE \"s\".FOO");
+
+        // Expected failures.
+        parseQueryThatShouldFail("SHOW CREATE VIEW foo");
+        parseQueryThatShouldFail("SHOW CREATE TABLE 'foo'");
+
+    }
 }
