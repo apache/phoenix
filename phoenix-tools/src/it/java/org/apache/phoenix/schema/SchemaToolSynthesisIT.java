@@ -23,8 +23,8 @@ import org.junit.Test;
 import java.io.File;
 import java.net.URL;
 
-import static org.apache.phoenix.schema.SchemaSynthesisProcessor.ENTITY_NAME_IN_BASE_AND_ALTER_DDL_DON_T_MATCH;
-import static org.apache.phoenix.schema.SchemaSynthesisProcessor.UNSUPPORTED_DDL_EXCEPTION;
+import static org.apache.phoenix.schematool.SchemaSynthesisProcessor.ENTITY_NAME_IN_BASE_AND_ALTER_DDL_DON_T_MATCH;
+import static org.apache.phoenix.schematool.SchemaSynthesisProcessor.UNSUPPORTED_DDL_EXCEPTION;
 import static org.apache.phoenix.schema.SchemaToolExtractionIT.runSchemaTool;
 
 public class SchemaToolSynthesisIT {

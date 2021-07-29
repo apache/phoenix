@@ -952,4 +952,8 @@ public class ParseNodeFactory {
     public ShowSchemasStatement showSchemasStatement(String pattern) {
         return new ShowSchemasStatement(pattern);
     }
+
+    public ShowCreateTable showCreateTable(TableName tableName) {
+        return new ShowCreateTableStatement(tableName);
+    }
 }
