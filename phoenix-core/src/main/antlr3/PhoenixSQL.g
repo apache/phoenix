@@ -428,6 +428,7 @@ oneStatement returns [BindableStatement ret]
     |   s=alter_index_node
     |   s=alter_table_node
     |   s=show_node
+    |   s=show_create_table_node
     |   s=trace_node
     |   s=create_function_node
     |   s=drop_function_node
@@ -494,6 +495,11 @@ revoke_permission_node returns [ChangePermsStatement ret]
 show_node returns [ShowStatement ret]
     :   SHOW TABLES (IN schema=identifier)? (LIKE pattern=string_literal)? { $ret = factory.showTablesStatement(schema, pattern); }
     |   SHOW SCHEMAS (LIKE pattern=string_literal)? { $ret = factory.showSchemasStatement(pattern); }
+    ;
+
+// Parse a describe statement. SHOW CREATE TABLE tablename/viewname/indexname ...
+show_create_table_node returns [ShowCreateTable ret]
+    :   SHOW CREATE TABLE tablename=from_table_name { $ret = factory.showCreateTable(tablename); }
     ;
 
 // Parse a create view statement.

@@ -140,6 +140,8 @@ import org.apache.phoenix.parse.DMLStatement;
 import org.apache.phoenix.parse.DeclareCursorStatement;
 import org.apache.phoenix.parse.DeleteJarStatement;
 import org.apache.phoenix.parse.DeleteStatement;
+import org.apache.phoenix.parse.ShowCreateTableStatement;
+import org.apache.phoenix.parse.ShowCreateTable;
 import org.apache.phoenix.parse.DropColumnStatement;
 import org.apache.phoenix.parse.DropFunctionStatement;
 import org.apache.phoenix.parse.DropIndexStatement;
@@ -1311,6 +1313,22 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
     }
 
+    private static class ExecutableShowCreateTable extends ShowCreateTableStatement
+            implements CompilableStatement {
+
+        public ExecutableShowCreateTable(TableName tableName) {
+            super(tableName);
+        }
+
+        @Override
+        public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
+                throws SQLException {
+            PreparedStatement delegateStmt = QueryUtil.getShowCreateTableStmt(stmt.getConnection(), null,
+                    getTableName());
+            return ((PhoenixPreparedStatement) delegateStmt).compileQuery();
+        }
+    }
+
     private static class ExecutableCreateIndexStatement extends CreateIndexStatement implements CompilableStatement {
 
         public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
@@ -1896,6 +1914,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         @Override
         public ShowSchemasStatement showSchemasStatement(String pattern) {
             return new ExecutableShowSchemasStatement(pattern);
+        }
+
+        @Override
+        public ShowCreateTable showCreateTable(TableName tableName) {
+            return new ExecutableShowCreateTable(tableName);
         }
 
     }
