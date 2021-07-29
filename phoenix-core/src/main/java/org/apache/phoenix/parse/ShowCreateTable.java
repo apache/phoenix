@@ -15,8 +15,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
 
-public interface SchemaProcessor {
-    String process() throws Exception;
+package org.apache.phoenix.parse;
+
+import org.apache.phoenix.jdbc.PhoenixStatement;
+
+/**
+ * Parent class for SHOW CREATE TABLE statements.
+ */
+public class ShowCreateTable implements BindableStatement {
+    @Override
+    public int getBindCount() {
+        return 0;
+    }
+
+    @Override
+    public PhoenixStatement.Operation getOperation() {
+        return PhoenixStatement.Operation.QUERY;
+    }
+
+    public ShowCreateTable() {}
 }
