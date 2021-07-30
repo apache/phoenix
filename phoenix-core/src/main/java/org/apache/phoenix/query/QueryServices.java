@@ -56,6 +56,9 @@ public interface QueryServices extends SQLCloseable {
             "phoenix.query.server.orderBy.spooling.enabled";
     public static final String HBASE_CLIENT_KEYTAB = "hbase.myclient.keytab";
     public static final String HBASE_CLIENT_PRINCIPAL = "hbase.myclient.principal";
+
+    public static final String HBASE_MASTERS = "hbase.masters";
+
     public static final String SPOOL_DIRECTORY = "phoenix.spool.directory";
     public static final String AUTO_COMMIT_ATTRIB = "phoenix.connection.autoCommit";
     // consistency configuration setting
