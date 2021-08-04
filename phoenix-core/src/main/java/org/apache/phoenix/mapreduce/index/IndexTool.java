@@ -889,7 +889,7 @@ public class IndexTool extends Configured implements Tool {
             validateLastVerifyTime();
         }
         if(isTimeRangeSet(startTime, endTime)) {
-            validateTimeRange();
+            validateTimeRange(startTime, endTime);
         }
         if (verify) {
             String value = cmdLine.getOptionValue(VERIFY_OPTION.getOpt());
@@ -945,10 +945,10 @@ public class IndexTool extends Configured implements Tool {
         }
     }
 
-    private void validateTimeRange() {
+    public static void validateTimeRange(Long sTime, Long eTime) {
         Long currentTime = EnvironmentEdgeManager.currentTimeMillis();
-        Long st = (startTime == null) ? 0 : startTime;
-        Long et = (endTime == null) ? currentTime : endTime;
+        Long st = (sTime == null) ? 0 : sTime;
+        Long et = (eTime == null) ? currentTime : eTime;
         if (st.compareTo(currentTime) > 0 || et.compareTo(currentTime) > 0 || st.compareTo(et) >= 0) {
             throw new RuntimeException(INVALID_TIME_RANGE_EXCEPTION_MESSAGE);
         }
@@ -984,7 +984,7 @@ public class IndexTool extends Configured implements Tool {
         changeDisabledIndexStateToBuiding(connection);
     }
 
-    private static boolean isTimeRangeSet(Long startTime, Long endTime) {
+    public static boolean isTimeRangeSet(Long startTime, Long endTime) {
         return startTime != null || endTime != null;
     }
 
@@ -1106,7 +1106,7 @@ public class IndexTool extends Configured implements Tool {
     }
 
     // setup a ValueGetter to get index values from the ResultSet
-    private ValueGetter getIndexValueGetter(final PhoenixResultSet rs, List<String> dataColNames) {
+    public static ValueGetter getIndexValueGetter(final PhoenixResultSet rs, List<String> dataColNames) {
         // map from data col name to index in ResultSet
         final Map<String, Integer> rsIndex = new HashMap<>(dataColNames.size());
         int i = 1;

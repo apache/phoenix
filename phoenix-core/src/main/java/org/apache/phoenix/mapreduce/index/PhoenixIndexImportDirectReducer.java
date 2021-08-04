@@ -33,11 +33,13 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.phoenix.coprocessor.IndexToolVerificationResult;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.transform.TransformTool;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.task.Task;
+import org.apache.phoenix.schema.transform.Transform;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -156,6 +158,16 @@ public class PhoenixIndexImportDirectReducer extends
                 IndexToolUtil.updateIndexState(context.getConfiguration(), PIndexState.ACTIVE);
             } catch (SQLException e) {
                 LOGGER.error(" Failed to update the status to Active", e);
+                throw new RuntimeException(e.getMessage());
+            }
+        }
+
+        if (PhoenixConfigurationUtil.getIsTransforming(context.getConfiguration())) {
+            try {
+                Transform.completeTransform(ConnectionUtil
+                        .getInputConnection(context.getConfiguration()), context.getConfiguration());
+            } catch (Exception e) {
+                LOGGER.error(" Failed to complete transform", e);
                 throw new RuntimeException(e.getMessage());
             }
         }

@@ -461,10 +461,6 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
             for (Result result = scanner.next(); result != null; result = scanner.next()) {
                 for (Cell cell : result.rawCells()) {
                     String cellString = cell.toString();
-                    for (Map.Entry<byte[], NavigableMap<byte[], NavigableMap<Long, byte[]>>> entryF : result.getMap()
-                            .entrySet()) {
-                        byte[] family = entryF.getKey();
-                    }
                     LOGGER.info(cellString + " ****** value : " + Bytes.toStringBinary(CellUtil.cloneValue(cell)));
                 }
             }

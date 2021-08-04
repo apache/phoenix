@@ -48,6 +48,7 @@ import java.util.List;
 import java.util.ArrayList;
 
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.util.MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES;
 
 public class SchemaExtractionProcessor implements SchemaProcessor {
@@ -118,7 +119,8 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             HTableDescriptor htd = getTableDescriptor(cqsi, table);
             setHTableProperties(htd);
         }
-        String propertiesString = convertPropertiesToString();
+
+        String propertiesString = convertPropertiesToString(true);
         return generateIndexDDLString(quotedBaseTableFullName, indexedColumnsString, coveredColumnsString,
                 indexPTable.getIndexType().equals(PTable.IndexType.LOCAL), quotedIndexTableName, propertiesString);
     }
@@ -276,7 +278,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         setHColumnFamilyProperties(hcds);
 
         String columnInfoString = getColumnInfoStringForTable(table);
-        String propertiesString = convertPropertiesToString();
+        String propertiesString = convertPropertiesToString(false);
 
         return generateTableDDLString(columnInfoString, propertiesString, pSchemaName, pTableName);
     }
@@ -368,7 +370,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         }
     }
 
-    private String convertPropertiesToString() {
+    private String convertPropertiesToString(boolean forIndex) {
         StringBuilder optionBuilder = new StringBuilder();
         for(Map.Entry<String, String> entry : definedProps.entrySet()) {
             String key = entry.getKey();
@@ -382,6 +384,12 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             }
 
             if(value!=null && (shouldGenerateWithDefaults || (defaultProps.get(key) != null && !value.equals(defaultProps.get(key))))) {
+                if (forIndex) {
+                    // cannot set these for index
+                    if (key.equals(UPDATE_CACHE_FREQUENCY)) {
+                        continue;
+                    }
+                }
                 if (optionBuilder.length() != 0) {
                     optionBuilder.append(", ");
                 }

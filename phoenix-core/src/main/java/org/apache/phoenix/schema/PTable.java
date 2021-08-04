@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PArrayDataTypeDecoder;
 import org.apache.phoenix.schema.types.PArrayDataTypeEncoder;
@@ -248,7 +249,8 @@ public interface PTable extends PMetaDataEntity {
     }
 
     public enum TransformType {
-        METADATA_TRANSFORM((byte)1);
+        METADATA_TRANSFORM((byte)1),
+        METADATA_TRANSFORM_PARTIAL((byte)2);
 
         private final byte[] byteValue;
         private final int serializedValue;
@@ -295,6 +297,11 @@ public interface PTable extends PMetaDataEntity {
         FAILED {
             public String toString() {
                 return  "FAILED";
+            }
+        },
+        PAUSED {
+            public String toString() {
+                return  "PAUSED";
             }
         },
     }
@@ -818,6 +825,7 @@ public interface PTable extends PMetaDataEntity {
 
     boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection);
     IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection);
+    TransformMaintainer getTransformMaintainer(PTable oldTable, PhoenixConnection connection);
     PName getDefaultFamilyName();
 
     boolean isWALDisabled();

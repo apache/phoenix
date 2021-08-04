@@ -63,13 +63,19 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
     public PhoenixRowTimestampFunctionIT(QualifierEncodingScheme encoding,
             ImmutableStorageScheme storage) {
         StringBuilder optionBuilder = new StringBuilder();
-        optionBuilder.append(" COLUMN_ENCODED_BYTES = " + encoding.ordinal());
-        optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME = "+ storage.toString());
-        this.tableDDLOptions = optionBuilder.toString();
-        this.encoded = (encoding != QualifierEncodingScheme.NON_ENCODED_QUALIFIERS)
-                            ? true : false;
         this.optimized = storage == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS
                             ? true : false;
+        // We cannot have non encoded column names if the storage type is single cell
+        this.encoded = (encoding != QualifierEncodingScheme.NON_ENCODED_QUALIFIERS)
+                ? true : (this.optimized) ? true : false;
+
+        if (this.optimized && encoding == QualifierEncodingScheme.NON_ENCODED_QUALIFIERS) {
+            optionBuilder.append(" COLUMN_ENCODED_BYTES = " + QualifierEncodingScheme.ONE_BYTE_QUALIFIERS.ordinal());
+        } else {
+            optionBuilder.append(" COLUMN_ENCODED_BYTES = " + encoding.ordinal());
+        }
+        optionBuilder.append(", IMMUTABLE_STORAGE_SCHEME = "+ storage.toString());
+        this.tableDDLOptions = optionBuilder.toString();
     }
 
     @Parameterized.Parameters(name = "encoding={0},storage={1}")
@@ -153,7 +159,7 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testRowTimestampDefault() throws Exception {
-
+        if (encoded || optimized) return;
         String tableName =  generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String ddl = "CREATE TABLE IF NOT EXISTS " + tableName
