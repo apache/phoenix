@@ -196,6 +196,15 @@ public final class PhoenixConfigurationUtil {
     // by default MR snapshot restore is handled internally by phoenix
     public static final boolean DEFAULT_MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE = false;
 
+    // Is the mapreduce used for table/index transform
+    public static final String IS_TRANSFORMING_VALUE = "phoenix.mr.istransforming";
+
+    // Is the mapreduce used for table/index transform
+    public static final String TRANSFORMING_TABLE_TYPE = "phoenix.mr.transform.tabletype";
+
+    public static final String IS_PARTIAL_TRANSFORM = "phoenix.mr.transform.ispartial";
+
+
     /**
      * Determines type of Phoenix Map Reduce job.
      * 1. QUERY allows running arbitrary queries without aggregates
@@ -600,6 +609,40 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         String clientPortString = configuration.get(HConstants.ZOOKEEPER_CLIENT_PORT);
         return clientPortString==null ? null : Integer.parseInt(clientPortString);
+    }
+
+    public static void setIsTransforming(Configuration configuration, Boolean isTransforming) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(isTransforming);
+        configuration.set(IS_TRANSFORMING_VALUE, Boolean.toString(isTransforming));
+    }
+
+    public static Boolean getIsTransforming(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return Boolean.valueOf(configuration.get(IS_TRANSFORMING_VALUE, "false"));
+    }
+
+    public static void setTransformingTableType(Configuration configuration,
+                                                SourceTable sourceTable) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(sourceTable);
+        configuration.set(TRANSFORMING_TABLE_TYPE, sourceTable.name());
+    }
+
+    public static SourceTable getTransformingTableType(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return SourceTable.valueOf(configuration.get(TRANSFORMING_TABLE_TYPE));
+    }
+
+    public static void setIsPartialTransform(final Configuration configuration, Boolean partialTransform) throws SQLException {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(partialTransform);
+        configuration.set(IS_PARTIAL_TRANSFORM, String.valueOf(partialTransform));
+    }
+
+    public static boolean getIsPartialTransform(final Configuration configuration)  {
+        Preconditions.checkNotNull(configuration);
+        return configuration.getBoolean(IS_PARTIAL_TRANSFORM, false);
     }
 
     /**

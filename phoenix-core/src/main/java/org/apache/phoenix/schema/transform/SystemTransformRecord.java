@@ -152,6 +152,27 @@ public class SystemTransformRecord {
         private String newMetadata;
         private String transformFunction;
 
+        public SystemTransformBuilder() {
+
+        }
+
+        public SystemTransformBuilder(SystemTransformRecord systemTransformRecord) {
+            this.setTransformType(systemTransformRecord.getTransformType());
+            this.setTenantId(systemTransformRecord.getTenantId());
+            this.setSchemaName(systemTransformRecord.getSchemaName());
+            this.setLogicalTableName(systemTransformRecord.getLogicalTableName());
+            this.setNewPhysicalTableName(systemTransformRecord.getNewPhysicalTableName());
+            this.setLogicalParentName(systemTransformRecord.getLogicalParentName());
+            this.setTransformStatus(systemTransformRecord.getTransformStatus());
+            this.setTransformJobId(systemTransformRecord.getTransformJobId());
+            this.setTransformRetryCount(systemTransformRecord.getTransformRetryCount());
+            this.setStartTs(systemTransformRecord.getTransformStartTs());
+            this.setEndTs(systemTransformRecord.getTransformEndTs());
+            this.setOldMetadata(systemTransformRecord.getOldMetadata());
+            this.setNewMetadata(systemTransformRecord.getNewMetadata());
+            this.setTransformFunction(systemTransformRecord.getTransformFunction());
+        }
+
         public SystemTransformBuilder setTransformType(PTable.TransformType transformType) {
             this.transformType = transformType;
             return this;

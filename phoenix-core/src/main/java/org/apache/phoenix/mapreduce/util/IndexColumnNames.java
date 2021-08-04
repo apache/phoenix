@@ -133,7 +133,7 @@ public class IndexColumnNames {
         }
     }
 
-    private String getDataColFullName(PColumn dCol) {
+    public static String getDataColFullName(PColumn dCol) {
         String dColFullName = "";
         if (dCol.getFamilyName() != null) {
             dColFullName += dCol.getFamilyName().getString() + QueryConstants.NAME_SEPARATOR;

@@ -196,6 +196,7 @@ import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFac
 
 public abstract class BaseTest {
     public static final String DRIVER_CLASS_NAME_ATTRIB = "phoenix.driver.class.name";
+    protected static final String NULL_STRING="NULL";
     private static final double ZERO = 1e-9;
     private static final Map<String,String> tableDDLMap;
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseTest.class);
