@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.transaction.TransactionFactory;
 
@@ -189,6 +190,11 @@ public class DelegateTable implements PTable {
     @Override
     public IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection) {
         return delegate.getIndexMaintainer(dataTable, connection);
+    }
+
+    @Override
+    public TransformMaintainer getTransformMaintainer(PTable oldTable, PhoenixConnection connection) {
+        return delegate.getTransformMaintainer(oldTable, connection);
     }
 
     @Override

@@ -33,6 +33,7 @@ import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.ServerBuildIndexCompiler;
+import org.apache.phoenix.compile.ServerBuildTransformingTableCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -63,6 +64,7 @@ import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getInde
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolSourceTable;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexVerifyType;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexToolStartTime;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIsTransforming;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.setCurrentScnValue;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
@@ -85,6 +87,17 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
     private interface QueryPlanBuilder {
         QueryPlan getQueryPlan(PhoenixConnection phoenixConnection, String dataTableFullName,
             String indexTableFullName) throws SQLException;
+    }
+
+    private class TransformingDataTableQueryPlanBuilder implements QueryPlanBuilder {
+        @Override
+        public QueryPlan getQueryPlan(PhoenixConnection phoenixConnection, String oldTableFullName,
+                                      String newTableFullName) throws SQLException {
+            PTable newTable = PhoenixRuntime.getTableNoCache(phoenixConnection, newTableFullName);
+            ServerBuildTransformingTableCompiler compiler = new ServerBuildTransformingTableCompiler(phoenixConnection, oldTableFullName);
+            MutationPlan plan = compiler.compile(newTable);
+            return plan.getQueryPlan();
+        }
     }
 
     private class DataTableQueryPlanBuilder implements QueryPlanBuilder {
@@ -145,8 +158,13 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
         String dataTableFullName = getIndexToolDataTableName(configuration);
         String indexTableFullName = getIndexToolIndexTableName(configuration);
         SourceTable sourceTable = getIndexToolSourceTable(configuration);
-        queryPlanBuilder = sourceTable.equals(SourceTable.DATA_TABLE_SOURCE) ?
-            new DataTableQueryPlanBuilder() : new IndexTableQueryPlanBuilder();
+        if (getIsTransforming(configuration) &&
+                PhoenixConfigurationUtil.getTransformingTableType(configuration) == SourceTable.DATA_TABLE_SOURCE) {
+            queryPlanBuilder = new TransformingDataTableQueryPlanBuilder();
+        } else {
+            queryPlanBuilder = sourceTable.equals(SourceTable.DATA_TABLE_SOURCE) ?
+                    new DataTableQueryPlanBuilder() : new IndexTableQueryPlanBuilder();
+        }
 
         try (final Connection connection = ConnectionUtil.getInputConnection(configuration, overridingProps)) {
             PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);

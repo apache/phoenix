@@ -29,6 +29,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -529,15 +530,14 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
 
     public static void renameAndDropPhysicalTable(Connection conn, String tenantId, String schema, String tableName, String physicalName, boolean isNamespaceEnabled) throws Exception {
         String
-                changeName =
-                String.format(
-                        "UPSERT INTO SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, PHYSICAL_TABLE_NAME) VALUES (%s, '%s', '%s', NULL, NULL, '%s')",
-                        tenantId, schema, tableName, physicalName);
+                changeName = String.format(
+                "UPSERT INTO SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, PHYSICAL_TABLE_NAME) VALUES (%s, %s, '%s', NULL, NULL, '%s')",
+                tenantId, schema==null ? null : ("'" + schema + "'"), tableName, physicalName);
         conn.createStatement().execute(changeName);
         conn.commit();
 
         String fullTableName = SchemaUtil.getTableName(schema, tableName);
-        if (isNamespaceEnabled) {
+        if (isNamespaceEnabled && !(Strings.isNullOrEmpty(schema) || NULL_STRING.equals(schema))) {
             fullTableName = schema + NAMESPACE_SEPARATOR + tableName;
         }
         Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();

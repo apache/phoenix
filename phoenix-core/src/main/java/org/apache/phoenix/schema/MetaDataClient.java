@@ -109,6 +109,8 @@ import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_UPDATE_STATS_ASYNC;
+import static org.apache.phoenix.schema.ColumnMetaDataOps.addColumnMutation;
+import static org.apache.phoenix.schema.ColumnMetaDataOps.newColumn;
 import static org.apache.phoenix.schema.PTable.EncodedCQCounter.NULL_COUNTER;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
@@ -122,6 +124,7 @@ import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -437,29 +440,6 @@ public class MetaDataClient {
                     INDEX_DISABLE_TIMESTAMP +","+
                     ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() +
                     ") VALUES (?, ?, ?, ?, ?, ?)";
-    private static final String INSERT_COLUMN_CREATE_TABLE =
-            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
-                    TENANT_ID + "," +
-                    TABLE_SCHEM + "," +
-                    TABLE_NAME + "," +
-                    COLUMN_NAME + "," +
-                    COLUMN_FAMILY + "," +
-                    DATA_TYPE + "," +
-                    NULLABLE + "," +
-                    COLUMN_SIZE + "," +
-                    DECIMAL_DIGITS + "," +
-                    ORDINAL_POSITION + "," +
-                    SORT_ORDER + "," +
-                    DATA_TABLE_NAME + "," + // write this both in the column and table rows for access by metadata APIs
-                    ARRAY_SIZE + "," +
-                    VIEW_CONSTANT + "," +
-                    IS_VIEW_REFERENCED + "," +
-                    PK_NAME + "," +  // write this both in the column and table rows for access by metadata APIs
-                    KEY_SEQ + "," +
-                    COLUMN_DEF + "," +
-                    COLUMN_QUALIFIER + ", " +
-                    IS_ROW_TIMESTAMP +
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     /*
      * Custom sql to add a column to SYSTEM.CATALOG table during upgrade.
@@ -941,57 +921,6 @@ public class MetaDataClient {
         return false;
     }
 
-    private void addColumnMutation(String schemaName, String tableName, PColumn column, PreparedStatement colUpsert, String parentTableName, String pkName, Short keySeq, boolean isSalted) throws SQLException {
-        colUpsert.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
-        colUpsert.setString(2, schemaName);
-        colUpsert.setString(3, tableName);
-        colUpsert.setString(4, column.getName().getString());
-        colUpsert.setString(5, column.getFamilyName() == null ? null : column.getFamilyName().getString());
-        colUpsert.setInt(6, column.getDataType().getSqlType());
-        colUpsert.setInt(7, SchemaUtil.getIsNullableInt(column.isNullable()));
-        if (column.getMaxLength() == null) {
-            colUpsert.setNull(8, Types.INTEGER);
-        } else {
-            colUpsert.setInt(8, column.getMaxLength());
-        }
-        if (column.getScale() == null) {
-            colUpsert.setNull(9, Types.INTEGER);
-        } else {
-            colUpsert.setInt(9, column.getScale());
-        }
-        colUpsert.setInt(10, column.getPosition() + (isSalted ? 0 : 1));
-        colUpsert.setInt(11, column.getSortOrder().getSystemValue());
-        colUpsert.setString(12, parentTableName);
-        if (column.getArraySize() == null) {
-            colUpsert.setNull(13, Types.INTEGER);
-        } else {
-            colUpsert.setInt(13, column.getArraySize());
-        }
-        colUpsert.setBytes(14, column.getViewConstant());
-        colUpsert.setBoolean(15, column.isViewReferenced());
-        colUpsert.setString(16, pkName);
-        if (keySeq == null) {
-            colUpsert.setNull(17, Types.SMALLINT);
-        } else {
-            colUpsert.setShort(17, keySeq);
-        }
-        if (column.getExpressionStr() == null) {
-            colUpsert.setNull(18, Types.VARCHAR);
-        } else {
-            colUpsert.setString(18, column.getExpressionStr());
-        }
-        //Do not try to set extra columns when using ALTER_SYSCATALOG_TABLE_UPGRADE
-        if (colUpsert.getParameterMetaData().getParameterCount() > 18) {
-            if (column.getColumnQualifierBytes() == null) {
-                colUpsert.setNull(19, Types.VARBINARY);
-            } else {
-                colUpsert.setBytes(19, column.getColumnQualifierBytes());
-            }
-            colUpsert.setBoolean(20, column.isRowTimestamp());
-        }
-        colUpsert.execute();
-    }
-
 	private void addFunctionArgMutation(String functionName, FunctionArgument arg, PreparedStatement argUpsert, int position) throws SQLException {
         argUpsert.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
         argUpsert.setString(2, functionName);
@@ -1006,65 +935,6 @@ public class MetaDataClient {
         argUpsert.execute();
     }
 
-    private PColumn newColumn(int position, ColumnDef def, PrimaryKeyConstraint pkConstraint, String defaultColumnFamily,
-            boolean addingToPK, byte[] columnQualifierBytes, boolean isImmutableRows) throws SQLException {
-        try {
-            ColumnName columnDefName = def.getColumnDefName();
-            SortOrder sortOrder = def.getSortOrder();
-            boolean isPK = def.isPK();
-            boolean isRowTimestamp = def.isRowTimestamp();
-            if (pkConstraint != null) {
-                Pair<ColumnName, SortOrder> pkSortOrder = pkConstraint.getColumnWithSortOrder(columnDefName);
-                if (pkSortOrder != null) {
-                    isPK = true;
-                    sortOrder = pkSortOrder.getSecond();
-                    isRowTimestamp = pkConstraint.isColumnRowTimestamp(columnDefName);
-                }
-            }
-            String columnName = columnDefName.getColumnName();
-            if (isPK && sortOrder == SortOrder.DESC && def.getDataType() == PVarbinary.INSTANCE) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.DESC_VARBINARY_NOT_SUPPORTED)
-                .setColumnName(columnName)
-                .build().buildException();
-            }
-
-            PName familyName = null;
-            if (def.isPK() && !pkConstraint.getColumnNames().isEmpty() ) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_ALREADY_EXISTS)
-                .setColumnName(columnName).build().buildException();
-            }
-            boolean isNull = def.isNull();
-            if (def.getColumnDefName().getFamilyName() != null) {
-                String family = def.getColumnDefName().getFamilyName();
-                if (isPK) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_WITH_FAMILY_NAME)
-                    .setColumnName(columnName).setFamilyName(family).build().buildException();
-                } else if (!def.isNull() && !isImmutableRows) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.KEY_VALUE_NOT_NULL)
-                    .setColumnName(columnName).setFamilyName(family).build().buildException();
-                }
-                familyName = PNameFactory.newName(family);
-            } else if (!isPK) {
-                familyName = PNameFactory.newName(defaultColumnFamily == null ? QueryConstants.DEFAULT_COLUMN_FAMILY : defaultColumnFamily);
-            }
-
-            if (isPK && !addingToPK && pkConstraint.getColumnNames().size() <= 1) {
-                if (def.isNull() && def.isNullSet()) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.SINGLE_PK_MAY_NOT_BE_NULL)
-                    .setColumnName(columnName).build().buildException();
-                }
-                isNull = false;
-            }
-            PColumn column = new PColumnImpl(PNameFactory.newName(columnName), familyName, def.getDataType(),
-                    def.getMaxLength(), def.getScale(), isNull, position, sortOrder, def.getArraySize(),
-                    null, false, def.getExpression(), isRowTimestamp,
-                    false, columnQualifierBytes, EnvironmentEdgeManager.currentTimeMillis());
-            return column;
-        } catch (IllegalArgumentException e) { // Based on precondition check in constructor
-            throw new SQLException(e);
-        }
-    }
-    
     public MutationState createTable(CreateTableStatement statement, byte[][] splits, PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType, byte[][] viewColumnConstants, BitSet isViewColumnReferenced) throws SQLException {
         TableName tableName = statement.getTableName();
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
@@ -2632,46 +2502,49 @@ public class MetaDataClient {
                 } else {
                     encodingScheme = getEncodingScheme(tableProps, schemaName, tableName, transactionProvider);
 
-                    if (isImmutableRows) {
-                        ImmutableStorageScheme immutableStorageSchemeProp =
-                                (ImmutableStorageScheme) TableProperty.IMMUTABLE_STORAGE_SCHEME
-                                .getValue(tableProps);
-                        if (immutableStorageSchemeProp == null) {
-                            // Ignore default if transactional and column encoding is not supported
-                            if (transactionProvider == null || 
-                                    !transactionProvider.getTransactionProvider().isUnsupported(
-                                            PhoenixTransactionProvider.Feature.COLUMN_ENCODING) ) {
-                                if (multiTenant) {
+                    ImmutableStorageScheme immutableStorageSchemeProp =
+                            (ImmutableStorageScheme) TableProperty.IMMUTABLE_STORAGE_SCHEME
+                                    .getValue(tableProps);
+                    if (immutableStorageSchemeProp == null) {
+                        // Ignore default if transactional and column encoding is not supported
+                        if (transactionProvider == null ||
+                                !transactionProvider.getTransactionProvider().isUnsupported(
+                                        PhoenixTransactionProvider.Feature.COLUMN_ENCODING)) {
+                            if (multiTenant) {
+                                immutableStorageScheme =
+                                        ImmutableStorageScheme
+                                                .valueOf(connection
+                                                        .getQueryServices()
+                                                        .getProps()
+                                                        .get(
+                                                                QueryServices.DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
+                                                                QueryServicesOptions.DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME));
+                            } else {
+                                if (isImmutableRows) {
                                     immutableStorageScheme =
                                             ImmutableStorageScheme
-                                            .valueOf(connection
-                                                    .getQueryServices()
-                                                    .getProps()
-                                                    .get(
-                                                            QueryServices.DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
-                                                            QueryServicesOptions.DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME));
+                                                    .valueOf(connection
+                                                            .getQueryServices()
+                                                            .getProps()
+                                                            .get(
+                                                                    QueryServices.DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
+                                                                    QueryServicesOptions.DEFAULT_IMMUTABLE_STORAGE_SCHEME));
                                 } else {
-                                    immutableStorageScheme =
-                                            ImmutableStorageScheme
-                                            .valueOf(connection
-                                                    .getQueryServices()
-                                                    .getProps()
-                                                    .get(
-                                                            QueryServices.DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
-                                                            QueryServicesOptions.DEFAULT_IMMUTABLE_STORAGE_SCHEME));
+                                    immutableStorageScheme = ONE_CELL_PER_COLUMN;
                                 }
                             }
-                        } else {
-                            immutableStorageScheme = getImmutableStorageSchemeForIndex(immutableStorageSchemeProp, schemaName, tableName, transactionProvider);
                         }
-                        if (immutableStorageScheme != ONE_CELL_PER_COLUMN
-                                && encodingScheme == NON_ENCODED_QUALIFIERS) {
-                            throw new SQLExceptionInfo.Builder(
-                                    SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES)
-                            .setSchemaName(schemaName).setTableName(tableName).build()
-                            .buildException();
-                        }
-                    } 
+                    } else {
+                        immutableStorageScheme = getImmutableStorageSchemeForIndex(immutableStorageSchemeProp, schemaName, tableName, transactionProvider);
+                    }
+                    if (immutableStorageScheme != ONE_CELL_PER_COLUMN
+                            && encodingScheme == NON_ENCODED_QUALIFIERS) {
+                        getEncodingScheme(tableProps, schemaName, tableName, transactionProvider);
+                        throw new SQLExceptionInfo.Builder(
+                                SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES)
+                                .setSchemaName(schemaName).setTableName(tableName).build()
+                                .buildException();
+                    }
                 }
                 cqCounter = encodingScheme != NON_ENCODED_QUALIFIERS ? new EncodedCQCounter() : NULL_COUNTER;
             }
@@ -2904,88 +2777,87 @@ public class MetaDataClient {
 
             List<Mutation> columnMetadata = Lists.newArrayListWithExpectedSize(columns.size());
             boolean isRegularView = (tableType == PTableType.VIEW && viewType!=ViewType.MAPPED);
-            try (PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN_CREATE_TABLE)) {
-                for (Map.Entry<PColumn, PColumn> entry : columns.entrySet()) {
-                    PColumn column = entry.getValue();
-                    final int columnPosition = column.getPosition();
-                    // For client-side cache, we need to update the column
-                    // set the autoPartition column attributes
-                    if (parent != null && parent.getAutoPartitionSeqName() != null
-                            && parent.getPKColumns().get(MetaDataUtil.getAutoPartitionColIndex(parent)).equals(column)) {
+            for (Map.Entry<PColumn, PColumn> entry : columns.entrySet()) {
+                PColumn column = entry.getValue();
+                final int columnPosition = column.getPosition();
+                // For client-side cache, we need to update the column
+                // set the autoPartition column attributes
+                if (parent != null && parent.getAutoPartitionSeqName() != null
+                        && parent.getPKColumns().get(MetaDataUtil.getAutoPartitionColIndex(parent)).equals(column)) {
+                    entry.setValue(column = new DelegateColumn(column) {
+                        @Override
+                        public byte[] getViewConstant() {
+                            // set to non-null value so that we will generate a Put that
+                            // will be set correctly on the server
+                            return QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
+                        }
+
+                        @Override
+                        public boolean isViewReferenced() {
+                            return true;
+                        }
+                    });
+                } else if (isViewColumnReferenced != null) {
+                    if (viewColumnConstants != null && columnPosition < viewColumnConstants.length) {
                         entry.setValue(column = new DelegateColumn(column) {
                             @Override
                             public byte[] getViewConstant() {
-                                // set to non-null value so that we will generate a Put that
-                                // will be set correctly on the server
-                                return QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
+                                return viewColumnConstants[columnPosition];
                             }
 
                             @Override
                             public boolean isViewReferenced() {
-                                return true;
+                                return isViewColumnReferenced.get(columnPosition);
                             }
                         });
-                    } else if (isViewColumnReferenced != null) {
-                        if (viewColumnConstants != null && columnPosition < viewColumnConstants.length) {
-                            entry.setValue(column = new DelegateColumn(column) {
-                                @Override
-                                public byte[] getViewConstant() {
-                                    return viewColumnConstants[columnPosition];
-                                }
-                                
-                                @Override
-                                public boolean isViewReferenced() {
-                                    return isViewColumnReferenced.get(columnPosition);
-                                }
-                            });
-                        } else {
-                            entry.setValue(column = new DelegateColumn(column) {
-                                @Override
-                                public boolean isViewReferenced() {
-                                    return isViewColumnReferenced.get(columnPosition);
-                                }
-                            });
-                        }
-
-                        // if the base table column is referenced in the view
-                        // or if we are adding a new column during view creation
-                        if (isViewColumnReferenced.get(columnPosition) ||
-                                viewNewColumnPositions.contains(
-                                        columnPosition)) {
-                            // acquire the mutex using the global physical table
-                            // name to prevent this column from being dropped
-                            // while the view is being created or to prevent
-                            // a conflicting column from being added to a parent
-                            // in case the view creation adds new columns
-                            boolean acquiredMutex = writeCell(
-                                    null,
-                                    parentPhysicalSchemaName,
-                                    parentPhysicalTableName,
-                                    column.toString());
-                            if (!acquiredMutex) {
-                                throw new ConcurrentTableMutationException(
-                                        parentPhysicalSchemaName,
-                                        parentPhysicalTableName);
+                    } else {
+                        entry.setValue(column = new DelegateColumn(column) {
+                            @Override
+                            public boolean isViewReferenced() {
+                                return isViewColumnReferenced.get(columnPosition);
                             }
-                            acquiredColumnMutexSet.add(column.toString());
-                        }
+                        });
                     }
-                    Short keySeq = SchemaUtil.isPKColumn(column) ? ++nextKeySeq : null;
-                    // Prior to PHOENIX-3534 we were sending the parent table column metadata while creating a
-                    // child view, now that we combine columns by resolving the parent table hierarchy we
-                    // don't need to include the parent table columns while creating a view
-                    // If QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK is true we continue
-                    // to store the parent table column metadata along with the child view metadata
-                    // so that we can rollback the upgrade if required.
-                    if (allowSystemCatalogRollback || !isRegularView
-                            || columnPosition >= baseTableColumnCount) {
-                        addColumnMutation(schemaName, tableName, column, colUpsert, parentTableName,
-                            pkName, keySeq, saltBucketNum != null);
-                        columnMetadata.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
-                        connection.rollback();
+
+                    // if the base table column is referenced in the view
+                    // or if we are adding a new column during view creation
+                    if (isViewColumnReferenced.get(columnPosition) ||
+                            viewNewColumnPositions.contains(
+                                    columnPosition)) {
+                        // acquire the mutex using the global physical table
+                        // name to prevent this column from being dropped
+                        // while the view is being created or to prevent
+                        // a conflicting column from being added to a parent
+                        // in case the view creation adds new columns
+                        boolean acquiredMutex = writeCell(
+                                null,
+                                parentPhysicalSchemaName,
+                                parentPhysicalTableName,
+                                column.toString());
+                        if (!acquiredMutex) {
+                            throw new ConcurrentTableMutationException(
+                                    parentPhysicalSchemaName,
+                                    parentPhysicalTableName);
+                        }
+                        acquiredColumnMutexSet.add(column.toString());
                     }
                 }
+                Short keySeq = SchemaUtil.isPKColumn(column) ? ++nextKeySeq : null;
+                // Prior to PHOENIX-3534 we were sending the parent table column metadata while creating a
+                // child view, now that we combine columns by resolving the parent table hierarchy we
+                // don't need to include the parent table columns while creating a view
+                // If QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK is true we continue
+                // to store the parent table column metadata along with the child view metadata
+                // so that we can rollback the upgrade if required.
+                if (allowSystemCatalogRollback || !isRegularView
+                        || columnPosition >= baseTableColumnCount) {
+                    addColumnMutation(connection, schemaName, tableName, column, parentTableName,
+                            pkName, keySeq, saltBucketNum != null);
+                    columnMetadata.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
+                    connection.rollback();
+                }
             }
+
             // add the columns in reverse order since we reverse the list later
             Collections.reverse(columnMetadata);
             tableMetaData.addAll(columnMetadata);
@@ -3730,57 +3602,72 @@ public class MetaDataClient {
             tableUpsert.close();
         }
         if (isImmutableRows != null) {
-            mutateBooleanProperty(tenantId, schemaName, tableName, IMMUTABLE_ROWS, isImmutableRows);
+            mutateBooleanProperty(connection, tenantId, schemaName, tableName, IMMUTABLE_ROWS, isImmutableRows);
         }
         if (disableWAL != null) {
-            mutateBooleanProperty(tenantId, schemaName, tableName, DISABLE_WAL, disableWAL);
+            mutateBooleanProperty(connection,tenantId, schemaName, tableName, DISABLE_WAL, disableWAL);
         }
         if (isMultiTenant != null) {
-            mutateBooleanProperty(tenantId, schemaName, tableName, MULTI_TENANT, isMultiTenant);
+            mutateBooleanProperty(connection,tenantId, schemaName, tableName, MULTI_TENANT, isMultiTenant);
         }
         if (storeNulls != null) {
-            mutateBooleanProperty(tenantId, schemaName, tableName, STORE_NULLS, storeNulls);
+            mutateBooleanProperty(connection,tenantId, schemaName, tableName, STORE_NULLS, storeNulls);
         }
         if (isTransactional != null) {
-            mutateBooleanProperty(tenantId, schemaName, tableName, TRANSACTIONAL, isTransactional);
+            mutateBooleanProperty(connection,tenantId, schemaName, tableName, TRANSACTIONAL, isTransactional);
         }
         if (transactionProvider !=null) {
-            mutateByteProperty(tenantId, schemaName, tableName, TRANSACTION_PROVIDER, transactionProvider.getCode());
+            mutateByteProperty(connection, tenantId, schemaName, tableName, TRANSACTION_PROVIDER, transactionProvider.getCode());
         }
         if (updateCacheFrequency != null) {
-            mutateLongProperty(tenantId, schemaName, tableName, UPDATE_CACHE_FREQUENCY, updateCacheFrequency);
+            mutateLongProperty(connection,tenantId, schemaName, tableName, UPDATE_CACHE_FREQUENCY, updateCacheFrequency);
         }
         if (guidePostWidth == null || guidePostWidth >= 0) {
-            mutateLongProperty(tenantId, schemaName, tableName, GUIDE_POSTS_WIDTH, guidePostWidth);
+            mutateLongProperty(connection, tenantId, schemaName, tableName, GUIDE_POSTS_WIDTH, guidePostWidth);
         }
         if (appendOnlySchema !=null) {
-            mutateBooleanProperty(tenantId, schemaName, tableName, APPEND_ONLY_SCHEMA, appendOnlySchema);
+            mutateBooleanProperty(connection, tenantId, schemaName, tableName, APPEND_ONLY_SCHEMA, appendOnlySchema);
         }
         if (columnEncodedBytes !=null) {
-            mutateByteProperty(tenantId, schemaName, tableName, ENCODING_SCHEME, columnEncodedBytes.getSerializedMetadataValue());
+            mutateByteProperty(connection, tenantId, schemaName, tableName, ENCODING_SCHEME, columnEncodedBytes.getSerializedMetadataValue());
         }
         if (immutableStorageScheme !=null) {
-            mutateStringProperty(tenantId, schemaName, tableName, IMMUTABLE_STORAGE_SCHEME, immutableStorageScheme.name());
+            mutateStringProperty(connection, tenantId, schemaName, tableName, IMMUTABLE_STORAGE_SCHEME, immutableStorageScheme.name());
         }
         if (useStatsForParallelization != null) {
-            mutateBooleanProperty(tenantId, schemaName, tableName, USE_STATS_FOR_PARALLELIZATION, useStatsForParallelization);
+            mutateBooleanProperty(connection, tenantId, schemaName, tableName, USE_STATS_FOR_PARALLELIZATION, useStatsForParallelization);
         }
         if (phoenixTTL != null) {
-            mutateLongProperty(tenantId, schemaName, tableName, PHOENIX_TTL, phoenixTTL);
+            mutateLongProperty(connection, tenantId, schemaName, tableName, PHOENIX_TTL, phoenixTTL);
         }
         if (isChangeDetectionEnabled != null) {
-            mutateBooleanProperty(tenantId, schemaName, tableName, CHANGE_DETECTION_ENABLED, isChangeDetectionEnabled);
+            mutateBooleanProperty(connection, tenantId, schemaName, tableName, CHANGE_DETECTION_ENABLED, isChangeDetectionEnabled);
         }
         if (!Strings.isNullOrEmpty(physicalTableName)) {
-            mutateStringProperty(tenantId, schemaName, tableName, PHYSICAL_TABLE_NAME, physicalTableName);
+            mutateStringProperty(connection, tenantId, schemaName, tableName, PHYSICAL_TABLE_NAME, physicalTableName);
         }
         if (!Strings.isNullOrEmpty(schemaVersion)) {
-            mutateStringProperty(tenantId, schemaName, tableName, SCHEMA_VERSION, schemaVersion);
+            mutateStringProperty(connection, tenantId, schemaName, tableName, SCHEMA_VERSION, schemaVersion);
         }
         return seqNum;
     }
 
-    private void mutateBooleanProperty(String tenantId, String schemaName, String tableName,
+    public static void mutateTransformProperties(Connection connection, String tenantId, String schemaName, String tableName,
+                                                 String physicalTableName,
+                                                 ImmutableStorageScheme immutableStorageScheme,
+                                                 QualifierEncodingScheme columnEncodedBytes) throws SQLException {
+        if (columnEncodedBytes !=null) {
+            mutateByteProperty(connection, tenantId, schemaName, tableName, ENCODING_SCHEME, columnEncodedBytes.getSerializedMetadataValue());
+        }
+        if (immutableStorageScheme !=null) {
+            mutateByteProperty(connection, tenantId, schemaName, tableName, IMMUTABLE_STORAGE_SCHEME, immutableStorageScheme.getSerializedMetadataValue());
+        }
+        if (!Strings.isNullOrEmpty(physicalTableName)) {
+            mutateStringProperty(connection, tenantId, schemaName, tableName, PHYSICAL_TABLE_NAME, physicalTableName);
+        }
+    }
+
+    private static void mutateBooleanProperty(Connection connection, String tenantId, String schemaName, String tableName,
             String propertyName, boolean propertyValue) throws SQLException {
         String updatePropertySql = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                 TENANT_ID + "," +
@@ -3797,7 +3684,7 @@ public class MetaDataClient {
         }
     }
 
-    private void mutateLongProperty(String tenantId, String schemaName, String tableName,
+    private static void mutateLongProperty(Connection connection, String tenantId, String schemaName, String tableName,
             String propertyName, Long propertyValue) throws SQLException {
         String updatePropertySql = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                 TENANT_ID + "," +
@@ -3818,7 +3705,7 @@ public class MetaDataClient {
         }
     }
     
-    private void mutateByteProperty(String tenantId, String schemaName, String tableName,
+    private static void mutateByteProperty(Connection connection, String tenantId, String schemaName, String tableName,
             String propertyName, Byte propertyValue) throws SQLException {
         String updatePropertySql = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                 TENANT_ID + "," +
@@ -3839,7 +3726,7 @@ public class MetaDataClient {
         }
     }
     
-    private void mutateStringProperty(String tenantId, String schemaName, String tableName,
+    private static void mutateStringProperty(Connection connection, String tenantId, String schemaName, String tableName,
             String propertyName, String propertyValue) throws SQLException {
         String updatePropertySql = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                 TENANT_ID + "," +
@@ -3989,123 +3876,117 @@ public class MetaDataClient {
                 Map<String, Integer> changedCqCounters = new HashMap<>(numCols);
                 if (numCols > 0 ) {
                     StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver);
-                    String addColumnSqlToUse = connection.isRunningUpgrade()
-                            && tableName.equals(PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE)
-                            && schemaName.equals(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA) ? ALTER_SYSCATALOG_TABLE_UPGRADE
-                            : INSERT_COLUMN_CREATE_TABLE;
-                    try (PreparedStatement colUpsert = connection.prepareStatement(addColumnSqlToUse)) {
-                        short nextKeySeq = SchemaUtil.getMaxKeySeq(table);
-                        for ( ColumnDef colDef : columnDefs) {
-                            if (colDef != null && !colDef.isNull()) {
-                                if (colDef.isPK()) {
-                                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY)
-                                    .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
-                                } else if (!willBeImmutableRows) {
-                                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.KEY_VALUE_NOT_NULL)
-                                    .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
-                                }
-                            }
-                            if (colDef != null && colDef.isPK() && table.getType() == VIEW && table.getViewType() != MAPPED) {
-                                throwIfLastPKOfParentIsVariableLength(getParentOfView(table), schemaName, tableName, colDef);
-                            }
-                            if (colDef != null && colDef.isRowTimestamp()) {
-                                throw new SQLExceptionInfo.Builder(SQLExceptionCode.ROWTIMESTAMP_CREATE_ONLY)
+                    short nextKeySeq = SchemaUtil.getMaxKeySeq(table);
+                    for ( ColumnDef colDef : columnDefs) {
+                        if (colDef != null && !colDef.isNull()) {
+                            if (colDef.isPK()) {
+                                throw new SQLExceptionInfo.Builder(SQLExceptionCode.NOT_NULLABLE_COLUMN_IN_ROW_KEY)
+                                .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
+                            } else if (!willBeImmutableRows) {
+                                throw new SQLExceptionInfo.Builder(SQLExceptionCode.KEY_VALUE_NOT_NULL)
                                 .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
                             }
-                            if (!colDef.validateDefault(context, null)) {
-                                colDef = new ColumnDef(colDef, null); // Remove DEFAULT as it's not necessary
-                            }
-                            String familyName = null;
-                            Integer encodedCQ = null;
-                            if (!colDef.isPK()) {
-                                String colDefFamily = colDef.getColumnDefName().getFamilyName();
-                                ImmutableStorageScheme storageScheme = table.getImmutableStorageScheme();
-                                String defaultColumnFamily = tableForCQCounters.getDefaultFamilyName() != null && !Strings.isNullOrEmpty(tableForCQCounters.getDefaultFamilyName().getString()) ? 
-                                        tableForCQCounters.getDefaultFamilyName().getString() : DEFAULT_COLUMN_FAMILY;
-                                    if (table.getType() == PTableType.INDEX && table.getIndexType() == IndexType.LOCAL) {
-                                        defaultColumnFamily = QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX + defaultColumnFamily;
-                                    }
-                                if (storageScheme == SINGLE_CELL_ARRAY_WITH_OFFSETS) {
-                                    familyName = colDefFamily != null ? colDefFamily : defaultColumnFamily;
-                                } else {
-                                    familyName = defaultColumnFamily;
+                        }
+                        if (colDef != null && colDef.isPK() && table.getType() == VIEW && table.getViewType() != MAPPED) {
+                            throwIfLastPKOfParentIsVariableLength(getParentOfView(table), schemaName, tableName, colDef);
+                        }
+                        if (colDef != null && colDef.isRowTimestamp()) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.ROWTIMESTAMP_CREATE_ONLY)
+                            .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
+                        }
+                        if (!colDef.validateDefault(context, null)) {
+                            colDef = new ColumnDef(colDef, null); // Remove DEFAULT as it's not necessary
+                        }
+                        String familyName = null;
+                        Integer encodedCQ = null;
+                        if (!colDef.isPK()) {
+                            String colDefFamily = colDef.getColumnDefName().getFamilyName();
+                            ImmutableStorageScheme storageScheme = table.getImmutableStorageScheme();
+                            String defaultColumnFamily = tableForCQCounters.getDefaultFamilyName() != null && !Strings.isNullOrEmpty(tableForCQCounters.getDefaultFamilyName().getString()) ?
+                                    tableForCQCounters.getDefaultFamilyName().getString() : DEFAULT_COLUMN_FAMILY;
+                                if (table.getType() == PTableType.INDEX && table.getIndexType() == IndexType.LOCAL) {
+                                    defaultColumnFamily = QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX + defaultColumnFamily;
                                 }
-                                encodedCQ = table.isAppendOnlySchema() ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position) : cqCounterToUse.getNextQualifier(familyName);
-                                if (!table.isAppendOnlySchema() && cqCounterToUse.increment(familyName)) {
-                                    changedCqCounters.put(familyName,
-                                        cqCounterToUse.getNextQualifier(familyName));
-                                }
-                            }
-                            byte[] columnQualifierBytes = null;
-                            try {
-                                columnQualifierBytes = EncodedColumnsUtil.getColumnQualifierBytes(colDef.getColumnDefName().getColumnName(), encodedCQ, table, colDef.isPK());
-                            }
-                            catch (QualifierOutOfRangeException e) {
-                                throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_COLUMNS_EXCEEDED)
-                                .setSchemaName(schemaName)
-                                .setTableName(tableName).build().buildException();
-                            }
-                            PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString(), true, columnQualifierBytes, willBeImmutableRows);
-                            HashMap<PTable, PColumn> indexToIndexColumnMap = null;
-                            if (cascade) {
-                                indexToIndexColumnMap = getPTablePColumnHashMapForCascade(indexesPTable, willBeImmutableRows,
-                                                colDef, familyName, indexToColumnSizeMap);
-                            }
-
-                            columns.add(column);
-                            String pkName = null;
-                            Short keySeq = null;
-                            
-                            // TODO: support setting properties on other families?
-                            if (column.getFamilyName() == null) {
-                                ++numPkColumnsAdded;
-                                pkName = table.getPKName() == null ? null : table.getPKName().getString();
-                                keySeq = ++nextKeySeq;
+                            if (storageScheme == SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                                familyName = colDefFamily != null ? colDefFamily : defaultColumnFamily;
                             } else {
-                                families.add(column.getFamilyName().getString());
+                                familyName = defaultColumnFamily;
                             }
-                            colFamiliesForPColumnsToBeAdded.add(column.getFamilyName() == null ? null : column.getFamilyName().getString());
-                            addColumnMutation(schemaName, tableName, column, colUpsert, null, pkName, keySeq, table.getBucketNum() != null);
-                            // add new columns for given indexes one by one
-                            if (cascade) {
-                                for (PTable index: indexesPTable) {
-                                    LOGGER.info("Adding column "+column.getName().getString()+" to "+index.getTableName().toString());
-                                    addColumnMutation(schemaName, index.getTableName().getString(), indexToIndexColumnMap.get(index), colUpsert, null, "", keySeq, index.getBucketNum() != null);
-                                }
+                            encodedCQ = table.isAppendOnlySchema() ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position) : cqCounterToUse.getNextQualifier(familyName);
+                            if (!table.isAppendOnlySchema() && cqCounterToUse.increment(familyName)) {
+                                changedCqCounters.put(familyName,
+                                    cqCounterToUse.getNextQualifier(familyName));
                             }
                         }
-                        
-                        // Add any new PK columns to end of index PK
-                        if (numPkColumnsAdded > 0) {
-                            // create PK column list that includes the newly created columns
-                            List<PColumn> pkColumns = Lists.newArrayListWithExpectedSize(table.getPKColumns().size()+numPkColumnsAdded);
-                            pkColumns.addAll(table.getPKColumns());
-                            for (int i=0; i<numCols; ++i) {
-                                if (columnDefs.get(i).isPK()) {
-                                    pkColumns.add(columns.get(i));
-                                }
-                            }
-                            int pkSlotPosition = table.getPKColumns().size()-1;
-                            for (PTable index : table.getIndexes()) {
-                                short nextIndexKeySeq = SchemaUtil.getMaxKeySeq(index);
-                                int indexPosition = index.getColumns().size();
-                                for (int i=0; i<numCols; ++i) {
-                                    ColumnDef colDef = columnDefs.get(i);
-                                    if (colDef.isPK()) {
-                                        PDataType indexColDataType = IndexUtil.getIndexColumnDataType(colDef.isNull(), colDef.getDataType());
-                                        ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, colDef.getColumnDefName().getColumnName()));
-                                        Expression expression = new RowKeyColumnExpression(columns.get(i), new RowKeyValueAccessor(pkColumns, pkSlotPosition));
-                                        ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), true, colDef.getSortOrder(), expression.toString(), colDef.isRowTimestamp());
-                                        PColumn indexColumn = newColumn(indexPosition++, indexColDef, PrimaryKeyConstraint.EMPTY, null, true, null, willBeImmutableRows);
-                                        addColumnMutation(schemaName, index.getTableName().getString(), indexColumn, colUpsert, index.getParentTableName().getString(), index.getPKName() == null ? null : index.getPKName().getString(), ++nextIndexKeySeq, index.getBucketNum() != null);
-                                    }
-                                }
-                            }
-                            ++pkSlotPosition;
+                        byte[] columnQualifierBytes = null;
+                        try {
+                            columnQualifierBytes = EncodedColumnsUtil.getColumnQualifierBytes(colDef.getColumnDefName().getColumnName(), encodedCQ, table, colDef.isPK());
                         }
-                        columnMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
-                        connection.rollback();
+                        catch (QualifierOutOfRangeException e) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_COLUMNS_EXCEEDED)
+                            .setSchemaName(schemaName)
+                            .setTableName(tableName).build().buildException();
+                        }
+                        PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString(), true, columnQualifierBytes, willBeImmutableRows);
+                        HashMap<PTable, PColumn> indexToIndexColumnMap = null;
+                        if (cascade) {
+                            indexToIndexColumnMap = getPTablePColumnHashMapForCascade(indexesPTable, willBeImmutableRows,
+                                            colDef, familyName, indexToColumnSizeMap);
+                        }
+
+                        columns.add(column);
+                        String pkName = null;
+                        Short keySeq = null;
+
+                        // TODO: support setting properties on other families?
+                        if (column.getFamilyName() == null) {
+                            ++numPkColumnsAdded;
+                            pkName = table.getPKName() == null ? null : table.getPKName().getString();
+                            keySeq = ++nextKeySeq;
+                        } else {
+                            families.add(column.getFamilyName().getString());
+                        }
+                        colFamiliesForPColumnsToBeAdded.add(column.getFamilyName() == null ? null : column.getFamilyName().getString());
+                        addColumnMutation(connection, schemaName, tableName, column, null, pkName, keySeq, table.getBucketNum() != null);
+                        // add new columns for given indexes one by one
+                        if (cascade) {
+                            for (PTable index: indexesPTable) {
+                                LOGGER.info("Adding column "+column.getName().getString()+" to "+index.getTableName().toString());
+                                addColumnMutation(connection, schemaName, index.getTableName().getString(), indexToIndexColumnMap.get(index), null, "", keySeq, index.getBucketNum() != null);
+                            }
+                        }
                     }
+
+                    // Add any new PK columns to end of index PK
+                    if (numPkColumnsAdded > 0) {
+                        // create PK column list that includes the newly created columns
+                        List<PColumn> pkColumns = Lists.newArrayListWithExpectedSize(table.getPKColumns().size()+numPkColumnsAdded);
+                        pkColumns.addAll(table.getPKColumns());
+                        for (int i=0; i<numCols; ++i) {
+                            if (columnDefs.get(i).isPK()) {
+                                pkColumns.add(columns.get(i));
+                            }
+                        }
+                        int pkSlotPosition = table.getPKColumns().size()-1;
+                        for (PTable index : table.getIndexes()) {
+                            short nextIndexKeySeq = SchemaUtil.getMaxKeySeq(index);
+                            int indexPosition = index.getColumns().size();
+                            for (int i=0; i<numCols; ++i) {
+                                ColumnDef colDef = columnDefs.get(i);
+                                if (colDef.isPK()) {
+                                    PDataType indexColDataType = IndexUtil.getIndexColumnDataType(colDef.isNull(), colDef.getDataType());
+                                    ColumnName indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, colDef.getColumnDefName().getColumnName()));
+                                    Expression expression = new RowKeyColumnExpression(columns.get(i), new RowKeyValueAccessor(pkColumns, pkSlotPosition));
+                                    ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), true, colDef.getSortOrder(), expression.toString(), colDef.isRowTimestamp());
+                                    PColumn indexColumn = newColumn(indexPosition++, indexColDef, PrimaryKeyConstraint.EMPTY, null, true, null, willBeImmutableRows);
+                                    addColumnMutation(connection, schemaName, index.getTableName().getString(), indexColumn, index.getParentTableName().getString(), index.getPKName() == null ? null : index.getPKName().getString(), ++nextIndexKeySeq, index.getBucketNum() != null);
+                                }
+                            }
+                        }
+                        ++pkSlotPosition;
+                    }
+                    columnMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
+                    connection.rollback();
                 } else {
                     // Check that HBase configured properly for mutable secondary indexing
                     // if we're changing from an immutable table to a mutable table and we
@@ -5417,10 +5298,9 @@ public class MetaDataClient {
             }
         }
 
-        if (!Strings.isNullOrEmpty(metaProperties.getPhysicalTableName())) {
-            if (!metaProperties.getPhysicalTableName().
-                    equals(table.getPhysicalName(true).getString())) {
-                metaPropertiesEvaluated.setPhysicalTableName(metaProperties.getPhysicalTableName());
+        if (!Strings.isNullOrEmpty(metaProperties.getPhysicalTableNameProp())) {
+            if (!metaProperties.getPhysicalTableNameProp().equals(table.getPhysicalName(true))) {
+                metaPropertiesEvaluated.setPhysicalTableName(metaProperties.getPhysicalTableNameProp());
                 changingPhoenixTableProperty = true;
             }
         }
