@@ -132,7 +132,7 @@ public class PhoenixRuntime {
     public final static String JDBC_THIN_PROTOCOL = "jdbc:phoenix:thin";
     public final static char JDBC_PROTOCOL_TERMINATOR = ';';
     public final static char JDBC_PROTOCOL_SEPARATOR = ':';
-    public final static char JDBC_PROTOCOL_SPECIFIER = '+';
+    public final static char JDBC_PROTOCOL_CONNECTOR_PREFIX = '+';
 
 
     @Deprecated
@@ -235,9 +235,8 @@ public class PhoenixRuntime {
             };
 
     /**
-     * This determines what to bootstrap the connection with
+     * Constants to help determine what to bootstrap the HBase connection with.
      */
-
     public final static String BOOTSTRAP_ZK = "zk";
     public final static String BOOTSTRAP_HRPC = "hrpc";
     public final static String BOOTSTRAP_HRPC_DEFAULT_HMASTER_PORT = "60010";

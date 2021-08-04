@@ -230,14 +230,22 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                     || url.equalsIgnoreCase("jdbc:phoenix")) {
                 return defaultConnectionInfo(url);
             }
+
+            // ex: jdbc:phoenix+hrpc:hostname1....
             url = url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)
                     ? url.substring(PhoenixRuntime.JDBC_PROTOCOL.length())
                     : PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url;
 
             String bootstrap = null;
-            if (url.startsWith(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_SPECIFIER))) {
-                String firstToken = url.split(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR))[0];
-                bootstrap = firstToken.replace(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_SPECIFIER), "");
+
+            // ex: +hrpc:hostname1....
+            if (url.startsWith(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_CONNECTOR_PREFIX))) {
+                final String firstToken = url.split(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR))[0];
+
+                // ex: +hrpc
+                bootstrap = firstToken.replace(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_CONNECTOR_PREFIX), "");
+
+                // ex: hrpc
                 if (Strings.isNullOrEmpty(bootstrap)) {
                     throw getMalFormedUrlException(url);
                 }
@@ -510,12 +518,13 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         private final String rootNode;
         private final String zookeeperQuorum;
         private final boolean isConnectionless;
-        public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab) {
-            this(zookeeperQuorum, port, rootNode, principal, keytab, null);
-        }
         private final String principal;
         private final String keytab;
         private final User user;
+
+        public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab) {
+            this(zookeeperQuorum, port, rootNode, principal, keytab, null);
+        }
 
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab, String bootstrap) {
             this.zookeeperQuorum = zookeeperQuorum;

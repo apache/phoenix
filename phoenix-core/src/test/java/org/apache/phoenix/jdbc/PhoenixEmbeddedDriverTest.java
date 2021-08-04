@@ -18,16 +18,6 @@
 
 package org.apache.phoenix.jdbc;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
-import java.sql.Driver;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -35,6 +25,12 @@ import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Test;
+
+import java.sql.Driver;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+
+import static org.junit.Assert.*;
 
 public class PhoenixEmbeddedDriverTest {
     @Test
@@ -175,7 +171,7 @@ public class PhoenixEmbeddedDriverTest {
 
 
         // ZK
-        String[] jdbcUrls = new String[] {
+        String[] jdbcUrls = new String[]{
                 "jdbc:phoenix+zk:hostname1,hostname2,hostname3:2181:user/principal:/user.keytab;test=false",
                 "jdbc:phoenix:hostname1,hostname2,hostname3:2181:user/principal:/user.keytab;test=false"
         };
@@ -187,6 +183,20 @@ public class PhoenixEmbeddedDriverTest {
             assertEquals("2181", readOnlyProps.get("hbase.zookeeper.property.clientPort"));
             assertFalse(connInfo.isHRPCBootstrap());
             assertTrue(connInfo.isZkBootstrap());
+        }
+
+        for (String invalidConnUrl : new String[]{"jdbc:phoenix+timhortons:it,dont,matter:user/principal:/user.keytab;",
+                "jdbc:phoenix+:hostname1,hostname2,hostname3:user/principal:/user.keytab;test=false" }) {
+            // Invalid connector
+            try {
+                ConnectionInfo.create(invalidConnUrl);
+            } catch (SQLException e) {
+                try {
+                    assertEquals(SQLExceptionCode.MALFORMED_CONNECTION_URL.getSQLState(), e.getSQLState());
+                } catch (AssertionError ae) {
+                    throw new AssertionError("Expected malformed connection" + ae.getMessage());
+                }
+            }
         }
     }
 
