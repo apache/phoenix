@@ -28,6 +28,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.joda.time.DateTime;
+import org.joda.time.chrono.ISOChronology;
 
 /**
  * Implementation of DayOfWeekFunction(Date/Timestamp)
@@ -69,7 +70,7 @@ public class DayOfWeekFunction extends DateScalarFunction {
             return true;
         }
         long dateTime = inputCodec.decodeLong(ptr, arg.getSortOrder());
-        DateTime jodaDT = new DateTime(dateTime);
+        DateTime jodaDT = new DateTime(dateTime, ISOChronology.getInstanceUTC());
         int day = jodaDT.getDayOfWeek();
         PDataType returnDataType = getDataType();
         byte[] byteValue = new byte[returnDataType.getByteSize()];

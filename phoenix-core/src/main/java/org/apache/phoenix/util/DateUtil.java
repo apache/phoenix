@@ -40,8 +40,10 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
+import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.joda.time.chrono.ISOChronology;
+import org.joda.time.chrono.GJChronology;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.DateTimeFormatterBuilder;
 import org.joda.time.format.ISODateTimeFormat;
@@ -190,6 +192,62 @@ public class DateUtil {
         return ISODateFormatParser.getInstance().parseDateTime(dateTimeValue);
     }
 
+    /**
+     * Converts a Date represented by a long value from Julian chronology to ISO
+     */
+    private static long convertJulianToISOChrono(long ts) {
+        DateTime dt1 = new DateTime(ts, GJChronology.getInstanceUTC());
+        Date d1 = parseDate(dt1.toString());
+        // parseDate uses ISO chronology
+        return d1.getTime();
+    }
+
+    public static Time getSQLTimeInISOChronology(Time time) {
+        return getSQLTimeInISOChronology(time.getTime(), 0);
+    }
+
+    public static Time getSQLTimeInISOChronology(Timestamp ts) {
+        return getSQLTimeInISOChronology(ts.getTime(), ts.getNanos());
+    }
+
+    public static Time getSQLTimeInISOChronology(long ts, long nanos) {
+        long correctedTs = getCorrectedLongValue(ts);
+        return new Time(correctedTs);
+    }
+
+    public static Date getSQLDateInISOChronology(Date date) {
+        return getSQLDateInISOChronology(date.getTime(), 0);
+    }
+
+    public static Date getSQLDateInISOChronology(Timestamp ts) {
+        return getSQLDateInISOChronology(ts.getTime(), ts.getNanos());
+    }
+
+    public static Date getSQLDateInISOChronology(long ts, long nanos) {
+        long correctedTs = getCorrectedLongValue(ts);
+        return new Date(correctedTs);
+    }
+
+    public static Timestamp getSQLTimestampInISOChronology(Timestamp ts) {
+        return getSQLTimestampInISOChronology(ts.getTime(), ts.getNanos());
+    }
+
+    public static Timestamp getSQLTimestampInISOChronology(long ts, int nanos) {
+        long correctedTs = getCorrectedLongValue(ts);
+        Timestamp t = new Timestamp(correctedTs);
+        t.setNanos(nanos);
+        return t;
+    }
+
+    private static long getCorrectedLongValue(long ts) {
+        // This long ts was parsed using ISO chronology
+        DateTime dt = new DateTime(ts, GJChronology.getInstanceUTC());
+        Timestamp timestamp = new Timestamp(parseDate(dt.toString()).getTime());
+        // Julian chronology used by the java.sql.Timestamp introduces a difference to the long value
+        long correction = timestamp.getTime() - ts; // we have different value than the original ts
+        return ts - correction;
+    }
+
     public static Date parseDate(String dateValue) {
         return new Date(parseDateTime(dateValue));
     }
@@ -274,8 +332,11 @@ public class DateUtil {
         @Override
         public long parseDateTime(String dateTimeString) throws IllegalDataException {
             try {
-                java.util.Date date =parser.parse(dateTimeString);
-                return date.getTime();
+                java.util.Date date = parser.parse(dateTimeString);
+                // this date is parsed using Julian chronology
+                // we convert it to ISO because ISODateFormatParserFactory used more ofter
+                // and we want to be consistent with that
+                return convertJulianToISOChrono(date.getTime());
             } catch (ParseException e) {
                 throw new IllegalDataException("Unable to parse date/time '" + dateTimeString + "' using format string of '" + datePattern + "'.");
             }

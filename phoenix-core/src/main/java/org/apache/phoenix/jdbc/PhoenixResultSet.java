@@ -93,7 +93,11 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
+import org.joda.time.DateTime;
+import org.joda.time.chrono.ISOChronology;
+import org.joda.time.chrono.JulianChronology;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -446,6 +450,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         if (value == null) {
             return null;
         }
+        value = DateUtil.getSQLDateInISOChronology(value);
         return value;
     }
 
@@ -463,6 +468,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         if (wasNull) {
             return null;
         }
+        value = DateUtil.getSQLDateInISOChronology(value);
         cal.setTime(value);
         return new Date(cal.getTimeInMillis());
     }
@@ -596,6 +602,16 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         ColumnProjector projector = getRowProjector().getColumnProjector(columnIndex-1);
         Object value = projector.getValue(currentRow, projector.getExpression().getDataType(), ptr);
         wasNull = (value == null);
+        if (wasNull) {
+            return null;
+        }
+        if (value instanceof java.sql.Date) {
+            value = DateUtil.getSQLDateInISOChronology((java.sql.Date) value);
+        } else if (value instanceof java.sql.Time) {
+            value = DateUtil.getSQLTimeInISOChronology((java.sql.Time) value);
+        } else if (value instanceof java.sql.Timestamp) {
+            value = DateUtil.getSQLTimestampInISOChronology((java.sql.Timestamp) value);
+        }
         return value;
     }
 
@@ -680,14 +696,26 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         ColumnProjector projector = getRowProjector().getColumnProjector(columnIndex-1);
         PDataType type = projector.getExpression().getDataType();
         Object value = projector.getValue(currentRow,type, ptr);
-        if (wasNull = (value == null)) {
+        wasNull = (value == null);
+        if (wasNull) {
             return null;
         }
         // Run Object through formatter to get String.
         // This provides a simple way of getting a reasonable string representation
         // for types like DATE and TIME
         Format formatter = statement.getFormatter(type);
-        return formatter == null ? value.toString() : formatter.format(value);
+        if ( formatter == null) {
+            return value.toString();
+        } else {
+            if (value instanceof java.sql.Date) {
+                value = DateUtil.getSQLDateInISOChronology((java.sql.Date) value);
+            } else if (value instanceof java.sql.Time) {
+                value = DateUtil.getSQLTimeInISOChronology((java.sql.Time) value);
+            } else if (value instanceof java.sql.Timestamp) {
+                value = DateUtil.getSQLTimestampInISOChronology((java.sql.Timestamp) value);
+            }
+            return formatter.format(value);
+        }
     }
 
     @Override
@@ -701,6 +729,10 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         Time value = (Time)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
             PTime.INSTANCE, ptr);
         wasNull = (value == null);
+        if (wasNull) {
+            return null;
+        }
+        value = DateUtil.getSQLTimeInISOChronology(value);
         return value;
     }
 
@@ -718,6 +750,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         if (value == null) {
             return null;
         }
+        value = DateUtil.getSQLTimeInISOChronology(value);
         cal.setTime(value);
         value.setTime(cal.getTimeInMillis());
         return value;
@@ -734,6 +767,10 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         Timestamp value = (Timestamp)getRowProjector().getColumnProjector(columnIndex-1)
                 .getValue(currentRow, PTimestamp.INSTANCE, ptr);
         wasNull = (value == null);
+        if (wasNull) {
+            return null;
+        }
+        value = DateUtil.getSQLTimestampInISOChronology(value);
         return value;
     }
 

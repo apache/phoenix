@@ -28,6 +28,9 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
+import org.joda.time.DateTime;
+import org.joda.time.chrono.ISOChronology;
+import org.joda.time.chrono.JulianChronology;
 
 /**
  * 
@@ -57,7 +60,8 @@ public class HourFunction extends DateScalarFunction {
             return true; //means null
         }
         long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
-        int hour = (int)(((dateTime/1000) % (24*3600))/3600);
+        DateTime dt = new DateTime(dateTime, ISOChronology.getInstanceUTC());
+        int hour = dt.getHourOfDay();
         PDataType returnType = getDataType();
         byte[] byteValue = new byte[returnType.getByteSize()];
         returnType.getCodec().encodeInt(hour, byteValue, 0);

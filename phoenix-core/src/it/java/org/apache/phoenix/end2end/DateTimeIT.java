@@ -56,6 +56,8 @@ import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.Properties;
 import java.util.TimeZone;
+import java.util.List;
+import java.util.Arrays;
 
 import org.apache.commons.lang3.time.FastDateFormat;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -560,7 +562,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     @Test
     public void testYearFunctionDate() throws SQLException {
 
-        assertEquals(2008, callYearFunction("\"YEAR\"(TO_DATE('2008-01-01', 'yyyy-MM-dd', 'local'))"));
+        assertEquals(2008, callYearFunction("\"YEAR\"(TO_DATE('2008-01-01', 'yyyy-MM-dd'))"));
 
         assertEquals(2004,
             callYearFunction("\"YEAR\"(TO_DATE('2004-12-13 10:13:18', 'yyyy-MM-dd hh:mm:ss'))"));
@@ -1936,6 +1938,99 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         String[] timeZoneIDs = {DateUtil.DEFAULT_TIME_ZONE_ID, "Asia/Yerevan", "Australia/Adelaide", "Asia/Tokyo"};
         for (String timeZoneID : timeZoneIDs) {
             testDateFormatTimeZone(timeZoneID);
+        }
+    }
+
+    private String getFormattedDate(List<String> dateList) {
+        return String.join("-", dateList.subList(0, 3)) + " "
+                + String.join(":", dateList.subList(3, 6)) + "." + dateList.get(6);
+    }
+
+    @Test
+    public void testAncientDates() throws Exception {
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        Statement stmt = conn.createStatement();
+        String tableName = generateUniqueName();
+
+        List<String> date1list = Arrays.asList("0010", "10", "10", "10", "10", "10", "111");
+        List<String> date2list = Arrays.asList("1000", "02", "03", "04", "05", "06", "000");
+        List<String> date3list = Arrays.asList("0001", "12", "31", "23", "59", "59", "000");
+        List<List<String>> dateLists = Arrays.asList(date1list, date2list, date3list, date2list);
+
+        String date1 = getFormattedDate(date1list); // 0010-10-10 10:10:10.111
+        String date2 = getFormattedDate(date2list); // 1000-02-03 04:05:06.000
+        String date3 = getFormattedDate(date3list); // 0001-12-31 23:59:59.000
+        List<String> dates = Arrays.asList(date1, date2, date3, date2);
+
+
+        stmt.execute("CREATE TABLE " + tableName + " ( id INTEGER not null PRIMARY KEY," +
+                " date DATE, time TIME, timestamp TIMESTAMP)");
+
+        stmt.execute("UPSERT INTO " + tableName + " VALUES(1, TO_DATE('" + date1
+                + "'), TO_TIME('" + date1 + "'), TO_TIMESTAMP('" + date1 + "'))");
+
+        PreparedStatement pstmt = conn.prepareStatement("UPSERT INTO " + tableName + " values (?, ?, ?, ?)");
+        pstmt.setInt(1, 2);
+        Timestamp t =  new Timestamp(DateUtil.parseDate(date2).getTime());
+        pstmt.setDate(2, new Date(t.getTime()));
+        pstmt.setTime(3, new Time(t.getTime()));
+        pstmt.setTimestamp(4, t);
+        pstmt.execute();
+
+        pstmt.setInt(1, 3);
+        t =  new Timestamp(DateUtil.parseDate(date3).getTime());
+        pstmt.setDate(2, new Date(t.getTime()));
+        pstmt.setTime(3, new Time(t.getTime()));
+        pstmt.setTimestamp(4, t);
+        pstmt.execute();
+
+        String f = " GMT', 'yyyy-MM-dd HH:mm:ss.SSS z', 'UTC";
+        stmt.execute("UPSERT INTO " + tableName + " VALUES(4, TO_DATE('" + date2 + f
+                + "'), TO_TIME('" + date2 + f + "'), TO_TIMESTAMP('" + date2 + f + "'))");
+        conn.commit();
+
+        ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName + " ORDER BY id");
+
+        for (int i = 0; i < dates.size(); i++){
+            assertTrue(rs.next());
+            String actualDate = dates.get(i);
+            Timestamp parseTimestamp = DateUtil.parseTimestamp(actualDate);
+
+            assertEquals(i + 1, rs.getInt(1));
+            Date expectedDate = DateUtil.getSQLDateInISOChronology(parseTimestamp);
+            assertEquals(expectedDate, rs.getDate(2));
+            assertEquals(rs.getDate(2), rs.getObject(2));
+            assertEquals(actualDate, rs.getString(2));
+
+            Time expectedTime = DateUtil.getSQLTimeInISOChronology(parseTimestamp);
+            assertEquals(new Timestamp(expectedTime.getTime()), new Timestamp(rs.getTime(3).getTime()));
+            assertEquals(expectedTime, rs.getTime(3));
+            assertEquals(rs.getTime(3), rs.getObject(3));
+            assertEquals(actualDate, rs.getString(3));
+
+            Timestamp expectedTimestamp = DateUtil.getSQLTimestampInISOChronology(parseTimestamp);
+            assertEquals(expectedTimestamp, rs.getTimestamp(4));
+            assertEquals(rs.getTimestamp(4), rs.getObject(4));
+            assertEquals(actualDate, rs.getString(4));
+        }
+
+        String query = "SELECT year(timestamp), month(timestamp), dayofmonth(timestamp),"
+                + " hour(timestamp), minute(timestamp), second(timestamp) FROM "  + tableName
+                + " ORDER BY id";
+        rs = stmt.executeQuery(query);
+
+        for (int i = 0; i < dates.size(); i++){
+            assertTrue(rs.next());
+            List<String> dateList = dateLists.get(i);
+            for (int j = 0; j < 6; j++){
+                int expected = Integer.parseInt(dateList.get(j));
+                int value = rs.getInt(j + 1);
+                String readFunc = query.split("\\s+")[j + 1];
+                assertTrue("Expected for " + readFunc.substring(0, readFunc.length()-1) + ": " + expected + ", got: " + value,
+                        expected == value);
+            }
         }
     }
 
