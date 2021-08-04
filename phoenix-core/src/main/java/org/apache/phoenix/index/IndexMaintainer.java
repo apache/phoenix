@@ -400,7 +400,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     //**** START: New member variables added in 4.16 ****/
     private String logicalIndexName;
 
-    private IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
+    protected IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
         this.dataRowKeySchema = dataRowKeySchema;
         this.isDataTableSalted = isDataTableSalted;
     }
@@ -1038,35 +1038,47 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         return indexRowKeySchema;
     }
-    
+
     public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
         byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey, ts);
+        return buildUpdateMutation(kvBuilder, valueGetter, dataRowKeyPtr, ts, regionStartKey, regionEndKey,
+                indexRowKey, this.getEmptyKeyValueFamily(), coveredColumnsMap,
+                indexEmptyKeyValueRef, indexWALDisabled, dataImmutableStorageScheme, immutableStorageScheme, encodingScheme);
+    }
+
+    public static Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable dataRowKeyPtr, long ts,
+                                   byte[] regionStartKey, byte[] regionEndKey, byte[] destRowKey, ImmutableBytesPtr emptyKeyValueCFPtr,
+                                          Map<ColumnReference, ColumnReference> coveredColumnsMap,
+                                          ColumnReference destEmptyKeyValueRef, boolean destWALDisabled,
+                                          ImmutableStorageScheme srcImmutableStroageScheme, ImmutableStorageScheme destImmutableStorageScheme,
+                                          QualifierEncodingScheme destEncodingScheme) throws IOException {
+        Set<ColumnReference> coveredColumns = coveredColumnsMap.keySet();
         Put put = null;
         // New row being inserted: add the empty key value
         ImmutableBytesWritable latestValue = null;
         if (valueGetter==null ||
-                this.getCoveredColumns().isEmpty() ||
-                (latestValue = valueGetter.getLatestValue(indexEmptyKeyValueRef, ts)) == null ||
+                coveredColumns.isEmpty() ||
+                (latestValue = valueGetter.getLatestValue(destEmptyKeyValueRef, ts)) == null ||
                 latestValue == ValueGetter.HIDDEN_BY_DELETE) {
             // We need to track whether or not our empty key value is hidden by a Delete Family marker at the same timestamp.
             // If it is, these Puts will be masked so should not be emitted.
             if (latestValue == ValueGetter.HIDDEN_BY_DELETE) {
                 return null;
             }
-            put = new Put(indexRowKey);
+            put = new Put(destRowKey);
             // add the keyvalue for the empty row
-            put.add(kvBuilder.buildPut(new ImmutableBytesPtr(indexRowKey),
-                    this.getEmptyKeyValueFamily(), indexEmptyKeyValueRef.getQualifierWritable(), ts,
+            put.add(kvBuilder.buildPut(new ImmutableBytesPtr(destRowKey),
+                    emptyKeyValueCFPtr, destEmptyKeyValueRef.getQualifierWritable(), ts,
                     QueryConstants.EMPTY_COLUMN_VALUE_BYTES_PTR));
-            put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
+            put.setDurability(!destWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
         }
 
-        ImmutableBytesPtr rowKey = new ImmutableBytesPtr(indexRowKey);
-        if (immutableStorageScheme != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
+        ImmutableBytesPtr rowKey = new ImmutableBytesPtr(destRowKey);
+        if (destImmutableStorageScheme != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
             // map from index column family to list of pair of index column and data column (for covered columns)
             Map<ImmutableBytesPtr, List<Pair<ColumnReference, ColumnReference>>> familyToColListMap = Maps.newHashMap();
-            for (ColumnReference ref : this.getCoveredColumns()) {
-                ColumnReference indexColRef = this.coveredColumnsMap.get(ref);
+            for (ColumnReference ref : coveredColumns) {
+                ColumnReference indexColRef = coveredColumnsMap.get(ref);
                 ImmutableBytesPtr cf = new ImmutableBytesPtr(indexColRef.getFamily());
                 if (!familyToColListMap.containsKey(cf)) {
                     familyToColListMap.put(cf, Lists.<Pair<ColumnReference, ColumnReference>>newArrayList());
@@ -1080,7 +1092,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 int maxEncodedColumnQualifier = Integer.MIN_VALUE;
                 // find the max col qualifier
                 for (Pair<ColumnReference, ColumnReference> colRefPair : colRefPairs) {
-                    maxEncodedColumnQualifier = Math.max(maxEncodedColumnQualifier, encodingScheme.decode(colRefPair.getFirst().getQualifier()));
+                    maxEncodedColumnQualifier = Math.max(maxEncodedColumnQualifier, destEncodingScheme.decode(colRefPair.getFirst().getQualifier()));
                 }
                 Expression[] colValues = EncodedColumnsUtil.createColumnExpressionArray(maxEncodedColumnQualifier);
                 // set the values of the columns
@@ -1088,7 +1100,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     ColumnReference indexColRef = colRefPair.getFirst();
                     ColumnReference dataColRef = colRefPair.getSecond();
                     byte[] value = null;
-                    if (this.dataImmutableStorageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                    if (srcImmutableStroageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
                         Expression expression = new SingleCellColumnExpression(new PDatum() {
                             @Override public boolean isNullable() {
                                 return false;
@@ -1109,8 +1121,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                             @Override public PDataType getDataType() {
                                 return null;
                             }
-                        }, dataColRef.getFamily(), dataColRef.getQualifier(), encodingScheme,
-                                immutableStorageScheme);
+                        }, dataColRef.getFamily(), dataColRef.getQualifier(), destEncodingScheme,
+                                destImmutableStorageScheme);
                         ImmutableBytesPtr ptr = new ImmutableBytesPtr();
                         expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
                         value = ptr.copyBytesIfNecessary();
@@ -1122,34 +1134,34 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         }
                     }
                     if (value != null) {
-                        int indexArrayPos = encodingScheme.decode(indexColRef.getQualifier())-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
+                        int indexArrayPos = destEncodingScheme.decode(indexColRef.getQualifier())-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
                         colValues[indexArrayPos] = new LiteralExpression(value);
                     }
                 }
                 
                 List<Expression> children = Arrays.asList(colValues);
                 // we use SingleCellConstructorExpression to serialize multiple columns into a single byte[]
-                SingleCellConstructorExpression singleCellConstructorExpression = new SingleCellConstructorExpression(immutableStorageScheme, children);
+                SingleCellConstructorExpression singleCellConstructorExpression = new SingleCellConstructorExpression(destImmutableStorageScheme, children);
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 singleCellConstructorExpression.evaluate(new BaseTuple() {}, ptr);
                 if (put == null) {
-                    put = new Put(indexRowKey);
-                    put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
+                    put = new Put(destRowKey);
+                    put.setDurability(!destWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
                 }
                 ImmutableBytesPtr colFamilyPtr = new ImmutableBytesPtr(columnFamily);
                 //this is a little bit of extra work for installations that are running <0.94.14, but that should be rare and is a short-term set of wrappers - it shouldn't kill GC
                 put.add(kvBuilder.buildPut(rowKey, colFamilyPtr, QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES_PTR, ts, ptr));
             }
         } else {
-            for (ColumnReference ref : this.getCoveredColumns()) {
-                ColumnReference indexColRef = this.coveredColumnsMap.get(ref);
+            for (ColumnReference ref : coveredColumns) {
+                ColumnReference indexColRef = coveredColumnsMap.get(ref);
                 ImmutableBytesPtr cq = indexColRef.getQualifierWritable();
                 ImmutableBytesPtr cf = indexColRef.getFamilyWritable();
                 ImmutableBytesWritable value = valueGetter.getLatestValue(ref, ts);
                 if (value != null && value != ValueGetter.HIDDEN_BY_DELETE) {
                     if (put == null) {
-                        put = new Put(indexRowKey);
-                        put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
+                        put = new Put(destRowKey);
+                        put.setDurability(!destWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
                     }
                     put.add(kvBuilder.buildPut(rowKey, cf, cq, ts, value));
                 }

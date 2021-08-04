@@ -45,6 +45,7 @@ public class TransformIT extends ParallelStatsDisabledIT {
     private Properties testProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 
     public TransformIT() {
+        testProps.put(QueryServices.DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB, "ONE_CELL_PER_COLUMN");
         testProps.put(QueryServices.DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB, "0");
     }
 

@@ -65,6 +65,7 @@ import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
@@ -191,7 +192,13 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         if (indexMetaData == null) {
             indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
         }
-        List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(indexMetaData, true);
+        byte[] transforming = scan.getAttribute(BaseScannerRegionObserver.DO_TRANSFORMING);
+        List<IndexMaintainer> maintainers = null;
+        if (transforming == null) {
+            maintainers = IndexMaintainer.deserialize(indexMetaData, true);
+        } else {
+            maintainers = TransformMaintainer.deserialize(indexMetaData);
+        }
         indexMaintainer = maintainers.get(0);
         this.scan = scan;
         this.innerScanner = innerScanner;

@@ -73,8 +73,9 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
         this.createChildAfterRename = createChildAfterRename;
         this.immutable = immutable;
         StringBuilder optionBuilder = new StringBuilder();
+        optionBuilder.append(" ,IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN");
         if (immutable) {
-            optionBuilder.append(" ,IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, IMMUTABLE_ROWS=true");
+            optionBuilder.append(" , IMMUTABLE_ROWS=true");
         }
         this.dataTableDdl = optionBuilder.toString();
     }
