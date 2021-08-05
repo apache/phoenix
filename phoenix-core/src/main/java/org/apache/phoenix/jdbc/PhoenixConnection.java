@@ -690,7 +690,9 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
             TableMetricsManager.pushMetricsFromConnInstanceMethod(getMutationMetrics());
             clearMetrics();
             try {
-                span.end();
+                if (span != null) {
+                    span.end();
+                }
                 closeStatements();
                 SQLCloseables.closeAllQuietly(childConnections);
             } finally {
