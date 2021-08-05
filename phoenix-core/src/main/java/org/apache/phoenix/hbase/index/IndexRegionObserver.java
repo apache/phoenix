@@ -30,6 +30,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -63,9 +65,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.hadoop.hbase.wal.WALKey;
-import org.apache.htrace.Span;
-import org.apache.htrace.Trace;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.compat.hbase.coprocessor.CompatIndexRegionObserver;
 import org.apache.phoenix.compile.ScanRanges;
@@ -90,8 +89,8 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.trace.TraceUtil;
 import org.apache.phoenix.trace.TracingUtils;
-import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -821,13 +820,9 @@ public class IndexRegionObserver extends CompatIndexRegionObserver implements Re
                                           long now,
                                           PhoenixIndexMetaData indexMetaData) throws Throwable {
         List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
-        // get the current span, or just use a null-span to avoid a bunch of if statements
-        try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
-            Span current = scope.getSpan();
-            if (current == null) {
-                current = NullSpan.INSTANCE;
-            }
-            current.addTimelineAnnotation("Built index updates, doing preStep");
+        Span span = TraceUtil.getGlobalTracer().spanBuilder("Starting to build index updates").startSpan();
+        try (Scope scope = span.makeCurrent()) {
+            span.addEvent("Built index updates, doing preStep");
             // The rest of this method is for handling global index updates
             context.indexUpdates = ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>>create();
             prepareIndexMutations(context, maintainers, now);
@@ -855,7 +850,9 @@ public class IndexRegionObserver extends CompatIndexRegionObserver implements Re
                     }
                 }
             }
-            TracingUtils.addAnnotation(current, "index update count", updateCount);
+            span.addEvent("index update count " + updateCount);
+        } finally {
+          span.end();
         }
     }
 
@@ -1105,18 +1102,16 @@ public class IndexRegionObserver extends CompatIndexRegionObserver implements Re
           return;
       }
 
-      // get the current span, or just use a null-span to avoid a bunch of if statements
-      try (TraceScope scope = Trace.startSpan("Completing " + (post ? "post" : "pre") + " index writes")) {
-          Span current = scope.getSpan();
-          if (current == null) {
-              current = NullSpan.INSTANCE;
-          }
-          current.addTimelineAnnotation("Actually doing " + (post ? "post" : "pre") + " index update for first time");
+      Span span = TraceUtil.getGlobalTracer().spanBuilder("Completing " + (post ? "post" : "pre") + " index writes").startSpan();
+      try (Scope scope = span.makeCurrent()) {
+          span.addEvent("Actually doing " + (post ? "post" : "pre") + " index update for first time");
           if (post) {
               postWriter.write(indexUpdates, false, context.clientVersion);
           } else {
               preWriter.write(indexUpdates, false, context.clientVersion);
           }
+      } finally {
+        span.end();
       }
   }
 

@@ -61,10 +61,9 @@ import java.util.concurrent.LinkedBlockingQueue;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import io.opentelemetry.api.trace.Span;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Consistency;
-import org.apache.htrace.Sampler;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -160,9 +159,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private final String timePattern;
     private final String timestampPattern;
     private int statementExecutionCounter;
-    private TraceScope traceScope = null;
+    private Span span = null;
     private volatile boolean isClosed = false;
-    private Sampler<?> sampler;
     private boolean readOnly = false;
     private Consistency consistency = Consistency.STRONG;
     private Map<String, String> customTracingAnnotations = emptyMap();
@@ -203,7 +201,6 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                 isRunningUpgrade, connection.buildingIndex, true);
         this.isAutoCommit = connection.isAutoCommit;
         this.isAutoFlush = connection.isAutoFlush;
-        this.sampler = connection.sampler;
         this.statementExecutionCounter = connection.statementExecutionCounter;
     }
 
@@ -231,7 +228,6 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                 connection.isRunningUpgrade(), connection.buildingIndex, true);
         this.isAutoCommit = connection.isAutoCommit;
         this.isAutoFlush = connection.isAutoFlush;
-        this.sampler = connection.sampler;
         this.statementExecutionCounter = connection.statementExecutionCounter;
     }
 
@@ -394,8 +390,6 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.metaData.pruneFunctions(pruner);
         this.services.addConnection(this);
 
-        // setup tracing, if its enabled
-        this.sampler = Tracing.getConfiguredSampler(this);
         this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
         this.scannerQueue = new LinkedBlockingQueue<>();
         this.tableResultIteratorFactory = new DefaultTableResultIteratorFactory();
@@ -491,14 +485,6 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     @VisibleForTesting
     public int getChildConnectionsCount() {
         return childConnections.size();
-    }
-
-    public Sampler<?> getSampler() {
-        return this.sampler;
-    }
-
-    public void setSampler(Sampler<?> sampler) throws SQLException {
-        this.sampler = sampler;
     }
 
     public Map<String, String> getCustomTracingAnnotations() {
@@ -704,9 +690,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
             TableMetricsManager.pushMetricsFromConnInstanceMethod(getMutationMetrics());
             clearMetrics();
             try {
-                if (traceScope != null) {
-                    traceScope.close();
-                }
+                span.end();
                 closeStatements();
                 SQLCloseables.closeAllQuietly(childConnections);
             } finally {
@@ -1250,12 +1234,12 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         statementExecutionCounter++;
     }
 
-    public TraceScope getTraceScope() {
-        return traceScope;
+    public Span getSpan() {
+        return span;
     }
 
-    public void setTraceScope(TraceScope traceScope) {
-        this.traceScope = traceScope;
+    public void setSpan(Span span) {
+        this.span = span;
     }
 
     public Map<String, Map<MetricType, Long>> getMutationMetrics() {

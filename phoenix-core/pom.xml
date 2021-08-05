@@ -398,6 +398,12 @@
       <type>test-jar</type>
     </dependency>
 
+    <!-- Tracing Dependencies -->
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-api</artifactId>
+    </dependency>
+
     <!-- Other dependencies -->
     <dependency>
       <groupId>org.antlr</groupId>
@@ -444,8 +450,8 @@
       <artifactId>protobuf-java</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.htrace</groupId>
-      <artifactId>htrace-core</artifactId>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-api</artifactId>
     </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>

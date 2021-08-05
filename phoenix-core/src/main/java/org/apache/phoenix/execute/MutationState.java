@@ -48,6 +48,9 @@ import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
@@ -57,8 +60,6 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.htrace.Span;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.compile.MutationPlan;
@@ -105,7 +106,7 @@ import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
-import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.trace.TraceUtil;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
 import org.apache.phoenix.transaction.TransactionFactory;
@@ -1173,8 +1174,8 @@ public class MutationState implements SQLCloseable {
         int i = 0;
         Map<TableInfo, List<Mutation>> physicalTableMutationMap = Maps.newLinkedHashMap();
         // add tracing for this operation
-        try (TraceScope trace = Tracing.startNewSpan(connection, "Committing mutations to tables")) {
-            Span span = trace.getSpan();
+        Span span = TraceUtil.getGlobalTracer().spanBuilder("Committing mutations to tables").startSpan();
+        try (Scope scope = span.makeCurrent()) {
             ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable();
             for (Map.Entry<TableRef, MultiRowMutationState> entry : commitBatch.entrySet()) {
                 // at this point we are going through mutations for each table
@@ -1251,6 +1252,8 @@ public class MutationState implements SQLCloseable {
                         "Ignoring exception that happened during setting index verified value to verified=TRUE ",
                         ex);
             }
+        } finally {
+            span.end();
         }
     }
 
@@ -1267,7 +1270,8 @@ public class MutationState implements SQLCloseable {
 
             // create a span per target table
             // TODO maybe we can be smarter about the table name to string here?
-            Span child = Tracing.child(span, "Writing mutation batch for table: " + Bytes.toString(htableName));
+            Span child = TraceUtil.getGlobalTracer().spanBuilder("Writing mutation batch for table: " + Bytes.toString(htableName)).setParent(
+                Context.current().with(span)).startSpan();
 
             int retryCount = 0;
             boolean shouldRetry = false;
@@ -1296,7 +1300,7 @@ public class MutationState implements SQLCloseable {
                 Table hTable = connection.getQueryServices().getTable(htableName);
                 List<Mutation> currentMutationBatch = null;
                 boolean areAllBatchesSuccessful = false;
-                try {
+                try(Scope scope = child.makeCurrent()) {
                     if (table.isTransactional()) {
                         // Track tables to which we've sent uncommitted data
                         if (tableInfo.isDataTable()) {
@@ -1314,7 +1318,7 @@ public class MutationState implements SQLCloseable {
                     GLOBAL_MUTATION_BATCH_SIZE.update(numMutations);
                     totalMutationBytesObject = calculateMutationSize(mutationList, true);
 
-                    child.addTimelineAnnotation("Attempt " + retryCount);
+                    child.addEvent("Attempt " + retryCount);
                     Iterator<List<Mutation>> itrListMutation = mutationBatchList.iterator();
                     while (itrListMutation.hasNext()) {
                         final List<Mutation> mutationBatch = itrListMutation.next();
@@ -1383,8 +1387,6 @@ public class MutationState implements SQLCloseable {
                             LOGGER.debug("Sent batch of " + mutationBatch.size() + " for "
                                     + Bytes.toString(htableName));
                     }
-                    child.stop();
-                    child.stop();
                     shouldRetry = false;
                     mutationCommitTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
                     GLOBAL_MUTATION_COMMIT_TIME.update(mutationCommitTime);
@@ -1417,9 +1419,9 @@ public class MutationState implements SQLCloseable {
                             connection.getQueryServices().clearTableRegionCache(TableName.valueOf(htableName));
 
                             // add a new child span as this one failed
-                            child.addTimelineAnnotation(msg);
-                            child.stop();
-                            child = Tracing.child(span, "Failed batch, attempting retry");
+                            child.addEvent(msg);
+                            child.end();
+                            child = TraceUtil.getGlobalTracer().spanBuilder("Failed batch, attempting retry").setParent(Context.current().with(span)).startSpan();
 
                             continue;
                         } else if (inferredE.getErrorCode() == SQLExceptionCode.INDEX_WRITE_FAILURE.getErrorCode()) {

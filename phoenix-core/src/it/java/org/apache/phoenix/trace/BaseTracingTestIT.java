@@ -29,13 +29,10 @@ import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.htrace.Span;
-import org.apache.htrace.Trace;
-import org.apache.htrace.impl.MilliSpan;
+import io.opentelemetry.api.trace.Span;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.DelegateConnection;
 import org.apache.phoenix.trace.util.Tracing;
-import org.apache.phoenix.trace.util.Tracing.Frequency;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.After;
@@ -56,14 +53,11 @@ public class BaseTracingTestIT extends ParallelStatsDisabledIT {
     protected int defaultTracingThreadPoolForTest = 1;
     protected int defaultTracingBatchSizeForTest = 1;
     protected String tracingTableName;
-    protected TraceSpanReceiver traceSpanReceiver = null;
     protected TestTraceWriter testTraceWriter = null;
 
     @Before
     public void setup() {
         tracingTableName = "TRACING_" + generateUniqueName();
-        traceSpanReceiver = new TraceSpanReceiver();
-        Trace.addReceiver(traceSpanReceiver);
         testTraceWriter =
                 new TestTraceWriter(tracingTableName, defaultTracingThreadPoolForTest,
                         defaultTracingBatchSizeForTest);
@@ -71,7 +65,6 @@ public class BaseTracingTestIT extends ParallelStatsDisabledIT {
 
     @After
     public void cleanUp() {
-        Trace.removeReceiver(traceSpanReceiver);
         if (testTraceWriter != null) testTraceWriter.stop();
     }
 
@@ -81,7 +74,7 @@ public class BaseTracingTestIT extends ParallelStatsDisabledIT {
     }
 
     public static Connection getConnectionWithoutTracing(Properties props) throws SQLException {
-        Connection conn = getConnectionWithTracingFrequency(props, Frequency.NEVER);
+        Connection conn = getConnectionWithTracingFrequency(props);
         return conn;
     }
 
@@ -98,26 +91,21 @@ public class BaseTracingTestIT extends ParallelStatsDisabledIT {
         if (tenantId != null) {
             props.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
-        return getConnectionWithTracingFrequency(props, Tracing.Frequency.ALWAYS);
+        return getConnectionWithTracingFrequency(props);
     }
 
-    public static Connection getConnectionWithTracingFrequency(Properties props,
-            Tracing.Frequency frequency) throws SQLException {
-        Tracing.setSampling(props, frequency);
+    public static Connection getConnectionWithTracingFrequency(Properties props) throws SQLException {
         return DriverManager.getConnection(getUrl(), props);
     }
 
     protected Span createNewSpan(long traceid, long parentid, long spanid, String description,
             long startTime, long endTime, String processid, String... tags) {
 
-        Span span =
-                new MilliSpan.Builder().description(description).traceId(traceid)
-                        .parents(new long[] { parentid }).spanId(spanid).processId(processid)
-                        .begin(startTime).end(endTime).build();
+        Span span = TraceUtil.getGlobalTracer().spanBuilder(description).startSpan();
 
         int tagCount = 0;
         for (String annotation : tags) {
-            span.addKVAnnotation((Integer.toString(tagCount++)).getBytes(), annotation.getBytes());
+            span.addEvent((Integer.toString(tagCount++)) + " " + annotation);
         }
         return span;
     }
@@ -157,11 +145,6 @@ public class BaseTracingTestIT extends ParallelStatsDisabledIT {
                 LOGGER.error("New connection failed for tracing Table: " + tableName, e);
                 return null;
             }
-        }
-
-        @Override
-        protected TraceSpanReceiver getTraceSpanReceiver() {
-            return traceSpanReceiver;
         }
 
         public void stop() {

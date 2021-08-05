@@ -60,7 +60,7 @@ import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFac
  * 
  * @since 0.1
  */
-public final class PhoenixDriver extends PhoenixEmbeddedDriver {
+public final class  PhoenixDriver extends PhoenixEmbeddedDriver {
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixDriver.class);
     public static final PhoenixDriver INSTANCE;
     private static volatile String driverShutdownMsg;

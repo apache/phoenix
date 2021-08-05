@@ -41,7 +41,6 @@ import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-import org.apache.htrace.SpanReceiver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
@@ -211,8 +210,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
 
         TableMapReduceUtil.addDependencyJars(job);
         TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(),
-                PhoenixConnection.class, Chronology.class, CharStream.class,
-                SpanReceiver.class, Gauge.class, MetricRegistriesImpl.class);
+                PhoenixConnection.class, Chronology.class, CharStream.class, Gauge.class, MetricRegistriesImpl.class);
         try {
             TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(),
                 Class.forName("org.apache.tephra.TransactionNotInProgressException"),

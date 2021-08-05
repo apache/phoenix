@@ -25,10 +25,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
 import org.apache.hadoop.hbase.exceptions.TimeoutIOException;
-import org.apache.htrace.Trace;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.trace.TraceUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,16 +61,10 @@ public class LockManager {
     public RowLock lockRow(ImmutableBytesPtr rowKey, int waitDuration) throws IOException {
         RowLockContext rowLockContext = null;
         RowLockImpl result = null;
-        TraceScope traceScope = null;
-
-        // If we're tracing start a span to show how long this took.
-        if (Trace.isTracing()) {
-            traceScope = Trace.startSpan("LockManager.getRowLock");
-            traceScope.getSpan().addTimelineAnnotation("Getting a lock");
-        }
-
+        Span span = TraceUtil.getGlobalTracer().spanBuilder("LockManager.getRowLock").startSpan();
+        span.addEvent("Getting a lock");
         boolean success = false;
-        try {
+        try (Scope scope = span.makeCurrent()) {
             // Keep trying until we have a lock or error out.
             // TODO: do we need to add a time component here?
             while (result == null) {
@@ -87,9 +82,7 @@ public class LockManager {
                 result = rowLockContext.newRowLock();
             }
             if (!result.getLock().tryLock(waitDuration, TimeUnit.MILLISECONDS)) {
-                if (traceScope != null) {
-                    traceScope.getSpan().addTimelineAnnotation("Failed to get row lock");
-                }
+                span.addEvent("Failed to get row lock");
                 throw new TimeoutIOException("Timed out waiting for lock for row: " + rowKey);
             }
             rowLockContext.setThreadName(Thread.currentThread().getName());
@@ -99,17 +92,13 @@ public class LockManager {
             LOGGER.warn("Thread interrupted waiting for lock on row: " + rowKey);
             InterruptedIOException iie = new InterruptedIOException();
             iie.initCause(ie);
-            if (traceScope != null) {
-                traceScope.getSpan().addTimelineAnnotation("Interrupted exception getting row lock");
-            }
+            span.addEvent("Interrupted exception getting row lock");
             Thread.currentThread().interrupt();
             throw iie;
         } finally {
+            span.end();
             // On failure, clean up the counts just in case this was the thing keeping the context alive.
             if (!success && rowLockContext != null) rowLockContext.cleanUp();
-            if (traceScope != null) {
-                traceScope.close();
-            }
         }
     }
 
