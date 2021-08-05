@@ -90,7 +90,7 @@
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.1.runtime.version>2.1.10</hbase-2.1.runtime.version>
     <hbase-2.2.runtime.version>2.2.6</hbase-2.2.runtime.version>
-    <hbase-2.3.runtime.version>2.3.5</hbase-2.3.runtime.version>
+    <hbase-2.3.runtime.version>2.3.6</hbase-2.3.runtime.version>
     <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
     <hbase-2.4.runtime.version>2.4.4</hbase-2.4.runtime.version>
 
