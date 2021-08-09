@@ -185,8 +185,10 @@ public class PhoenixEmbeddedDriverTest {
             assertTrue(connInfo.isZkBootstrap());
         }
 
-        for (String invalidConnUrl : new String[]{"jdbc:phoenix+timhortons:it,dont,matter:user/principal:/user.keytab;",
-                "jdbc:phoenix+:hostname1,hostname2,hostname3:user/principal:/user.keytab;test=false" }) {
+        for (String invalidConnUrl : new String[]{
+                "jdbc:phoenix+timhortons:it,dont,matter:user/principal:/user.keytab;",
+                "jdbc:phoenix+:hostname1,hostname2,hostname3:user/principal:/user.keytab;test=false"
+        }) {
             // Invalid connector
             try {
                 ConnectionInfo.create(invalidConnUrl);

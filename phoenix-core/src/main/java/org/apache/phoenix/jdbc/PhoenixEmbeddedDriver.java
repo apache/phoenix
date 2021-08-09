@@ -20,6 +20,7 @@ package org.apache.phoenix.jdbc;
 import com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.MasterRegistry;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.util.KerberosUtil;
@@ -573,6 +574,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 for (final String m : masters) {
                     masterList.add(m + ":" + masterPort);
                 }
+
+                connectionProps.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, MasterRegistry.class.getName());
                 connectionProps.put(QueryServices.HBASE_MASTERS, String.join(",", masterList));
             }
 
