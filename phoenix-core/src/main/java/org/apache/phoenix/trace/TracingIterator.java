@@ -44,7 +44,9 @@ public class TracingIterator extends DelegateResultIterator {
 
     @Override
     public void close() throws SQLException {
-        parentSpan.end();
+        if(parentSpan != null){
+            parentSpan.end();
+        }
         super.close();
     }
 

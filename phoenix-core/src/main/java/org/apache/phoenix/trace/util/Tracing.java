@@ -25,6 +25,7 @@ import io.opentelemetry.context.Scope;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.call.CallWrapper;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.job.JobManager;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TraceUtil;
 import org.apache.phoenix.trace.TraceWriter;
@@ -61,6 +62,7 @@ public class Tracing {
         return new TraceUtil.TraceCallable<V>(callable, description);
     }
 
+
     /**
      * Helper to automatically start and complete tracing on the given method, used in conjuction
      * with {@link CallRunner#run}.
@@ -96,7 +98,9 @@ public class Tracing {
 
         @Override
         public void after() {
-            span.end();
+            if (span != null) {
+                span.end();
+            }
         }
     }
 

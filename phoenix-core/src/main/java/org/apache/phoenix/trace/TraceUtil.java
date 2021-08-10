@@ -22,6 +22,8 @@ import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.job.JobManager;
+import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.yetus.audience.InterfaceAudience;
 
 import java.util.concurrent.Callable;
@@ -49,15 +51,21 @@ public final class TraceUtil {
     public TraceCallable(Callable<V> impl,
         String description) {
       this.impl = impl;
-      this.description = description;
+      if (description == null){
+        this.description = Thread.currentThread().getName();
+      }
+      else {
+        this.description = description;
+      }
     }
 
     @Override
     public V call() throws Exception {
-
       Span span = getGlobalTracer().spanBuilder(description).startSpan();
       try (Scope scope = span.makeCurrent()) {
         return impl.call();
+      } finally {
+        span.end();
       }
     }
 
@@ -65,5 +73,4 @@ public final class TraceUtil {
       return impl;
     }
   }
-
 }

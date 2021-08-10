@@ -108,6 +108,7 @@ public class ParallelIterators extends BaseResultIterators {
         context.getOverallQueryMetrics().updateNumParallelScans(numScans);
         GLOBAL_NUM_PARALLEL_SCANS.update(numScans);
         final long renewLeaseThreshold = context.getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
+        //TODO: Parent Span creation using Span.current() and create children with description  "Parallel scanner for table: " + tableRef.getTable().getPhysicalName().getString()
         for (final ScanLocator scanLocation : scanLocations) {
             final Scan scan = scanLocation.getScan();
             final ScanMetricsHolder scanMetricsHolder = ScanMetricsHolder.getInstance(readMetrics, physicalTableName,
@@ -118,10 +119,11 @@ public class ParallelIterators extends BaseResultIterators {
                         mutationState, tableRef, scan, scanMetricsHolder, renewLeaseThreshold, plan,
                         scanGrouper, caches);
             context.getConnection().addIteratorForLeaseRenewal(tableResultItr);
-            Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
+            Future<PeekingResultIterator> future = executor.submit(new JobCallable<PeekingResultIterator>() {
                 
                 @Override
                 public PeekingResultIterator call() throws Exception {
+                    //TODO: create child span for each call using parent
                     long startTime = EnvironmentEdgeManager.currentTimeMillis();
                     PeekingResultIterator iterator = iteratorFactory.newIterator(
                             context,
@@ -162,7 +164,7 @@ public class ParallelIterators extends BaseResultIterators {
                 public TaskExecutionMetricsHolder getTaskExecutionMetric() {
                     return taskMetrics;
                 }
-            }, "Parallel scanner for table: " + tableRef.getTable().getPhysicalName().getString()));
+            });
             // Add our future in the right place so that we can concatenate the
             // results of the inner futures versus merge sorting across all of them.
             nestedFutures.get(scanLocation.getOuterListIndex()).set(scanLocation.getInnerListIndex(), new Pair<Scan,Future<PeekingResultIterator>>(scan,future));
