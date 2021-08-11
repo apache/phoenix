@@ -809,6 +809,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             indexPosOffset = (!isLocalIndex && nIndexSaltBuckets > 0 ? 1 : 0) + (isMultiTenant ? 1 : 0) + (viewIndexId == null ? 0 : 1);
             BitSet viewConstantColumnBitSet = this.rowKeyMetaData.getViewConstantColumnBitSet();
             BitSet descIndexColumnBitSet = rowKeyMetaData.getDescIndexColumnBitSet();
+            int trailingVariableWidthColumnNum = 0;
             for (int i = dataPosOffset; i < dataRowKeySchema.getFieldCount(); i++) {
                 // Write view constants from the data table, as these
                 // won't appear in the index (as they're the
@@ -843,21 +844,21 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         }
                     }
                 }
-                // Write separator byte if variable length unless it's the last field in the schema
-                // (but we still need to write it if it's DESC to ensure sort order is correct).
+                // Write separator byte if variable length
                 byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength() == 0, dataRowKeySchema.getField(i));
-                if (!dataRowKeySchema.getField(i).getDataType().isFixedWidth() && (((i+1) !=  dataRowKeySchema.getFieldCount()) || sepByte == QueryConstants.DESC_SEPARATOR_BYTE)) {
+                if (!dataRowKeySchema.getField(i).getDataType().isFixedWidth()){
                     output.writeByte(sepByte);
+                    trailingVariableWidthColumnNum++;
+                } else {
+                    trailingVariableWidthColumnNum = 0;
                 }
             }
             int length = stream.size();
-            int minLength = length - maxTrailingNulls;
             byte[] dataRowKey = stream.getBuffer();
             // Remove trailing nulls
-            int index = dataRowKeySchema.getFieldCount() - 1;
-            while (index >= 0 && !dataRowKeySchema.getField(index).getDataType().isFixedWidth() && length > minLength && dataRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
+            while (trailingVariableWidthColumnNum > 0 && dataRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
                 length--;
-                index--;
+                trailingVariableWidthColumnNum--;
             }
             // TODO: need to capture nDataSaltBuckets instead of just a boolean. For now,
             // we store this in nIndexSaltBuckets, as we only use this function for local indexes
