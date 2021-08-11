@@ -412,6 +412,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         Long int1= 1792L;
         String text2 ="text2";
         BigDecimal double1 = BigDecimal.valueOf(254.564);
+        IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             // View fixed, index variable
             createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, INT1", "TEXT1", "INT1", int1);
@@ -440,18 +441,22 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
             createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, INT1", "TEXT1 DESC", "INT1", int1);
             createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, INT1 DESC", "TEXT1 DESC", "INT1", int1);
             createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1, INT1 DESC", "TEXT1", "INT1", int1);
+
             createTableForRowKeyTestsAndVerify(conn,"DATE_TIME1, TEXT3 DESC, INT1 DESC, TEXT2, TEXT4 DESC", "TEXT1, DOUBLE1 DESC", "TEXT2", text2);
+
             createTableForRowKeyTestsAndVerify(conn,"DATE_TIME1, TEXT3 DESC, INT1 DESC, TEXT2 DESC, TEXT4 DESC", "TEXT1 DESC, DOUBLE1 DESC", "TEXT2",text2);
             createTableForRowKeyTestsAndVerify(conn, "DATE_TIME1 DESC, TEXT3 DESC, INT1, DOUBLE1 DESC", "TEXT1", "DOUBLE1", double1);
 
             // Both index and data end with var length
             createTableForRowKeyTestsAndVerify(conn,"DATE_TIME1 DESC, TEXT3 DESC, INT1, TEXT4, EMAIL1", "TEXT1", "INT1", int1);
             createTableForRowKeyTestsAndVerify(conn,"DATE_TIME1 DESC, TEXT3, INT1, EMAIL1", "TEXT1, TEXT4", "INT1", int1);
+        } finally {
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
         }
     }
 
     private void createTableForRowKeyTestsAndVerify(Connection conn, String viewPkColumns, String indexPKColumns, String lastViewPKCol, Object lastColExpectedVal)
-            throws SQLException {
+            throws Exception {
         final String fullTableName = "TBL_"+generateUniqueName();
         final String fullViewName = "VW_" + generateUniqueName();
         final String fullIndexName = "IDX_" + generateUniqueName();
