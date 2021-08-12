@@ -18,6 +18,14 @@
 
 package org.apache.phoenix.jdbc;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import java.sql.Driver;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -25,12 +33,6 @@ import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Test;
-
-import java.sql.Driver;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-
-import static org.junit.Assert.*;
 
 public class PhoenixEmbeddedDriverTest {
     @Test
@@ -165,7 +167,7 @@ public class PhoenixEmbeddedDriverTest {
 
         ConnectionInfo c2 = ConnectionInfo.create("jdbc:phoenix+hrpc:hostname1,hostname2,hostname3:user/principal:/user.keytab;test=false");
         ReadOnlyProps rop2 = c2.asProps();
-        assertEquals("hostname1:60010,hostname2:60010,hostname3:60010", rop2.get("hbase.masters"));
+        assertEquals("hostname1:16000,hostname2:16000,hostname3:16000", rop2.get("hbase.masters"));
         assertTrue(c2.isHRPCBootstrap());
         assertFalse(c2.isZkBootstrap());
 
@@ -187,7 +189,8 @@ public class PhoenixEmbeddedDriverTest {
 
         for (String invalidConnUrl : new String[]{
                 "jdbc:phoenix+timhortons:it,dont,matter:user/principal:/user.keytab;",
-                "jdbc:phoenix+:hostname1,hostname2,hostname3:user/principal:/user.keytab;test=false"
+                "jdbc:phoenix+:hostname1,hostname2,hostname3:user/principal:/user.keytab;test=false",
+                "jdbc:phoenix:hostname1:2181,hostname:2182,hostname3:2183:user/principal:/user.keytab;test=false"
         }) {
             // Invalid connector
             try {

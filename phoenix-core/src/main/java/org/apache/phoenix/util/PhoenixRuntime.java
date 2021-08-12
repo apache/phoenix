@@ -61,6 +61,7 @@ import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
 
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -239,10 +240,10 @@ public class PhoenixRuntime {
     /**
      * Constants to help determine what to bootstrap the HBase connection with.
      */
-    public final static String BOOTSTRAP_ZK = "zk";
-    public final static String BOOTSTRAP_HRPC = "hrpc";
-    public final static String BOOTSTRAP_HRPC_DEFAULT_HMASTER_PORT = "60010";
-    public final static Set<String> BOOTSTRAPPABLES = newHashSet(BOOTSTRAP_HRPC, BOOTSTRAP_ZK);
+    public enum HBaseBootstrap {
+        ZK,
+        HRPC
+    }
 
     /**
      * Use this as the zookeeper quorum name to have a connection-less connection. This enables

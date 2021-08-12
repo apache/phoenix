@@ -17,6 +17,22 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
+
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.Driver;
+import java.sql.DriverPropertyInfo;
+import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
+import java.util.Map;
+import java.util.Properties;
+import java.util.StringTokenizer;
+import java.util.Map.Entry;
+import java.util.logging.Logger;
+
+import javax.annotation.concurrent.Immutable;
+
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
@@ -30,22 +46,16 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.concurrent.Immutable;
-import java.io.IOException;
-import java.sql.*;
-import java.util.*;
-import java.util.Map.Entry;
-import java.util.logging.Logger;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
+import java.util.*;
 
 
 
@@ -204,7 +214,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         }
 
         public String getZookeeperConnectionString() {
-            return getZookeeperQuorum() + ":" + getPort();
+            return getQuorum() + ":" + getPort();
         }
 
         /**
@@ -237,22 +247,26 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                     ? url.substring(PhoenixRuntime.JDBC_PROTOCOL.length())
                     : PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url;
 
-            String bootstrap = null;
+            PhoenixRuntime.HBaseBootstrap bootstrapAsEnum = null;
 
             // ex: +hrpc:hostname1....
             if (url.startsWith(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_CONNECTOR_PREFIX))) {
                 final String firstToken = url.split(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR))[0];
 
                 // ex: +hrpc
-                bootstrap = firstToken.replace(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_CONNECTOR_PREFIX), "");
+                final String bootstrapString = firstToken
+                        .replace(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_CONNECTOR_PREFIX), "")
+                        .toUpperCase();
 
-                // ex: hrpc
-                if (Strings.isNullOrEmpty(bootstrap)) {
+                if (Strings.isNullOrEmpty(bootstrapString)) {
                     throw getMalFormedUrlException(url);
                 }
 
-                if (!PhoenixRuntime.BOOTSTRAPPABLES.contains(bootstrap)) {
-                    throw getMalFormedUrlException("Invalid bootstrap connector specified: " + bootstrap, url);
+                // ex: hrpc
+                try {
+                    bootstrapAsEnum = PhoenixRuntime.HBaseBootstrap.valueOf(bootstrapString);
+                } catch (IllegalArgumentException iae) {
+                    throw getMalFormedUrlException("Invalid bootstrap connector specified: " + bootstrapString, url);
                 }
 
                 url = url.substring(firstToken.length());
@@ -327,21 +341,21 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                     }
                 }
             }
-            return new ConnectionInfo(quorum,port,rootNode, principal, keytabFile, bootstrap);
+            return new ConnectionInfo(quorum,port,rootNode, principal, keytabFile, bootstrapAsEnum);
         }
 
-        private final String bootstrap;
+        private final PhoenixRuntime.HBaseBootstrap bootstrap;
 
         public boolean isZkBootstrap() {
-            return Strings.isNullOrEmpty(this.bootstrap) || this.bootstrap.equalsIgnoreCase(PhoenixRuntime.BOOTSTRAP_ZK);
+            return this.bootstrap == null || this.bootstrap == PhoenixRuntime.HBaseBootstrap.ZK;
         }
 
         public boolean isHRPCBootstrap() {
-            return !Strings.isNullOrEmpty(this.bootstrap) && this.bootstrap.equalsIgnoreCase(PhoenixRuntime.BOOTSTRAP_HRPC);
+            return this.bootstrap != null && this.bootstrap == PhoenixRuntime.HBaseBootstrap.HRPC;
         }
 
         public ConnectionInfo normalize(ReadOnlyProps props, Properties info) throws SQLException {
-            String zookeeperQuorum = this.getZookeeperQuorum();
+            String zookeeperQuorum = this.getQuorum();
             Integer port = this.getPort();
             String rootNode = this.getRootNode();
             String keytab = this.getKeytab();
@@ -517,21 +531,21 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
 
         private final Integer port;
         private final String rootNode;
-        private final String zookeeperQuorum;
+        private final String quorum;
         private final boolean isConnectionless;
         private final String principal;
         private final String keytab;
         private final User user;
 
-        public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab) {
-            this(zookeeperQuorum, port, rootNode, principal, keytab, null);
+        public ConnectionInfo(String quorum, Integer port, String rootNode, String principal, String keytab) {
+            this(quorum, port, rootNode, principal, keytab, null);
         }
 
-        public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab, String bootstrap) {
-            this.zookeeperQuorum = zookeeperQuorum;
+        public ConnectionInfo(String quorum, Integer port, String rootNode, String principal, String keytab, PhoenixRuntime.HBaseBootstrap bootstrap) {
+            this.quorum = quorum;
             this.port = port;
             this.rootNode = rootNode;
-            this.isConnectionless = PhoenixRuntime.CONNECTIONLESS.equals(zookeeperQuorum);
+            this.isConnectionless = PhoenixRuntime.CONNECTIONLESS.equals(quorum);
             this.principal = principal;
             this.keytab = keytab;
             try {
@@ -547,8 +561,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         }
 
         
-        public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
-        	this(zookeeperQuorum, port, rootNode, null, null);
+        public ConnectionInfo(String quorum, Integer port, String rootNode) {
+        	this(quorum, port, rootNode, null, null);
         }
 
         /**
@@ -557,17 +571,21 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
          * @param other The instance to copy
          */
         public ConnectionInfo(ConnectionInfo other) {
-            this(other.zookeeperQuorum, other.port, other.rootNode, other.principal, other.keytab);
+            this(other.quorum, other.port, other.rootNode, other.principal, other.keytab);
         }
 
         public ReadOnlyProps asProps() {
             Map<String, String> connectionProps = Maps.newHashMapWithExpectedSize(3);
-            if (this.isHRPCBootstrap() && getZookeeperQuorum() != null) {
-                final String[] masters = getZookeeperQuorum().split(",");
+            if (this.isHRPCBootstrap() && getQuorum() != null) {
+                final String[] masters = getQuorum().split(",");
 
-                String masterPort = PhoenixRuntime.BOOTSTRAP_HRPC_DEFAULT_HMASTER_PORT;
+                String masterPort;
+
                 if (getPort() != null) {
                     masterPort = getPort().toString();
+                } else {
+                    masterPort = HBaseFactoryProvider.getConfigurationFactory()
+                            .getConfiguration().get(HConstants.MASTER_PORT);
                 }
 
                 final List<String> masterList = new ArrayList<>();
@@ -576,12 +594,12 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 }
 
                 connectionProps.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, MasterRegistry.class.getName());
-                connectionProps.put(QueryServices.HBASE_MASTERS, String.join(",", masterList));
+                connectionProps.put(HConstants.MASTER_ADDRS_KEY, String.join(",", masterList));
             }
 
             if (this.isZkBootstrap()) {
-                if (getZookeeperQuorum() != null) {
-                    connectionProps.put(QueryServices.ZOOKEEPER_QUORUM_ATTRIB, getZookeeperQuorum());
+                if (getQuorum() != null) {
+                    connectionProps.put(QueryServices.ZOOKEEPER_QUORUM_ATTRIB, getQuorum());
                 }
 
                 if (getPort() != null) {
@@ -605,8 +623,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             return isConnectionless;
         }
         
-        public String getZookeeperQuorum() {
-            return zookeeperQuorum;
+        public String getQuorum() {
+            return quorum;
         }
 
         public Integer getPort() {
@@ -633,7 +651,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         public int hashCode() {
             final int prime = 31;
             int result = 1;
-            result = prime * result + ((zookeeperQuorum == null) ? 0 : zookeeperQuorum.hashCode());
+            result = prime * result + ((quorum == null) ? 0 : quorum.hashCode());
             result = prime * result + ((port == null) ? 0 : port.hashCode());
             result = prime * result + ((rootNode == null) ? 0 : rootNode.hashCode());
             result = prime * result + ((principal == null) ? 0 : principal.hashCode());
@@ -652,9 +670,9 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             ConnectionInfo other = (ConnectionInfo) obj;
             // `user` is guaranteed to be non-null
             if (!other.user.equals(user)) return false;
-            if (zookeeperQuorum == null) {
-                if (other.zookeeperQuorum != null) return false;
-            } else if (!zookeeperQuorum.equals(other.zookeeperQuorum)) return false;
+            if (quorum == null) {
+                if (other.quorum != null) return false;
+            } else if (!quorum.equals(other.quorum)) return false;
             if (port == null) {
                 if (other.port != null) return false;
             } else if (!port.equals(other.port)) return false;
@@ -675,7 +693,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         
         @Override
 		public String toString() {
-			return zookeeperQuorum + (port == null ? "" : ":" + port)
+			return quorum + (port == null ? "" : ":" + port)
 					+ (rootNode == null ? "" : ":" + rootNode)
 					+ (principal == null ? "" : ":" + principal)
 					+ (keytab == null ? "" : ":" + keytab);
