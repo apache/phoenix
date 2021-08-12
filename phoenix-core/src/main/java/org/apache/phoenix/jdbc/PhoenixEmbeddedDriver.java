@@ -25,6 +25,8 @@ import java.sql.Driver;
 import java.sql.DriverPropertyInfo;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Properties;
 import java.util.StringTokenizer;
@@ -54,9 +56,6 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-
-import java.util.*;
-
 
 
 /**
