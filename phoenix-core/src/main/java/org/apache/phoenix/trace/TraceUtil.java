@@ -22,16 +22,13 @@ import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.job.JobManager;
-import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
-import org.apache.yetus.audience.InterfaceAudience;
+
 
 import java.util.concurrent.Callable;
 
-@InterfaceAudience.Private
 public final class TraceUtil {
 
-  private static final String INSTRUMENTATION_NAME = "io.opentelemetry.contrib.hbase";
+  private static final String INSTRUMENTATION_NAME = "io.opentelemetry.contrib.phoenix";
 
   private TraceUtil() {
   }
