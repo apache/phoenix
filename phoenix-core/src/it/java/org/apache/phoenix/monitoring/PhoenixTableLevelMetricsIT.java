@@ -56,6 +56,8 @@ import org.junit.experimental.categories.Category;
 import static org.apache.phoenix.exception.SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY;
 import static org.apache.phoenix.exception.SQLExceptionCode.GET_TABLE_REGIONS_FAIL;
 import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
+import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_COMMIT_TIME;
+import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_SUCCESS_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_BATCH_FAILED_COUNTER;
@@ -1150,6 +1152,50 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             conn.close();
             assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, delayRs, 0, 1, 0,
                     writeMutMetrics, conn);
+        }
+    }
+
+    @Test public void testTableLevelMetricsForAtomicUpserts() throws Throwable {
+        String tableName = generateUniqueName();
+        Connection conn = null;
+        Throwable exception = null;
+        int numAtomicUpserts = 4;
+        try {
+            conn = getConnFromTestDriver();
+            String ddl = "create table " + tableName + "(pk varchar primary key, counter1 bigint)";
+            conn.createStatement().execute(ddl);
+            String dml;
+            ResultSet rs;
+            dml = String.format("UPSERT INTO %s VALUES('a', 0)", tableName);
+            conn.createStatement().execute(dml);
+            dml = String.format("UPSERT INTO %s VALUES('a', 0) ON DUPLICATE KEY UPDATE counter1 = counter1 + 1", tableName);
+            for (int i = 0; i < numAtomicUpserts; ++i) {
+                conn.createStatement().execute(dml);
+            }
+            conn.commit();
+            String dql = String.format("SELECT counter1 FROM %s WHERE counter1 > 0", tableName);
+            rs = conn.createStatement().executeQuery(dql);
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+        }catch (Throwable t) {
+            exception = t;
+        } finally {
+            // Otherwise the test fails with an error from assertions below instead of the real exception
+            if (exception != null) {
+                throw exception;
+            }
+            assertNotNull("Failed to get a connection!", conn);
+            // Get write metrics before closing the connection since that clears those metrics
+            Map<MetricType, Long>
+                writeMutMetrics =
+                getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
+            conn.close();
+            // 1 regular upsert + numAtomicUpserts
+            // 2 mutations (regular and atomic on the same row in the same batch will be split)
+            assertMutationTableMetrics(true, tableName, 1 + numAtomicUpserts, 0, 0, true, 2, 0, 0, 2, 0,
+                writeMutMetrics, conn);
+            assertEquals(numAtomicUpserts, getMetricFromTableMetrics(tableName, ATOMIC_UPSERT_SQL_COUNTER));
+            assertTrue(getMetricFromTableMetrics(tableName, ATOMIC_UPSERT_COMMIT_TIME) > 0);
         }
     }
 
