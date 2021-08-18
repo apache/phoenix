@@ -81,6 +81,7 @@ import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.ref.WeakReference;
+import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -648,6 +649,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         connection.clearRegionCache(TableName.valueOf(tableName));
     }
 
+    public byte[] getNextRegionStartKey(HRegionLocation regionLocation, byte[] currentKey) throws IOException {
+        // in order to check the overlap/inconsistencies bad region info, we have to make sure
+        // the current endKey always increasing(compare the previous endKey)
+        if (Bytes.compareTo(regionLocation.getRegionInfo().getEndKey(), currentKey) <= 0
+                && !Bytes.equals(currentKey, HConstants.EMPTY_START_ROW)
+                && !Bytes.equals(regionLocation.getRegionInfo().getEndKey(), HConstants.EMPTY_END_ROW)) {
+            String regionNameString =
+                    new String(regionLocation.getRegionInfo().getRegionName(), StandardCharsets.UTF_8);
+            throw new IOException(String.format(
+                    "HBase region information overlap/inconsistencies on region %s", regionNameString));
+        }
+        return regionLocation.getRegionInfo().getEndKey();
+    }
+
     @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
         /*
@@ -666,8 +681,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 do {
                     HRegionLocation regionLocation = connection.getRegionLocation(
                             TableName.valueOf(tableName), currentKey, reload);
+                    currentKey = getNextRegionStartKey(regionLocation, currentKey);
                     locations.add(regionLocation);
-                    currentKey = regionLocation.getRegionInfo().getEndKey();
                 } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW));
                 return locations;
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
