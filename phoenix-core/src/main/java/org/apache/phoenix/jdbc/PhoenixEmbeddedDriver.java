@@ -33,7 +33,9 @@ import java.util.logging.Logger;
 
 import javax.annotation.concurrent.Immutable;
 
-import org.apache.phoenix.jdbc.bootstrapz.*;
+import org.apache.phoenix.jdbc.bootstrapz.HBaseRegistryBootstrap;
+import org.apache.phoenix.jdbc.bootstrapz.HBaseRegistryBootstrapFactory;
+import org.apache.phoenix.jdbc.bootstrapz.HBaseRegistryBootstrapType;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
