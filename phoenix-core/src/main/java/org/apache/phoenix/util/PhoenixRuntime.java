@@ -238,14 +238,6 @@ public class PhoenixRuntime {
             };
 
     /**
-     * Constants to help determine what to bootstrap the HBase connection with.
-     */
-    public enum HBaseBootstrap {
-        ZK,
-        HRPC
-    }
-
-    /**
      * Use this as the zookeeper quorum name to have a connection-less connection. This enables
      * Phoenix-compatible HFiles to be created in a map/reduce job by creating tables,
      * upserting data into them, and getting the uncommitted state through {@link #getUncommittedData(Connection)}

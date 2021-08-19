@@ -25,8 +25,6 @@ import java.sql.Driver;
 import java.sql.DriverPropertyInfo;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
-import java.util.List;
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.Properties;
 import java.util.StringTokenizer;
@@ -35,10 +33,10 @@ import java.util.logging.Logger;
 
 import javax.annotation.concurrent.Immutable;
 
+import org.apache.phoenix.jdbc.bootstrapz.*;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.MasterRegistry;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.util.KerberosUtil;
@@ -55,7 +53,6 @@ import org.apache.phoenix.util.SQLCloseable;
 import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 
 /**
@@ -246,11 +243,12 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                     ? url.substring(PhoenixRuntime.JDBC_PROTOCOL.length())
                     : PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url;
 
-            PhoenixRuntime.HBaseBootstrap bootstrapAsEnum = null;
+            HBaseRegistryBootstrapType bootstrapAsEnum = null;
 
             // ex: +hrpc:hostname1....
             if (url.startsWith(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_CONNECTOR_PREFIX))) {
-                final String firstToken = url.split(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR))[0];
+                int offset = url.indexOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                final String firstToken = url.substring(0, offset);
 
                 // ex: +hrpc
                 final String bootstrapString = firstToken
@@ -263,7 +261,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
 
                 // ex: hrpc
                 try {
-                    bootstrapAsEnum = PhoenixRuntime.HBaseBootstrap.valueOf(bootstrapString);
+                    bootstrapAsEnum = HBaseRegistryBootstrapType.valueOf(bootstrapString);
                 } catch (IllegalArgumentException iae) {
                     throw getMalFormedUrlException("Invalid bootstrap connector specified: " + bootstrapString, url);
                 }
@@ -343,15 +341,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             return new ConnectionInfo(quorum,port,rootNode, principal, keytabFile, bootstrapAsEnum);
         }
 
-        private final PhoenixRuntime.HBaseBootstrap bootstrap;
-
-        public boolean isZkBootstrap() {
-            return this.bootstrap == null || this.bootstrap == PhoenixRuntime.HBaseBootstrap.ZK;
-        }
-
-        public boolean isHRPCBootstrap() {
-            return this.bootstrap != null && this.bootstrap == PhoenixRuntime.HBaseBootstrap.HRPC;
-        }
+        private final HBaseRegistryBootstrap bootstrap;
 
         public ConnectionInfo normalize(ReadOnlyProps props, Properties info) throws SQLException {
             String zookeeperQuorum = this.getQuorum();
@@ -540,7 +530,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             this(quorum, port, rootNode, principal, keytab, null);
         }
 
-        public ConnectionInfo(String quorum, Integer port, String rootNode, String principal, String keytab, PhoenixRuntime.HBaseBootstrap bootstrap) {
+        public ConnectionInfo(String quorum, Integer port, String rootNode, String principal, String keytab,
+                              HBaseRegistryBootstrapType bootstrap) {
             this.quorum = quorum;
             this.port = port;
             this.rootNode = rootNode;
@@ -553,7 +544,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 throw new RuntimeException("Couldn't get the current user!!", e);
             }
 
-            this.bootstrap = bootstrap;
+            this.bootstrap = HBaseRegistryBootstrapFactory.resolve(bootstrap);
+
             if (null == this.user) {
                 throw new RuntimeException("Acquired null user which should never happen");
             }
@@ -574,41 +566,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         }
 
         public ReadOnlyProps asProps() {
-            Map<String, String> connectionProps = Maps.newHashMapWithExpectedSize(3);
-            if (this.isHRPCBootstrap() && getQuorum() != null) {
-                final String[] masters = getQuorum().split(",");
-
-                String masterPort;
-
-                if (getPort() != null) {
-                    masterPort = getPort().toString();
-                } else {
-                    masterPort = HBaseFactoryProvider.getConfigurationFactory()
-                            .getConfiguration().get(HConstants.MASTER_PORT);
-                }
-
-                final List<String> masterList = new ArrayList<>();
-                for (final String m : masters) {
-                    masterList.add(m + ":" + masterPort);
-                }
-
-                connectionProps.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, MasterRegistry.class.getName());
-                connectionProps.put(HConstants.MASTER_ADDRS_KEY, String.join(",", masterList));
-            }
-
-            if (this.isZkBootstrap()) {
-                if (getQuorum() != null) {
-                    connectionProps.put(QueryServices.ZOOKEEPER_QUORUM_ATTRIB, getQuorum());
-                }
-
-                if (getPort() != null) {
-                    connectionProps.put(QueryServices.ZOOKEEPER_PORT_ATTRIB, getPort().toString());
-                }
-
-                if (getRootNode() != null) {
-                    connectionProps.put(QueryServices.ZOOKEEPER_ROOT_NODE_ATTRIB, getRootNode());
-                }
-            }
+            Map<String, String> connectionProps =
+                    this.bootstrap.generateConnectionProps(getQuorum(), getPort(), getRootNode());
 
             if (getPrincipal() != null && getKeytab() != null) {
                 connectionProps.put(QueryServices.HBASE_CLIENT_PRINCIPAL, getPrincipal());

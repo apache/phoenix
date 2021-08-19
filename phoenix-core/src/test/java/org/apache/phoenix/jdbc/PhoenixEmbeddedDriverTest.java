@@ -161,16 +161,11 @@ public class PhoenixEmbeddedDriverTest {
         ConnectionInfo c1 = ConnectionInfo.create("jdbc:phoenix+hrpc:hostname1,hostname2,hostname3:90210:user/principal:/user.keytab;test=false");
         ReadOnlyProps rop1 = c1.asProps();
         assertEquals("hostname1:90210,hostname2:90210,hostname3:90210", rop1.get("hbase.masters"));
-        assertTrue(c1.isHRPCBootstrap());
-        assertFalse(c1.isZkBootstrap());
 
 
         ConnectionInfo c2 = ConnectionInfo.create("jdbc:phoenix+hrpc:hostname1,hostname2,hostname3:user/principal:/user.keytab;test=false");
         ReadOnlyProps rop2 = c2.asProps();
         assertEquals("hostname1:16000,hostname2:16000,hostname3:16000", rop2.get("hbase.masters"));
-        assertTrue(c2.isHRPCBootstrap());
-        assertFalse(c2.isZkBootstrap());
-
 
         // ZK
         String[] jdbcUrls = new String[]{
@@ -183,8 +178,6 @@ public class PhoenixEmbeddedDriverTest {
             ReadOnlyProps readOnlyProps = connInfo.asProps();
             assertEquals("hostname1,hostname2,hostname3", readOnlyProps.get("hbase.zookeeper.quorum"));
             assertEquals("2181", readOnlyProps.get("hbase.zookeeper.property.clientPort"));
-            assertFalse(connInfo.isHRPCBootstrap());
-            assertTrue(connInfo.isZkBootstrap());
         }
 
         for (String invalidConnUrl : new String[]{
