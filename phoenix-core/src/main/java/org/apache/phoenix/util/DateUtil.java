@@ -40,8 +40,10 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
+import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.joda.time.chrono.ISOChronology;
+import org.joda.time.chrono.GJChronology;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.DateTimeFormatterBuilder;
 import org.joda.time.format.ISODateTimeFormat;
@@ -70,13 +72,13 @@ public class DateUtil {
     public static final String DEFAULT_TIMESTAMP_FORMAT = DEFAULT_MS_DATE_FORMAT;
     public static final Format DEFAULT_TIMESTAMP_FORMATTER = DEFAULT_MS_DATE_FORMATTER;
 
-    private static final DateTimeFormatter ISO_DATE_TIME_FORMATTER = new DateTimeFormatterBuilder()
+    private static final DateTimeFormatter JULIAN_DATE_TIME_FORMATTER = new DateTimeFormatterBuilder()
         .append(ISODateTimeFormat.dateParser())
         .appendOptional(new DateTimeFormatterBuilder()
                 .appendLiteral(' ').toParser())
         .appendOptional(new DateTimeFormatterBuilder()
                 .append(ISODateTimeFormat.timeParser()).toParser())
-        .toFormatter().withChronology(ISOChronology.getInstanceUTC());
+        .toFormatter().withChronology(GJChronology.getInstanceUTC());
     
     private DateUtil() {
     }
@@ -154,7 +156,7 @@ public class DateUtil {
             pattern = defaultPattern;
         }
         if(defaultPattern.equals(pattern)) {
-            return ISODateFormatParserFactory.getParser(timeZone);
+            return JulianDateFormatParserFactory.getParser(timeZone);
         } else {
             return new SimpleDateFormatParser(pattern, timeZone);
         }
@@ -187,7 +189,7 @@ public class DateUtil {
     }
 
     private static long parseDateTime(String dateTimeValue) {
-        return ISODateFormatParser.getInstance().parseDateTime(dateTimeValue);
+        return JulianDateFormatParser.getInstance().parseDateTime(dateTimeValue);
     }
 
     public static Date parseDate(String dateValue) {
@@ -287,17 +289,17 @@ public class DateUtil {
         }
     }
 
-    private static class ISODateFormatParserFactory {
-        private ISODateFormatParserFactory() {}
-        
+    private static class JulianDateFormatParserFactory {
+        private JulianDateFormatParserFactory() {}
+
         public static DateTimeParser getParser(final TimeZone timeZone) {
             // If timeZone matches default, get singleton DateTimeParser
             if (timeZone.equals(DEFAULT_TIME_ZONE)) {
-                return ISODateFormatParser.getInstance();
+                return JulianDateFormatParser.getInstance();
             }
             // Otherwise, create new DateTimeParser
             return new DateTimeParser() {
-                private final DateTimeFormatter formatter = ISO_DATE_TIME_FORMATTER
+                private final DateTimeFormatter formatter = JULIAN_DATE_TIME_FORMATTER
                         .withZone(DateTimeZone.forTimeZone(timeZone));
 
                 @Override
@@ -316,19 +318,20 @@ public class DateUtil {
             };
         }
     }
+
     /**
      * This class is our default DateTime string parser
      */
-    private static class ISODateFormatParser implements DateTimeParser {
-        private static final ISODateFormatParser INSTANCE = new ISODateFormatParser();
+    private static class JulianDateFormatParser implements DateTimeParser {
+        private static final JulianDateFormatParser INSTANCE = new JulianDateFormatParser();
 
-        public static ISODateFormatParser getInstance() {
+        public static JulianDateFormatParser getInstance() {
             return INSTANCE;
         }
 
-        private final DateTimeFormatter formatter = ISO_DATE_TIME_FORMATTER.withZone(DateTimeZone.UTC);
+        private final DateTimeFormatter formatter = JULIAN_DATE_TIME_FORMATTER.withZone(DateTimeZone.UTC);
 
-        private ISODateFormatParser() {}
+        private JulianDateFormatParser() {}
 
         @Override
         public long parseDateTime(String dateTimeString) throws IllegalDataException {
