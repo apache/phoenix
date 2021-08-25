@@ -28,6 +28,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.joda.time.DateTime;
+import org.joda.time.chrono.GJChronology;
 
 /**
  * Implementation of DayOfYearFunction(Date/Timestamp)
@@ -62,7 +63,7 @@ public class DayOfYearFunction extends DateScalarFunction {
             return true;
         }
         long dateTime = inputCodec.decodeLong(ptr, arg.getSortOrder());
-        DateTime jodaDT = new DateTime(dateTime);
+        DateTime jodaDT = new DateTime(dateTime, GJChronology.getInstanceUTC());
         int day = jodaDT.getDayOfYear();
         PDataType returnDataType = getDataType();
         byte[] byteValue = new byte[returnDataType.getByteSize()];
