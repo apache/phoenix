@@ -29,6 +29,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.joda.time.DateTime;
+import org.joda.time.chrono.GJChronology;
 
 /**
  * 
@@ -57,7 +58,7 @@ public class YearFunction extends DateScalarFunction {
             return true; //means null
         }
         long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
-        DateTime dt = new DateTime(dateTime);
+        DateTime dt = new DateTime(dateTime, GJChronology.getInstanceUTC());
         int year = dt.getYear();
         PDataType returnType = getDataType();
         byte[] byteValue = new byte[returnType.getByteSize()];
