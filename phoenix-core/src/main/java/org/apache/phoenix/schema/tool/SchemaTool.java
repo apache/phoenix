@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.schema.tool;
 
-import org.apache.hadoop.yarn.webapp.hamlet.HamletSpec;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
