@@ -332,6 +332,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public MetaDataMutationResult addColumn(List<Mutation> tableMetaData,
                                             PTable table,
                                             PTable parentTable,
+                                            PTable transformingNewTable,
                                             Map<String, List<Pair<String, Object>>> properties,
                                             Set<String> colFamiliesForPColumnsToBeAdded,
                                             List<PColumn> columnsToBeAdded) throws SQLException {

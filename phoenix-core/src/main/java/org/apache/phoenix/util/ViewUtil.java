@@ -19,6 +19,7 @@ import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYS
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
@@ -285,7 +286,33 @@ public class ViewUtil {
             return new TableViewFinderResult(tableInfoList);
         } 
     }
-    
+
+    public static TableViewFinderResult findChildViews(PhoenixConnection connection, String tenantId, String schema,
+                                                       String tableName) throws IOException, SQLException {
+        // Find child views
+        TableViewFinderResult childViewsResult = new TableViewFinderResult();
+        ReadOnlyProps readOnlyProps = connection.getQueryServices().getProps();
+        for (int i=0; i<2; i++) {
+            try (Table sysCatOrSysChildLinkTable = connection.getQueryServices()
+                    .getTable(SchemaUtil.getPhysicalName(
+                            i==0 ? SYSTEM_CHILD_LINK_NAME_BYTES : SYSTEM_CATALOG_TABLE_BYTES,
+                            readOnlyProps).getName())) {
+                byte[] tenantIdBytes = tenantId != null ? tenantId.getBytes() : null;
+                ViewUtil.findAllRelatives(sysCatOrSysChildLinkTable, tenantIdBytes,
+                        schema == null?null:schema.getBytes(),
+                        tableName.getBytes(), PTable.LinkType.CHILD_TABLE, childViewsResult);
+                break;
+            } catch (TableNotFoundException ex) {
+                // try again with SYSTEM.CATALOG in case the schema is old
+                if (i == 1) {
+                    // This means even SYSTEM.CATALOG was not found, so this is bad, rethrow
+                    throw ex;
+                }
+            }
+        }
+        return childViewsResult;
+    }
+
     /**
      * Check metadata to find if a given table/view has any immediate child views. Note that this
      * is not resilient to orphan {@code parent->child } links.

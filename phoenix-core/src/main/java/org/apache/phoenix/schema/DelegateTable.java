@@ -143,6 +143,9 @@ public class DelegateTable implements PTable {
     public List<PTable> getIndexes() { return delegate.getIndexes(); }
 
     @Override
+    public PTable getTransformingNewTable() { return delegate.getTransformingNewTable(); }
+
+    @Override
     public PIndexState getIndexState() {
         return delegate.getIndexState();
     }

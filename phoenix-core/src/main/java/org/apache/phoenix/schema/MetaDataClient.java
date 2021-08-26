@@ -116,6 +116,7 @@ import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_P
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
+import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.schema.PTableType.VIEW;
@@ -348,7 +349,7 @@ public class MetaDataClient {
     private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE
             + "\"( " + TABLE_SCHEM + "," + TABLE_NAME + ") VALUES (?,?)";
 
-    private static final String CREATE_LINK =
+    public static final String CREATE_LINK =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                     TENANT_ID + "," +
                     TABLE_SCHEM + "," +
@@ -3152,6 +3153,11 @@ public class MetaDataClient {
         QualifierEncodingScheme encodingScheme = null;
         Byte encodingSchemeSerializedByte = (Byte) TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
         if (encodingSchemeSerializedByte == null) {
+            if (tableProps.containsKey(ENCODING_SCHEME)) {
+                encodingSchemeSerializedByte = QualifierEncodingScheme.valueOf(((String) tableProps.get(ENCODING_SCHEME))).getSerializedMetadataValue();
+            }
+        }
+        if (encodingSchemeSerializedByte == null) {
             // Ignore default if transactional and column encoding is not supported (as with OMID)
             if (transactionProvider == null || !transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.COLUMN_ENCODING) ) {
                 encodingSchemeSerializedByte = (byte)connection.getQueryServices().getProps().getInt(QueryServices.DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB,
@@ -4052,9 +4058,10 @@ public class MetaDataClient {
                     connection.rollback();
                 }
 
-               if (isTransformNeeded) {
+                PTable transformingNewTable = null;
+                if (isTransformNeeded) {
                    try {
-                       Transform.addTransform(connection, tenantIdToUse, table, metaProperties, seqNum, PTable.TransformType.METADATA_TRANSFORM);
+                       transformingNewTable = Transform.addTransform(connection, tenantIdToUse, table, metaProperties, seqNum, PTable.TransformType.METADATA_TRANSFORM);
                     } catch (SQLException ex) {
                        connection.rollback();
                        throw ex;
@@ -4137,7 +4144,7 @@ public class MetaDataClient {
                     acquiredColumnMutexSet.add(pColumn.toString());
                 }
                 MetaDataMutationResult result = connection.getQueryServices().addColumn(tableMetaData, table,
-                        getParentTable(table), properties, colFamiliesForPColumnsToBeAdded, columns);
+                        getParentTable(table), transformingNewTable, properties, colFamiliesForPColumnsToBeAdded, columns);
 
                 try {
                     MutationCode code = processMutationResult(schemaName, tableName, result);
@@ -4205,6 +4212,10 @@ public class MetaDataClient {
                                     Collections.<PColumn>emptyList(), ts);
                             connection.getQueryServices().updateData(plan);
                         }
+                    }
+                    if (transformingNewTable != null) {
+                        connection.removeTable(tenantId, fullTableName, null, resolvedTimeStamp);
+                        connection.getQueryServices().clearCache();
                     }
                     if (emptyCF != null) {
                         Long scn = connection.getSCN();
@@ -4556,7 +4567,7 @@ public class MetaDataClient {
                                     Collections.<Mutation>singletonList(new Put(SchemaUtil.getTableKey
                                             (tenantIdBytes, tableContainingColumnToDrop.getSchemaName().getBytes(),
                                                     tableContainingColumnToDrop.getTableName().getBytes()))),
-                                                    tableContainingColumnToDrop, null, family, Sets.newHashSet(Bytes.toString(emptyCF)), Collections.<PColumn>emptyList());
+                                                    tableContainingColumnToDrop, null, null,family, Sets.newHashSet(Bytes.toString(emptyCF)), Collections.<PColumn>emptyList());
 
                         }
                     }

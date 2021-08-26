@@ -20,6 +20,7 @@ package org.apache.phoenix.schema.transform;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.ByteStringer;
@@ -440,6 +441,25 @@ public class TransformMaintainer extends IndexMaintainer {
         return buildUpdateMutation(kvBuilder, valueGetter, oldRowKeyPtr, ts, regionStartKey, regionEndKey,
                 newRowKey, this.getEmptyKeyValueFamily(), coveredColumnsMap,
                 newTableEmptyKeyValueRef, newTableWALDisabled, oldTableImmutableStorageScheme, newTableImmutableStorageScheme, newTableEncodingScheme);
+    }
+
+    public Delete buildRowDeleteMutation(byte[] rowKey, DeleteType deleteType, long ts) {
+        byte[] emptyCF = emptyKeyValueCFPtr.copyBytesIfNecessary();
+        Delete delete = new Delete(rowKey);
+
+        for (ColumnReference ref : newTableColumns) {
+            if (deleteType == DeleteType.SINGLE_VERSION) {
+                delete.addFamilyVersion(ref.getFamily(), ts);
+            } else {
+                delete.addFamily(ref.getFamily(), ts);
+            }
+        }
+        if (deleteType == DeleteType.SINGLE_VERSION) {
+            delete.addFamilyVersion(emptyCF, ts);
+        } else {
+            delete.addFamily(emptyCF, ts);
+        }
+        return delete;
     }
 
     public ImmutableBytesPtr getEmptyKeyValueFamily() {

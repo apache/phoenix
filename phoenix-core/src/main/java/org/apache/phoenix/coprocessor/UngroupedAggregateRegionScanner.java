@@ -211,6 +211,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         }
         indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes, useProto);
         indexMutations = localIndexBytes == null ? new UngroupedAggregateRegionObserver.MutationList() : new UngroupedAggregateRegionObserver.MutationList(1024);
+        byte[] transforming = scan.getAttribute(BaseScannerRegionObserver.DO_TRANSFORMING);
 
         replayMutations = scan.getAttribute(REPLAY_WRITES);
         indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);

@@ -136,10 +136,11 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     public MetaDataMutationResult addColumn(List<Mutation> tableMetaData,
                                             PTable table,
                                             PTable parentTable,
+                                            PTable transformingNewTable,
                                             Map<String, List<Pair<String, Object>>> properties,
                                             Set<String> colFamiliesForPColumnsToBeAdded,
                                             List<PColumn> columns) throws SQLException {
-        return getDelegate().addColumn(tableMetaData, table, parentTable,
+        return getDelegate().addColumn(tableMetaData, table, parentTable, transformingNewTable,
                 properties, colFamiliesForPColumnsToBeAdded, columns);
     }
 

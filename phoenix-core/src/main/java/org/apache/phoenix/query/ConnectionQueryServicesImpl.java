@@ -2324,6 +2324,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public MetaDataMutationResult addColumn(final List<Mutation> tableMetaData,
                                             PTable table,
                                             final PTable parentTable,
+                                            final PTable transformingNewTable,
                                             Map<String, List<Pair<String, Object>>> stmtProperties,
                                             Set<String> colFamiliesForPColumnsToBeAdded,
                                             List<PColumn> columns) throws SQLException {
@@ -2410,6 +2411,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     builder.setClientVersion(VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
                     if (parentTable!=null)
                         builder.setParentTable(PTableImpl.toProto(parentTable));
+                    if (transformingNewTable!=null) {
+                        builder.setTransformingNewTable(PTableImpl.toProto(transformingNewTable));
+                    }
                     builder.setAddingColumns(addingColumns);
                     instance.addColumn(controller, builder.build(), rpcCallback);
                     if (controller.getFailedOn() != null) {
@@ -4449,7 +4453,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         tableMetadata.addAll(metaConnection.getMutationState().toMutations(metaConnection.getSCN()).next().getSecond());
         metaConnection.rollback();
-        metaConnection.getQueryServices().addColumn(tableMetadata, sysCatalogPTable, null, Collections.<String,List<Pair<String,Object>>>emptyMap(), Collections.<String>emptySet(), Lists.newArrayList(column));
+        metaConnection.getQueryServices().addColumn(tableMetadata, sysCatalogPTable, null,null, Collections.<String,List<Pair<String,Object>>>emptyMap(), Collections.<String>emptySet(), Lists.newArrayList(column));
         metaConnection.removeTable(null, SYSTEM_CATALOG_NAME, null, timestamp);
         ConnectionQueryServicesImpl.this.removeTable(null,
                 SYSTEM_CATALOG_NAME, null,

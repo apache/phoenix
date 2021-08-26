@@ -139,7 +139,7 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
             // if not verify exists is true one call to add column table with empty mutation list (which does not make a rpc) 
             // else verify no add column calls
             verify(connectionQueryServices, notExists ? times(1) : never() )
-                    .addColumn(eq(Collections.<Mutation>emptyList()), any(PTable.class),
+                    .addColumn(eq(Collections.<Mutation>emptyList()), any(PTable.class), any(PTable.class),
                             any(PTable.class), anyMap(), anySetOf(String.class),
                             anyListOf(PColumn.class));
 
