@@ -91,6 +91,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
+import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
@@ -1037,6 +1038,15 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
         return false;
     }
 
+    private static boolean isTransforming(PhoenixIndexMetaData indexMetaData) {
+        for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
+            if (indexMaintainer instanceof TransformMaintainer) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void waitForPreviousConcurrentBatch(TableName table, BatchMutateContext context)
             throws Throwable {
         boolean done;
@@ -1105,7 +1115,7 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
         boolean hasAtomic = hasAtomicUpdate(miniBatchOp);
         long onDupCheckTime = 0;
 
-        if (hasAtomic || hasGlobalIndex(indexMetaData)) {
+        if (hasAtomic || hasGlobalIndex(indexMetaData) || isTransforming(indexMetaData)) {
             // Retrieve the current row states from the data table while holding the lock.
             // This is needed for both atomic mutations and global indexes
             long start = EnvironmentEdgeManager.currentTimeMillis();
@@ -1136,7 +1146,7 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
         setTimestamps(miniBatchOp, builder, now);
 
         TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
-        if (hasGlobalIndex(indexMetaData)) {
+        if (hasGlobalIndex(indexMetaData) || isTransforming(indexMetaData)) {
             // Prepare next data rows states for pending mutations (for global indexes)
             prepareDataRowStates(c, miniBatchOp, context, now);
             // Add the table rows in the mini batch to the collection of pending rows. This will be used to detect

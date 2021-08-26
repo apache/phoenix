@@ -39,6 +39,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
@@ -99,6 +100,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.schema.tuple.ValueGetterTuple;
 import org.apache.phoenix.schema.types.PDataType;
@@ -224,11 +226,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      */
     public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
             List<PTable> indexes, PhoenixConnection connection) {
-        if (indexes.isEmpty()) {
+        if (indexes.isEmpty() && dataTable.getTransformingNewTable() == null) {
             ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
             return;
         }
         int nIndexes = indexes.size();
+        if (dataTable.getTransformingNewTable() != null) {
+            nIndexes++;
+        }
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         DataOutputStream output = new DataOutputStream(stream);
         try {
@@ -241,6 +246,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     byte[] protoBytes = proto.toByteArray();
                     WritableUtils.writeVInt(output, protoBytes.length);
                     output.write(protoBytes);
+            }
+            if (dataTable.getTransformingNewTable() != null) {
+                ServerCachingProtos.TransformMaintainer proto = TransformMaintainer.toProto(
+                        dataTable.getTransformingNewTable().getTransformMaintainer(dataTable, connection));
+                byte[] protoBytes = proto.toByteArray();
+                WritableUtils.writeVInt(output, protoBytes.length);
+                output.write(protoBytes);
             }
         } catch (IOException e) {
             throw new RuntimeException(e); // Impossible
@@ -316,8 +328,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                       int protoSize = WritableUtils.readVInt(input);
                       byte[] b = new byte[protoSize];
                       input.readFully(b);
-                      org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer proto = ServerCachingProtos.IndexMaintainer.parseFrom(b);
-                      maintainers.add(IndexMaintainer.fromProto(proto, rowKeySchema, isDataTableSalted));
+                      try {
+                          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer proto = ServerCachingProtos.IndexMaintainer.parseFrom(b);
+                          maintainers.add(IndexMaintainer.fromProto(proto, rowKeySchema, isDataTableSalted));
+                      } catch (InvalidProtocolBufferException e) {
+                          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.TransformMaintainer proto = ServerCachingProtos.TransformMaintainer.parseFrom(b);
+                          maintainers.add(TransformMaintainer.fromProto(proto, rowKeySchema, isDataTableSalted));
+                      }
                     } else {
                         IndexMaintainer maintainer = new IndexMaintainer(rowKeySchema, isDataTableSalted);
                         maintainer.readFields(input);

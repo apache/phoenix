@@ -163,7 +163,11 @@ public interface PTable extends PMetaDataEntity {
         /**
          * Link from an index on a view to its parent table
          */
-        VIEW_INDEX_PARENT_TABLE((byte)6);
+        VIEW_INDEX_PARENT_TABLE((byte)6),
+        /**
+         * Link from the old table to the new transforming table
+         */
+        TRANSFORMING_NEW_TABLE((byte)7);
 
         private final byte[] byteValue;
         private final byte serializedValue;
@@ -768,6 +772,12 @@ public interface PTable extends PMetaDataEntity {
      * @return the list of indexes.
      */
     List<PTable> getIndexes();
+
+    /**
+     * Return the new version of the table if it is going through transform.
+     * @return the new table.
+     */
+    PTable getTransformingNewTable();
 
     /**
      * For a table of index type, return the state of the table.
