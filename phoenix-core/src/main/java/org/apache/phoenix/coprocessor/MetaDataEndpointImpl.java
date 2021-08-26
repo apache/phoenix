@@ -82,8 +82,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.VIEW_MODIFIED_PROPERTY_TAG_TYPE;
+import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.INDEX;
-import static org.apache.phoenix.schema.PTableType.VIEW;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
@@ -93,7 +93,6 @@ import static org.apache.phoenix.util.ViewUtil.getSystemTableForChildLinks;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.PrivilegedExceptionAction;
-import java.sql.Connection;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -236,6 +235,8 @@ import org.apache.phoenix.schema.metrics.MetricsMetadataSource;
 import org.apache.phoenix.schema.metrics.MetricsMetadataSourceFactory;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.schema.task.Task;
+import org.apache.phoenix.schema.transform.SystemTransformRecord;
+import org.apache.phoenix.schema.transform.Transform;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
@@ -1430,6 +1431,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         builder.setTimeStamp(timeStamp);
 
 
+        PTable transformingNewTable = null;
         boolean isRegularView = (tableType == PTableType.VIEW && viewType != ViewType.MAPPED);
         for (List<Cell> columnCellList : allColumnCellList) {
 
@@ -1502,6 +1504,17 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 } else if (linkType == LinkType.EXCLUDED_COLUMN) {
                     // add the excludedColumn
                     addExcludedColumnToTable(columns, colName, famName, colKv.getTimestamp());
+                } else if (linkType == LinkType.TRANSFORMING_NEW_TABLE) {
+                    transformingNewTable = doGetTable((tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getBytes())
+                            , SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(), SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(), clientTimeStamp, null, clientVersion);
+                    if (transformingNewTable == null) {
+                        // It could be global
+                        transformingNewTable = doGetTable(ByteUtil.EMPTY_BYTE_ARRAY
+                                , SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(), SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(), clientTimeStamp, null, clientVersion);
+                        if (transformingNewTable == null) {
+                            ServerUtil.throwIOException("Transforming new table not found", new TableNotFoundException(schemaName.getString(), famName.getString()));
+                        }
+                    }
                 }
             } else {
                 long columnTimestamp =
@@ -1525,6 +1538,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         if (!setPhysicalName && oldTable != null) {
             builder.setPhysicalTableName(oldTable.getPhysicalName());
         }
+        builder.setTransformingNewTable(transformingNewTable);
 
         builder.setExcludedColumns(ImmutableList.<PColumn>of());
         builder.setBaseTableLogicalName(parentLogicalName != null ?
@@ -3068,7 +3082,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private MetaDataMutationResult mutateColumn(
             final List<Mutation> tableMetadata,
             final ColumnMutator mutator, final int clientVersion,
-            final PTable parentTable, boolean isAddingOrDroppingColumns) throws IOException {
+            final PTable parentTable, final PTable transformingNewTable, boolean isAddingOrDroppingColumns) throws IOException {
         byte[][] rowKeyMetaData = new byte[5][];
         MetaDataUtil.getTenantIdAndSchemaAndTableName(tableMetadata, rowKeyMetaData);
         byte[] tenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
@@ -3148,6 +3162,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table,
                                 parentTable);
                     }
+                }
+                if (transformingNewTable !=null) {
+                    table = PTableImpl.builderWithColumns(table, getColumnsToClone(table))
+                            .setTransformingNewTable(transformingNewTable).build();
                 }
 
                 if (table.getTimeStamp() >= clientTimeStamp) {
@@ -3442,9 +3460,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         try {
             List<Mutation> tableMetaData = ProtobufUtil.getMutations(request);
             PTable parentTable = request.hasParentTable() ? PTableImpl.createFromProto(request.getParentTable()) : null;
+            PTable transformingNewTable = request.hasTransformingNewTable() ? PTableImpl.createFromProto(request.getTransformingNewTable()) : null;
             boolean addingColumns = request.getAddingColumns();
             MetaDataMutationResult result = mutateColumn(tableMetaData, new AddColumnMutator(),
-                    request.getClientVersion(), parentTable, addingColumns);
+                    request.getClientVersion(), parentTable, transformingNewTable, addingColumns);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
             }
@@ -3582,7 +3601,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             tableMetaData = ProtobufUtil.getMutations(request);
             PTable parentTable = request.hasParentTable() ? PTableImpl.createFromProto(request.getParentTable()) : null;
             MetaDataMutationResult result = mutateColumn(tableMetaData, new DropColumnMutator(env.getConfiguration()),
-                    request.getClientVersion(), parentTable, true);
+                    request.getClientVersion(), parentTable,null, true);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
             }

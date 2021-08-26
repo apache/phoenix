@@ -435,12 +435,10 @@ public class TransformTool extends Configured implements Tool {
                 new PostIndexDDLCompiler(pConnection, new TableRef(pOldTable), true);
         ddlCompiler.compile(pNewTable);
         final List<String> newColumns = ddlCompiler.getDataColumnNames();
-        //final String selectQuery = ddlCompiler.getSelectQuery();
         final String upsertQuery =
                 QueryUtil.constructUpsertStatement(newTableWithSchema, newColumns, HintNode.Hint.NO_INDEX);
 
         configuration.set(PhoenixConfigurationUtil.UPSERT_STATEMENT, upsertQuery);
-        //PhoenixConfigurationUtil.setPhysicalTableName(configuration, pNewTable.getPhysicalName().getString());
 
         PhoenixConfigurationUtil.setUpsertColumnNames(configuration,
                 ddlCompiler.getIndexColumnNames().toArray(new String[ddlCompiler.getIndexColumnNames().size()]));

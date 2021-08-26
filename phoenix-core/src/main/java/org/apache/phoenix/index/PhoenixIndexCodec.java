@@ -34,6 +34,8 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DO_TRANSFORMING;
+
 /**
  * Phoenix-based {@link IndexCodec}. Manages all the logic of how to cleanup an index (
  * {@link #getIndexDeletes(TableState, IndexMetaData, byte[], byte[])}) as well as what the new index state should be (
@@ -66,6 +68,13 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
         if (attributes == null) { return false; }
         byte[] uuid = attributes.get(INDEX_UUID);
         if (uuid == null) { return false; }
+        return true;
+    }
+
+    boolean isTransforming(Map<String, byte[]> attributes) {
+        if (attributes == null) { return false; }
+        byte[] transforming = attributes.get(DO_TRANSFORMING);
+        if (transforming == null) { return false; }
         return true;
     }
 
@@ -122,6 +131,6 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
 
     @Override
     public boolean isEnabled(Mutation m) {
-        return hasIndexMaintainers(m.getAttributesMap());
+        return hasIndexMaintainers(m.getAttributesMap()) || isTransforming(m.getAttributesMap());
     }
 }

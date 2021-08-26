@@ -18,12 +18,15 @@
 package org.apache.phoenix.schema.transform;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.TableInfo;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
 import org.apache.phoenix.mapreduce.transform.TransformTool;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
@@ -34,12 +37,16 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.tool.SchemaExtractionProcessor;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.JacksonUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TableViewFinderResult;
+import org.apache.phoenix.util.ViewUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,10 +56,13 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.util.Collections;
 
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID;
 import static org.apache.phoenix.schema.ColumnMetaDataOps.addColumnMutation;
+import static org.apache.phoenix.schema.MetaDataClient.CREATE_LINK;
 import static org.apache.phoenix.schema.PTableType.INDEX;
+import static org.apache.phoenix.schema.PTableType.VIEW;
 
 public class Transform {
     private static final Logger LOGGER = LoggerFactory.getLogger(Transform.class);
@@ -63,7 +73,7 @@ public class Transform {
         return newName;
     }
 
-    public static void addTransform(PhoenixConnection connection, String tenantId, PTable table, MetaDataClient.MetaProperties changingProperties,
+    public static PTable addTransform(PhoenixConnection connection, String tenantId, PTable table, MetaDataClient.MetaProperties changingProperties,
                                     long sequenceNum, PTable.TransformType transformType) throws SQLException {
         try {
             String newMetadata = JacksonUtil.getObjectWriter().writeValueAsString(changingProperties);
@@ -87,7 +97,7 @@ public class Transform {
                 newPhysicalTableName = generateNewTableName(schema, logicalTableName, sequenceNum);
             }
             transformBuilder.setNewPhysicalTableName(newPhysicalTableName);
-            Transform.addTransform(table, changingProperties, transformBuilder.build(), connection);
+            return Transform.addTransform(table, changingProperties, transformBuilder.build(), sequenceNum, connection);
         } catch (JsonProcessingException ex) {
             LOGGER.error("addTransform failed", ex);
             throw new SQLException("Adding transform failed with JsonProcessingException");
@@ -101,8 +111,9 @@ public class Transform {
         }
     }
 
-    protected static void addTransform(
-            PTable table, MetaDataClient.MetaProperties changedProps, SystemTransformRecord systemTransformParams, PhoenixConnection connection) throws Exception {
+    protected static PTable addTransform(
+            PTable table, MetaDataClient.MetaProperties changedProps, SystemTransformRecord systemTransformParams,
+            long sequenceNum, PhoenixConnection connection) throws Exception {
         PName newTableName = PNameFactory.newName(systemTransformParams.getNewPhysicalTableName());
         PName newTableNameWithoutSchema = PNameFactory.newName(SchemaUtil.getTableNameFromFullName(systemTransformParams.getNewPhysicalTableName()));
         PTable newTable = new PTableImpl.Builder()
@@ -122,6 +133,7 @@ public class Transform {
                 .setImmutableRows(table.isImmutableRows())
                 .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled())
                 .setIndexType(table.getIndexType())
+                .setIndexes(Collections.<PTable>emptyList())
                 .setName(newTableName)
                 .setMultiTenant(table.isMultiTenant())
                 .setParentName(table.getParentName())
@@ -150,16 +162,77 @@ public class Transform {
                         (changedProps.getColumnEncodedBytesProp() != null? changedProps.getColumnEncodedBytesProp() : table.getEncodingScheme()))
                 .build();
         SchemaExtractionProcessor schemaExtractionProcessor = new SchemaExtractionProcessor(systemTransformParams.getTenantId(),
-                connection.getQueryServices().getConfiguration(), newTable,  true);
+                connection.getQueryServices().getConfiguration(), newTable, true);
         String ddl = schemaExtractionProcessor.process();
         LOGGER.info("Creating transforming table via " + ddl);
         connection.createStatement().execute(ddl);
         upsertTransform(systemTransformParams, connection);
+
+        // Add row linking from old table row to new table row
+        addTransformTableLink(connection, systemTransformParams.getTenantId(), systemTransformParams.getSchemaName(),
+                systemTransformParams.getLogicalTableName(), newTableName, sequenceNum);
+
+        // Also add the transforming new table link to views
+        TableViewFinderResult childViewsResult = ViewUtil.findChildViews(connection, systemTransformParams.getTenantId()
+                , systemTransformParams.getSchemaName(), systemTransformParams.getLogicalTableName());
+        for (TableInfo view : childViewsResult.getLinks()) {
+            addTransformTableLink(connection, view.getTenantId()==null? null: Bytes.toString(view.getTenantId()),
+                    (view.getSchemaName()==null? null: Bytes.toString(view.getSchemaName())), Bytes.toString(view.getTableName())
+                    , newTableName, sequenceNum);
+        }
+
+        return newTable;
+    }
+
+    private static void addTransformTableLink(Connection connection, String tenantId, String schemaName, String tableName,
+                                              PName newTableName, long sequenceNum) throws SQLException {
+        PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK);
+        linkStatement.setString(1, tenantId);
+        linkStatement.setString(2, schemaName);
+        linkStatement.setString(3,tableName);
+        linkStatement.setString(4, newTableName.getString());
+        linkStatement.setByte(5, PTable.LinkType.TRANSFORMING_NEW_TABLE.getSerializedValue());
+        linkStatement.setLong(6, sequenceNum);
+        linkStatement.setString(7, PTableType.TABLE.getSerializedValue());
+        linkStatement.execute();
+    }
+
+    public static SystemTransformRecord getTransformRecord(Configuration conf, PTableType tableType, PName schemaName,
+                                                           PName tableName, PName dataTableName, PName tenantId,
+                                                           PName parentLogicalName) throws SQLException {
+        if (tableType == PTableType.TABLE) {
+            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(conf).unwrap(PhoenixConnection.class)) {
+                return Transform.getTransformRecord(schemaName, tableName, null, tenantId, connection);
+            }
+        } else if (tableType == INDEX) {
+            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(conf).unwrap(PhoenixConnection.class)) {
+                return Transform.getTransformRecord(schemaName, tableName, dataTableName, tenantId, connection);
+            }
+        } else if (tableType == VIEW) {
+            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(conf).unwrap(PhoenixConnection.class)) {
+                return Transform.getTransformRecord(SchemaUtil.getSchemaNameFromFullName(parentLogicalName.getString()),
+                        SchemaUtil.getTableNameFromFullName(parentLogicalName.getString()), null, tenantId==null? null:tenantId.getString(), connection);
+            }
+        }
+        return null;
+    }
+
+    public static SystemTransformRecord getTransformRecord(
+            PName schema, PName logicalTableName, PName logicalParentName, PName tenantId, PhoenixConnection connection) throws SQLException {
+        return  getTransformRecordFromDB((schema==null?null:schema.getString())
+                        , (logicalTableName==null?null:logicalTableName.getString())
+                        , (logicalParentName==null?null:logicalParentName.getString())
+                        , (tenantId==null?null:tenantId.getString()), connection);
     }
 
     public static SystemTransformRecord getTransformRecord(
             String schema, String logicalTableName, String logicalParentName, String tenantId, PhoenixConnection connection) throws SQLException {
-        try (ResultSet resultSet = connection.prepareStatement("SELECT " +
+        return getTransformRecordFromDB(schema, logicalTableName, logicalParentName, tenantId, connection);
+    }
+
+    public static SystemTransformRecord getTransformRecordFromDB(
+            String schema, String logicalTableName, String logicalParentName, String tenantId, PhoenixConnection connection) throws SQLException {
+        String sql = "SELECT " +
                 PhoenixDatabaseMetaData.TENANT_ID + ", " +
                 PhoenixDatabaseMetaData.TABLE_SCHEM + ", " +
                 PhoenixDatabaseMetaData.LOGICAL_TABLE_NAME + ", " +
@@ -178,8 +251,9 @@ public class Transform {
                 (Strings.isNullOrEmpty(tenantId) ? "" : (PhoenixDatabaseMetaData.TENANT_ID + " ='" + tenantId + "' AND ")) +
                 (Strings.isNullOrEmpty(schema) ? "" : (PhoenixDatabaseMetaData.TABLE_SCHEM + " ='" + schema + "' AND ")) +
                 PhoenixDatabaseMetaData.LOGICAL_TABLE_NAME + " ='" + logicalTableName + "'" +
-                (Strings.isNullOrEmpty(logicalParentName) ? "": (" AND " + PhoenixDatabaseMetaData.LOGICAL_PARENT_NAME + "='" + logicalParentName + "'" ))
-        ).executeQuery()) {
+                (Strings.isNullOrEmpty(logicalParentName) ? "" : (" AND " + PhoenixDatabaseMetaData.LOGICAL_PARENT_NAME + "='" + logicalParentName + "'"));
+        try (ResultSet resultSet = ((PhoenixPreparedStatement) connection.prepareStatement(
+                sql)).executeQuery()) {
             if (resultSet.next()) {
                 return SystemTransformRecord.SystemTransformBuilder.build(resultSet);
             }
@@ -299,7 +373,6 @@ public class Transform {
             } else {
                 stmt.setNull(colNum++, Types.VARCHAR);
             }
-
             LOGGER.info("Adding transform type: "
                     + systemTransformParams.getString());
             stmt.execute();
