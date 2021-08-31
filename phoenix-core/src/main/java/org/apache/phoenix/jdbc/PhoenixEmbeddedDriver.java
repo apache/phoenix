@@ -204,7 +204,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
 
         private static SQLException getMalFormedUrlException(String url) {
             return new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
-                    .setMessage(url).build().buildException();
+            .setMessage(url).build().buildException();
         }
 
         private static SQLException getMalFormedUrlException(String message, String url) {
