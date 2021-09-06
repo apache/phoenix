@@ -977,10 +977,10 @@ public class FromCompiler {
         }
 
         protected void rememberTable(TableRef tableRef, String alias) {
-            String name = tableRef.getTable().getName().getString();
             if (alias != null) {
                 tableMap.put(alias, tableRef);
             } else {
+                String name = tableRef.getTable().getName().getString();
                 tableMap.put(name, tableRef);
             }
             tables.add(tableRef);
@@ -1129,7 +1129,7 @@ public class FromCompiler {
         private final boolean isLocalIndex;
         // We must handle the local index data tables separately
         protected final ListMultimap<String, TableRef> localIndexDataTableMap = ArrayListMultimap.<String, TableRef> create();
-        protected final List<TableRef> localIndexDataTables = new ArrayList<>();;
+        protected final List<TableRef> localIndexDataTables = new ArrayList<>();
         private final List<TableRef> theTableRefs;
         private final Map<ColumnRef, Integer> columnRefMap;
         private ProjectedTableColumnResolver(PTable projectedTable, PhoenixConnection conn, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
@@ -1159,10 +1159,10 @@ public class FromCompiler {
         }
 
         protected void rememberLocalIndexDataTable(TableRef tableRef, String alias) {
-            String name = tableRef.getTable().getName().getString();
             if (alias != null) {
                 localIndexDataTableMap.put(alias, tableRef);
             } else {
+                String name = tableRef.getTable().getName().getString();
                 localIndexDataTableMap.put(name, tableRef);
             }
             localIndexDataTables.add(tableRef);
