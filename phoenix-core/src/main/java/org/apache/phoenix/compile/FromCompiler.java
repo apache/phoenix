@@ -986,24 +986,6 @@ public class FromCompiler {
             tables.add(tableRef);
         }
 
-        protected static class ColumnFamilyRef {
-            private final TableRef tableRef;
-            private final PColumnFamily family;
-
-            ColumnFamilyRef(TableRef tableRef, PColumnFamily family) {
-                this.tableRef = tableRef;
-                this.family = family;
-            }
-
-            public TableRef getTableRef() {
-                return tableRef;
-            }
-
-            public PColumnFamily getFamily() {
-                return family;
-            }
-        }
-
         @Override
         public TableRef resolveTable(String schemaName, String tableName) throws SQLException {
             String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
@@ -1014,34 +996,6 @@ public class FromCompiler {
                 throw new AmbiguousTableException(tableName);
             } else {
                 return tableRefs.get(0);
-            }
-        }
-
-        private ColumnFamilyRef resolveColumnFamily(String tableName, String cfName) throws SQLException {
-            if (tableName == null) {
-                ColumnFamilyRef theColumnFamilyRef = null;
-                Iterator<TableRef> iterator = tables.iterator();
-                while (iterator.hasNext()) {
-                    TableRef tableRef = iterator.next();
-                    try {
-                        PColumnFamily columnFamily = tableRef.getTable().getColumnFamily(cfName);
-                        if (columnFamily == null) { 
-                            throw new TableNotFoundException(cfName); 
-                        }
-                        theColumnFamilyRef = new ColumnFamilyRef(tableRef, columnFamily);
-                    } catch (ColumnFamilyNotFoundException e) {}
-                }
-                if (theColumnFamilyRef != null) { return theColumnFamilyRef; }
-                throw new TableNotFoundException(cfName);
-            } else {
-                TableRef tableRef = null;
-                try {
-                    tableRef = resolveTable(null, tableName);
-                } catch (TableNotFoundException e) {
-                    return resolveColumnFamily(null, cfName);
-                }
-                PColumnFamily columnFamily = tableRef.getTable().getColumnFamily(cfName);
-                return new ColumnFamilyRef(tableRef, columnFamily);
             }
         }
 
@@ -1106,8 +1060,7 @@ public class FromCompiler {
                             throw new ColumnNotFoundException(colName);
                         }
                     }
-                    ColumnFamilyRef cfRef = new ColumnFamilyRef(theTableRef, theColumnFamily);
-                    return new ColumnRef(cfRef.getTableRef(), theColumn.getPosition());
+                    return new ColumnRef(theTableRef, theColumn.getPosition());
                 }
             }
         }
@@ -1244,8 +1197,7 @@ public class FromCompiler {
                                 throw new ColumnNotFoundException(colName);
                             }
                         }
-                        ColumnFamilyRef cfRef = new ColumnFamilyRef(theTableRef, theColumnFamily);
-                        colRef = new ColumnRef(cfRef.getTableRef(), theColumn.getPosition());
+                        colRef = new ColumnRef(theTableRef, theColumn.getPosition());
                     }
                 } else {
                     throw e;
