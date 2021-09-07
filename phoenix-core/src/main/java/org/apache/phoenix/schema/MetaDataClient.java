@@ -964,12 +964,15 @@ public class MetaDataClient {
         } else {
             colUpsert.setString(18, column.getExpressionStr());
         }
-        if (column.getColumnQualifierBytes() == null) {
-            colUpsert.setNull(19, Types.VARBINARY);
-        } else {
-            colUpsert.setBytes(19, column.getColumnQualifierBytes());
+        //Do not try to set extra columns when using ALTER_SYSCATALOG_TABLE_UPGRADE
+        if (colUpsert.getParameterMetaData().getParameterCount() > 18) {
+            if (column.getColumnQualifierBytes() == null) {
+                colUpsert.setNull(19, Types.VARBINARY);
+            } else {
+                colUpsert.setBytes(19, column.getColumnQualifierBytes());
+            }
+            colUpsert.setBoolean(20, column.isRowTimestamp());
         }
-        colUpsert.setBoolean(20, column.isRowTimestamp());
         colUpsert.execute();
     }
 
@@ -3947,7 +3950,10 @@ public class MetaDataClient {
                 Map<String, Integer> changedCqCounters = new HashMap<>(numCols);
                 if (numCols > 0 ) {
                     StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver);
-                    String addColumnSqlToUse = INSERT_COLUMN_CREATE_TABLE;
+                    String addColumnSqlToUse = connection.isRunningUpgrade()
+                            && tableName.equals(PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE)
+                            && schemaName.equals(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA) ? ALTER_SYSCATALOG_TABLE_UPGRADE
+                            : INSERT_COLUMN_CREATE_TABLE;
                     try (PreparedStatement colUpsert = connection.prepareStatement(addColumnSqlToUse)) {
                         short nextKeySeq = SchemaUtil.getMaxKeySeq(table);
                         for ( ColumnDef colDef : columnDefs) {
