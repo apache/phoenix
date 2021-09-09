@@ -170,6 +170,37 @@ public class TransformIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testTransformFailsForViewIndex() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl(), testProps)) {
+            conn.setAutoCommit(true);
+            String schema = "S_" + generateUniqueName();
+            String tableName = "TBL_" + generateUniqueName();
+            String fullTableName = SchemaUtil.getTableName(schema, tableName);
+            String viewName = "VW_" + generateUniqueName();
+            String viewIdxName = "VWIDX_" + generateUniqueName();
+
+            String createTableSql = "CREATE TABLE " + fullTableName + " (PK1 VARCHAR NOT NULL, INT_PK INTEGER NOT NULL, " +
+                    "V1 VARCHAR, V2 INTEGER CONSTRAINT NAME_PK PRIMARY KEY(PK1, INT_PK)) ";
+            conn.createStatement().execute(createTableSql);
+            assertMetadata(conn, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, fullTableName);
+
+            String createViewSql = "CREATE VIEW " + viewName + " ( VIEW_COL1 INTEGER, VIEW_COL2 VARCHAR ) AS SELECT * FROM " + fullTableName;
+            conn.createStatement().execute(createViewSql);
+
+            String createViewIdxSql = "CREATE INDEX " + viewIdxName + " ON " + viewName + " (VIEW_COL1) include (VIEW_COL2) ";
+            conn.createStatement().execute(createViewIdxSql);
+
+            try {
+                conn.createStatement().execute("ALTER INDEX " + viewIdxName + " ON "  + viewName
+                        + " ACTIVE IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_TRANSFORM_VIEW_INDEX.getErrorCode(), e.getErrorCode());
+            }
+        }
+    }
+
+    @Test
     public void testTransformForLiveMutations_mutatingTable() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl(), testProps)) {
             conn.setAutoCommit(true);

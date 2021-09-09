@@ -27,6 +27,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.transform.TransformTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -54,6 +55,18 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 
+import static org.apache.phoenix.end2end.index.ImmutableIndexExtendedIT.getRowCountForEmptyColValue;
+import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REBUILD_VALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
+import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
+import static org.apache.phoenix.query.QueryConstants.UNVERIFIED_BYTES;
+import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.getRowCount;
 import static org.junit.Assert.assertEquals;
@@ -71,7 +84,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT{
 
     public TransformToolIT() {
         StringBuilder optionBuilder = new StringBuilder();
-        optionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=NONE, TTL=18000 ");
+        optionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=NONE ");
         if (!mutable) {
             optionBuilder.append(", IMMUTABLE_ROWS=true ");
         }
@@ -86,16 +99,21 @@ public class TransformToolIT extends ParallelStatsDisabledIT{
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
                 QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         serverProps.put(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(8));
+        serverProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
                 new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
     private void createTableAndUpsertRows(Connection conn, String dataTableFullName, int numOfRows) throws SQLException {
+        createTableAndUpsertRows(conn, dataTableFullName, numOfRows, tableDDLOptions);
+    }
+
+    private void createTableAndUpsertRows(Connection conn, String dataTableFullName, int numOfRows, String tableOptions) throws SQLException {
         String stmString1 =
                 "CREATE TABLE IF NOT EXISTS " + dataTableFullName
                         + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
-                        + tableDDLOptions;
+                        + tableOptions;
         conn.createStatement().execute(stmString1);
         String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
         PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
@@ -125,7 +143,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT{
             assertNotNull(record);
 
             List<String> args = getArgList(schemaName, dataTableName, null,
-                    null, null, null, false, false, false, false);
+                    null, null, null, false, false, false, false,false);
             runTransformTool(args.toArray(new String[0]), 0);
             record = Transform.getTransformRecord(schemaName, dataTableName, null, null, conn.unwrap(PhoenixConnection.class));
             assertEquals(PTable.TransformStatus.COMPLETED.name(), record.getTransformStatus());
@@ -167,7 +185,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT{
             assertNotNull(record);
 
             List<String> args = getArgList(schemaName, dataTableName, null,
-                    null, null, null, true, false, false, false);
+                    null, null, null, true, false, false, false, false);
 
             runTransformTool(args.toArray(new String[0]), 0);
             record = Transform.getTransformRecord(schemaName, dataTableName, null, null, conn.unwrap(PhoenixConnection.class));
@@ -187,7 +205,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT{
         assertNotNull(record);
 
         List<String> args = getArgList(schemaName, dataTableName, null,
-                null, null, null, false, true, false, false);
+                null, null, null, false, true, false, false, false);
 
         runTransformTool(args.toArray(new String[0]), 0);
         record = Transform.getTransformRecord(schemaName, dataTableName, null, null, conn.unwrap(PhoenixConnection.class));
@@ -214,7 +232,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT{
             conn.setAutoCommit(true);
             pauseTableTransform(schemaName, dataTableName, conn);
             List<String> args = getArgList(schemaName, dataTableName, null,
-                    null, null, null, false, false, true, false);
+                    null, null, null, false, false, true, false, false);
 
             runTransformTool(args.toArray(new String[0]), 0);
             SystemTransformRecord record = Transform.getTransformRecord(schemaName, dataTableName, null, null, conn.unwrap(PhoenixConnection.class));
@@ -282,7 +300,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT{
                     " SET IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
 
             List<String> args = getArgList(schemaName, dataTableName, null,
-                    null, null, null, false, false, false, false);
+                    null, null, null, false, false, false, false, false);
             // split if data table more than 3 regions
             args.add("--autosplit=3");
 
@@ -336,7 +354,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT{
                     " SET IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
 
             List<String> args = getArgList(schemaName, dataTableName, null,
-                    null, null, null, false, false, false, false);
+                    null, null, null, false, false, false, false, false);
             runTransformTool(args.toArray(new String[0]), 0);
 
             SingleCellIndexIT.assertMetadata(conn, PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS, PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, newDataTN.getNameAsString());
@@ -382,7 +400,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT{
             assertNotNull(record);
 
             List<String> args = getArgList(schemaName, dataTableName, indexTableName,
-                    null, null, null, false, false, false, false);
+                    null, null, null, false, false, false, false, false);
 
             runTransformTool(args.toArray(new String[0]), 0);
             record = Transform.getTransformRecord(schemaName, indexTableName, dataTableFullName, null, conn.unwrap(PhoenixConnection.class));
@@ -413,13 +431,102 @@ public class TransformToolIT extends ParallelStatsDisabledIT{
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String parentViewName = "VWP_" + generateUniqueName();
+        String viewName = "VW_" + generateUniqueName();
+        String viewIdxName = "VWIDX_" + generateUniqueName();
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
-            IndexRegionObserver.setFailPreIndexUpdatesForTesting(true);
             int numOfRows = 0;
             createTableAndUpsertRows(conn, dataTableFullName, numOfRows);
+            String createParentViewSql = "CREATE VIEW " + parentViewName + " ( PARENT_VIEW_COL1 VARCHAR ) AS SELECT * FROM " + dataTableFullName;
+            conn.createStatement().execute(createParentViewSql);
+
+            String createViewSql = "CREATE VIEW " + viewName + " ( VIEW_COL1 INTEGER, VIEW_COL2 VARCHAR ) AS SELECT * FROM " + parentViewName;
+            conn.createStatement().execute(createViewSql);
+
+            String createViewIdxSql = "CREATE INDEX " + viewIdxName + " ON " + viewName + " (VIEW_COL1) include (VIEW_COL2) ";
+            conn.createStatement().execute(createViewIdxSql);
+
+            SingleCellIndexIT.assertMetadata(conn, PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN, PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, dataTableFullName);
+
+            conn.createStatement().execute("ALTER TABLE " + dataTableFullName +
+                    " SET IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+            SystemTransformRecord record = Transform.getTransformRecord(schemaName, dataTableName, null, null, conn.unwrap(PhoenixConnection.class));
+            assertNotNull(record);
+            assertMetadata(conn, PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS, PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, record.getNewPhysicalTableName());
+            IndexRegionObserver.setFailPreIndexUpdatesForTesting(true);
+            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", viewName);
+            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
+            try {
+                IndexToolIT.upsertRow(stmt1, 1);
+                fail("Transform table upsert should have failed");
+            } catch (Exception e) {
+            }
+            assertEquals(0, getRowCount(conn, record.getNewPhysicalTableName()));
+            assertEquals(0, getRowCount(conn, dataTableFullName));
+
+            IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+            IndexToolIT.upsertRow(stmt1, 2);
+            IndexToolIT.upsertRow(stmt1, 3);
+
+            assertEquals(2, getRowCount(conn, record.getNewPhysicalTableName()));
+            assertEquals(2, getRowCount(conn,dataTableFullName));
+
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            try {
+                IndexToolIT.upsertRow(stmt1, 4);
+                fail("Data table upsert should have failed");
+            } catch (Exception e) {
+            }
+            try {
+                IndexToolIT.upsertRow(stmt1, 5);
+                fail("Data table upsert should have failed");
+            } catch (Exception e) {
+            }
+            assertEquals(4, getRowCount(conn, record.getNewPhysicalTableName()));
+            assertEquals(2, getRowCount(conn,dataTableFullName));
+
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+
+            List<String> args = getArgList(schemaName, dataTableName, null,
+                    null, null, null, false, false, false, false, true);
+            runTransformTool(args.toArray(new String[0]), 0);
+
+            assertEquals(2, getRowCount(conn.unwrap(PhoenixConnection.class).getQueryServices()
+                    .getTable(Bytes.toBytes(dataTableFullName)), false));
+            assertEquals(0, getRowCountForEmptyColValue(conn, record.getNewPhysicalTableName(), UNVERIFIED_BYTES));
+            assertEquals(2, getRowCountForEmptyColValue(conn, record.getNewPhysicalTableName(), VERIFIED_BYTES));
+        } finally {
+            IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+        }
+    }
+
+    @Test
+    public void testTransformVerifiedForTransactionalTable() throws Exception {
+        // TODO: Column encoding is not supported for OMID. Have omid test for other type of transforms.
+        // For now, we don't support transforms other than storage and column encoding type change.
+        //testVerifiedForTransactionalTable("OMID");
+        testVerifiedForTransactionalTable("TEPHRA");
+    }
+
+    private void testVerifiedForTransactionalTable(String provider) throws Exception{
+        String tableOptions = tableDDLOptions + " ,TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'";
+
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            int numOfRows = 1;
+            createTableAndUpsertRows(conn, dataTableFullName, numOfRows, tableOptions);
             SingleCellIndexIT.assertMetadata(conn, PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN, PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, dataTableFullName);
 
             conn.createStatement().execute("ALTER TABLE " + dataTableFullName +
@@ -428,44 +535,210 @@ public class TransformToolIT extends ParallelStatsDisabledIT{
             assertNotNull(record);
             assertMetadata(conn, PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS, PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, record.getNewPhysicalTableName());
 
+            List<String> args = getArgList(schemaName, dataTableName, null,
+                    null, null, null, false, false, false, false, false);
+            runTransformTool(args.toArray(new String[0]), 0);
+            assertEquals(1, getRowCountForEmptyColValue(conn, record.getNewPhysicalTableName(), VERIFIED_BYTES));
+
+
+            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
+            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
+
+            // Run again to check that VERIFIED row still remains verified
+            runTransformTool(args.toArray(new String[0]), 0);
+            assertEquals(1, getRowCountForEmptyColValue(conn, record.getNewPhysicalTableName(), VERIFIED_BYTES));
+            assertEquals(0, getRowCountForEmptyColValue(conn, record.getNewPhysicalTableName(), UNVERIFIED_BYTES));
+
+            // We will have two rows with empty col = 'x' since there is no IndexRegionObserver for transactional table
+            IndexToolIT.upsertRow(stmt1, ++numOfRows);
+            IndexToolIT.upsertRow(stmt1, ++numOfRows);
+
+            assertEquals(1, getRowCountForEmptyColValue(conn, record.getNewPhysicalTableName(), VERIFIED_BYTES));
+            assertEquals(0, getRowCountForEmptyColValue(conn, record.getNewPhysicalTableName(), UNVERIFIED_BYTES));
+            assertEquals(2, getRowCountForEmptyColValue(conn, record.getNewPhysicalTableName(), EMPTY_COLUMN_VALUE_BYTES));
+
+            // Even when we run TransformTool again, verified bit is not cleared but the empty column stays as is
+            args = getArgList(schemaName, dataTableName, null,
+                    null, null, null, false, false, false, false, false);
+            runTransformTool(args.toArray(new String[0]), 0);
+            assertEquals(1, getRowCountForEmptyColValue(conn, record.getNewPhysicalTableName(), VERIFIED_BYTES));
+            assertEquals(0, getRowCountForEmptyColValue(conn, record.getNewPhysicalTableName(), UNVERIFIED_BYTES));
+            assertEquals(2, getRowCountForEmptyColValue(conn, record.getNewPhysicalTableName(), EMPTY_COLUMN_VALUE_BYTES));
+        }
+    }
+
+    @Test
+    public void testTransformVerify() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            int numOfRows = 2;
+            createTableAndUpsertRows(conn, dataTableFullName, numOfRows);
+            SingleCellIndexIT.assertMetadata(conn, PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN, PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, dataTableFullName);
+
+            conn.createStatement().execute("ALTER TABLE " + dataTableFullName +
+                    " SET IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+            SystemTransformRecord record = Transform.getTransformRecord(schemaName, dataTableName, null, null, conn.unwrap(PhoenixConnection.class));
+            assertNotNull(record);
+            assertMetadata(conn, PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS, PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, record.getNewPhysicalTableName());
+            IndexRegionObserver.setFailPreIndexUpdatesForTesting(true);
             String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
             PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
             try {
-                IndexToolIT.upsertRow(stmt1, 1);
-                fail("Transform table upsert should have failed");
+                IndexToolIT.upsertRow(stmt1, numOfRows+1);
+                fail("New table upsert should have failed");
             } catch (Exception e) {
             }
+            // We didn't run transform tool yet. So new table would have 0.
             assertEquals(0, getRowCount(conn, record.getNewPhysicalTableName()));
-            assertEquals(0, getRowCount(conn,dataTableFullName));
+            assertEquals(numOfRows, getRowCount(conn, dataTableFullName));
 
             IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
             IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
-            IndexToolIT.upsertRow(stmt1, 2);
+            IndexToolIT.upsertRow(stmt1, ++numOfRows);
+            IndexToolIT.upsertRow(stmt1, ++numOfRows);
 
-            assertEquals(1, getRowCount(conn, record.getNewPhysicalTableName()));
-            assertEquals(1, getRowCount(conn,dataTableFullName));
+            // 2 missing in the new table since it is the initial rows
+            assertEquals(numOfRows-2, getRowCount(conn, record.getNewPhysicalTableName()));
+            assertEquals(numOfRows, getRowCount(conn,dataTableFullName));
 
             IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
             IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
             try {
-                IndexToolIT.upsertRow(stmt1, 3);
+                IndexToolIT.upsertRow(stmt1, numOfRows+1);
                 fail("Data table upsert should have failed");
             } catch (Exception e) {
             }
-            assertEquals(2, getRowCount(conn, record.getNewPhysicalTableName()));
-            assertEquals(1, getRowCount(conn,dataTableFullName));
+            //  Three unverified row in new table, original 2 rows missing since transform tool did not run.
+            //  One unverified row is not in the data table. 2 unverified row is in the data table.
+            assertEquals(numOfRows-1, getRowCount(conn, record.getNewPhysicalTableName()));
+            assertEquals(numOfRows, getRowCount(conn,dataTableFullName));
 
             IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
 
             List<String> args = getArgList(schemaName, dataTableName, null,
-                    null, null, null, false, false, false, false);
-            runTransformTool(args.toArray(new String[0]), 0);
+                    null, null, null, false, false, false, false, false);
+            args.add("-v");
+            args.add(IndexTool.IndexVerifyType.ONLY.getValue());
+            // Run only validation and check
+            TransformTool transformTool = runTransformTool(args.toArray(new String[0]), 0);
+            assertEquals(numOfRows, transformTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertEquals(numOfRows, transformTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
+            assertEquals(0, transformTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(numOfRows-2, transformTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(2, transformTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(2, transformTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
 
-            //TODO: Implement GlobalIndexChecker like repair for unverified rows
-            assertEquals(1, getRowCount(conn.unwrap(PhoenixConnection.class).getQueryServices()
-                    .getTable(Bytes.toBytes(dataTableFullName)), false));
-//            assertEquals(1, getRowCount(conn.unwrap(PhoenixConnection.class).getQueryServices()
-//                    .getTable(Bytes.toBytes(record.getNewPhysicalTableName())), false));
+            args = getArgList(schemaName, dataTableName, null,
+                    null, null, null, false, false, false, false, false);
+            args.add("-v");
+            args.add(IndexTool.IndexVerifyType.AFTER.getValue());
+            // Run after validation and check that 2 missing (initial) rows are built.
+            transformTool = runTransformTool(args.toArray(new String[0]), 0);
+            assertEquals(numOfRows, transformTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertEquals(numOfRows, transformTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
+            assertEquals(numOfRows, transformTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(numOfRows, transformTool.getJob().getCounters().findCounter(AFTER_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+
+            int numOfRows2= 2;
+            String dataTableName2 = generateUniqueName();
+            String dataTableFullName2 = SchemaUtil.getTableName(schemaName, dataTableName2);
+            createTableAndUpsertRows(conn, dataTableFullName2, numOfRows2);
+            conn.createStatement().execute("ALTER TABLE " + dataTableFullName2 +
+                    " SET IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+            record = Transform.getTransformRecord(schemaName, dataTableName2, null, null, conn.unwrap(PhoenixConnection.class));
+            assertNotNull(record);
+
+            //  Original 2 rows missing since transform tool did not run
+            assertEquals(0, getRowCount(conn, record.getNewPhysicalTableName()));
+            assertEquals(numOfRows2, getRowCount(conn,dataTableFullName2));
+
+            args = getArgList(schemaName, dataTableName2, null,
+                    null, null, null, false, false, false, false, false);
+            args.add("-v");
+            args.add(IndexTool.IndexVerifyType.BEFORE.getValue());
+            // Run before validation and check.
+            transformTool = runTransformTool(args.toArray(new String[0]), 0);
+            assertEquals(numOfRows2, transformTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertEquals(numOfRows2, transformTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
+            assertEquals(numOfRows2, transformTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(numOfRows2-2, transformTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(numOfRows2, transformTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, transformTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
+        } finally {
+            IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+        }
+    }
+
+    @Test
+    public void testTransformVerify_shouldFixUnverified() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            int numOfRows = 1;
+            int numOfRowsInNewTbl = 0;
+            createTableAndUpsertRows(conn, dataTableFullName, numOfRows);
+            SingleCellIndexIT.assertMetadata(conn, PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN, PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, dataTableFullName);
+
+            conn.createStatement().execute("ALTER TABLE " + dataTableFullName +
+                    " SET IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+            SystemTransformRecord record = Transform.getTransformRecord(schemaName, dataTableName, null, null, conn.unwrap(PhoenixConnection.class));
+            assertNotNull(record);
+            assertMetadata(conn, PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS, PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, record.getNewPhysicalTableName());
+            String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
+            PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
+            // We didn't run transform tool yet. So new table would have 0.
+            assertEquals(0, getRowCount(conn, record.getNewPhysicalTableName()));
+            assertEquals(numOfRows, getRowCount(conn, dataTableFullName));
+
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+            IndexToolIT.upsertRow(stmt1, ++numOfRows);
+            numOfRowsInNewTbl++;
+            IndexToolIT.upsertRow(stmt1, ++numOfRows);
+            numOfRowsInNewTbl++;
+
+            // 1 missing in the new table since it is the initial rows
+            assertEquals(numOfRows-1, getRowCount(conn, record.getNewPhysicalTableName()));
+            assertEquals(numOfRows, getRowCount(conn,dataTableFullName));
+
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            try {
+                numOfRowsInNewTbl++;
+                IndexToolIT.upsertRow(stmt1, numOfRows+1);
+                fail("Data table upsert should have failed");
+            } catch (Exception e) {
+            }
+            try {
+                numOfRowsInNewTbl++;
+                IndexToolIT.upsertRow(stmt1, numOfRows+2);
+                fail("Data table upsert should have failed");
+            } catch (Exception e) {
+            }
+            //  Four unverified row in new table, original 1 row is missing since transform tool did not run.
+            //  Two of the unverified rows is not in the data table.
+            assertEquals(numOfRowsInNewTbl, getRowCount(conn, record.getNewPhysicalTableName()));
+            assertEquals(numOfRows, getRowCount(conn,dataTableFullName));
+
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            List<String> args = getArgList(schemaName, dataTableName, null,
+                    null, null, null, false, false, false, false, true);
+            args.add("-v");
+            args.add(IndexTool.IndexVerifyType.BEFORE.getValue());
+            TransformTool transformTool = runTransformTool(args.toArray(new String[0]), 0);
+            // Run after validation and check that 2 missing (initial) rows are built but the unverified one is not built yet since we didn't build with -fixunverified option.
+            assertEquals(numOfRowsInNewTbl, transformTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
+            assertEquals(2, transformTool.getJob().getCounters().findCounter(BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT).getValue());
         } finally {
             IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
             IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
@@ -475,7 +748,8 @@ public class TransformToolIT extends ParallelStatsDisabledIT{
 
     public static List<String> getArgList(String schemaName, String dataTable, String indxTable, String tenantId,
                                           Long startTime, Long endTime,
-                                          boolean shouldAbort, boolean shouldPause, boolean shouldResume, boolean isPartial) {
+                                          boolean shouldAbort, boolean shouldPause, boolean shouldResume, boolean isPartial,
+                                          boolean shouldFixUnverified) {
         List<String> args = Lists.newArrayList();
         if (schemaName != null) {
             args.add("--schema=" + schemaName);
@@ -515,6 +789,9 @@ public class TransformToolIT extends ParallelStatsDisabledIT{
         if (isPartial) {
             args.add("-pt");
         }
+        if (shouldFixUnverified) {
+            args.add("-fu");
+        }
         return args;
     }
 
@@ -523,7 +800,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT{
                                          String dataTable, String indexTable, String tenantId,
                                          Long startTime, Long endTime) {
         List<String> args = getArgList(schemaName, dataTable, indexTable,
-                tenantId, startTime, endTime, false, false, false, false);
+                tenantId, startTime, endTime, false, false, false, false, false);
         args.add("-op");
         args.add("/tmp/" + UUID.randomUUID().toString());
         return args.toArray(new String[0]);

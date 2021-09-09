@@ -19,6 +19,7 @@ package org.apache.phoenix.mapreduce.transform;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -28,9 +29,13 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.filter.CompareFilter;
+import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
+import org.apache.hadoop.hbase.mapreduce.TableOutputFormat;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
@@ -42,6 +47,8 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.CsvBulkImportUtil;
 import org.apache.phoenix.mapreduce.PhoenixServerBuildIndexInputFormat;
@@ -60,6 +67,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.transform.SystemTransformRecord;
 import org.apache.phoenix.schema.transform.Transform;
+import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.HelpFormatter;
@@ -67,10 +75,12 @@ import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.PosixParser;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TransactionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,8 +94,11 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.apache.hadoop.hbase.HConstants.EMPTY_BYTE_ARRAY;
+import static org.apache.phoenix.mapreduce.index.IndexTool.createIndexToolTables;
 import static org.apache.phoenix.mapreduce.index.IndexTool.isTimeRangeSet;
 import static org.apache.phoenix.mapreduce.index.IndexTool.validateTimeRange;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.setCurrentScnValue;
+import static org.apache.phoenix.query.QueryConstants.UNVERIFIED_BYTES;
 import static org.apache.phoenix.util.QueryUtil.getConnection;
 
 public class TransformTool extends Configured implements Tool {
@@ -104,6 +117,13 @@ public class TransformTool extends Configured implements Tool {
             "Data table name (mandatory)");
     private static final Option INDEX_TABLE_OPTION = new Option("it", "index-table", true,
             "Index table name(not required in case of partial rebuilding)");
+
+    private static final Option FIX_UNVERIFIED_TRANSFORM_OPTION = new Option("fu", "fix-unverified", false,
+            "To fix unverified transform records");
+
+    private static final Option USE_NEW_TABLE_AS_SOURCE_OPTION =
+            new Option("fn", "from-new", false,
+                    "To verify every row in the new table has a corresponding row in the old table. ");
 
     private static final Option PARTIAL_TRANSFORM_OPTION = new Option("pt", "partial-transform", false,
             "To transform a data table from a start timestamp");
@@ -145,14 +165,23 @@ public class TransformTool extends Configured implements Tool {
     private static final Option END_TIME_OPTION = new Option("et", "end-time",
             true, "End time for transform");
 
-    public static final String TRANSFORM_JOB_NAME_TEMPLATE = "PHOENIX_TRANS_%s.%s";
+    public static final String TRANSFORM_JOB_NAME_TEMPLATE = "PHOENIX_TRANS_%s.%s.%s";
 
     public static final String PARTIAL_TRANSFORM_NOT_APPLICABLE = "Partial transform accepts "
             + "non-zero ts set in the past as start-time(st) option and that ts must be present in SYSTEM.TRANSFORM table";
 
-    public static final String TRANSFORM_NOT_APPLICABLE = "Transform is not applicable for local indexes or views or transactional tables";
+    public static final String TRANSFORM_NOT_APPLICABLE = "Transform is not applicable for local indexes or views";
 
     public static final String PARTIAL_TRANSFORM_NOT_COMPATIBLE = "Can't abort/pause/resume/split during partial transform";
+
+    private static final Option VERIFY_OPTION = new Option("v", "verify", true,
+            "To verify every data row in the old table has a corresponding row in the new table. " +
+                    "The accepted values are NONE, ONLY, BEFORE,  AFTER, and BOTH. " +
+                    "NONE is for no inline verification, which is also the default for this option. ONLY is for " +
+                    "verifying without rebuilding the new table rows. The rest for verifying before, after, and both before " +
+                    "and after rebuilding row. If the verification is done before rebuilding rows and the correct " +
+                    "new table rows will not be rebuilt");
+
 
     private Configuration configuration;
     private Connection connection;
@@ -174,10 +203,13 @@ public class TransformTool extends Configured implements Tool {
     private String oldTableWithSchema;
     private String newTableWithSchema;
     private JobPriority jobPriority;
+    private IndexTool.IndexVerifyType verifyType = IndexTool.IndexVerifyType.NONE;;
     private String jobName;
     private boolean isForeground;
     private Long startTime, endTime, lastTransformTime;
     private boolean isPartialTransform;
+    private boolean shouldFixUnverified;
+    private boolean shouldUseNewTableAsSource;
     private Job job;
 
     public Long getStartTime() {
@@ -224,10 +256,13 @@ public class TransformTool extends Configured implements Tool {
         options.addOption(PARTIAL_TRANSFORM_OPTION);
         options.addOption(START_TIME_OPTION);
         options.addOption(END_TIME_OPTION);
+        options.addOption(FIX_UNVERIFIED_TRANSFORM_OPTION);
+        options.addOption(USE_NEW_TABLE_AS_SOURCE_OPTION);
         options.addOption(AUTO_SPLIT_OPTION);
         options.addOption(ABORT_TRANSFORM_OPTION);
         options.addOption(PAUSE_TRANSFORM_OPTION);
         options.addOption(RESUME_TRANSFORM_OPTION);
+        options.addOption(VERIFY_OPTION);
         START_TIME_OPTION.setOptionalArg(true);
         END_TIME_OPTION.setOptionalArg(true);
         return options;
@@ -265,6 +300,8 @@ public class TransformTool extends Configured implements Tool {
     public int populateTransformToolAttributesAndValidate(CommandLine cmdLine) throws Exception {
         boolean useStartTime = cmdLine.hasOption(START_TIME_OPTION.getOpt());
         boolean useEndTime = cmdLine.hasOption(END_TIME_OPTION.getOpt());
+        shouldFixUnverified = cmdLine.hasOption(FIX_UNVERIFIED_TRANSFORM_OPTION.getOpt());
+        shouldUseNewTableAsSource = cmdLine.hasOption(USE_NEW_TABLE_AS_SOURCE_OPTION.getOpt());
         basePath = cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt());
         isPartialTransform = cmdLine.hasOption(PARTIAL_TRANSFORM_OPTION.getOpt());
         if (useStartTime) {
@@ -279,11 +316,11 @@ public class TransformTool extends Configured implements Tool {
             validateTimeRange(startTime, endTime);
         }
 
-        if (isPartialTransform &&
+        if ((isPartialTransform || shouldFixUnverified) &&
                 (cmdLine.hasOption(AUTO_SPLIT_OPTION.getOpt()))) {
             throw new IllegalArgumentException(PARTIAL_TRANSFORM_NOT_COMPATIBLE);
         }
-        if (isPartialTransform &&
+        if ((isPartialTransform || shouldFixUnverified) &&
                 (cmdLine.hasOption(ABORT_TRANSFORM_OPTION.getOpt()) || cmdLine.hasOption(PAUSE_TRANSFORM_OPTION.getOpt())
                         || cmdLine.hasOption(RESUME_TRANSFORM_OPTION.getOpt()))) {
             throw new IllegalArgumentException(PARTIAL_TRANSFORM_NOT_COMPATIBLE);
@@ -337,6 +374,11 @@ public class TransformTool extends Configured implements Tool {
 
         oldTableWithSchema = SchemaUtil.getQualifiedPhoenixTableName(schemaName, SchemaUtil.getTableNameFromFullName(pOldTable.getName().getString()));
         newTableWithSchema = SchemaUtil.getQualifiedPhoenixTableName(schemaName, SchemaUtil.getTableNameFromFullName(pNewTable.getName().getString()));
+        if (cmdLine.hasOption(VERIFY_OPTION.getOpt())) {
+            String value = cmdLine.getOptionValue(VERIFY_OPTION.getOpt());
+            verifyType = IndexTool.IndexVerifyType.fromValue(value);
+        }
+
         return 0;
     }
 
@@ -347,10 +389,6 @@ public class TransformTool extends Configured implements Tool {
         }
 
         if (argIndexTable != null && argIndexTable.getType() != PTableType.INDEX) {
-            throw new IllegalArgumentException(TRANSFORM_NOT_APPLICABLE);
-        }
-
-        if (argPDataTable.isTransactional()) {
             throw new IllegalArgumentException(TRANSFORM_NOT_APPLICABLE);
         }
 
@@ -425,9 +463,23 @@ public class TransformTool extends Configured implements Tool {
     }
 
     public Job configureJob() throws Exception {
-        final String jobName = String.format(TRANSFORM_JOB_NAME_TEMPLATE, schemaName, dataTable, indexTable);
+        String jobName = String.format(TRANSFORM_JOB_NAME_TEMPLATE, schemaName, dataTable, indexTable, (shouldFixUnverified ? "Unverified" : "Full"));
+        if (shouldUseNewTableAsSource) {
+            jobName = String.format(TRANSFORM_JOB_NAME_TEMPLATE, schemaName, dataTable, indexTable, "NewTableSource_" + pNewTable.getName());
+        }
+        if (pNewTable.isTransactional()) {
+            configuration.set(PhoenixConfigurationUtil.TX_SCN_VALUE,
+                    Long.toString(TransactionUtil.convertToNanoseconds(pOldTable.getTimeStamp()+1)));
+            configuration.set(PhoenixConfigurationUtil.TX_PROVIDER, pDataTable.getTransactionProvider().name());
+        }
         if (lastTransformTime != null) {
             PhoenixConfigurationUtil.setCurrentScnValue(configuration, lastTransformTime);
+        } else {
+            if (endTime != null) {
+                PhoenixConfigurationUtil.setCurrentScnValue(configuration, endTime);
+            } else {
+                setCurrentScnValue(configuration, EnvironmentEdgeManager.currentTimeMillis());
+            }
         }
 
         final PhoenixConnection pConnection = connection.unwrap(PhoenixConnection.class);
@@ -445,6 +497,8 @@ public class TransformTool extends Configured implements Tool {
         if (tenantId != null) {
             PhoenixConfigurationUtil.setTenantId(configuration, tenantId);
         }
+
+        PhoenixConfigurationUtil.setIndexVerifyType(configuration, verifyType);
 
         long indexRebuildQueryTimeoutMs =
                 configuration.getLong(QueryServices.INDEX_REBUILD_QUERY_TIMEOUT_ATTRIB,
@@ -471,7 +525,12 @@ public class TransformTool extends Configured implements Tool {
 
         PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, oldTableWithSchema);
         PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, newTableWithSchema);
-        PhoenixConfigurationUtil.setIndexToolSourceTable(configuration, IndexScrutinyTool.SourceTable.DATA_TABLE_SOURCE);
+        PhoenixConfigurationUtil.setShouldFixUnverifiedTransform(configuration, shouldFixUnverified);
+        if (shouldFixUnverified || shouldUseNewTableAsSource) {
+            PhoenixConfigurationUtil.setIndexToolSourceTable(configuration, IndexScrutinyTool.SourceTable.INDEX_TABLE_SOURCE);
+        } else {
+            PhoenixConfigurationUtil.setIndexToolSourceTable(configuration, IndexScrutinyTool.SourceTable.DATA_TABLE_SOURCE);
+        }
         if (startTime != null) {
             PhoenixConfigurationUtil.setIndexToolStartTime(configuration, startTime);
         }
@@ -497,21 +556,59 @@ public class TransformTool extends Configured implements Tool {
         if (outputPath != null) {
             FileOutputFormat.setOutputPath(job, outputPath);
         }
-        job.setReducerClass(PhoenixTransformReducer.class);
         job.setNumReduceTasks(1);
         job.setMapOutputKeyClass(ImmutableBytesWritable.class);
 
+        if (shouldFixUnverified) {
+            configureUnverifiedFromNewToOld();
+        } else {
+            configureFromOldToNew();
+        }
         //Set the Output classes
         job.setMapOutputValueClass(IntWritable.class);
         job.setOutputKeyClass(NullWritable.class);
         job.setOutputValueClass(NullWritable.class);
         TableMapReduceUtil.addDependencyJars(job);
-        job.setMapperClass(PhoenixServerBuildIndexMapper.class);
+
+        job.setReducerClass(PhoenixTransformReducer.class);
 
         TableMapReduceUtil.initCredentials(job);
         LOGGER.info("TransformTool is running for " + job.getJobName());
 
         return job;
+    }
+
+    private void configureFromOldToNew() {
+        job.setMapperClass(PhoenixServerBuildIndexMapper.class);
+    }
+
+    private void configureUnverifiedFromNewToOld() throws IOException, SQLException {
+        List<IndexMaintainer> maintainers = Lists.newArrayListWithExpectedSize(1);
+        TransformMaintainer transformMaintainer = pNewTable.getTransformMaintainer(pOldTable, connection.unwrap(PhoenixConnection.class));
+        maintainers.add(transformMaintainer);
+        Scan scan = IndexManagementUtil.newLocalStateScan(maintainers);
+        if (startTime != null) {
+            scan.setTimeRange(startTime - 1, HConstants.LATEST_TIMESTAMP);
+        }
+        scan.setRaw(true);
+        scan.setCacheBlocks(false);
+        SingleColumnValueFilter filter = new SingleColumnValueFilter(
+                transformMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+                transformMaintainer.getEmptyKeyValueQualifier(),
+                CompareFilter.CompareOp.EQUAL,
+                UNVERIFIED_BYTES
+        );
+        scan.setFilter(filter);
+        Configuration conf = job.getConfiguration();
+        HBaseConfiguration.merge(conf, HBaseConfiguration.create(conf));
+        // Set the Physical Table name for use in DirectHTableWriter#write(Mutation)
+        conf.set(TableOutputFormat.OUTPUT_TABLE,
+                PhoenixConfigurationUtil.getPhysicalTableName(job.getConfiguration()));
+        ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
+        TransformMaintainer.serialize(pDataTable, indexMetaDataPtr, pNewTable, connection.unwrap(PhoenixConnection.class));
+        PhoenixConfigurationUtil.setIndexMaintainers(conf, indexMetaDataPtr);
+        TableMapReduceUtil.initTableMapperJob(pNewTable.getPhysicalName().getString(), scan, PhoenixTransformRepairMapper.class, null,
+                null, job);
     }
 
     public int runJob() throws IOException {
@@ -731,6 +828,7 @@ public class TransformTool extends Configured implements Tool {
             try (Connection conn = getConnection(configuration)) {
                 this.connection = conn;
                 this.connection.setAutoCommit(true);
+                createIndexToolTables(conn);
                 populateTransformToolAttributesAndValidate(cmdLine);
                 if (cmdLine.hasOption(ABORT_TRANSFORM_OPTION.getOpt())) {
                     abortTransform();

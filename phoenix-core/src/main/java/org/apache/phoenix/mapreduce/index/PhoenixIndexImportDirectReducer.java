@@ -60,7 +60,7 @@ public class PhoenixIndexImportDirectReducer extends
     private String indexTableName;
     private byte[] indexTableNameBytes;
 
-    private void updateCounters(IndexTool.IndexVerifyType verifyType,
+    protected void updateCounters(IndexTool.IndexVerifyType verifyType,
                                 Reducer<ImmutableBytesWritable, IntWritable, NullWritable, NullWritable>.Context context)
             throws IOException {
         Configuration configuration = context.getConfiguration();
@@ -162,13 +162,15 @@ public class PhoenixIndexImportDirectReducer extends
             }
         }
 
-        if (PhoenixConfigurationUtil.getIsTransforming(context.getConfiguration())) {
-            try {
-                Transform.completeTransform(ConnectionUtil
-                        .getInputConnection(context.getConfiguration()), context.getConfiguration());
-            } catch (Exception e) {
-                LOGGER.error(" Failed to complete transform", e);
-                throw new RuntimeException(e.getMessage());
+        if (verifyType != IndexTool.IndexVerifyType.ONLY) {
+            if (PhoenixConfigurationUtil.getIsTransforming(context.getConfiguration())) {
+                try {
+                    Transform.completeTransform(ConnectionUtil
+                            .getInputConnection(context.getConfiguration()), context.getConfiguration());
+                } catch (Exception e) {
+                    LOGGER.error(" Failed to complete transform", e);
+                    throw new RuntimeException(e.getMessage());
+                }
             }
         }
     }
