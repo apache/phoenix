@@ -28,11 +28,11 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
+import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compat.hbase.CompatRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.TaskMetaDataProtos;
 import org.apache.phoenix.protobuf.ProtobufUtil;
@@ -71,7 +71,7 @@ public class TaskMetaDataEndpointTest {
         MockitoAnnotations.initMocks(this);
         configuration = new Configuration();
         RegionCoprocessorEnvironment environment =
-                new CompatRegionCoprocessorEnvironment() {
+                new RegionCoprocessorEnvironment() {
 
             @Override
             public int getVersion() {
@@ -137,6 +137,11 @@ public class TaskMetaDataEndpointTest {
 
             @Override
             public ConcurrentMap<String, Object> getSharedData() {
+                return null;
+            }
+
+            @Override
+            public MetricRegistry getMetricRegistryForRegionServer() {
                 return null;
             }
         };

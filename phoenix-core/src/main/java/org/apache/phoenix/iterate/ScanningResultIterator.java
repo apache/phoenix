@@ -62,14 +62,12 @@ import org.apache.phoenix.util.ServerUtil;
 
 public class ScanningResultIterator implements ResultIterator {
     private final ResultScanner scanner;
-    private final Scan scan;
     private final ScanMetricsHolder scanMetricsHolder;
     boolean scanMetricsUpdated;
     boolean scanMetricsEnabled;
 
     public ScanningResultIterator(ResultScanner scanner, Scan scan, ScanMetricsHolder scanMetricsHolder) {
         this.scanner = scanner;
-        this.scan = scan;
         this.scanMetricsHolder = scanMetricsHolder;
         scanMetricsUpdated = false;
         scanMetricsEnabled = scan.isScanMetricsEnabled();
@@ -97,9 +95,7 @@ public class ScanningResultIterator implements ResultIterator {
     private void updateMetrics() {
 
         if (scanMetricsEnabled && !scanMetricsUpdated) {
-            ScanMetrics scanMetrics = scan.getScanMetrics();
-            if (scanMetrics == null)
-                return; // See PHOENIX-5345
+            ScanMetrics scanMetrics = scanner.getScanMetrics();
             Map<String, Long> scanMetricsMap = scanMetrics.getMetricsMap();
             scanMetricsHolder.setScanMetricMap(scanMetricsMap);
 

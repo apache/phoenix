@@ -23,9 +23,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CellScannable;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
-import org.apache.phoenix.compat.hbase.CompatHBaseRpcController;
-import org.apache.phoenix.compat.hbase.CompatRpcControllerFactory;
 
 /**
 
@@ -34,33 +33,33 @@ import org.apache.phoenix.compat.hbase.CompatRpcControllerFactory;
  * This controller factory shouldn't be globally configured anywhere and is meant to be used
  * only internally by Phoenix indexing code.
  */
-public class InterRegionServerIndexRpcControllerFactory extends CompatRpcControllerFactory {
+public class InterRegionServerIndexRpcControllerFactory extends RpcControllerFactory {
 
     public InterRegionServerIndexRpcControllerFactory(Configuration conf) {
         super(conf);
     }
 
     @Override
-    public CompatHBaseRpcController newController() {
-        CompatHBaseRpcController delegate = super.newController();
+    public HBaseRpcController newController() {
+        HBaseRpcController delegate = super.newController();
         return getController(delegate);
     }
 
     @Override
-    public CompatHBaseRpcController newController(CellScanner cellScanner) {
-        CompatHBaseRpcController delegate = super.newController(cellScanner);
+    public HBaseRpcController newController(CellScanner cellScanner) {
+        HBaseRpcController delegate = super.newController(cellScanner);
         return getController(delegate);
     }
 
     @Override
-    public CompatHBaseRpcController newController(List<CellScannable> cellIterables) {
-        CompatHBaseRpcController delegate = super.newController(cellIterables);
+    public HBaseRpcController newController(List<CellScannable> cellIterables) {
+        HBaseRpcController delegate = super.newController(cellIterables);
         return getController(delegate);
     }
 
-    private CompatHBaseRpcController getController(CompatHBaseRpcController delegate) {
+    private HBaseRpcController getController(HBaseRpcController delegate) {
         // construct a chain of controllers: metadata, index and standard controller
-        CompatHBaseRpcController indexRpcController = new IndexRpcController(delegate, conf);
+      HBaseRpcController indexRpcController = new IndexRpcController(delegate, conf);
         return new MetadataRpcController(indexRpcController, conf);
     }
 

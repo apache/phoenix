@@ -524,21 +524,6 @@
       </properties>
     </profile>
     <profile>
-      <id>phoenix-hbase-compat-1.3.0</id>
-      <activation>
-        <property>
-          <name>hbase.profile</name>
-          <value>1.3</value>
-        </property>
-      </activation>
-      <properties>
-        <hbase.profile>1.3</hbase.profile>
-        <hbase.compat.version>1.3.0</hbase.compat.version>
-        <hbase.version>${hbase-1.3.runtime.version}</hbase.version>
-        <tephra.hbase.compat.version>1.3</tephra.hbase.compat.version>
-      </properties>
-    </profile>
-    <profile>
       <id>phoenix-hbase-compat-1.4.0</id>
       <activation>
         <property>

@@ -37,12 +37,13 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MutableHistogram;
 import org.apache.hadoop.metrics2.source.JvmMetrics;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Contents mostly copied from GlobalMetricRegistriesAdapter class from hbase-hadoop2-compat The
- * adapter attaches HBase's MetricRegistry to Hadoop's DefaultMetricsSystem 
+ * Contents mostly copied from GlobalMetricRegistriesAdapter class from hbase-hadoop2-compat
+ * The adapter attaches HBase's MetricRegistry to Hadoop's DefaultMetricsSystem
  * Note: This DOES NOT handle dynamic attach/detach of registries
  */
 public class GlobalMetricRegistriesAdapter {
@@ -66,7 +67,7 @@ public class GlobalMetricRegistriesAdapter {
             return;
         }
 
-        HBaseMetrics2HadoopMetricsAdapter adapter =
+        HBaseMetrics2HadoopMetricsAdapter adapter = 
                 new HBaseMetrics2HadoopMetricsAdapter(registry, metricTag);
         adapter.registerToDefaultMetricsSystem();
     }
@@ -87,17 +88,16 @@ public class GlobalMetricRegistriesAdapter {
 
         private void registerToDefaultMetricsSystem() {
             MetricRegistryInfo info = registry.getMetricRegistryInfo();
-            LOGGER.info("Registering " + info.getMetricsJmxContext() + " "
-                    + info.getMetricsDescription() + " into DefaultMetricsSystem");
+            LOGGER.info("Registering " + info.getMetricsJmxContext() +
+                    " " + info.getMetricsDescription() + " into DefaultMetricsSystem");
             DefaultMetricsSystem.instance().register(info.getMetricsJmxContext(),
-                info.getMetricsDescription(), this);
+                    info.getMetricsDescription(), this);
         }
 
         private void snapshotAllMetrics(MetricRegistry metricRegistry, MetricsCollector collector) {
             MetricRegistryInfo hbaseMetricRegistryInfo = metricRegistry.getMetricRegistryInfo();
-            MetricsInfo hadoopMetricsInfo =
-                    Interns.info(hbaseMetricRegistryInfo.getMetricsName(),
-                        hbaseMetricRegistryInfo.getMetricsDescription());
+            MetricsInfo hadoopMetricsInfo = Interns.info(hbaseMetricRegistryInfo.getMetricsName(),
+                    hbaseMetricRegistryInfo.getMetricsDescription());
             MetricsRecordBuilder builder = collector.addRecord(hadoopMetricsInfo);
             builder.setContext(hbaseMetricRegistryInfo.getMetricsContext());
             builder.tag(hadoopMetricsInfo, metricTag);
@@ -109,7 +109,7 @@ public class GlobalMetricRegistriesAdapter {
             Map<String, Metric> metrics = metricRegistry.getMetrics();
             Iterator iterator = metrics.entrySet().iterator();
 
-            while (iterator.hasNext()) {
+            while(iterator.hasNext()) {
                 Entry<String, Metric> e = (Entry) iterator.next();
                 String name = StringUtils.capitalize(e.getKey());
                 Metric metric = e.getValue();
@@ -133,7 +133,7 @@ public class GlobalMetricRegistriesAdapter {
             MetricsInfo info = Interns.info(name, "");
             Object o = gauge.getValue();
             if (o instanceof Integer) {
-                builder.addGauge(info, (Integer) o);
+                builder.addGauge(info, (Integer)o);
             } else if (o instanceof Long) {
                 builder.addGauge(info, (Long) o);
             } else if (o instanceof Float) {

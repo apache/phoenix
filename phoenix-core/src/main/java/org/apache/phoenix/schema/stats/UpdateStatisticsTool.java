@@ -30,6 +30,8 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
+import org.apache.hadoop.hbase.metrics.Gauge;
+import org.apache.hadoop.hbase.metrics.impl.MetricRegistriesImpl;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobPriority;
@@ -39,7 +41,6 @@ import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.htrace.SpanReceiver;
-import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
@@ -214,13 +215,10 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         job.setPriority(this.jobPriority);
 
         TableMapReduceUtil.addDependencyJars(job);
-        TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(),
-            PhoenixConnection.class, Chronology.class, CharStream.class,
-            TransactionSystemClient.class, TransactionNotInProgressException.class, ZKClient.class,
-            DiscoveryServiceClient.class, ZKDiscoveryService.class, Cancellable.class,
-            TTransportException.class, SpanReceiver.class, TransactionProcessor.class);
-        TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(),
-            CompatUtil.getMrMetricsClasses());
+        TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(), PhoenixConnection.class, Chronology.class,
+                CharStream.class, TransactionSystemClient.class, TransactionNotInProgressException.class,
+                ZKClient.class, DiscoveryServiceClient.class, ZKDiscoveryService.class,
+                Cancellable.class, TTransportException.class, SpanReceiver.class, TransactionProcessor.class, Gauge.class, MetricRegistriesImpl.class);
         LOGGER.info("UpdateStatisticsTool running for: " + tableName
                 + " on snapshot: " + snapshotName + " with restore dir: " + restoreDir);
     }
