@@ -34,10 +34,13 @@ import java.util.Properties;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class SaltedTableVarLengthRowKeyIT extends ParallelStatsDisabledIT {
 
     private static final String TEST_TABLE = generateUniqueName();

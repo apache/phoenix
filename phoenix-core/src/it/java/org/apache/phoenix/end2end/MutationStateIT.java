@@ -59,9 +59,11 @@ import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 
+@Category(ParallelStatsDisabledTest.class)
 @RunWith(RunUntilFailure.class)
 public class MutationStateIT extends ParallelStatsDisabledIT {
 

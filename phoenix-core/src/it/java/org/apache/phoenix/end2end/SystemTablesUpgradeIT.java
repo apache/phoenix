@@ -49,6 +49,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 /**
  * Tests for upgrades of System tables.
  */
+//FIXME this class has no @Category, and will not be run by Maven
 public class SystemTablesUpgradeIT extends BaseTest {
     private static boolean reinitialize;
     private static int countUpgradeAttempts;

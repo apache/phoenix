@@ -36,8 +36,10 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsEnabledTest.class)
 public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
     private String tableName;
     private String joinedTableName;

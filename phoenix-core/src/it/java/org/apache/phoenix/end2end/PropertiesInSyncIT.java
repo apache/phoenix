@@ -35,6 +35,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -59,6 +60,7 @@ import static org.apache.phoenix.end2end.index.IndexMetadataIT.assertUpdateCache
 /**
  * Test properties that need to be kept in sync amongst all column families and indexes of a table
  */
+@Category(ParallelStatsDisabledTest.class)
 public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     private static final String COL_FAM1 = "CF1";
     private static final String COL_FAM2 = "CF2";

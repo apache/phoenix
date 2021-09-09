@@ -25,12 +25,15 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.util.Properties;
 
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.end2end.join.HashJoinCacheIT.InvalidateHashCache;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class HashJoinPersistentCacheIT extends BaseJoinIT {
 
     @Override

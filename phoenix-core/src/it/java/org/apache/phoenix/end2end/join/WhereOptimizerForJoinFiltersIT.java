@@ -26,8 +26,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class WhereOptimizerForJoinFiltersIT extends ParallelStatsDisabledIT {
 
   String allValues =

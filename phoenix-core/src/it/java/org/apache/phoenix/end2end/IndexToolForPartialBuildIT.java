@@ -59,13 +59,14 @@ import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Tests for the {@link IndexToolForPartialBuildIT}
  */
+@Category(NeedsOwnMiniClusterTest.class)
 public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
     
     protected boolean isNamespaceEnabled = false;

@@ -28,10 +28,12 @@ import java.sql.ResultSet;
 import org.apache.phoenix.expression.function.PowerFunction;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * End to end tests for {@link PowerFunction}
  */
+@Category(ParallelStatsDisabledTest.class)
 public class PowerFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

@@ -33,7 +33,9 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PInteger;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class RowKeyBytesStringFunctionIT extends ParallelStatsDisabledIT {
 
     @Test

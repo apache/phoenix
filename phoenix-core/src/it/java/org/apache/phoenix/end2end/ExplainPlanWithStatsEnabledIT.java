@@ -49,13 +49,14 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * This class has tests for asserting the bytes and rows information exposed in the explain plan
  * when statistics are enabled.
  */
+@Category(ParallelStatsEnabledTest.class)
 public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
 
     private static String tableA;

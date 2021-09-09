@@ -18,6 +18,7 @@
 package org.apache.phoenix.rpc;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -28,6 +29,8 @@ import static org.apache.phoenix.util.TestUtil.DEFAULT_SCHEMA_NAME;
 
 import org.junit.AfterClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
+
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -52,6 +55,7 @@ import static org.mockito.Mockito.verify;
  * for SELECTs and UPSERTs:
  * Table-level property > Connection-level property > Default value
  */
+@Category(ParallelStatsDisabledTest.class)
 public class UpdateCacheConnectionLevelPropIT extends ParallelStatsDisabledIT {
 
     private static Connection conn1;

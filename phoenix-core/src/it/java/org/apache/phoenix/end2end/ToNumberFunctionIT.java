@@ -36,6 +36,7 @@ import org.apache.phoenix.schema.types.PDecimal;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Tests for the TO_NUMBER built-in function.
@@ -45,6 +46,7 @@ import org.junit.Test;
  * @since 0.1
  */
 
+@Category(ParallelStatsDisabledTest.class)
 public class ToNumberFunctionIT extends ParallelStatsDisabledIT {
 
     // This test changes to locale to en_US, and saves the previous locale here

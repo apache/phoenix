@@ -31,8 +31,10 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class RTrimFunctionIT extends ParallelStatsDisabledIT {
     
     @Test

@@ -63,7 +63,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 
-public class LogicalTableNameBaseIT extends BaseTest {
+public abstract class LogicalTableNameBaseIT extends BaseTest {
     protected String dataTableDdl = "";
     public static final String NEW_TABLE_PREFIX = "NEW_TBL_";
     private Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
