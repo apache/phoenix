@@ -33,7 +33,9 @@ import java.util.Properties;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
     
     @Test

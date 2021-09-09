@@ -34,12 +34,14 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  *
  * Basic tests for Alter Session Statements
  *
  */
+@Category(ParallelStatsDisabledTest.class)
 public class AlterSessionIT extends ParallelStatsDisabledIT {
 
     private String tableName;

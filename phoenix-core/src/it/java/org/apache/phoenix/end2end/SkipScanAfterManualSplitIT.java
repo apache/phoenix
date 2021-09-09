@@ -40,8 +40,10 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
 
     private static final int BATCH_SIZE = 25;

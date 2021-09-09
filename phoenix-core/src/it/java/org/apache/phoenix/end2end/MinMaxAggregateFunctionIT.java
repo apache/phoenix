@@ -22,7 +22,9 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class MinMaxAggregateFunctionIT extends ParallelStatsDisabledIT {
 
     private static final String TABLE_NAME = generateUniqueName();

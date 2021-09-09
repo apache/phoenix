@@ -199,7 +199,7 @@ public abstract class BaseTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseTest.class);
     @ClassRule
     public static TemporaryFolder tmpFolder = new TemporaryFolder();
-    private static final int dropTableTimeout = 300; // 5 mins should be long enough.
+    private static final int dropTableTimeout = 120; // 2 mins should be long enough.
     private static final ThreadFactory factory = new ThreadFactoryBuilder().setDaemon(true)
             .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
     private static final ExecutorService dropHTableService = Executors
@@ -1612,45 +1612,74 @@ public abstract class BaseTest {
 
     private static synchronized void disableAndDropAllTables() throws IOException {
         long startTime = System.currentTimeMillis();
-        Admin admin = utility.getAdmin();
-        ExecutorService dropHTableExecutor = Executors
-                .newCachedThreadPool(factory);
+        long deadline = System.currentTimeMillis() + 15 * 60 * 1000;
+        final Admin admin = utility.getAdmin();
 
         List<TableDescriptor> tableDescriptors = admin.listTableDescriptors();
         int tableCount = tableDescriptors.size();
 
-        int retryCount=10;
-        List<Future<Void>> futures = new ArrayList<>();
-        while (!tableDescriptors.isEmpty() && retryCount-->0) {
-            for(TableDescriptor tableDescriptor : tableDescriptors) {
+        while (!(tableDescriptors = admin.listTableDescriptors()).isEmpty()) {
+            List<Future<Void>> futures = new ArrayList<>();
+            ExecutorService dropHTableExecutor = Executors.newFixedThreadPool(10, factory);
+
+            for(final TableDescriptor tableDescriptor : tableDescriptors) {
                 futures.add(dropHTableExecutor.submit(new Callable<Void>() {
                     @Override
                     public Void call() throws Exception {
-                        if (admin.isTableEnabled(tableDescriptor.getTableName())) {
-                            admin.disableTable(tableDescriptor.getTableName());
+                        final TableName tableName = tableDescriptor.getTableName();
+                        String table = tableName.toString();
+                        Future<Void> disableFuture = null;
+                        try {
+                            LOGGER.info("Calling disable table on: {} ", table);
+                            disableFuture = admin.disableTableAsync(tableName);
+                            disableFuture.get(dropTableTimeout, TimeUnit.SECONDS);
+                            LOGGER.info("Table disabled: {}", table);
+                        } catch (Exception e) {
+                            LOGGER.warn("Could not disable table {}", table, e);
+                            try {
+                                disableFuture.cancel(true);
+                            } catch (Exception f) {
+                              //fall through
+                            }
+                            //fall through
                         }
-                        admin.deleteTable(tableDescriptor.getTableName());
+                        Future<Void> deleteFuture = null;
+                        try {
+                            LOGGER.info("Calling delete table on: {}", table);
+                            deleteFuture = admin.deleteTableAsync(tableName);
+                            deleteFuture.get(dropTableTimeout, TimeUnit.SECONDS);
+                            LOGGER.info("Table deleted: {}", table);
+                        } catch (Exception e) {
+                            LOGGER.warn("Could not delete table {}", table, e);
+                            try {
+                                deleteFuture.cancel(true);
+                            } catch (Exception f) {
+                              //fall through
+                            }
+                            //fall through
+                        }
                         return null;
                     }
                 }));
             }
-            for (Future<Void> future : futures) {
-                try {
-                    future.get(dropTableTimeout, TimeUnit.SECONDS);
-                } catch (Exception e) {
-                    LOGGER.warn("Error while dropping table, will try again", e);
-                }
+
+            try {
+                dropHTableExecutor.shutdown();
+                dropHTableExecutor.awaitTermination(600, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                LOGGER.error("dropHTableExecutor didn't shut down in 10 minutes, calling shutdownNow()");
+                dropHTableExecutor.shutdownNow();
             }
-            tableDescriptors = admin.listTableDescriptors();
+
+            if (System.currentTimeMillis() > deadline) {
+                LOGGER.error("Could not clean up HBase tables in 15 minutes, killing JVM");
+                System.exit(-1);
+             }
         }
-        if(!tableDescriptors.isEmpty()) {
-           LOGGER.error("Could not clean up tables!");
-        }
-        dropHTableExecutor.shutdownNow();
+
         long endTime =  System.currentTimeMillis();
 
         LOGGER.info("Disabled and dropped {} tables in {} ms", tableCount, endTime-startTime);
-
     }
     
     public static void assertOneOfValuesEqualsResultSet(ResultSet rs, List<List<Object>>... expectedResultsArray) throws SQLException {

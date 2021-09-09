@@ -34,9 +34,11 @@ import java.sql.ResultSet;
 
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class CustomEntityDataIT extends ParallelStatsDisabledIT {
     
     private static void initTableValues(Connection conn, String tenantId, String tableName) throws Exception {

@@ -25,7 +25,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TableViewFinderResult;
 import org.apache.phoenix.util.ViewUtil;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -46,6 +46,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+@Category(ParallelStatsDisabledTest.class)
 public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
     private final TableName catalogTable = TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
     private final TableName linkTable = TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES);

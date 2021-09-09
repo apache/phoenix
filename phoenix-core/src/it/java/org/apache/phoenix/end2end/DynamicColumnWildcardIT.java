@@ -51,6 +51,7 @@ import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS
  * {@link org.apache.phoenix.query.QueryServices#WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB} config is
  * turned on
  */
+//FIXME this class has no @Category and is never run by maven
 @RunWith(Parameterized.class)
 public class DynamicColumnWildcardIT extends BaseTest {
     private final boolean mutableTable;

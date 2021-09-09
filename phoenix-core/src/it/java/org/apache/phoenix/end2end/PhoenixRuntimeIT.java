@@ -51,9 +51,10 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
+@Category(ParallelStatsDisabledTest.class)
 public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
     private static void assertTenantIds(Expression e, Table htable, Filter filter, String[] tenantIds) throws IOException {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();

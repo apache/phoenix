@@ -32,8 +32,10 @@ import java.util.TimeZone;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class TimezoneOffsetFunctionIT extends ParallelStatsDisabledIT {
 
 	@Test

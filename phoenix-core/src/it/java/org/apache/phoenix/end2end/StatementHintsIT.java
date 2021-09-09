@@ -30,6 +30,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
 /**
@@ -37,6 +38,7 @@ import org.junit.Test;
  */
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class StatementHintsIT extends ParallelStatsDisabledIT {
 
     private static final String TABLE_NAME = generateUniqueName();

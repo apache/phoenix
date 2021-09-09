@@ -33,6 +33,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * 
@@ -40,6 +41,7 @@ import org.junit.Test;
  * 
  */
 
+@Category(ParallelStatsDisabledTest.class)
 public class ExtendedQueryExecIT extends ParallelStatsDisabledIT {
 
     @Test

@@ -33,9 +33,10 @@ import java.util.List;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
+@Category(ParallelStatsDisabledTest.class)
 public class EncodeFunctionIT extends ParallelStatsDisabledIT {
 
     /**

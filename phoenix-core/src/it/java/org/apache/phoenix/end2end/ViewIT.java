@@ -67,6 +67,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -76,6 +77,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 /**
  * Basic test suite for views
  */
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class ViewIT extends SplitSystemCatalogIT {
 

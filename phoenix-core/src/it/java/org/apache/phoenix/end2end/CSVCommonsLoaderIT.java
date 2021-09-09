@@ -48,8 +48,10 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.rules.TemporaryFolder;
 
+@Category(ParallelStatsDisabledTest.class)
 public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
 
     private static final String DATATYPE_TABLE = "DATATYPE";

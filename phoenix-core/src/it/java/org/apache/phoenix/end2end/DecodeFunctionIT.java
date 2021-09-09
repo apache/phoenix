@@ -33,8 +33,10 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class DecodeFunctionIT extends ParallelStatsDisabledIT {
 
 	@Test

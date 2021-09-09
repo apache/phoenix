@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.rules.ExpectedException;
 
 import java.sql.Connection;
@@ -35,6 +36,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class UpsertWithSCNIT extends ParallelStatsDisabledIT {
 
     @Rule

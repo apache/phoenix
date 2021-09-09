@@ -30,8 +30,10 @@ import java.util.Properties;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class PrimitiveTypeIT extends ParallelStatsDisabledIT {
 
     private static final Properties PROPS = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);

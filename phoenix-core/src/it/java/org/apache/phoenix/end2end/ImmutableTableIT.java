@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -26,6 +27,7 @@ import java.sql.Statement;
 
 import static org.junit.Assert.assertEquals;
 
+@Category(ParallelStatsDisabledTest.class)
 public class ImmutableTableIT extends ParallelStatsDisabledIT {
 
     @Test

@@ -28,8 +28,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class IsNullIT extends ParallelStatsDisabledIT {
     @Test
     public void testIsNullInPk() throws Exception {

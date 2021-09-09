@@ -18,7 +18,9 @@
 package org.apache.phoenix.end2end;
 
 import org.junit.BeforeClass;
+import org.junit.experimental.categories.Category;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class PermissionNSDisabledWithCustomAccessControllerIT extends PermissionNSDisabledIT{
     public PermissionNSDisabledWithCustomAccessControllerIT() throws Exception {
         super();

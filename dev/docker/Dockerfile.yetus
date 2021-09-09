@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM apache/yetus:0.12.0
+FROM apache/yetus:0.13.0
 
 #####
 # Update SpotBugs
@@ -34,3 +34,13 @@ ENV SPOTBUGS_HOME /opt/spotbugs
 # Enable spotbugs prefix for maven
 #####
 RUN sed -i -e 's/<\/pluginGroups>/<pluginGroup>com.github.spotbugs<\/pluginGroup><\/pluginGroups>/' /etc/maven/settings.xml
+#####
+# /run/user directory for gpg
+#####
+RUN mkdir -p /run/user/910/gnupg/ \
+    && chmod -R 700 /run/user/910 \
+    && chown -R 910:910 /run/user/910 \
+    && mkdir -p /var/run/user/910/gnupg \
+    && chown -R 910:910 /var/run/user/910 \
+    && chmod -R 700 /var/run/user/910
+ENV JAVA_HOME /usr/lib/jvm/java-11-openjdk-amd64

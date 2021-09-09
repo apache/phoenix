@@ -23,6 +23,7 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -46,6 +47,7 @@ import static org.junit.Assert.assertTrue;
  * A set of lightweight ITs should run every build, and another fully covered ITs build for daily or
  * weekly.
  */
+@Category(ParallelStatsDisabledTest.class)
 public class RowValueConstructorOffsetOptionalIT extends ParallelStatsDisabledIT {
     private final long TS = System.currentTimeMillis();
     private final String[] stringDataSet = new String[] {"aaa", "aab", "aac"};

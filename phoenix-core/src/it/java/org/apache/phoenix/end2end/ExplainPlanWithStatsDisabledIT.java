@@ -28,13 +28,14 @@ import java.util.List;
 
 import org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.Estimate;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * This class has tests for asserting the bytes and rows information exposed in the explain plan
  * when statistics are disabled.
  */
+@Category(ParallelStatsDisabledTest.class)
 public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
 
     private static void initData(Connection conn, String tableName) throws Exception {
