@@ -131,23 +131,11 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
         return top;
     }
 
-    // These implement the 1.3, and 1.4+ versions of the getStoreFileScanner() interface
-    // The @Override is missing, since we do not know which version will be active at compile time
-
-    //The 1.4+ version
-    public StoreFileScanner getStoreFileScanner(boolean cacheBlocks, boolean pread,
-            boolean isCompaction, long readPt,
-            long scannerOrder, boolean canOptimizeForNonNullColumn) {
-        return new LocalIndexStoreFileScanner(this, getScanner(cacheBlocks, pread, isCompaction),
-            true, getHFileReader().hasMVCCInfo(), readPt,
-            scannerOrder, canOptimizeForNonNullColumn);
-    }
-
-    //The 1.3 version
-    public StoreFileScanner getStoreFileScanner(boolean cacheBlocks, boolean pread,
-           boolean isCompaction, long readPt) {
-        return new LocalIndexStoreFileScanner(this, getScanner(cacheBlocks, pread, isCompaction),
-                true, getHFileReader().hasMVCCInfo(), readPt, 0, false);
+    @Override
+    public StoreFileScanner getStoreFileScanner(boolean cacheBlocks, boolean pread, boolean isCompaction, long readPt,
+                                                long scannerOrder, boolean canOptimizeForNonNullColumn) {
+        return new LocalIndexStoreFileScanner(this, getScanner(cacheBlocks, pread, isCompaction), true,
+                getHFileReader().hasMVCCInfo(), readPt, scannerOrder, canOptimizeForNonNullColumn);
     }
 
     @Override

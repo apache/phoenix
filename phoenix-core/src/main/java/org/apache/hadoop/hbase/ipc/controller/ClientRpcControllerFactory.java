@@ -22,39 +22,38 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CellScannable;
 import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
-import org.apache.phoenix.compat.hbase.CompatHBaseRpcController;
-import org.apache.phoenix.compat.hbase.CompatRpcControllerFactory;
 
 /**
  * {@link RpcControllerFactory} that sets the priority of metadata rpc calls to be processed
  * in its own queue.
  */
-public class ClientRpcControllerFactory extends CompatRpcControllerFactory {
+public class ClientRpcControllerFactory extends RpcControllerFactory {
 
     public ClientRpcControllerFactory(Configuration conf) {
         super(conf);
     }
 
     @Override
-    public CompatHBaseRpcController newController() {
-        CompatHBaseRpcController delegate = super.newController();
+    public HBaseRpcController newController() {
+        HBaseRpcController delegate = super.newController();
         return getController(delegate);
     }
 
     @Override
-    public CompatHBaseRpcController newController(CellScanner cellScanner) {
-        CompatHBaseRpcController delegate = super.newController(cellScanner);
+    public HBaseRpcController newController(CellScanner cellScanner) {
+        HBaseRpcController delegate = super.newController(cellScanner);
         return getController(delegate);
     }
 
     @Override
-    public CompatHBaseRpcController newController(List<CellScannable> cellIterables) {
-        CompatHBaseRpcController delegate = super.newController(cellIterables);
+    public HBaseRpcController newController(List<CellScannable> cellIterables) {
+        HBaseRpcController delegate = super.newController(cellIterables);
         return getController(delegate);
     }
     
-    private CompatHBaseRpcController getController(CompatHBaseRpcController delegate) {
+    private HBaseRpcController getController(HBaseRpcController delegate) {
         return new MetadataRpcController(delegate, conf);
     }
     

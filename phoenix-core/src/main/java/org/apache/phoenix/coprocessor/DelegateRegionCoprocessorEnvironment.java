@@ -27,9 +27,9 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.metrics.MetricRegistry;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
-import org.apache.phoenix.compat.hbase.CompatDelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.util.ServerUtil;
@@ -40,9 +40,10 @@ import org.apache.phoenix.util.ServerUtil.ConnectionType;
  * clone the configuration provided by the HBase coprocessor environment before modifying it. So
  * this class comes in handy where we have to return our custom config.
  */
-public class DelegateRegionCoprocessorEnvironment extends CompatDelegateRegionCoprocessorEnvironment {
+public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEnvironment {
 
     private final Configuration config;
+    private RegionCoprocessorEnvironment delegate;
     private HTableFactory tableFactory;
 
     public DelegateRegionCoprocessorEnvironment(RegionCoprocessorEnvironment delegate, ConnectionType connectionType) {
@@ -117,4 +118,8 @@ public class DelegateRegionCoprocessorEnvironment extends CompatDelegateRegionCo
         return delegate.getSharedData();
     }
 
+    @Override
+    public MetricRegistry getMetricRegistryForRegionServer() {
+        return delegate.getMetricRegistryForRegionServer();
+    }
 }

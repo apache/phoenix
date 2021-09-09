@@ -26,7 +26,6 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.filter.PagedFilter;
 
-import static org.apache.phoenix.compat.hbase.CompatUtil.setStartRow;
 import static org.apache.phoenix.util.ScanUtil.getDummyResult;
 import static org.apache.phoenix.util.ScanUtil.getPhoenixPagedFilter;
 
@@ -66,7 +65,7 @@ public class PagedRegionScanner extends BaseRegionScanner {
                     // Close the current region scanner, start a new one and return a dummy result
                     delegate.close();
                     byte[] rowKey = pageFilter.getRowKeyAtStop();
-                    setStartRow(scan, rowKey, true);
+                    scan.withStartRow(rowKey, true);
                     delegate = region.getScanner(scan);
                     if (results.isEmpty()) {
                         getDummyResult(rowKey, results);

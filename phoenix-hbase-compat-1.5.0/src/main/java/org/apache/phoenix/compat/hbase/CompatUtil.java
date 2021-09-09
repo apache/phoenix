@@ -31,18 +31,6 @@ public abstract class CompatUtil {
     private static final Logger LOGGER = LoggerFactory.getLogger(
         CompatUtil.class);
 
-    public static Class[] getMrMetricsClasses() {
-        return new Class[] { Gauge.class, MetricRegistriesImpl.class };
-    }
-
-    public static Scan setStartRow(Scan scan, byte[] indexRowKey, boolean inclusive) {
-        return scan.withStartRow(indexRowKey, inclusive);
-    }
-
-    public static Scan setSingleRow(Scan scan, byte[] indexRowKey) {
-        return scan.withStartRow(indexRowKey, true).withStopRow(indexRowKey, true);
-    }
-
     /**
      * HBase 1.5+ has storeRefCount available in RegionMetrics
      *
