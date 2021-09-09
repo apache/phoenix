@@ -30,8 +30,10 @@ import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class QueryExecWithoutSCNIT extends ParallelStatsDisabledIT {
     @Test
     public void testScanNoSCN() throws Exception {

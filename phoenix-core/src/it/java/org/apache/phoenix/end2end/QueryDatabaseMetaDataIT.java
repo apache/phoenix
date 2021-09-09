@@ -82,8 +82,10 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
     private static void createMDTestTable(Connection conn, String tableName, String extraProps)

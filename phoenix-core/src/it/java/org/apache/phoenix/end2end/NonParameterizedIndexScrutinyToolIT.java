@@ -40,6 +40,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+//FIXME this test is never run by maven, as it has no @Category
 public class NonParameterizedIndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
 
     @Test

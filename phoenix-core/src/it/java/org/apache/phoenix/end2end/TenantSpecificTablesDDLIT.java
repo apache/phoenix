@@ -62,8 +62,10 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsEnabledTest.class)
 public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
 
     @Test

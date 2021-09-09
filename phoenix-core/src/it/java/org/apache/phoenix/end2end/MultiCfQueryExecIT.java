@@ -42,8 +42,10 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsEnabledTest.class)
 public class MultiCfQueryExecIT extends ParallelStatsEnabledIT {
     private String fullTableName;
 

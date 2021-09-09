@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -52,7 +53,7 @@ import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
-public class NoLookbackMutableIndexExtendedIT extends BaseUniqueNamesOwnClusterIT {
+public class NoLookbackMutableIndexExtendedIT extends BaseTest {
     protected final boolean localIndex;
     protected final String tableDDLOptions;
 

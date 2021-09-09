@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
+import org.apache.phoenix.end2end.ParallelStatsEnabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.util.SchemaUtil;
@@ -42,7 +43,9 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsEnabledTest.class)
 public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
     private static final StatisticsCollectionRunTracker tracker = StatisticsCollectionRunTracker
             .getInstance(new Configuration());

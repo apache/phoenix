@@ -25,7 +25,6 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hbase.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -132,7 +131,7 @@ import java.util.Properties;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
+public class PhoenixTableLevelMetricsIT extends BaseTest {
 
     private static final String
             CREATE_TABLE_DDL =

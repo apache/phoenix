@@ -39,11 +39,13 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 
-public class RenewLeaseIT extends BaseUniqueNamesOwnClusterIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class RenewLeaseIT extends BaseTest {
     private static final long SCANNER_LEASE_TIMEOUT = 12000;
     private static volatile boolean SLEEP_NOW = false;
     private final static String TABLE_NAME = generateUniqueName();

@@ -47,12 +47,8 @@
     <module>phoenix-hbase-compat-2.1.6</module>
     <module>phoenix-core</module>
     <module>phoenix-pherf</module>
-    <module>phoenix-client-parent</module>
-    <module>phoenix-client-parent/phoenix-client</module>
-    <module>phoenix-client-parent/phoenix-client-embedded</module>
-    <module>phoenix-server</module>
-    <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
+    <!-- shaded artifact and assembly modules are added in shade-and-assembly profile -->
   </modules>
 
   <repositories>
@@ -147,10 +143,10 @@
     <maven-antlr-eclipse-plugin.version>${antlr.version}</maven-antlr-eclipse-plugin.version>
     <maven-project-info-reports-plugin.version>3.1.1</maven-project-info-reports-plugin.version>
     <!-- Override property in ASF parent -->
-    <surefire.version>2.22.2</surefire.version>
+    <surefire.version>3.0.0-M5</surefire.version>
     <spotbugs-maven-plugin.version>4.1.3</spotbugs-maven-plugin.version>
     <spotbugs.version>4.1.3</spotbugs.version>
-    <jacoco-maven-plugin.version>0.8.5</jacoco-maven-plugin.version>
+    <jacoco-maven-plugin.version>0.8.7</jacoco-maven-plugin.version>
 
     <!-- Plugin options -->
     <numForkedUT>8</numForkedUT>
@@ -167,7 +163,7 @@
     <jacoco.instruction.coverage.percentage>0.700</jacoco.instruction.coverage.percentage>
     <jacoco.branch.coverage.percentage>0.600</jacoco.branch.coverage.percentage>
 
-    <maven-owasp-plugin.version>5.3.2</maven-owasp-plugin.version>
+    <maven-owasp-plugin.version>6.3.1</maven-owasp-plugin.version>
     <protobuf.plugin.version>0.6.1</protobuf.plugin.version>
     <os.maven.version>1.5.0.Final</os.maven.version>
   </properties>
@@ -313,16 +309,19 @@
             <forkCount>${numForkedIT}</forkCount>
             <runOrder>alphabetical</runOrder>
             <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-            <shutdown>kill</shutdown>
+            <forkedProcessExitTimeoutInSeconds>180</forkedProcessExitTimeoutInSeconds>
+            <shutdown>exit</shutdown>
             <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
             <trimStackTrace>false</trimStackTrace>
+            <!-- https://www.orpiske.net/2021/04/test-woes-with-maven-failsafe-3-0-0-m5 -->
+            <useModulePath>false</useModulePath>
           </configuration>
           <executions>
             <execution>
               <id>ParallelStatsEnabledTest</id>
               <configuration>
                 <reuseForks>true</reuseForks>
-                <argLine>@{jacocoArgLine} -Xmx2000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 </argLine>
+                <argLine>@{jacocoArgLine} -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
               </configuration>
               <goals>
@@ -334,7 +333,7 @@
               <id>ParallelStatsDisabledTest</id>
               <configuration>
                 <reuseForks>true</reuseForks>
-                <argLine>@{jacocoArgLine} -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 </argLine>
+                <argLine>@{jacocoArgLine} -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
               </configuration>
               <goals>
@@ -346,7 +345,7 @@
               <id>NeedTheirOwnClusterTests</id>
               <configuration>
                  <reuseForks>false</reuseForks>
-                 <argLine>@{jacocoArgLine} -enableassertions -Xmx2000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
+                 <argLine>@{jacocoArgLine} -enableassertions -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
               </configuration>
               <goals>
@@ -553,10 +552,10 @@
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
-          <argLine>@{jacocoArgLine} -enableassertions -Xmx2250m -XX:MaxPermSize=128m
+          <argLine>@{jacocoArgLine} -enableassertions -Xmx2250m
             -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-          <shutdown>kill</shutdown>
+          <shutdown>exit</shutdown>
           <trimStackTrace>false</trimStackTrace>
         </configuration>
       </plugin>
@@ -1502,6 +1501,21 @@
 
   <profiles>
     <!-- this profile should be activated for release builds -->
+    <profile>
+      <id>shade-and-assembly</id>
+      <activation>
+        <property>
+          <name>!PhoenixPatchProcess</name>
+        </property>
+      </activation>
+      <modules>
+        <module>phoenix-client-parent</module>
+        <module>phoenix-client-parent/phoenix-client</module>
+        <module>phoenix-client-parent/phoenix-client-embedded</module>
+        <module>phoenix-server</module>
+        <module>phoenix-assembly</module>
+      </modules>
+    </profile>
     <profile>
       <id>release</id>
       <build>

@@ -52,8 +52,10 @@ import org.apache.phoenix.util.RunUntilFailure;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 
+@Category(ParallelStatsDisabledTest.class)
 @RunWith(RunUntilFailure.class)
 public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
 
