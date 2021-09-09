@@ -4803,6 +4803,10 @@ public class MetaDataClient {
                 }
 
                 if (isTransformNeeded) {
+                    if (indexRef.getTable().getViewIndexId() != null) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_TRANSFORM_VIEW_INDEX)
+                                .setSchemaName(schemaName).setTableName(indexName).build().buildException();
+                    }
                     try {
                         Transform.addTransform(connection, tenantId, table, metaProperties, seqNum, PTable.TransformType.METADATA_TRANSFORM);
                     } catch (SQLException ex) {

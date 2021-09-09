@@ -217,7 +217,7 @@ public class ImmutableIndexExtendedIT extends ParallelStatsDisabledIT {
         TestUtil.waitForIndexState(conn, indexTable, PIndexState.ACTIVE);
     }
     
-    private static int getRowCountForEmptyColValue(Connection conn, String tableName,
+    public static int getRowCountForEmptyColValue(Connection conn, String tableName,
             byte[] valueBytes)  throws IOException, SQLException {
 
         PTable table = PhoenixRuntime.getTable(conn, tableName);

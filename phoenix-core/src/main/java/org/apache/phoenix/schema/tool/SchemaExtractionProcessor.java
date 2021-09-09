@@ -48,6 +48,7 @@ import java.util.List;
 import java.util.ArrayList;
 
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.util.MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES;
 
@@ -390,6 +391,13 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
                         continue;
                     }
                 }
+
+                if (key.contains("TTL") && definedProps.containsKey(TRANSACTION_PROVIDER)
+                        && definedProps.get(TRANSACTION_PROVIDER).equalsIgnoreCase("OMID")) {
+                    // TTL is unsupported for OMID transactional table
+                    continue;
+                }
+
                 if (optionBuilder.length() != 0) {
                     optionBuilder.append(", ");
                 }
