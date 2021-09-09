@@ -142,8 +142,6 @@ if [[ -n "${EXCLUDE_TESTS_URL}" ]]; then
 fi
 # help keep the ASF boxes clean
 YETUS_ARGS+=("--sentinel")
-# use emoji vote so it is easier to find the broken line
-YETUS_ARGS+=("--github-use-emoji-vote")
 
 echo "Launching yetus with command line:"
 echo "${TESTPATCHBIN} ${YETUS_ARGS[*]}"

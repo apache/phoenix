@@ -26,7 +26,9 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test

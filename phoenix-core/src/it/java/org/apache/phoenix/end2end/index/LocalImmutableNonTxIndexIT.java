@@ -20,8 +20,11 @@ package org.apache.phoenix.end2end.index;
 import java.util.Arrays;
 import java.util.Collection;
 
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
+import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
+@Category(ParallelStatsDisabledTest.class)
 public class LocalImmutableNonTxIndexIT extends BaseIndexIT {
 
     public LocalImmutableNonTxIndexIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded) {

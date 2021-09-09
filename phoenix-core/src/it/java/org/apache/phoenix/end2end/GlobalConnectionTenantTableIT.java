@@ -40,6 +40,7 @@ import org.junit.Test;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
+//FIXME this class has no @Category, and is never run by maven
 public class GlobalConnectionTenantTableIT extends BaseTest {
 
     private static final String SCHEMA_NAME = "SCHEMA1";

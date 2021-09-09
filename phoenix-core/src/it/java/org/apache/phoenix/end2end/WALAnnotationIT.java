@@ -34,6 +34,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder;
 import org.apache.phoenix.query.QueryServices;
@@ -74,7 +75,7 @@ import static org.junit.Assert.fail;
 
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
-public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
+public class WALAnnotationIT extends BaseTest {
     private final boolean isImmutable;
     private final boolean isMultiTenant;
 

@@ -41,9 +41,11 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 /*
  * since 4.8
  */
+@Category(ParallelStatsDisabledTest.class)
 public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
     /**
      * Tests that when: There is a table created with older version of phoenix and a table created with newer version

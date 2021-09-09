@@ -35,12 +35,14 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.htrace.*;
 import org.apache.htrace.impl.ProbabilitySampler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,6 +51,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 /**
  * Test that the logging sink stores the expected metrics/stats
  */
+@Category(ParallelStatsDisabledTest.class)
 @Ignore("Will need to revisit for new HDFS/HBase/HTrace, broken on 5.x")
 public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 

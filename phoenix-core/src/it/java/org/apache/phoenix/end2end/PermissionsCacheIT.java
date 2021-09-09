@@ -35,9 +35,11 @@ import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.ListMultimap;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class PermissionsCacheIT extends BasePermissionsIT {
 
     public PermissionsCacheIT() throws Exception {

@@ -42,7 +42,9 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
 
     private static Connection conn;

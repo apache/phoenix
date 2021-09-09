@@ -45,7 +45,9 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
 
     private static final String SIMPLE_DDL = "CREATE TABLE %s (t_id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"

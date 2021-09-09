@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -27,6 +28,7 @@ import java.sql.Statement;
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
 
+@Category(ParallelStatsDisabledTest.class)
 public class SumFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testSumFunctionWithCaseWhenStatement() throws Exception {

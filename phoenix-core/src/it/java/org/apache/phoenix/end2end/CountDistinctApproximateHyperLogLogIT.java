@@ -24,6 +24,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.*;
 import java.util.Properties;
@@ -31,6 +32,7 @@ import java.util.Properties;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
 
+@Category(ParallelStatsDisabledTest.class)
 public class CountDistinctApproximateHyperLogLogIT extends ParallelStatsDisabledIT {
 	private String tableName;
 

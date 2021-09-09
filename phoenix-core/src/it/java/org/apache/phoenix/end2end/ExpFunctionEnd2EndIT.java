@@ -30,10 +30,12 @@ import java.sql.ResultSet;
 import org.apache.phoenix.expression.function.ExpFunction;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * End to end tests for {@link ExpFunction}
  */
+@Category(ParallelStatsDisabledTest.class)
 public class ExpFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

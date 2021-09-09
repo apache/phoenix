@@ -41,6 +41,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -55,6 +56,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * All tests are run with both a generic connection and a multi-tenant connection.
  * 
  */
+@Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
 

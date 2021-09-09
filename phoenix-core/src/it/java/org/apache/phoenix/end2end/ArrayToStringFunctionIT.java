@@ -28,7 +28,9 @@ import java.sql.ResultSet;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
     private String tableName;
     private Connection conn;

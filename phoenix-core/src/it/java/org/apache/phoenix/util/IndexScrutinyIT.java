@@ -24,8 +24,11 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class IndexScrutinyIT extends ParallelStatsDisabledIT {
     @Test
     public void testRowCountIndexScrutiny() throws Throwable {

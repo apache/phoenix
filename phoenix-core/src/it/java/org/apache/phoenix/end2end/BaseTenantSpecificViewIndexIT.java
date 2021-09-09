@@ -38,7 +38,7 @@ import org.apache.phoenix.util.SchemaUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
-public class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT {
+public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT {
     
     public static final String NON_STRING_TENANT_ID = "1234";
     

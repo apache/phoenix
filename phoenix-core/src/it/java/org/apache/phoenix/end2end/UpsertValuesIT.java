@@ -54,8 +54,10 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test
     public void testGroupByWithLimitOverRowKey() throws Exception {

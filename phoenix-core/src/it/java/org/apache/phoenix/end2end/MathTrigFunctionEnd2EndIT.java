@@ -30,6 +30,7 @@ import org.apache.phoenix.expression.function.SinFunction;
 import org.apache.phoenix.expression.function.TanFunction;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * End to end tests for
@@ -38,6 +39,7 @@ import org.junit.Test;
  * {@link org.apache.phoenix.expression.function.TanFunction}
  */
 
+@Category(ParallelStatsDisabledTest.class)
 public class MathTrigFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

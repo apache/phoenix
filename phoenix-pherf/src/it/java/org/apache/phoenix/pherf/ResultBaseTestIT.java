@@ -36,8 +36,7 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 
-@Category(NeedsOwnMiniClusterTest.class)
-public class ResultBaseTestIT extends ParallelStatsDisabledIT {
+public abstract class ResultBaseTestIT extends ParallelStatsDisabledIT {
     protected static final String matcherScenario = ".*scenario/.*test_scenario.xml";
     protected static final String matcherSchema = ".*datamodel/.*test_schema.sql";
 

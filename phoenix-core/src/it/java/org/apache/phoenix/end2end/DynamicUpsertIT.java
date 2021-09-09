@@ -37,6 +37,7 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Basic tests for Phoenix dynamic upserting
@@ -46,6 +47,7 @@ import org.junit.Test;
  */
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class DynamicUpsertIT extends ParallelStatsDisabledIT {
     private String tableName;
 

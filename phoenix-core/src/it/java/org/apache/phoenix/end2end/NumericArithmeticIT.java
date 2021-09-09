@@ -41,10 +41,11 @@ import java.util.Properties;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Floats;
 
+@Category(ParallelStatsDisabledTest.class)
 public class NumericArithmeticIT extends ParallelStatsDisabledIT {
     private String tableName;
     
