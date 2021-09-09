@@ -32,15 +32,18 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Tests for table with transparent salting.
  */
 
+@Category(ParallelStatsDisabledTest.class)
 public class SaltedTableIT extends BaseSaltedTableIT {
 
     @Test

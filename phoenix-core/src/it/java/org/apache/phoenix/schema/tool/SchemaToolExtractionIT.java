@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema.tool;
 
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
+import org.apache.phoenix.end2end.ParallelStatsEnabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.ParseException;
 import org.apache.phoenix.parse.SQLParser;
@@ -29,6 +30,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -49,6 +51,7 @@ import static junit.framework.TestCase.assertTrue;
 import static junit.framework.TestCase.fail;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
+@Category(ParallelStatsEnabledTest.class)
 public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
 
     @BeforeClass

@@ -33,11 +33,13 @@ import org.apache.phoenix.expression.function.SetBitFunction;
 import org.apache.phoenix.expression.function.SetByteFunction;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * End to end tests for {@link GetByteFunction} {@link SetByteFunction} {@link GetBitFunction}
  * {@link SetBitFunction}
  */
+@Category(ParallelStatsDisabledTest.class)
 public class GetSetByteBitFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

@@ -25,10 +25,12 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.expression.function.MathPIFunction;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * End to end tests for {@link MathPIFunction}
  */
+@Category(ParallelStatsDisabledTest.class)
 public class MathPIFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     @Test

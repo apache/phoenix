@@ -50,6 +50,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Basic tests for Phoenix dynamic family querying "cf.*"
@@ -62,6 +63,7 @@ import org.junit.Test;
         value="RV_RETURN_VALUE_IGNORED", 
         justification="Designed to ignore.")
 
+@Category(ParallelStatsDisabledTest.class)
 public class DynamicFamilyIT extends ParallelStatsDisabledIT {
     private static final String WEB_STATS = generateUniqueName();
     private static final String WEB_STATS_SCHEMA_NAME = "";

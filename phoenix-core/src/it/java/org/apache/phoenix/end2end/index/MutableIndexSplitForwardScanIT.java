@@ -17,8 +17,11 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class MutableIndexSplitForwardScanIT extends MutableIndexSplitIT {
 
     public MutableIndexSplitForwardScanIT(boolean localIndex, boolean multiTenant) {

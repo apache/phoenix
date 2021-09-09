@@ -30,12 +30,14 @@ import java.sql.Statement;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import static org.junit.Assert.assertFalse;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * CONVERT_TZ(date, 'from_timezone', 'to_timezone') tests
  *
  */
 
+@Category(ParallelStatsDisabledTest.class)
 public class ConvertTimezoneFunctionIT extends ParallelStatsDisabledIT {
 
     @Test

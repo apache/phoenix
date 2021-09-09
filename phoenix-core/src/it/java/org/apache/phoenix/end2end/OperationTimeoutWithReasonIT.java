@@ -21,6 +21,7 @@ package org.apache.phoenix.end2end;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -34,6 +35,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+@Category(ParallelStatsDisabledTest.class)
 public class OperationTimeoutWithReasonIT extends ParallelStatsDisabledIT {
 
     private static final class MyClock extends EnvironmentEdge {

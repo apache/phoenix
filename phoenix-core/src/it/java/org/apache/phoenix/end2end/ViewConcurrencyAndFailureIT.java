@@ -68,6 +68,7 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -78,6 +79,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * Tests for views dealing with other ongoing concurrent operations and
  * failure scenarios
  */
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
 

@@ -37,7 +37,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * You must create unique names using {@link #generateUniqueName()} for each
  * table and sequence used to prevent collisions.
  */
-@Category(ParallelStatsEnabledTest.class)
 public abstract class ParallelStatsEnabledIT extends BaseTest {
 
     protected static RegionCoprocessorEnvironment TaskRegionEnvironment;

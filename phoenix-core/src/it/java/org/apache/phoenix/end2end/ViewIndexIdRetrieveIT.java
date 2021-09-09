@@ -37,11 +37,13 @@ import java.util.Properties;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /*
     After 4.15 release, Phoenix introduced VIEW_INDEX_ID_COLUMN_TYPE and changed VIEW_INDEX_ID data
@@ -50,7 +52,8 @@ import org.junit.Test;
     a coproc that checks the client request version and send it back to the client.
     For more information, please see PHOENIX-3547, PHOENIX-5712
  */
-public class ViewIndexIdRetrieveIT extends BaseUniqueNamesOwnClusterIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class ViewIndexIdRetrieveIT extends BaseTest {
     private final String BASE_TABLE_DDL = "CREATE TABLE %s (TENANT_ID CHAR(15) NOT NULL, " +
             "ID CHAR(3) NOT NULL, NUM BIGINT CONSTRAINT PK PRIMARY KEY (TENANT_ID, ID))" +
             " MULTI_TENANT = true, COLUMN_ENCODED_BYTES=0 ";

@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.index.GlobalIndexChecker;
@@ -31,6 +32,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
@@ -45,6 +47,7 @@ import static org.apache.phoenix.end2end.index.IndexTestUtil.assertCoprocConfig;
 import static org.apache.phoenix.end2end.index.IndexTestUtil.assertCoprocsContains;
 import static org.apache.phoenix.end2end.index.IndexTestUtil.assertCoprocsNotContains;
 
+@Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class IndexCoprocIT extends ParallelStatsDisabledIT {
     private boolean isNamespaceMapped = false;

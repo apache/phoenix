@@ -58,7 +58,8 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.junit.Assert.*;
 
-@RunWith(RunUntilFailure.class) @Category(NeedsOwnMiniClusterTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
+@RunWith(RunUntilFailure.class)
 public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
     private static final Random RAND = new Random(5);

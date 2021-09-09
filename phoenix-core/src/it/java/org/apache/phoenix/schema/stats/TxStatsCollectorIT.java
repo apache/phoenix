@@ -17,12 +17,15 @@
  */
 package org.apache.phoenix.schema.stats;
 
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized;
 
 import java.util.Arrays;
 import java.util.Collection;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class TxStatsCollectorIT extends BaseStatsCollectorIT {
 
     public TxStatsCollectorIT(boolean mutable, String transactionProvider, boolean columnEncoded) {

@@ -20,8 +20,11 @@ package org.apache.phoenix.schema.stats;
 import java.util.Arrays;
 import java.util.Collection;
 
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class NonTxStatsCollectorIT extends BaseStatsCollectorIT {
 
     public NonTxStatsCollectorIT(boolean mutable,

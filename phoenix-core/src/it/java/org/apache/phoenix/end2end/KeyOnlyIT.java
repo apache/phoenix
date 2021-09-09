@@ -40,8 +40,10 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsEnabledTest.class)
 public class KeyOnlyIT extends ParallelStatsEnabledIT {
     private String tableName;
     

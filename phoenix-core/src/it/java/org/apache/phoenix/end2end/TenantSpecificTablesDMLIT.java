@@ -35,8 +35,10 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsEnabledTest.class)
 public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
 	
 	@Test

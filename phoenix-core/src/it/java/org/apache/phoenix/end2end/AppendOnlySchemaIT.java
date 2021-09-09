@@ -59,8 +59,10 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.mockito.Mockito;
 
+@Category(ParallelStatsDisabledTest.class)
 public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
 
     

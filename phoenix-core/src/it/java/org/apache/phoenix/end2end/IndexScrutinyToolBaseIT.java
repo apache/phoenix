@@ -39,6 +39,9 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * Tests for the {@link IndexScrutinyTool}
+ *
+ * Note that this class is never run directly by Junit/Maven, as it has no @Tests, but
+ * cannot be made abstract
  */
 public class IndexScrutinyToolBaseIT extends BaseTest {
     protected String outputDir;

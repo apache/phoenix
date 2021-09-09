@@ -29,10 +29,12 @@ import java.sql.ResultSet;
 import org.apache.phoenix.expression.function.OctetLengthFunction;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * End to end tests for {@link OctetLengthFunction}
  */
+@Category(ParallelStatsDisabledTest.class)
 public class OctetLengthFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

@@ -30,10 +30,12 @@ import java.sql.ResultSet;
 import org.apache.phoenix.expression.function.AbsFunction;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * End to end tests for {@link AbsFunction}
  */
+@Category(ParallelStatsDisabledTest.class)
 public class AbsFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String TABLE_NAME = generateUniqueName();

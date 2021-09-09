@@ -20,7 +20,7 @@ package org.apache.phoenix.query;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.util.DelayedRegionServer;
@@ -28,6 +28,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -47,7 +48,8 @@ import static org.junit.Assert.fail;
 /**
  * Note that some tests for concurrentConnections live in PhoenixMetricsIT.java which also test the metric emission
  */
-public class MaxConcurrentConnectionsIT extends BaseUniqueNamesOwnClusterIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class MaxConcurrentConnectionsIT extends BaseTest {
 
     private static HBaseTestingUtility hbaseTestUtil;
 

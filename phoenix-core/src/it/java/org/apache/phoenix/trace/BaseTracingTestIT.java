@@ -48,7 +48,7 @@ import org.slf4j.LoggerFactory;
  * any supporting utils.
  */
 
-public class BaseTracingTestIT extends ParallelStatsDisabledIT {
+public abstract class BaseTracingTestIT extends ParallelStatsDisabledIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseTracingTestIT.class);
 

@@ -17,16 +17,11 @@
  */
 package org.apache.phoenix.end2end;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
-
 /**
  * 
- * Annotation to denote that the test needs to run its own 
- * mini cluster that is separate from the clusters used by 
- * tests annotated as {@link ParallelStatsDisabledTest} or 
+ * Marker class to denote that the test needs to run its own
+ * mini cluster that is separate from the clusters used by
+ * tests annotated as {@link ParallelStatsDisabledTest} or
  * {@link ParallelStatsEnabledTest}.
  * 
  * As much as possible, tests should be able to run in one of the
@@ -37,8 +32,6 @@ import java.lang.annotation.Target;
  * 
  * @since 4.1
  */
-@Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.TYPE)
-public @interface NeedsOwnMiniClusterTest {
+public class NeedsOwnMiniClusterTest {
 
 }
