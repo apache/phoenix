@@ -311,6 +311,7 @@
           <configuration>
             <encoding>UTF-8</encoding>
             <forkCount>${numForkedIT}</forkCount>
+            <forkedProcessExitTimeoutInSeconds>180</forkedProcessExitTimeoutInSeconds>
             <runOrder>alphabetical</runOrder>
             <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
             <shutdown>kill</shutdown>
@@ -552,6 +553,7 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
+          <forkedProcessExitTimeoutInSeconds>180</forkedProcessExitTimeoutInSeconds>
           <reuseForks>true</reuseForks>
           <argLine>@{jacocoArgLine} -enableassertions -Xmx2250m -XX:MaxPermSize=128m
             -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
