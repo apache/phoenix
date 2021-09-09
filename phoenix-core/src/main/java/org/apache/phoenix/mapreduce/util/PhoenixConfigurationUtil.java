@@ -137,6 +137,11 @@ public final class PhoenixConfigurationUtil {
 
     public static final boolean DEFAULT_SCRUTINY_OUTPUT_INVALID_ROWS = false;
 
+    public static final String SHOULD_FIX_UNVERIFIED_TRANSFORM =
+            "phoenix.mr.fix.unverified.transform";
+
+    public static final boolean DEFAULT_SHOULD_FIX_UNVERIFIED_TRANSFORM = false;
+
     public static final String SCRUTINY_OUTPUT_FORMAT = "phoenix.mr.scrutiny.output.format";
 
     public static final String SCRUTINY_EXECUTE_TIMESTAMP = "phoenix.mr.scrutiny.execute.timestamp";
@@ -851,6 +856,18 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         String value = configuration.get(INDEX_VERIFY_TYPE, IndexTool.IndexVerifyType.NONE.getValue());
         return IndexTool.IndexVerifyType.fromValue(value);
+    }
+
+    public static boolean getShouldFixUnverifiedTransform(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.getBoolean(SHOULD_FIX_UNVERIFIED_TRANSFORM,
+                DEFAULT_SHOULD_FIX_UNVERIFIED_TRANSFORM);
+    }
+
+    public static void setShouldFixUnverifiedTransform(Configuration configuration,
+                                                    boolean shouldFixUnverified) {
+        Preconditions.checkNotNull(configuration);
+        configuration.setBoolean(SHOULD_FIX_UNVERIFIED_TRANSFORM, shouldFixUnverified);
     }
 
     public static IndexTool.IndexVerifyType getDisableLoggingVerifyType(Configuration configuration) {

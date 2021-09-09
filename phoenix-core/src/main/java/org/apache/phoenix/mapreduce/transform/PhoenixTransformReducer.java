@@ -21,28 +21,32 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.mapreduce.index.IndexToolUtil;
+import org.apache.phoenix.mapreduce.index.PhoenixIndexImportDirectReducer;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.transform.Transform;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexVerifyType;
 
 /**
  * Reducer class that does only one task and that is to complete transform.
  */
 public class PhoenixTransformReducer extends
-        Reducer<ImmutableBytesWritable, IntWritable, NullWritable, NullWritable> {
+        PhoenixIndexImportDirectReducer {
     private AtomicBoolean calledOnce = new AtomicBoolean(false);
 
     private static final Logger LOGGER =
             LoggerFactory.getLogger(PhoenixTransformReducer.class);
-
-    @Override
-    protected void setup(Context context) throws IOException {
-    }
 
     @Override
     protected void reduce(ImmutableBytesWritable arg0, Iterable<IntWritable> arg1,
@@ -51,18 +55,20 @@ public class PhoenixTransformReducer extends
         if (!calledOnce.compareAndSet(false, true)) {
             return;
         }
-
-        try (final Connection
-                     connection = ConnectionUtil.getInputConnection(context.getConfiguration())){
-            // Complete full Transform and add a partial transform
-            Transform.completeTransform(connection, context.getConfiguration());
-        } catch (Exception e) {
-            LOGGER.error(" Failed to complete transform", e);
-            throw new RuntimeException(e.getMessage());
+        IndexTool.IndexVerifyType verifyType = getIndexVerifyType(context.getConfiguration());
+        if (verifyType != IndexTool.IndexVerifyType.NONE) {
+            updateCounters(verifyType, context);
         }
-    }
-    @Override
-    protected void cleanup(Context context) throws IOException, InterruptedException{
 
+        if (verifyType != IndexTool.IndexVerifyType.ONLY) {
+            try (final Connection
+                         connection = ConnectionUtil.getInputConnection(context.getConfiguration())) {
+                // Complete full Transform and add a partial transform
+                Transform.completeTransform(connection, context.getConfiguration());
+            } catch (Exception e) {
+                LOGGER.error(" Failed to complete transform", e);
+                throw new RuntimeException(e.getMessage());
+            }
+        }
     }
 }

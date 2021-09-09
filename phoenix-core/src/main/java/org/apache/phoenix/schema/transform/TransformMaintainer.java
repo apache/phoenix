@@ -20,6 +20,7 @@ package org.apache.phoenix.schema.transform;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -45,6 +46,11 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
+
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.ValueSchema;
+import org.apache.phoenix.schema.tuple.BaseTuple;
+import org.apache.phoenix.schema.tuple.ValueGetterTuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -134,7 +140,7 @@ public class TransformMaintainer extends IndexMaintainer {
         this.oldTableEncodingScheme = oldTable.getEncodingScheme() == null ? PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : oldTable.getEncodingScheme();
         this.oldTableImmutableStorageScheme = oldTable.getImmutableStorageScheme() == null ? PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN : oldTable.getImmutableStorageScheme();
 
-        this.newTableName = newTable.getPhysicalName().getBytes();
+        this.newTableName = SchemaUtil.getTableName(newTable.getSchemaName(), newTable.getTableName()).getBytes();
         boolean newTableWALDisabled = newTable.isWALDisabled();
         int nNewTableColumns = newTable.getColumns().size();
         int nNewTablePKColumns = newTable.getPKColumns().size();
@@ -185,6 +191,42 @@ public class TransformMaintainer extends IndexMaintainer {
         }
     }
 
+    /*
+     * Build the old table row key
+     */
+    public byte[] buildDataRowKey(ImmutableBytesWritable indexRowKeyPtr, byte[][] viewConstants) {
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        TrustedByteArrayOutputStream stream = new TrustedByteArrayOutputStream(estimatedNewTableRowKeyBytes);
+        DataOutput output = new DataOutputStream(stream);
+
+        try {
+            int dataPosOffset = 0;
+            int maxRowKeyOffset = indexRowKeyPtr.getLength();
+
+            oldTableRowKeySchema.iterator(indexRowKeyPtr, ptr, 0);
+            // The oldTableRowKeySchema includes the salt byte field,
+            while (oldTableRowKeySchema.next(ptr, dataPosOffset, maxRowKeyOffset) != null) {
+                output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
+                if (!oldTableRowKeySchema.getField(dataPosOffset).getDataType().isFixedWidth()) {
+                    output.writeByte(SchemaUtil.getSeparatorByte(oldTableRowKeySchema.rowKeyOrderOptimizable(), ptr.getLength()==0
+                            , oldTableRowKeySchema.getField(dataPosOffset)));
+                }
+                dataPosOffset++;
+            }
+
+            byte[] oldTableRowKey = stream.getBuffer();
+            return oldTableRowKey;
+        } catch (IOException e) {
+            throw new RuntimeException(e); // Impossible
+        } finally {
+            try {
+                stream.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e); // Impossible
+            }
+        }
+    }
+
     /**
      * Init calculated state reading/creating
      */
@@ -230,6 +272,11 @@ public class TransformMaintainer extends IndexMaintainer {
             throw new RuntimeException(e); // Impossible
         }
         ptr.set(stream.toByteArray(), 0, stream.size());
+    }
+
+    @Override
+    public Iterator<ColumnReference> iterator() {
+        return newTableColumns.iterator();
     }
 
     public static ServerCachingProtos.TransformMaintainer toProto(TransformMaintainer maintainer) throws IOException {
@@ -470,4 +517,11 @@ public class TransformMaintainer extends IndexMaintainer {
         return newTableEmptyKeyValueRef.getQualifier();
     }
 
+    public byte[] getDataEmptyKeyValueCF() {
+        return oldTableEmptyKeyValueCF;
+    }
+
+    public byte[] getEmptyKeyValueQualifierForDataTable() {
+        return oldTableEmptyKeyValueRef.getQualifier();
+    }
 }
