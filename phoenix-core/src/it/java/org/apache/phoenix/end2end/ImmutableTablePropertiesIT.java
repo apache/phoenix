@@ -36,7 +36,9 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class ImmutableTablePropertiesIT extends ParallelStatsDisabledIT {
 
     @Test

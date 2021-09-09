@@ -33,9 +33,10 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.io.Files;
 
+@Category(ParallelStatsDisabledTest.class)
 public class SpooledTmpFileDeleteIT extends ParallelStatsDisabledIT {
     private static final String PRINCIPAL = "noRenewLease";
     private File spoolDir;

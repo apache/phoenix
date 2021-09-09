@@ -28,7 +28,9 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
   @Test

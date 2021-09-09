@@ -31,7 +31,9 @@ import java.sql.Statement;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class LikeExpressionIT extends ParallelStatsDisabledIT {
 
     private String tableName;

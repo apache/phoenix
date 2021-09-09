@@ -32,8 +32,10 @@ import java.sql.SQLException;
 import java.sql.Types;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
 
     private String tableName;

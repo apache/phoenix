@@ -47,8 +47,10 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
     @Test
     public void testMappingHbaseTableToPhoenixTable() throws Exception {

@@ -23,6 +23,7 @@ import org.apache.phoenix.schema.TypeMismatchException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.*;
 import java.util.Properties;
@@ -30,6 +31,7 @@ import java.util.Properties;
 import static org.junit.Assert.*;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class ToDateFunctionIT extends ParallelStatsDisabledIT {
 
     private static final long ONE_HOUR_IN_MILLIS = 1000L * 60L * 60L;

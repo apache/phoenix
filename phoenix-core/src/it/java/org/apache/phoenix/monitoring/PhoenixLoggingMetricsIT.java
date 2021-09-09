@@ -18,11 +18,13 @@
 package org.apache.phoenix.monitoring;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.LoggingPhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixMetricsLog;
 import org.apache.phoenix.jdbc.LoggingPhoenixResultSet;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -34,6 +36,7 @@ import java.util.Map;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class PhoenixLoggingMetricsIT extends BasePhoenixMetricsIT {
 
     private static final int NUM_ROWS = 10;

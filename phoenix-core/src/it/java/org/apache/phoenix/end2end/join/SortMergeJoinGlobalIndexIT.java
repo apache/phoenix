@@ -21,11 +21,13 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
-
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
+@Category(ParallelStatsDisabledTest.class)
 public class SortMergeJoinGlobalIndexIT extends SortMergeJoinIT {
 
     private static final Map<String,String> virtualNameToRealNameMap = Maps.newHashMap();

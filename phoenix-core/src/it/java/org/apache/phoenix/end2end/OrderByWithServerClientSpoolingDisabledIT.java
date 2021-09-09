@@ -32,7 +32,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * {@link SizeBoundQueue} for all its operations
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class OrderByWithServerClientSpoolingDisabledIT extends OrderByIT {
+public class OrderByWithServerClientSpoolingDisabledIT extends BaseOrderByIT {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {

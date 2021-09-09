@@ -90,6 +90,14 @@ function personality_globals
   # TODO Doesn't seem to have effect in Yetus 0.12, set in cli instead
   #shellcheck disable=SC2034
   DOCKERMEMLIMIT=20g
+
+  # Extremely evil in-memory patching of the maven module to use mvn verify instead of mvn test
+  # This is likely to break on Yetus upgrade
+  maven_modules_worker_definition=$(declare -f maven_modules_worker)
+  maven_modules_worker_definition=${maven_modules_worker_definition//unit clean test/unit clean verify}
+  eval "$maven_modules_worker_definition"
+
+  yetus_debug "patched maven_modules_worker_definition. New function:\n${maven_modules_worker_definition}"
 }
 
 ## @description  Parse extra arguments required by personalities, if any.
@@ -141,6 +149,9 @@ function personality_modules
   # Running with threads>1 seems to trigger some problem in the build, but since we
   # spend 80+% of the time in phoenix-core, it wouldn't help much anyway
   extra="--threads=1 -DPhoenixPatchProcess"
+  
+  # I have been unable to get jacoco reliably running on ASF Jenkins
+  extra="--threads=1 -DPhoenixPatchProcess -Dskip.code-coverage "
   if [[ "${PATCH_BRANCH}" = 4* ]]; then
     extra="${extra} -Dhttps.protocols=TLSv1.2"
   fi
@@ -204,9 +215,8 @@ function personality_modules
   if [[ ${testtype} == unit ]]; then
     local tests_arg=""
     get_include_exclude_tests_arg tests_arg
-    #Phoenix traditially runs the full IT suite from Precommit
-    #keep it that way to ease transition
-    extra="verify ${extra} ${tests_arg}"
+    # We have patched the maven module above to run mvn verify instead of mvn test
+    extra="${extra} ${tests_arg}"
 
     # Inject the jenkins build-id for our surefire invocations
     # Used by zombie detection stuff, even though we're not including that yet.
@@ -321,7 +331,13 @@ function hbaserebuild_precompile
 {
   big_console_header "Reinstalling HBase with Hadoop 3"
 
+  if [[ -n "${HBASE_REBUILD_DONE}" ]]; then
+    return
+  fi
+
   MAVEN_LOCAL_REPO="$MAVEN_LOCAL_REPO" ${BASEDIR}/dev/rebuild_hbase.sh detect
+
+  HBASE_REBUILD_DONE=1
 
   add_vote_table +0 hbaserecompile "" "HBase recompiled."
   return 0

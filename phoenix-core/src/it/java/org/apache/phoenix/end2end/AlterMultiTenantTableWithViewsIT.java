@@ -52,9 +52,10 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
 
     private Connection getTenantConnection(String tenantId) throws Exception {

@@ -38,6 +38,7 @@ import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
 
@@ -46,6 +47,7 @@ import org.junit.runners.Parameterized.Parameters;
  * Basic tests for Phoenix JDBC implementation
  *
  */
+@Category(ParallelStatsDisabledTest.class)
 public class QueryIT extends BaseQueryIT {
     
     @Parameters(name="QueryIT_{index}") // name is used by failsafe as file name in reports

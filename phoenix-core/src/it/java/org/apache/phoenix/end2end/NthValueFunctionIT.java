@@ -27,8 +27,10 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test

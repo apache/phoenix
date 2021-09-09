@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -39,6 +40,7 @@ import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -57,8 +59,8 @@ import static org.apache.phoenix.util.TestUtil.assertTableHasTtl;
 import static org.apache.phoenix.util.TestUtil.assertTableHasVersions;
 import static org.junit.Assert.assertFalse;
 
-@NeedsOwnMiniClusterTest
-public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class MaxLookbackIT extends BaseTest {
     private static final int MAX_LOOKBACK_AGE = 15;
     private static final int ROWS_POPULATED = 2;
     public static final int WAIT_AFTER_TABLE_CREATION_MILLIS = 1;

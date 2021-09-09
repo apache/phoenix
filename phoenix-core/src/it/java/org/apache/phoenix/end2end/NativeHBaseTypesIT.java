@@ -54,6 +54,7 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
 /**
@@ -66,6 +67,7 @@ import org.junit.Test;
  * @since 0.1
  */
 
+@Category(ParallelStatsDisabledTest.class)
 public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     
     private String initTableValues() throws Exception {

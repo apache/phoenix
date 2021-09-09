@@ -44,9 +44,10 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
+@Category(ParallelStatsDisabledTest.class)
 public class DateArithmeticIT extends ParallelStatsDisabledIT {
     
     @Test
