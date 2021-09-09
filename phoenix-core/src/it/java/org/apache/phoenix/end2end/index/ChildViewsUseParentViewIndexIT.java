@@ -32,11 +32,14 @@ import java.util.Properties;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
 
     @Test

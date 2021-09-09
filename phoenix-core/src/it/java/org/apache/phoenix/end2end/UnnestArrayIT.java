@@ -31,7 +31,9 @@ import java.util.Properties;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public abstract class UnnestArrayIT extends ParallelStatsDisabledIT {
     private String tableName;
     

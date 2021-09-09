@@ -81,7 +81,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-@Category(NeedsOwnMiniClusterTest.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public abstract class BasePermissionsIT extends BaseTest {
 

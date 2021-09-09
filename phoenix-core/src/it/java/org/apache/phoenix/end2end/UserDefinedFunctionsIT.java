@@ -73,10 +73,11 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.junit.rules.TestName;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
     protected static final String TENANT_ID = "ZZTop";
     private static String url;

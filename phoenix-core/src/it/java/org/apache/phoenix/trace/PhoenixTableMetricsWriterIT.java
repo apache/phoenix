@@ -28,14 +28,17 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.htrace.Span;
 import org.apache.htrace.Tracer;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Test that the logging sink stores the expected metrics/stats
  */
+@Category(ParallelStatsDisabledTest.class)
 public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
 
     /**

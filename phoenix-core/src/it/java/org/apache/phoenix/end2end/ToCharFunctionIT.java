@@ -39,6 +39,7 @@ import java.util.TimeZone;
 import org.apache.phoenix.expression.function.ToCharFunction;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Tests for the TO_CHAR built-in function.
@@ -48,6 +49,7 @@ import org.junit.Test;
  * @since 0.1
  */
 
+@Category(ParallelStatsDisabledTest.class)
 public class ToCharFunctionIT extends ParallelStatsDisabledIT {
     
     private String TO_CHAR_TABLE_NAME;

@@ -47,6 +47,7 @@ import java.util.Properties;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
 @RunWith(Parameterized.class)
+//FIXME this test is never run by maven, as it has no @Category
 public class IndexUpgradeToolIT extends BaseTest {
 
     public static final String

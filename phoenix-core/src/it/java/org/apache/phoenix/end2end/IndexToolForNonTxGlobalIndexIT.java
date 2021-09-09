@@ -50,6 +50,7 @@ import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRow;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -67,6 +68,7 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -116,8 +118,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
-public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT {
+public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
     public static final int MAX_LOOKBACK_AGE = 3600;
     private final String tableDDLOptions;

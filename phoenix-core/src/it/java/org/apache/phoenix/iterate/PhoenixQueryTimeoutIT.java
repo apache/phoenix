@@ -28,15 +28,18 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Tests to validate that user specified property phoenix.query.timeoutMs
  * works as expected.
  */
+@Category(ParallelStatsDisabledTest.class)
 public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
 
     private String tableName;

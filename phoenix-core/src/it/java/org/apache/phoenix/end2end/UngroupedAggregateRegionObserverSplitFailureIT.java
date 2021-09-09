@@ -36,12 +36,15 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.phoenix.compat.hbase.CompatObserverContext;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-public class UngroupedAggregateRegionObserverSplitFailureIT extends BaseUniqueNamesOwnClusterIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class UngroupedAggregateRegionObserverSplitFailureIT extends BaseTest {
     
     private static HBaseTestingUtility hbaseTestUtil;
     private static String url;

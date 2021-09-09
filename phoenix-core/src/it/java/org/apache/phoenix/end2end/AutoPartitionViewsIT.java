@@ -42,10 +42,12 @@ import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+@Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
 

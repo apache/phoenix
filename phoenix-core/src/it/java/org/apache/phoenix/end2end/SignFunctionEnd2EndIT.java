@@ -30,11 +30,13 @@ import java.sql.ResultSet;
 import org.apache.phoenix.expression.function.SignFunction;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * End to end tests for {@link SignFunction}
  * @since 4.0.0
  */
+@Category(ParallelStatsDisabledTest.class)
 public class SignFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

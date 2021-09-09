@@ -20,8 +20,9 @@ package org.apache.phoenix.monitoring;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.InstanceResolver;
@@ -30,6 +31,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.hamcrest.CoreMatchers;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.DriverManager;
 import java.util.Map;
@@ -39,7 +41,8 @@ import static org.apache.phoenix.monitoring.NoOpGlobalMetricImpl.NO_VALUE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 
-public class PhoenixMetricsDisabledIT extends BaseUniqueNamesOwnClusterIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class PhoenixMetricsDisabledIT extends BaseTest {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {

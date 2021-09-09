@@ -31,7 +31,9 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class MetaDataEndPointIT extends ParallelStatsDisabledIT {
     @Test
 	public void testUpdateIndexState() throws Throwable {

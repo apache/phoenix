@@ -52,7 +52,6 @@ import static org.junit.Assert.fail;
  * You must create unique names using {@link #generateUniqueName()} for each
  * table and sequence used to prevent collisions.
  */
-@Category(ParallelStatsDisabledTest.class)
 public abstract class ParallelStatsDisabledIT extends BaseTest {
 
     @BeforeClass

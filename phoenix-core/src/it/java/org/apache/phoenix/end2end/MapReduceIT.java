@@ -36,6 +36,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.io.IOException;
 import java.sql.Array;
@@ -53,6 +54,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * Test that our MapReduce basic tools work as expected
  */
+@Category(ParallelStatsDisabledTest.class)
 public class MapReduceIT extends ParallelStatsDisabledIT {
 
     private static final String STOCK_NAME = "STOCK_NAME";

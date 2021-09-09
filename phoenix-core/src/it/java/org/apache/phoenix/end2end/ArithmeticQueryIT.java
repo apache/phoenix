@@ -35,11 +35,12 @@ import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Floats;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
 
     @Test

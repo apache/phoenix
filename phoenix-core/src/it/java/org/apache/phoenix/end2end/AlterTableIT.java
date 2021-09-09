@@ -73,6 +73,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -88,6 +89,7 @@ import org.junit.runners.Parameterized.Parameters;
  * or at the end of test class.
  *
  */
+@Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class AlterTableIT extends ParallelStatsDisabledIT {
     private String schemaName;

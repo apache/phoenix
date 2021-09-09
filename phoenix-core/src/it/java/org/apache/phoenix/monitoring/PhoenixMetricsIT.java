@@ -76,6 +76,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
@@ -87,6 +88,7 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.hamcrest.CoreMatchers;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.mockito.internal.util.reflection.Whitebox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -102,6 +104,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
  * 2. Phoenix Request level metrics are exposed via
  *   a. PhoenixRuntime
  */
+@Category(NeedsOwnMiniClusterTest.class)
 public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixMetricsIT.class);

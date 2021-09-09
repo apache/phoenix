@@ -38,9 +38,10 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver.BuildIndexScheduleTask;
-import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -50,12 +51,14 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-public class IndexRebuildIncrementDisableCountIT extends BaseUniqueNamesOwnClusterIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class IndexRebuildIncrementDisableCountIT extends BaseTest {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(IndexRebuildIncrementDisableCountIT.class);
     private static long pendingDisableCount = 0;

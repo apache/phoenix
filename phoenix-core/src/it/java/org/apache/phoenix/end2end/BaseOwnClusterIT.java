@@ -18,14 +18,15 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.query.BaseTest;
 import org.junit.After;
 
 /**
  * Base class for tests that need their own mini cluster. Classes that extend this base class don't necessarily have to
  * use unique names for tables and sequences. Any new integration tests that need their own mini cluster should be
- * extending {@link BaseUniqueNamesOwnClusterIT} class directly.
+ * extending {@link BaseTest} class directly.
  */
-public class BaseOwnClusterIT extends BaseUniqueNamesOwnClusterIT {
+public abstract class BaseOwnClusterIT extends BaseTest {
     @After
     public void cleanUpAfterTest() throws Exception {
         deletePriorMetaData(HConstants.LATEST_TIMESTAMP, getUrl());

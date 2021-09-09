@@ -28,6 +28,7 @@ import java.util.Properties;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
+import org.apache.phoenix.end2end.ParallelStatsEnabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
@@ -36,12 +37,14 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@Category(ParallelStatsEnabledTest.class)
 @RunWith(Parameterized.class)
 public class ConnectionCachingIT extends ParallelStatsEnabledIT {
   private static final Logger LOGGER = LoggerFactory.getLogger(ConnectionCachingIT.class);

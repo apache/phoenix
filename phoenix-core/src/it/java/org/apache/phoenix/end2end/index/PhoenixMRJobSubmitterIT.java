@@ -17,10 +17,10 @@
  */
 package org.apache.phoenix.end2end.index;
 
-import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.mapreduce.index.automation.PhoenixAsyncIndex;
 import org.apache.phoenix.mapreduce.index.automation.PhoenixMRJobSubmitter;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -38,7 +38,7 @@ import java.sql.PreparedStatement;
 import java.util.Map;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class PhoenixMRJobSubmitterIT extends BaseUniqueNamesOwnClusterIT {
+public class PhoenixMRJobSubmitterIT extends BaseTest {
 
   private static String REQUEST_INDEX_REBUILD_SQL = "ALTER INDEX %s ON %s REBUILD ASYNC";
 

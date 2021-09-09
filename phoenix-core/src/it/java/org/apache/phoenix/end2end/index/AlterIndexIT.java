@@ -18,14 +18,17 @@
 package org.apache.phoenix.end2end.index;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
+@Category(ParallelStatsDisabledTest.class)
 public class AlterIndexIT extends ParallelStatsDisabledIT {
 
     @Test

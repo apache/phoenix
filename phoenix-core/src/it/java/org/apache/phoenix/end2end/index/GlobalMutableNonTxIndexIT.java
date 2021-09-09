@@ -20,9 +20,12 @@ package org.apache.phoenix.end2end.index;
 import java.util.Arrays;
 import java.util.Collection;
 
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
+@Category(ParallelStatsDisabledTest.class)
 public class GlobalMutableNonTxIndexIT extends BaseIndexIT {
 
     public GlobalMutableNonTxIndexIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded, boolean skipPostIndexUpdates) {

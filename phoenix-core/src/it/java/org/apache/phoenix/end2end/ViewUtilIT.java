@@ -31,6 +31,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -53,6 +54,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+@Category(ParallelStatsDisabledTest.class)
 public class ViewUtilIT extends ParallelStatsDisabledIT {
 
     @Test

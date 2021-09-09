@@ -52,8 +52,10 @@ import org.apache.phoenix.util.CursorUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     private String tableName = generateUniqueName();
 
