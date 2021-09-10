@@ -610,9 +610,9 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
             }
             Mutation m = miniBatchOp.getOperation(i);
             // skip this mutation if we aren't enabling indexing or not an atomic op
-            // or if it is an atomic op and its timestamp is already set
+            // or if it is an atomic op and its timestamp is already set(not LATEST)
             if (!builder.isEnabled(m) &&
-                (!builder.isAtomicOp(m) || getMaxTimestamp(m) != HConstants.LATEST_TIMESTAMP)) {
+                !(builder.isAtomicOp(m) && getMaxTimestamp(m) == HConstants.LATEST_TIMESTAMP)) {
                 continue;
             }
             setTimestampOnMutation(m, ts);

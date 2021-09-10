@@ -37,6 +37,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -784,23 +792,27 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
             // row doesn't exist
             upsertRecord(conn, ignoreDml, orgid, userid, rowTimestamp, original);
             assertNumRecords(1, conn, dql, original);
+            assertHBaseRowTimestamp(tableName, rowTimestamp);
 
             // on duplicate key ignore
             upsertRecord(conn, ignoreDml, orgid, userid, rowTimestamp, updated);
             assertNumRecords(1, conn, dql, original);
             assertNumRecords(0, conn, dql, updated);
+            assertHBaseRowTimestamp(tableName, rowTimestamp);
 
             // regular upsert override
             upsertRecord(conn, dml, orgid, userid, rowTimestamp, updated);
             assertNumRecords(0, conn, dql, original);
             assertNumRecords(1, conn, dql, updated);
+            assertHBaseRowTimestamp(tableName, rowTimestamp);
 
-            // on duplicate key update
+            // on duplicate key update generates extra mutations on the server but those mutations
+            // don't honor ROW_TIMESTAMP
             upsertRecord(conn, updateDml, orgid, userid, rowTimestamp, "");
             assertNumRecords(0, conn, dql, updated);
             assertNumRecords(1, conn, dql, duplicate);
 
-            // set null
+            // set null, new mutations generated on the server
             upsertRecord(conn, nullDml, orgid, userid, rowTimestamp, "");
             assertNumRecords(0, conn, dql, duplicate);
             dql = "SELECT count(*) from " + tableName + " WHERE STATUS is null";
@@ -840,5 +852,18 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
         assertEquals(count, rs.getInt(1));
     }
 
+    private void assertHBaseRowTimestamp(String tableName, long expectedTimestamp) throws Exception {
+        Scan scan = new Scan();
+        byte[] emptyKVQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(true).getFirst();
+        try (org.apache.hadoop.hbase.client.Connection hconn =
+                 ConnectionFactory.createConnection(config)) {
+            Table table = hconn.getTable(TableName.valueOf(tableName));
+            ResultScanner resultScanner = table.getScanner(scan);
+            Result result = resultScanner.next();
+            long actualTimestamp = result.getColumnLatestCell(
+                QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, emptyKVQualifier).getTimestamp();
+            assertEquals(expectedTimestamp, actualTimestamp);
+        }
+    }
 }
     
