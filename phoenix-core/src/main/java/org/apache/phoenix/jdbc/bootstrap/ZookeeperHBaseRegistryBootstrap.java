@@ -1,4 +1,4 @@
-package org.apache.phoenix.jdbc.bootstrapz;
+package org.apache.phoenix.jdbc.bootstrap;
 
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;

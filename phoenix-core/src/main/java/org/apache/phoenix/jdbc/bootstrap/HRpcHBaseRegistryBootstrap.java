@@ -1,4 +1,4 @@
-package org.apache.phoenix.jdbc.bootstrapz;
+package org.apache.phoenix.jdbc.bootstrap;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.MasterRegistry;

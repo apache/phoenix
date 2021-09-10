@@ -1,4 +1,4 @@
-package org.apache.phoenix.jdbc.bootstrapz;
+package org.apache.phoenix.jdbc.bootstrap;
 
 public class HBaseRegistryBootstrapFactory {
 
@@ -9,4 +9,5 @@ public class HBaseRegistryBootstrapFactory {
 
         return new ZookeeperHBaseRegistryBootstrap();
     }
+
 }

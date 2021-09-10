@@ -33,9 +33,10 @@ import java.util.logging.Logger;
 
 import javax.annotation.concurrent.Immutable;
 
-import org.apache.phoenix.jdbc.bootstrapz.HBaseRegistryBootstrap;
-import org.apache.phoenix.jdbc.bootstrapz.HBaseRegistryBootstrapFactory;
-import org.apache.phoenix.jdbc.bootstrapz.HBaseRegistryBootstrapType;
+import org.apache.phoenix.jdbc.bootstrap.HBaseRegistryBootstrap;
+import org.apache.phoenix.jdbc.bootstrap.HBaseRegistryBootstrapFactory;
+import org.apache.phoenix.jdbc.bootstrap.HBaseRegistryBootstrapType;
+import org.apache.phoenix.jdbc.bootstrap.ZookeeperHBaseRegistryBootstrap;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
@@ -212,6 +213,9 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         }
 
         public String getZookeeperConnectionString() {
+            if (this.bootstrap.getClass() != ZookeeperHBaseRegistryBootstrap.class){
+                throw new RuntimeException("Not bootstrapped with Zookeeper, unable to resolve connection string.");
+            }
             return getQuorum() + ":" + getPort();
         }
 
@@ -656,7 +660,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
 			return quorum + (port == null ? "" : ":" + port)
 					+ (rootNode == null ? "" : ":" + rootNode)
 					+ (principal == null ? "" : ":" + principal)
-					+ (keytab == null ? "" : ":" + keytab);
+					+ (keytab == null ? "" : ":" + keytab)
+					+ (bootstrap == null ? "" : ":" + bootstrap);
 		}
 
         public String toUrl() {

@@ -1,4 +1,4 @@
-package org.apache.phoenix.jdbc.bootstrapz;
+package org.apache.phoenix.jdbc.bootstrap;
 
 import java.util.Map;
 
@@ -12,6 +12,10 @@ public abstract class HBaseRegistryBootstrap {
     public abstract Map<String, String> generateConnectionProps(String quorum, Integer port, String rootNode);
 
 
+    @Override
+    public String toString() {
+        return bootstrapType.toString();
+    }
 
     @Override
     public int hashCode() {

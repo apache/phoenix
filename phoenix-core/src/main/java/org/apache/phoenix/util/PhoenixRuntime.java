@@ -19,7 +19,6 @@ package org.apache.phoenix.util;
 
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
-import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newHashSet;
 import static org.apache.phoenix.schema.types.PDataType.ARRAY_TYPE_SUFFIX;
 
 import java.io.File;
