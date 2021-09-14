@@ -22,8 +22,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
-import junit.framework.AssertionFailedError;
-
 import java.sql.*;
 import java.util.Properties;
 
@@ -87,7 +85,7 @@ public class AuditLoggingIT extends ParallelStatsDisabledIT {
                     assertEquals(rs2.getString(7), selectQuery);
                     assertFalse(rs2.next());
                     break;
-                } catch (AssertionFailedError e) {
+                } catch (AssertionError e) {
                     if(retryCount-- <= 0) {
                         throw e;
                     }
@@ -128,7 +126,7 @@ public class AuditLoggingIT extends ParallelStatsDisabledIT {
                     assertEquals(rs2.getString(7), upsertQuery);
                     assertFalse(rs2.next());
                     break;
-                } catch (AssertionFailedError e) {
+                } catch (AssertionError e) {
                     if(retryCount-- <= 0) {
                         throw e;
                     }
@@ -172,7 +170,7 @@ public class AuditLoggingIT extends ParallelStatsDisabledIT {
 
                     assertFalse(rs2.next());
                     break;
-                } catch (AssertionFailedError e) {
+                } catch (AssertionError e) {
                     if(retryCount-- <= 0) {
                         throw e;
                     }
@@ -225,7 +223,7 @@ public class AuditLoggingIT extends ParallelStatsDisabledIT {
                     assertTrue(rs2.next());
                     assertFalse(rs2.next());
                     break;
-                } catch (AssertionFailedError e) {
+                } catch (AssertionError e) {
                     if(retryCount-- <= 0) {
                         throw e;
                     }
