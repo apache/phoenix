@@ -56,6 +56,7 @@ import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_RETRIES;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_REMOTE_RPC_RETRIES;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_ROWS_SCANNED;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_ROWS_FILTERED;
+import static org.apache.phoenix.monitoring.MetricType.COUNTER_METADATA_INCONSISTENCY;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -116,7 +117,8 @@ public enum GlobalClientMetrics {
     GLOBAL_HBASE_COUNT_RPC_RETRIES(COUNT_RPC_RETRIES),
     GLOBAL_HBASE_COUNT_REMOTE_RPC_RETRIES(COUNT_REMOTE_RPC_RETRIES),
     GLOBAL_HBASE_COUNT_ROWS_SCANNED(COUNT_ROWS_SCANNED),
-    GLOBAL_HBASE_COUNT_ROWS_FILTERED(COUNT_ROWS_FILTERED);
+    GLOBAL_HBASE_COUNT_ROWS_FILTERED(COUNT_ROWS_FILTERED),
+    GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY(COUNTER_METADATA_INCONSISTENCY);
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalClientMetrics.class);
     private static final boolean isGlobalMetricsEnabled = QueryServicesOptions.withDefaults().isGlobalMetricsEnabled();
