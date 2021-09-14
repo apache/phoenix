@@ -375,6 +375,11 @@ public class DelegateTable implements PTable {
         return delegate.getSchemaVersion();
     }
 
+    @Override
+    public String getExternalSchemaId() {
+        return delegate.getExternalSchemaId();
+    }
+
     @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }
 
     @Override public Map<String, String> getDefaultPropertyValues() { return delegate.getDefaultPropertyValues(); }

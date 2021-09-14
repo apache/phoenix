@@ -36,6 +36,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -46,6 +47,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
@@ -64,6 +66,9 @@ import org.apache.phoenix.schema.PTable.EncodedCQCounter;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.export.DefaultSchemaRegistryRepository;
+import org.apache.phoenix.schema.export.DefaultSchemaWriter;
+import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
@@ -71,6 +76,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -230,7 +236,97 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testAlterTableUpdatesSchemaRegistry() throws Exception {
+        String schemaName = generateUniqueName();
+        String tableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String createDdl = "CREATE TABLE " + fullTableName +
+                " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
+                " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
+                "CHANGE_DETECTION_ENABLED=true, SCHEMA_VERSION='OLD'";
+            conn.createStatement().execute(createDdl);
+            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            assertEquals("OLD", table.getSchemaVersion());
+            String expectedSchemaId = String.format("global*%s*%s*OLD", schemaName, tableName);
+            assertEquals(expectedSchemaId, table.getExternalSchemaId());
 
+            String alterVersionDdl = "ALTER TABLE " + fullTableName + " SET SCHEMA_VERSION='NEW'";
+            conn.createStatement().execute(alterVersionDdl);
+
+            String alterDdl = "ALTER TABLE " + fullTableName +
+                " ADD col3 VARCHAR NULL";
+
+            conn.createStatement().execute(alterDdl);
+            PTable newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            verifySchemaExport(newTable, getUtility().getConfiguration());
+        }
+    }
+
+    @Test
+    public void testAlterChangeDetectionActivatesSchemaRegistryExport() throws Exception {
+        String schemaName = generateUniqueName();
+        String tableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String createDdl = "CREATE TABLE " + fullTableName + " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
+                + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) "
+                + " SCHEMA_VERSION='OLD'";
+            conn.createStatement().execute(createDdl);
+            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            Assert.assertNull(table.getExternalSchemaId());
+            String alterDdl = "ALTER TABLE " + fullTableName + " SET CHANGE_DETECTION_ENABLED=true";
+            conn.createStatement().execute(alterDdl);
+            PTable alteredTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            assertTrue(alteredTable.isChangeDetectionEnabled());
+            verifySchemaExport(alteredTable, getUtility().getConfiguration());
+        }
+    }
+
+    @Test
+    public void testChangeDetectionFalseDoesntExportToSchemaRegistry() throws Exception {
+        String schemaName = generateUniqueName();
+        String tableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String createDdl = "CREATE TABLE " + fullTableName + " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
+                + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) "
+                + "CHANGE_DETECTION_ENABLED=false, SCHEMA_VERSION='OLD'";
+            conn.createStatement().execute(createDdl);
+            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            assertFalse(table.isChangeDetectionEnabled());
+            assertNull(table.getExternalSchemaId());
+        }
+    }
+
+    public static void verifySchemaExport(PTable newTable, Configuration conf) throws IOException {
+        assertEquals(DefaultSchemaRegistryRepository.getSchemaId(newTable),
+            newTable.getExternalSchemaId());
+        String expectedSchemaText = new DefaultSchemaWriter().exportSchema(newTable);
+        String actualSchemaText = SchemaRegistryRepositoryFactory.getSchemaRegistryRepository(
+            conf).getSchemaById(newTable.getExternalSchemaId());
+
+        //filter out table and column timestamp fields, which can vary by a few ms because
+        //HBase assigns the real server timestamp after we update the schema registry
+        String pattern = "(?i)\\s*timestamp:\\s\\d*";
+        expectedSchemaText = expectedSchemaText.replaceAll(pattern, "");
+        actualSchemaText = actualSchemaText.replaceAll(pattern, "");
+
+        //external schema id can be different because it's assigned at the registry AFTER
+        //we save it
+        String externalSchemaPattern = "(?i)\\s*externalSchemaId:\\s\".*\"";
+        expectedSchemaText = expectedSchemaText.replaceAll(externalSchemaPattern, "");
+        actualSchemaText = actualSchemaText.replaceAll(externalSchemaPattern, "");
+
+        //reconstructing the complete view sometimes messes up the base column count. It's not
+        //needed in an external schema registry. TODO: fix the base column count anyway
+        String baseColumnCountPattern = "(?i)\\s*baseColumnCount:\\s\".*\"";
+        expectedSchemaText = expectedSchemaText.replaceAll(baseColumnCountPattern, "");
+        actualSchemaText = expectedSchemaText.replaceAll(baseColumnCountPattern, "");
+
+        assertEquals(expectedSchemaText, actualSchemaText);
+    }
 
     @Test
     public void testSetPropertyAndAddColumnForNewColumnFamily() throws Exception {

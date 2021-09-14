@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.client.Scan;
