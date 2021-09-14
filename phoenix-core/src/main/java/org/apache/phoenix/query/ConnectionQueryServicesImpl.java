@@ -65,6 +65,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HCONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_SERVICES_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_ENABLED;
@@ -655,6 +656,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (Bytes.compareTo(regionLocation.getRegionInfo().getEndKey(), currentKey) <= 0
                 && !Bytes.equals(currentKey, HConstants.EMPTY_START_ROW)
                 && !Bytes.equals(regionLocation.getRegionInfo().getEndKey(), HConstants.EMPTY_END_ROW)) {
+            GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.increment();
             String regionNameString =
                     new String(regionLocation.getRegionInfo().getRegionName(), StandardCharsets.UTF_8);
             throw new IOException(String.format(

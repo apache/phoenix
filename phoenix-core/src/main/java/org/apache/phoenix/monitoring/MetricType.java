@@ -155,7 +155,9 @@ public enum MetricType {
     COUNT_RPC_RETRIES("rpr", "Number of RPC retries",LogLevel.DEBUG, PLong.INSTANCE),
     COUNT_REMOTE_RPC_RETRIES("rrr", "Number of remote RPC retries",LogLevel.DEBUG, PLong.INSTANCE),
     COUNT_ROWS_SCANNED("ws", "Number of rows scanned",LogLevel.DEBUG, PLong.INSTANCE),
-    COUNT_ROWS_FILTERED("wf", "Number of rows filtered",LogLevel.DEBUG,PLong.INSTANCE);
+    COUNT_ROWS_FILTERED("wf", "Number of rows filtered",LogLevel.DEBUG,PLong.INSTANCE),
+    COUNTER_METADATA_INCONSISTENCY("mi", "Number of times the metadata inconsistencies ",
+            LogLevel.DEBUG, PLong.INSTANCE);
 	
     private final String description;
     private final String shortName;

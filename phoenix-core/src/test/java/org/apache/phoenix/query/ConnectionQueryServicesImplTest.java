@@ -58,6 +58,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.SystemExitRule;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -176,28 +177,33 @@ public class ConnectionQueryServicesImplTest {
 
         // comparing the current regionInfo endKey is equal to the previous endKey
         // [0x3000, Ox3000) vs 0x3000
+        GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedStartAndEndKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(corruptedStartAndEndKey);
         testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true);
 
         // comparing the current regionInfo endKey is less than previous endKey
         // [0x3000,0x2999) vs 0x3000
+        GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedStartAndEndKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(corruptedDecreasingKey);
         testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true);
 
         // comparing the current regionInfo endKey is greater than the previous endKey
         // [0x3000,0x3000) vs 0x3001
+        GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(notCorruptedStartKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(notCorruptedNewKey);
         testGetNextRegionStartKey(mockCqsi, mockRegionLocation, notCorruptedEndKey, false);
 
         // test EMPTY_START_ROW
+        GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(HConstants.EMPTY_START_ROW);
         when(mockHRegionInfo.getEndKey()).thenReturn(notCorruptedEndKey);
         testGetNextRegionStartKey(mockCqsi, mockRegionLocation, HConstants.EMPTY_START_ROW, false);
         
         //test EMPTY_END_ROW
+        GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(notCorruptedStartKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(HConstants.EMPTY_END_ROW);
         testGetNextRegionStartKey(mockCqsi, mockRegionLocation, notCorruptedStartKey, false);
@@ -215,6 +221,9 @@ public class ConnectionQueryServicesImplTest {
                 fail();
             }
         }
+
+        assertEquals(isCorrupted ? 1 : 0,
+                GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().getValue());
     }
     @Test
     public void testSysMutexCheckReturnsFalseWhenTableAbsent() throws Exception {
