@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionInfo;
@@ -41,13 +40,10 @@ import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -109,10 +105,8 @@ public class WALAnnotationIT extends BaseTest {
         Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         SchemaBuilder builder = new SchemaBuilder(getUrl());
         boolean createGlobalIndex = false;
-        long ddlTimestamp = upsertAndDeleteHelper(builder, createGlobalIndex);
-        assertAnnotation(2, builder.getPhysicalTableName(false), null,
-            builder.getTableOptions().getSchemaName(),
-            builder.getDataOptions().getTableName(), PTableType.TABLE, ddlTimestamp);
+        String externalSchemaId = upsertAndDeleteHelper(builder, createGlobalIndex);
+        assertAnnotation(2, builder.getPhysicalTableName(false), externalSchemaId);
     }
 
     @Test
@@ -183,18 +177,16 @@ public class WALAnnotationIT extends BaseTest {
         Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         SchemaBuilder builder = new SchemaBuilder(getUrl());
         boolean createGlobalIndex = true;
-        long ddlTimestamp = upsertAndDeleteHelper(builder, createGlobalIndex);
-        assertAnnotation(2, builder.getPhysicalTableName(false), null,
-            builder.getTableOptions().getSchemaName(),
-            builder.getDataOptions().getTableName(), PTableType.TABLE, ddlTimestamp);
+        String externalSchemaId = upsertAndDeleteHelper(builder, createGlobalIndex);
+        assertAnnotation(2, builder.getPhysicalTableName(false), externalSchemaId);
         assertAnnotation(0, builder.getPhysicalTableIndexName(false),
-            null, null, null, null, ddlTimestamp);
+            externalSchemaId);
     }
 
     // Note that local secondary indexes aren't supported because they go in the same WALEdit as the
     // "base" table data they index.
 
-    private long upsertAndDeleteHelper(SchemaBuilder builder, boolean createGlobalIndex) throws Exception {
+    private String upsertAndDeleteHelper(SchemaBuilder builder, boolean createGlobalIndex) throws Exception {
         try (Connection conn = getConnection()) {
             SchemaBuilder.TableOptions tableOptions = getTableOptions();
 
@@ -209,7 +201,7 @@ public class WALAnnotationIT extends BaseTest {
             conn.createStatement().execute(upsertSql);
             conn.commit();
             PTable table = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTableName());
-            assertEquals("Change Detection Enabled is false!", true, table.isChangeDetectionEnabled());
+            assertTrue("Change Detection Enabled is false!", table.isChangeDetectionEnabled());
             // Deleting by entire PK gets executed as more like an UPSERT VALUES than an UPSERT
             // SELECT (i.e, it generates the Mutations and then pushes them to server, rather than
             // running a select query and deleting the mutations returned)
@@ -221,7 +213,7 @@ public class WALAnnotationIT extends BaseTest {
             // last had columns added or removed. It is NOT the timestamp of a particular mutation
             // We need it in the annotation to match up with schema object in an external schema
             // repo.
-            return table.getLastDDLTimestamp();
+            return table.getExternalSchemaId();
         }
     }
 
@@ -261,16 +253,10 @@ public class WALAnnotationIT extends BaseTest {
                                                 int expectedAnnotations) throws SQLException, IOException {
         PTable baseTable = PhoenixRuntime.getTableNoCache(conn,
             baseBuilder.getEntityTableName());
-        assertAnnotation(expectedAnnotations, baseBuilder.getPhysicalTableName(false), null,
-            baseBuilder.getTableOptions().getSchemaName(),
-            baseBuilder.getDataOptions().getTableName(),
-            PTableType.TABLE,
-            baseTable.getLastDDLTimestamp());
+        assertAnnotation(expectedAnnotations, baseBuilder.getPhysicalTableName(false), baseTable.getExternalSchemaId());
         PTable targetTable = PhoenixRuntime.getTableNoCache(conn,
             targetBuilder.getEntityTableName());
-        assertAnnotation(expectedAnnotations, targetBuilder.getPhysicalTableName(false), null,
-            targetBuilder.getTableOptions().getSchemaName(), targetBuilder.getDataOptions().getTableName(),
-            PTableType.TABLE, targetTable.getLastDDLTimestamp());
+        assertAnnotation(expectedAnnotations, targetBuilder.getPhysicalTableName(false), targetTable.getExternalSchemaId());
     }
 
     @Test
@@ -290,10 +276,8 @@ public class WALAnnotationIT extends BaseTest {
                 " (OID, KP, COL1, COL2, COL3) SELECT * FROM " + targetBuilder.getEntityTableName();
             conn.createStatement().execute(sql);
             PTable table = PhoenixRuntime.getTableNoCache(conn, targetBuilder.getEntityTableName());
-            assertAnnotation(1, targetBuilder.getPhysicalTableName(false), null,
-                targetBuilder.getTableOptions().getSchemaName(),
-                targetBuilder.getDataOptions().getTableName(),
-                PTableType.TABLE, table.getLastDDLTimestamp());
+            assertAnnotation(1, targetBuilder.getPhysicalTableName(false),
+                table.getExternalSchemaId());
         }
 
     }
@@ -347,9 +331,7 @@ public class WALAnnotationIT extends BaseTest {
             conn.createStatement().execute(sql);
             conn.commit();
             PTable table = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTableName());
-            assertAnnotation(2, table.getPhysicalName().getString(), null,
-                table.getSchemaName().getString(),
-                table.getTableName().getString(), PTableType.TABLE, table.getLastDDLTimestamp());
+            assertAnnotation(2, table.getPhysicalName().getString(), table.getExternalSchemaId());
         }
 
     }
@@ -376,9 +358,7 @@ public class WALAnnotationIT extends BaseTest {
             conn.createStatement().execute(deleteSql);
             conn.commit();
             PTable view = PhoenixRuntime.getTableNoCache(conn, builder.getEntityGlobalViewName());
-            assertAnnotation(2, view.getPhysicalName().getString(), null,
-                view.getSchemaName().getString(),
-                view.getTableName().getString(), PTableType.VIEW, view.getLastDDLTimestamp());
+            assertAnnotation(2, view.getPhysicalName().getString(), view.getExternalSchemaId());
         }
 
     }
@@ -435,13 +415,11 @@ public class WALAnnotationIT extends BaseTest {
             conn.createStatement().execute(deleteSql);
             conn.commit();
             PTable view = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTenantViewName());
-            assertAnnotation(2, view.getPhysicalName().getString(), tenant,
-                view.getSchemaName().getString(),
-                view.getTableName().getString(), PTableType.VIEW, view.getLastDDLTimestamp());
+            assertAnnotation(2, view.getPhysicalName().getString(), view.getExternalSchemaId());
             if (createIndex) {
                 assertAnnotation(0,
                     MetaDataUtil.getViewIndexPhysicalName(builder.getEntityTableName()),
-                    tenant, null, null, null, view.getLastDDLTimestamp());
+                    view.getExternalSchemaId());
             }
         }
 
@@ -469,7 +447,7 @@ public class WALAnnotationIT extends BaseTest {
             SchemaBuilder.TableOptions tableOptions = getTableOptions();
             builder.withTableOptions(tableOptions).withTableIndexDefaults().build();
             PTable table = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTableName());
-            assertEquals("Change Detection Enabled is false!", true, table.isChangeDetectionEnabled());
+            assertTrue("Change Detection Enabled is false!", table.isChangeDetectionEnabled());
             Long ddlTimestamp = table.getLastDDLTimestamp();
             String upsertSql = "UPSERT INTO " + builder.getEntityTableName() + " VALUES" +
                 " ('a', 'b', 'c', 'd')";
@@ -486,11 +464,9 @@ public class WALAnnotationIT extends BaseTest {
                 " ('a', 'b', 'c', 'd') ON DUPLICATE KEY UPDATE " + onDupClause;
             conn.createStatement().execute(upsertSql);
             conn.commit();
-            assertAnnotation(2, builder.getPhysicalTableName(false), null,
-                builder.getTableOptions().getSchemaName(),
-                builder.getDataOptions().getTableName(), PTableType.TABLE, ddlTimestamp);
+            assertAnnotation(2, builder.getPhysicalTableName(false), table.getExternalSchemaId());
             assertAnnotation(0, builder.getPhysicalTableIndexName(false),
-                null, null, null, null, ddlTimestamp);
+                table.getExternalSchemaId());
         }
     }
 
@@ -512,29 +488,16 @@ public class WALAnnotationIT extends BaseTest {
         observer.clearAnnotations();
     }
 
-    private void assertAnnotation(int numOccurrences, String physicalTableName, String tenant,
-                                  String schemaName,
-                                  String logicalTableName,
-                                  PTableType tableType, long ddlTimestamp) throws IOException {
+    private void assertAnnotation(int numOccurrences, String physicalTableName,
+        String externalSchemaId) throws IOException {
         int foundCount = 0;
         int notFoundCount = 0;
         List<Map<String, byte[]>> entries =
             getEntriesForTable(TableName.valueOf(physicalTableName));
         for (Map<String, byte[]> m : entries) {
-            byte[] tenantBytes = m.get(MutationState.MutationMetadataType.TENANT_ID.toString());
-            byte[] schemaBytes = m.get(MutationState.MutationMetadataType.SCHEMA_NAME.toString());
-            byte[] logicalTableBytes =
-                m.get(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString());
-            byte[] tableTypeBytes = m.get(MutationState.MutationMetadataType.TABLE_TYPE.toString());
-            byte[] timestampBytes = m.get(MutationState.MutationMetadataType.TIMESTAMP.toString());
-            assertNotNull(timestampBytes);
-            long timestamp = Bytes.toLong(timestampBytes);
-            if (Objects.equals(tenant, Bytes.toString(tenantBytes)) &&
-                Objects.equals(schemaName, Bytes.toString(schemaBytes)) &&
-                Objects.equals(logicalTableName, Bytes.toString(logicalTableBytes)) &&
-                Objects.equals(tableType.toString(), Bytes.toString(tableTypeBytes)) &&
-                Objects.equals(ddlTimestamp, timestamp)
-                && timestamp < HConstants.LATEST_TIMESTAMP) {
+            byte[] externalSchemaIdBytes = m.get(MutationState.MutationMetadataType.EXTERNAL_SCHEMA_ID.toString());
+            assertNotNull(externalSchemaIdBytes);
+            if (Objects.equals(externalSchemaId, Bytes.toString(externalSchemaIdBytes))) {
                 foundCount++;
             } else {
                 notFoundCount++;

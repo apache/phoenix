@@ -17,8 +17,7 @@
  */
 package org.apache.phoenix.util;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME_INDEX;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FAMILY_NAME_INDEX;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.*;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
@@ -26,6 +25,10 @@ import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.*;
 
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PTinyint;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -122,6 +125,17 @@ public class MetaDataUtil {
         byte[] lastDDLTimestampBytes = PLong.INSTANCE.toBytes(lastDDLTimestamp);
         p.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
             PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP_BYTES, lastDDLTimestampBytes);
+        return p;
+    }
+
+    public static Put getExternalSchemaIdUpdate(byte[] tableHeaderRowKey,
+                                                String externalSchemaId) {
+        //use client timestamp as the timestamp of the Cell, to match the other Cells that might
+        // be created by this DDL. But the actual value will be a _server_ timestamp
+        Put p = new Put(tableHeaderRowKey);
+        byte[] externalSchemaIdBytes = PVarchar.INSTANCE.toBytes(externalSchemaId);
+        p.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+            PhoenixDatabaseMetaData.EXTERNAL_SCHEMA_ID_BYTES, externalSchemaIdBytes);
         return p;
     }
 
@@ -422,7 +436,7 @@ public class MetaDataUtil {
         List<Cell> kvs = tableMutation.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
         if (kvs != null) {
             for (Cell kv : kvs) { // list is not ordered, so search. TODO: we could potentially assume the position
-                if (Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(), PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES, 0, PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES.length) == 0) {
+                if (isSequenceNumber(kv)) {
                     return PLong.INSTANCE.getCodec().decodeLong(kv.getValueArray(), kv.getValueOffset(), SortOrder.getDefault());
                 }
             }
@@ -433,7 +447,21 @@ public class MetaDataUtil {
     public static long getSequenceNumber(List<Mutation> tableMetaData) {
         return getSequenceNumber(getPutOnlyTableHeaderRow(tableMetaData));
     }
-    
+
+    public static boolean isSequenceNumber(Mutation m) {
+        boolean foundSequenceNumber = false;
+        for (Cell kv : m.getFamilyCellMap().get(TABLE_FAMILY_BYTES)) {
+            if (isSequenceNumber(kv)) {
+                foundSequenceNumber = true;
+                break;
+            }
+        }
+        return foundSequenceNumber;
+    }
+    public static boolean isSequenceNumber(Cell kv) {
+        return CellUtil.matchingQualifier(kv, PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES);
+    }
+
     public static PTableType getTableType(List<Mutation> tableMetaData, KeyValueBuilder builder,
       ImmutableBytesWritable value) {
         if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
@@ -523,6 +551,52 @@ public class MetaDataUtil {
             }
         }
         return false;
+    }
+
+    public static List<Cell> getTableCellsFromMutations(List<Mutation> tableMetaData) {
+        List<Cell> tableCells = Lists.newArrayList();
+        byte[] tableKey = tableMetaData.get(0).getRow();
+        for (int k = 0; k < tableMetaData.size(); k++) {
+            Mutation m = tableMetaData.get(k);
+            if (Bytes.equals(m.getRow(), tableKey)) {
+                tableCells.addAll(getCellList(m));
+            }
+        }
+        return tableCells;
+    }
+
+    public static List<List<Cell>> getColumnAndLinkCellsFromMutations(List<Mutation> tableMetaData) {
+        //skip the first mutation because it's the table header row with table-specific information
+        //all the rest of the mutations are either from linking rows or column definition rows
+        List<List<Cell>> allColumnsCellList = Lists.newArrayList();
+        byte[] tableKey = tableMetaData.get(0).getRow();
+        for (int k = 1; k < tableMetaData.size(); k++) {
+            Mutation m = tableMetaData.get(k);
+            //filter out mutations for the table header row and TABLE_SEQ_NUM and parent table
+            //rows such as a view's column qualifier count
+            if (!Bytes.equals(m.getRow(), tableKey) && !(!isLinkType(m) && isSequenceNumber(m)
+                && !isParentTableColumnQualifierCounter(m, tableKey))) {
+                List<Cell> listToAdd = getCellList(m);
+                if (listToAdd != null && listToAdd.size() > 0) {
+                    allColumnsCellList.add(listToAdd);
+                }
+            }
+        }
+        return allColumnsCellList;
+    }
+
+    private static List<Cell> getCellList(Mutation m) {
+        List<Cell> cellList = Lists.newArrayList();
+        for (Cell c : m.getFamilyCellMap().get(TABLE_FAMILY_BYTES)) {
+            //Mutations will mark NULL columns as deletes, whereas when we read
+            //from HBase we just won't get Cells for those columns. To use Mutation cells
+            //with code expecting Cells read from HBase results, we have to purge those
+            //Delete mutations
+            if (c != null && !CellUtil.isDelete(c)) {
+                cellList.add(c);
+            }
+        }
+        return cellList;
     }
 
     /**
@@ -899,11 +973,10 @@ public class MetaDataUtil {
     public static LinkType getLinkType(Collection<Cell> kvs) {
         if (kvs != null) {
             for (Cell kv : kvs) {
-                if (Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(),
-                    PhoenixDatabaseMetaData.LINK_TYPE_BYTES, 0,
-                    PhoenixDatabaseMetaData.LINK_TYPE_BYTES.length) == 0) { return LinkType
-                    .fromSerializedValue(PUnsignedTinyint.INSTANCE.getCodec().decodeByte(kv.getValueArray(),
-                        kv.getValueOffset(), SortOrder.getDefault())); }
+                if (isLinkType(kv))  {
+                    return LinkType.fromSerializedValue(PUnsignedTinyint.INSTANCE.getCodec().
+                        decodeByte(kv.getValueArray(), kv.getValueOffset(),
+                        SortOrder.getDefault())); }
             }
         }
         return null;
@@ -911,6 +984,48 @@ public class MetaDataUtil {
 
     public static boolean isLocalIndex(String physicalName) {
         if (physicalName.contains(LOCAL_INDEX_TABLE_PREFIX)) { return true; }
+        return false;
+    }
+
+    public static boolean isLinkType(Cell kv) {
+        return CellUtil.matchingQualifier(kv, PhoenixDatabaseMetaData.LINK_TYPE_BYTES);
+    }
+
+    public static boolean isLinkType(Mutation m) {
+        boolean foundLinkType = false;
+        for (Cell kv : m.getFamilyCellMap().get(TABLE_FAMILY_BYTES)) {
+            if (isLinkType(kv)) {
+                foundLinkType = true;
+                break;
+            }
+        }
+        return foundLinkType;
+    }
+
+    public static boolean isParentTableColumnQualifierCounter(Mutation m, byte[] tableRow) {
+        boolean foundCQCounter = false;
+        for (Cell kv : m.getFamilyCellMap().get(TABLE_FAMILY_BYTES)) {
+            if (isParentTableColumnQualifierCounter(kv, tableRow)) {
+                foundCQCounter = true;
+                break;
+            }
+        }
+        return foundCQCounter;
+    }
+    public static boolean isParentTableColumnQualifierCounter(Cell kv, byte[] tableRow) {
+        byte[][] tableRowKeyMetaData = new byte[5][];
+        getVarChars(tableRow, tableRowKeyMetaData);
+        byte[] tableName = tableRowKeyMetaData[TABLE_NAME_INDEX];
+
+        byte[][] columnRowKeyMetaData = new byte[5][];
+        int nColumns = getVarChars(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(),
+            0, columnRowKeyMetaData);
+        if (nColumns == 5) {
+            byte[] columnTableName = columnRowKeyMetaData[TABLE_NAME_INDEX];
+            if (!Bytes.equals(tableName, columnTableName)) {
+                return CellUtil.matchingQualifier(kv, COLUMN_QUALIFIER_BYTES);
+            }
+        }
         return false;
     }
 
@@ -1018,6 +1133,19 @@ public class MetaDataUtil {
                     PInteger.INSTANCE.getCodec().decodeInt(value, SortOrder.getDefault()));
         }
         return getLegacyViewIndexIdDataType();
+    }
+
+    public static boolean getChangeDetectionEnabled(List<Mutation> tableMetaData) {
+        KeyValueBuilder builder = GenericKeyValueBuilder.INSTANCE;
+        ImmutableBytesWritable value = new ImmutableBytesWritable();
+        if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
+            PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED_BYTES, builder, value)) {
+            return Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(value.get(),
+                value.getOffset(),
+                value.getLength()));
+        } else {
+            return false;
+        }
     }
 
     public static PColumn getColumn(int pkCount, byte[][] rowKeyMetaData, PTable table) throws ColumnFamilyNotFoundException, ColumnNotFoundException {

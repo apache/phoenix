@@ -3229,6 +3229,8 @@ public class MetaDataClient {
                                 result.getTable().getLastDDLTimestamp() : null)
                         .setIsChangeDetectionEnabled(isChangeDetectionEnabledProp)
                         .setSchemaVersion(schemaVersion)
+                        .setExternalSchemaId(result.getTable() != null ?
+                        result.getTable().getExternalSchemaId() : null)
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
@@ -3349,6 +3351,9 @@ public class MetaDataClient {
                 throwsSQLExceptionUtil(String.valueOf(code), SchemaUtil.getSchemaNameFromFullName(
                 parent.getPhysicalName().getString()),SchemaUtil.getTableNameFromFullName(
                 parent.getPhysicalName().getString()));
+            case ERROR_WRITING_TO_SCHEMA_REGISTRY:
+                throw new SQLExceptionInfo.Builder(ERROR_WRITING_TO_SCHEMA_REGISTRY)
+                    .setSchemaName(schemaName).setTableName(tableName).build().buildException();
             default:
                 // Cannot use SQLExecptionInfo here since not all mutation codes have their
                 // corresponding codes in the enum SQLExceptionCode
@@ -3649,6 +3654,9 @@ public class MetaDataClient {
             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
         case TABLE_ALREADY_EXISTS:
             break;
+        case ERROR_WRITING_TO_SCHEMA_REGISTRY:
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY).
+                    setSchemaName(schemaName).setTableName(tableName).build().buildException();
         default:
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNEXPECTED_MUTATION_CODE).setSchemaName(schemaName)
             .setTableName(tableName).setMessage("mutation code: " + mutationCode).build().buildException();
