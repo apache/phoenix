@@ -109,6 +109,10 @@ public class BackwardCompatibilityIT {
     public synchronized void doSetup() throws Exception {
         tmpDir = System.getProperty("java.io.tmpdir");
         conf = HBaseConfiguration.create();
+        conf.set(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
+            Long.toString(Long.MAX_VALUE));
+        conf.set(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
+            Long.toString(Long.MAX_VALUE));
         hbaseTestUtil = new HBaseTestingUtility(conf);
         setUpConfigForMiniCluster(conf);
         conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
@@ -389,11 +393,11 @@ public class BackwardCompatibilityIT {
         if (majorVersion > 4 || (majorVersion == 4 && minorVersion >= 15)) {
             executeQueryWithClientVersion(compatibleClientVersion,
                 INDEX_REBUILD_ASYNC, zkQuorum);
-            // wait to finish the rebuild job (convoluted logic to preserve the AssertionError)
+            //Check if the task is added.
+            //It won't start because we set the task intervals to long.MAX_VALUE
             int retryCount=0;
             while (true) {
                 try {
-                    Thread.sleep(5000);
                     executeQueriesWithCurrentVersion(QUERY_INDEX_REBUILD_ASYNC, url, NONE);
                     assertExpectedOutput(QUERY_INDEX_REBUILD_ASYNC);
                     break;
@@ -401,6 +405,7 @@ public class BackwardCompatibilityIT {
                     if (retryCount++ > 10) {
                         throw e;
                     }
+                    Thread.sleep(5000);
                 }
             }
         }
