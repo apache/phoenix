@@ -1391,7 +1391,10 @@ public abstract class BasePermissionsIT extends BaseTest {
             // this user
             verifyAllowed(readTable(phoenixTableName, indexName1), unprivilegedUser);
             verifyAllowed(readTable(phoenixTableName), regularUser1);
-            verifyAllowed(rebuildIndex(indexName1, phoenixTableName), regularUser1);
+            retryVerifyOperation(() -> {
+                verifyAllowed(rebuildIndex(indexName1, phoenixTableName), regularUser1);
+                return null;
+            }, UndeclaredThrowableException.class, 4);
             verifyAllowed(addColumn(phoenixTableName, "val1"), regularUser1);
             verifyAllowed(addProperties(phoenixTableName, "GUIDE_POSTS_WIDTH", "100"), regularUser1);
             verifyAllowed(dropView(viewName1), regularUser1);
@@ -1405,7 +1408,10 @@ public abstract class BasePermissionsIT extends BaseTest {
 
             // check again with super users
             verifyAllowed(createTable(phoenixTableName), superUser2);
-            verifyAllowed(createIndex(indexName1, phoenixTableName), superUser2);
+            retryVerifyOperation(() -> {
+                verifyAllowed(createIndex(indexName1, phoenixTableName), superUser2);
+                return null;
+            }, UndeclaredThrowableException.class, 4);
             verifyAllowed(createView(viewName1, phoenixTableName), superUser2);
             verifyAllowed(readTable(phoenixTableName), superUser2);
             verifyAllowed(dropView(viewName1), superUser2);
