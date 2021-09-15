@@ -622,9 +622,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
 
     @Test
     public void testIndexToolFailedMapperNotRecordToResultTable() throws Exception {
-        if (mutable != true || singleCell != true ) {
-            return;
-        }
+        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported() && mutable && singleCell);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String schemaName = generateUniqueName();
