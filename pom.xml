@@ -101,7 +101,7 @@
     <top.dir>${project.basedir}/..</top.dir>
 
     <!-- Dependency versions -->
-    <jackson.version>2.10.3</jackson.version>
+    <jackson.version>2.12.4</jackson.version>
     <antlr.version>3.5.2</antlr.version>
     <log4j.version>1.2.17</log4j.version>
     <disruptor.version>3.3.6</disruptor.version>
@@ -110,7 +110,7 @@
     <protobuf.group>com.google.protobuf</protobuf.group>
     <protobuf-java.version>2.5.0</protobuf-java.version>
     <protoc.version>2.5.0</protoc.version>
-    <commons-io.version>2.5</commons-io.version>
+    <commons-io.version>2.11.0</commons-io.version>
     <commons-lang.version>3.8</commons-lang.version>
     <commons-csv.version>1.0</commons-csv.version>
     <sqlline.version>1.9.0</sqlline.version>
