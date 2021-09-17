@@ -98,15 +98,13 @@
     <top.dir>${project.basedir}/..</top.dir>
 
     <!-- Dependency versions -->
-    <hive.version>1.2.1</hive.version>
     <hadoop.version>2.7.1</hadoop.version>
-    <pig.version>0.13.0</pig.version>
-    <jackson.version>2.10.3</jackson.version>
+    <jackson.version>2.12.4</jackson.version>
     <antlr.version>3.5.2</antlr.version>
     <log4j.version>1.2.17</log4j.version>
     <disruptor.version>3.3.6</disruptor.version>
     <slf4j.version>1.6.4</slf4j.version>
-    <commons-io.version>2.1</commons-io.version>
+    <commons-io.version>2.6</commons-io.version>
     <commons-lang.version>2.5</commons-lang.version>
     <!-- com.google repo will be used except on Aarch64 platform. -->
     <protobuf.group>com.google.protobuf</protobuf.group>
@@ -115,8 +113,6 @@
     <commons-csv.version>1.0</commons-csv.version>
     <sqlline.version>1.5.0</sqlline.version>
     <guava.version>13.0.1</guava.version>
-    <flume.version>1.4.0</flume.version>
-    <kafka.version>0.9.0.0</kafka.version>
     <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jline.version>2.11</jline.version>
