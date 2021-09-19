@@ -33,11 +33,7 @@ import java.util.logging.Logger;
 
 import javax.annotation.concurrent.Immutable;
 
-import org.apache.phoenix.jdbc.bootstrap.HBaseRegistryBootstrap;
-import org.apache.phoenix.jdbc.bootstrap.HBaseRegistryBootstrapFactory;
-import org.apache.phoenix.jdbc.bootstrap.HBaseRegistryBootstrapType;
-import org.apache.phoenix.jdbc.bootstrap.ZookeeperHBaseRegistryBootstrap;
-import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.jdbc.bootstrap.*;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.security.User;
@@ -203,14 +199,6 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         private static final char WINDOWS_SEPARATOR_CHAR = '\\';
         private static final String REALM_EQUIVALENCY_WARNING_MSG = "Provided principal does not contan a realm and the default realm cannot be determined. Ignoring realm equivalency check.";
 
-        private static SQLException getMalFormedUrlException(String url) {
-            return new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
-            .setMessage(url).build().buildException();
-        }
-
-        private static SQLException getMalFormedUrlException(String message, String url) {
-            return getMalFormedUrlException(message + "\n" + url);
-        }
 
         public String getZookeeperConnectionString() {
             if (this.bootstrap.getClass() != ZookeeperHBaseRegistryBootstrap.class){
@@ -244,36 +232,9 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 return defaultConnectionInfo(url);
             }
 
-            // ex: jdbc:phoenix+hrpc:hostname1....
-            url = url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)
-                    ? url.substring(PhoenixRuntime.JDBC_PROTOCOL.length())
-                    : PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url;
-
-            HBaseRegistryBootstrapType bootstrapAsEnum = null;
-
-            // ex: +hrpc:hostname1....
-            if (url.startsWith(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_CONNECTOR_PREFIX))) {
-                int offset = url.indexOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
-                final String firstToken = url.substring(0, offset);
-
-                // ex: +hrpc
-                final String bootstrapString = firstToken
-                        .replace(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_CONNECTOR_PREFIX), "")
-                        .toUpperCase();
-
-                if (Strings.isNullOrEmpty(bootstrapString)) {
-                    throw getMalFormedUrlException(url);
-                }
-
-                // ex: hrpc
-                try {
-                    bootstrapAsEnum = HBaseRegistryBootstrapType.valueOf(bootstrapString);
-                } catch (IllegalArgumentException iae) {
-                    throw getMalFormedUrlException("Invalid bootstrap connector specified: " + bootstrapString, url);
-                }
-
-                url = url.substring(firstToken.length());
-            }
+            final ParsedHBaseRegistryBootstrapTuple bpr = HBaseRegistryBootstrapFactory.fromURL(url);
+            url = bpr.getRemainingURL();
+            HBaseRegistryBootstrap bootstrap = bpr.getBootstrap();
 
             StringTokenizer tokenizer = new StringTokenizer(url, DELIMITERS, true);
             int nTokens = 0;
@@ -285,7 +246,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 token = tokenizer.nextToken();
                 // This would mean we have an empty string for a token which is illegal
                 if (DELIMITERS.contains(token)) {
-                    throw getMalFormedUrlException(url);
+                    throw MalformedUrlException.getMalFormedUrlException(url);
                 }
                 tokens[nTokens++] = token;
             }
@@ -296,10 +257,10 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                   String prevToken = tokens[nTokens - 1];
                   tokens[nTokens - 1] = prevToken + ":" + extraToken;
                   if (tokenizer.hasMoreTokens() && !(token=tokenizer.nextToken()).equals(TERMINATOR)) {
-                      throw getMalFormedUrlException(url);
+                      throw MalformedUrlException.getMalFormedUrlException(url);
                   }
                 } else {
-                    throw getMalFormedUrlException(url);
+                    throw MalformedUrlException.getMalFormedUrlException(url);
                 }
             }
             String quorum = null;
@@ -314,12 +275,12 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                     try {
                         port = Integer.parseInt(tokens[tokenIndex]);
                         if (port < 0) {
-                            throw getMalFormedUrlException(url);
+                            throw MalformedUrlException.getMalFormedUrlException(url);
                         }
                         tokenIndex++; // Found port
                     } catch (NumberFormatException e) { // No port information
                         if (isMultiPortUrl(tokens[tokenIndex])) {
-                            throw getMalFormedUrlException(url);
+                            throw MalformedUrlException.getMalFormedUrlException(url);
                         }
                     }
                     if (nTokens > tokenIndex) {
@@ -344,7 +305,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                     }
                 }
             }
-            return new ConnectionInfo(quorum,port,rootNode, principal, keytabFile, bootstrapAsEnum);
+            return new ConnectionInfo(quorum,port,rootNode, principal, keytabFile, bootstrap);
         }
 
         private final HBaseRegistryBootstrap bootstrap;
@@ -355,6 +316,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             String rootNode = this.getRootNode();
             String keytab = this.getKeytab();
             String principal = this.getPrincipal();
+
             // Normalize connInfo so that a url explicitly specifying versus implicitly inheriting
             // the default values will both share the same ConnectionQueryServices.
             if (zookeeperQuorum == null) {
@@ -439,8 +401,10 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                     LOGGER.debug("Principal and keytab not provided, not attempting Kerberos login");
                 }
             } // else, no connection, no need to login
+
             // Will use the current User from UGI
-            return new ConnectionInfo(zookeeperQuorum, port, rootNode, principal, keytab);
+            return new ConnectionInfo(zookeeperQuorum, port, rootNode, principal, keytab,
+                    HBaseRegistryBootstrapFactory.normalize(this.bootstrap));
         }
 
         // Visible for testing
@@ -537,7 +501,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         }
 
         public ConnectionInfo(String quorum, Integer port, String rootNode, String principal, String keytab,
-                              HBaseRegistryBootstrapType bootstrap) {
+                              HBaseRegistryBootstrap bootstrap) {
             this.quorum = quorum;
             this.port = port;
             this.rootNode = rootNode;
@@ -550,7 +514,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 throw new RuntimeException("Couldn't get the current user!!", e);
             }
 
-            this.bootstrap = HBaseRegistryBootstrapFactory.resolve(bootstrap);
+            this.bootstrap = bootstrap != null ? bootstrap : HBaseRegistryBootstrapFactory.resolve(null);
 
             if (null == this.user) {
                 throw new RuntimeException("Acquired null user which should never happen");
@@ -674,12 +638,12 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                     HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
             String quorum = config.get(HConstants.ZOOKEEPER_QUORUM);
             if (quorum == null || quorum.isEmpty()) {
-                throw getMalFormedUrlException(url);
+                throw MalformedUrlException.getMalFormedUrlException(url);
             }
             String clientPort = config.get(HConstants.ZOOKEEPER_CLIENT_PORT);
             Integer port = clientPort==null ? null : Integer.parseInt(clientPort);
             if (port == null || port < 0) {
-                throw getMalFormedUrlException(url);
+                throw MalformedUrlException.getMalFormedUrlException(url);
             }
             String znodeParent = config.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
             LOGGER.debug("Getting default jdbc connection url "

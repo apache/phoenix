@@ -3,6 +3,10 @@ package org.apache.phoenix.jdbc.bootstrap;
 import java.util.Map;
 
 public abstract class HBaseRegistryBootstrap {
+    public HBaseRegistryBootstrapType getBootstrapType() {
+        return bootstrapType;
+    }
+
     private final HBaseRegistryBootstrapType bootstrapType;
 
     public HBaseRegistryBootstrap(HBaseRegistryBootstrapType bootstrapType) {
@@ -10,6 +14,7 @@ public abstract class HBaseRegistryBootstrap {
     }
 
     public abstract Map<String, String> generateConnectionProps(String quorum, Integer port, String rootNode);
+
 
 
     @Override
