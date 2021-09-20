@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one
+  ~   or more contributor license agreements.  See the NOTICE file
+  ~   distributed with this work for additional information
+  ~   regarding copyright ownership.  The ASF licenses this file
+  ~   to you under the Apache License, Version 2.0 (the
+  ~   "License"); you may not use this file except in compliance
+  ~   with the License.  You may obtain a copy of the License at
+  ~
+  ~   http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~   Unless required by applicable law or agreed to in writing, software
+  ~   distributed under the License is distributed on an "AS IS" BASIS,
+  ~   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~   See the License for the specific language governing permissions and
+  ~   limitations under the License.
+  -->
+
+<datamodel name="model_1">
+    <datamapping>
+        <column>
+            <!-- This column type defines what will generally happen to VARCHAR fields unless they are explicitly defined or overridden elsewhere -->
+            <type>VARCHAR</type>
+            <dataSequence>RANDOM</dataSequence>
+            <length>15</length>
+            <name>GENERAL_VARCHAR</name>
+        </column>
+    </datamapping>
+    <scenarios>
+        <scenario tableName="PHERF.EVT_GEN1" name="EVT_GEN1" generatorName="WEIGHTED">
+            <loadProfile>
+                <batchSize>1</batchSize>
+                <numOperations>1000</numOperations>
+                <!-- Case 1 : where no operations have zero weight -->
+                <tenantDistribution id="tg1" weight="10" numTenants="10"></tenantDistribution>
+                <tenantDistribution id="tg2" weight="10" numTenants="10"></tenantDistribution>
+                <tenantDistribution id="tg3" weight="80" numTenants="10"></tenantDistribution>
+                <opDistribution id="upsertOp" weight="40"></opDistribution>
+                <opDistribution id="queryOp1" weight="20"></opDistribution>
+                <opDistribution id="queryOp2" weight="20"></opDistribution>
+                <opDistribution id="idleOp" weight="10"></opDistribution>
+                <opDistribution id="udfOp" weight="10"></opDistribution>
+            </loadProfile>
+            <upserts>
+                <upsert id="upsertOp">
+                    <column>
+                        <type>CHAR</type>
+                        <name>COLUMN1</name>
+                    </column>
+                </upsert>
+            </upserts>
+
+            <querySet>
+                <query id="queryOp1" statement="select count(*) from PHERF.EVT_GEN1"/>
+                <query id="queryOp2" statement="select sum(SOME_INT) from PHERF.EVT_GEN1"/>
+            </querySet>
+            <idleTimes>
+                <idleTime id="idleOp" idleTime="50"></idleTime>
+            </idleTimes>
+            <udfs>
+                <udf id="udfOp" >
+                    <clazzName>org.apache.phoenix.pherf.ConfigurationParserTest.TestUDF</clazzName>
+                    <args>Hello</args>
+                    <args>World</args>
+                </udf>
+            </udfs>
+        </scenario>
+    </scenarios>
+</datamodel>

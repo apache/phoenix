@@ -1,0 +1,425 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one
+  ~   or more contributor license agreements.  See the NOTICE file
+  ~   distributed with this work for additional information
+  ~   regarding copyright ownership.  The ASF licenses this file
+  ~   to you under the Apache License, Version 2.0 (the
+  ~   "License"); you may not use this file except in compliance
+  ~   with the License.  You may obtain a copy of the License at
+  ~
+  ~   http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~   Unless required by applicable law or agreed to in writing, software
+  ~   distributed under the License is distributed on an "AS IS" BASIS,
+  ~   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~   See the License for the specific language governing permissions and
+  ~   limitations under the License.
+  -->
+
+<datamodel name="model_1">
+    <datamapping>
+        <column>
+            <!-- This column type defines what will generally happen to VARCHAR fields unless they are explicitly defined or overridden elsewhere -->
+            <type>VARCHAR</type>
+            <dataSequence>RANDOM</dataSequence>
+            <length>15</length>
+            <name>GENERAL_VARCHAR</name>
+        </column>
+        <column>
+            <type>CHAR</type>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <length>15</length>
+            <name>GENERAL_CHAR</name>
+        </column>
+        <column>
+            <type>TIMESTAMP</type>
+            <!--SEQUENTIAL is unsupported for DATE -->
+            <dataSequence>RANDOM</dataSequence>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <minValue>2020</minValue>
+            <maxValue>2025</maxValue>
+            <name>GENERAL_TIMESTAMP</name>
+        </column>
+        <column>
+            <type>DATE</type>
+            <!--SEQUENTIAL is unsupported for DATE -->
+            <dataSequence>RANDOM</dataSequence>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <minValue>1975</minValue>
+            <maxValue>2025</maxValue>
+            <name>GENERAL_DATE</name>
+        </column>
+        <column>
+            <type>DATE</type>
+            <!--SEQUENTIAL is unsupported for DATE -->
+            <dataSequence>RANDOM</dataSequence>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>0</nullChance>
+            <useCurrentDate>true</useCurrentDate>
+            <name>NOW_DATE</name>
+        </column>
+        <column>
+            <type>DECIMAL</type>
+            <dataSequence>RANDOM</dataSequence>
+            <minValue>0</minValue>
+            <maxValue>1</maxValue>
+
+            <!-- Precision is limited to 18 -->
+            <precision>18</precision>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>10</nullChance>
+            <name>GENERAL_DECIMAL</name>
+        </column>
+        <column>
+            <type>INTEGER</type>
+            <dataSequence>RANDOM</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>50000000</maxValue>
+            <!-- Number [0-100] that represents the probability of creating a null value -->
+            <!-- The higher the number, the more like the value will returned will be null -->
+            <!-- Leaving this tag out is equivalent to having a 0 probability. i.e. never null -->
+            <nullChance>100</nullChance>
+            <name>GENERAL_INTEGER</name>
+        </column>
+        <column>
+            <type>DATE</type>
+            <name>CREATED_DATE</name>
+            <minValue>1975</minValue>
+            <maxValue>2025</maxValue>
+            <valuelist>
+                <!-- Distributes randomly with equal chance of being picked -->
+                <datavalue distribution="80">
+                    <!-- Joda time format: yyyy-MM-dd HH:mm:ss.SSS ZZZ -->
+                    <minValue>2019-09-15 00:01:00.000</minValue>
+                    <maxValue>2019-09-15 11:00:00.000</maxValue>
+                </datavalue>
+                <datavalue distribution="10">
+                    <value>2019-09-19 00:01:00.000</value>
+                </datavalue>
+                <datavalue distribution="10">
+                    <minValue>2019-09-22 00:01:00.000</minValue>
+                    <maxValue>2019-09-22 00:01:00.300</maxValue>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>DATE</type>
+            <name>PRESENT_DATE</name>
+            <minValue>1975</minValue>
+            <maxValue>2025</maxValue>
+            <valuelist>
+                <!-- Distributes randomly with equal chance of being picked -->
+                <datavalue distribution="80">
+                    <!-- Joda time format: yyyy-MM-dd HH:mm:ss.SSS z -->
+                    <useCurrentDate>true</useCurrentDate>
+                </datavalue>
+                <datavalue distribution="20">
+                    <useCurrentDate>true</useCurrentDate>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>CHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>LIST</dataSequence>
+            <length>15</length>
+            <name>PARENT_ID</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <datavalue distribution="60">
+                    <value>aAAyYhnNbBs9kWk</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>bBByYhnNbBs9kWu</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>cCCyYhnNbBs9kWr</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <!-- This column type defines what will generally happen to VARCHAR fields unless they are explicitly defined or overridden elsewhere -->
+            <type>VARCHAR</type>
+            <length>10</length>
+            <userDefined>true</userDefined>
+            <dataSequence>RANDOM</dataSequence>
+            <name>OLDVAL_STRING</name>
+            <prefix>MYPRFX</prefix>
+        </column>
+        <column>
+            <!-- This column type defines what will generally happen to VARCHAR fields unless they are explicitly defined or overridden elsewhere -->
+            <type>VARCHAR</type>
+            <length>15</length>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <name>NEWVAL_STRING</name>
+            <prefix>0F90000000000X</prefix>
+        </column>
+        <column>
+            <type>VARCHAR_ARRAY</type>
+            <userDefined>true</userDefined>
+            <name>VAR_ARRAY</name>
+            <valuelist>
+                <datavalue>
+                    <value>Foo</value>
+                </datavalue>
+                <datavalue>
+                    <value>Bar</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>CHAR</type>
+            <length>3</length>
+            <userDefined>true</userDefined>
+            <dataSequence>LIST</dataSequence>
+            <name>IDENTIFIER</name>
+            <valuelist>
+                <!-- Distributes according to specified values. These must total 100 -->
+                <datavalue distribution="60">
+                    <value>ABC</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>XYZ</value>
+                </datavalue>
+                <datavalue distribution="20">
+                    <value>LMN</value>
+                </datavalue>
+            </valuelist>
+        </column>
+        <column>
+            <type>CHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <length>8</length>
+            <name>OTHER_ID</name>
+            <prefix>z0Oxx00</prefix>
+        </column>
+        <column>
+            <type>VARBINARY</type>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <length>8</length>
+            <name>VAR_BIN</name>
+            <prefix>VBOxx00</prefix>
+        </column>
+        <column>
+            <type>VARCHAR</type>
+            <userDefined>true</userDefined>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <length>1</length>
+            <name>FIELD</name>
+        </column>
+        <column>
+            <type>INTEGER</type>
+            <dataSequence>SEQUENTIAL</dataSequence>
+            <minValue>1</minValue>
+            <maxValue>100000</maxValue>
+            <name>SEQUENTIAL_INTEGER</name>
+        </column>
+    </datamapping>
+    <scenarios>
+        <scenario tableName="PHERF.Z11" name="scenario_11" generatorName="UNIFORM">
+            <phoenixProperties>
+                <entry>
+                    <key>pherf.mt.handlers_per_scenario</key>
+                    <value>2</value>
+                </entry>
+                <entry>
+                    <key>pherf.mt.uniform.benchmark_mode</key>
+                    <value>true</value>
+                </entry>
+            </phoenixProperties>
+            <loadProfile>
+                <batchSize>1</batchSize>
+                <numOperations>1000</numOperations>
+                <tenantDistribution id="t111" weight="10" numTenants="10"/>
+                <tenantDistribution id="t112" weight="10" numTenants="10"/>
+                <tenantDistribution id="t113" weight="80" numTenants="1"/>
+                <opDistribution id="op111" weight="50"/>
+                <opDistribution id="op112" weight="0"/>
+                <opDistribution id="op113" weight="0"/>
+                <opDistribution id="op114" weight="50"/>
+                <opDistribution id="op115" weight="0"/>
+            </loadProfile>
+
+
+            <preScenarioDdls>
+                <ddl statement="CREATE VIEW IF NOT EXISTS PHERF.Z11 (field1 VARCHAR, field2 VARCHAR) AS SELECT * FROM PHERF.TEST_TABLE" />
+            </preScenarioDdls>
+
+            <upserts>
+                <upsert id="op111">
+                    <column>
+                        <type>CHAR</type>
+                        <name>PARENT_ID</name>
+                    </column>
+                    <column>
+                        <type>DATE</type>
+                        <name>CREATED_DATE</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>FIELD</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>OTHER_ID</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>OLDVAL_STRING</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>NEWVAL_STRING</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>FIELD1</name>
+                    </column>
+                </upsert>
+            </upserts>
+
+            <idleTimes>
+                <idleTime id="op114" idleTime="50"/>
+            </idleTimes>
+            <udfs>
+                <udf id="op115" >
+                    <clazzName>org.apache.phoenix.pherf.ConfigurationParserTest.TestUDF</clazzName>
+                    <args>Hello</args>
+                    <args>World</args>
+                </udf>
+            </udfs>
+            <querySet>
+                <query id="op112" statement="select count(*) from PHERF.Z11"/>
+                <query id="op113" statement="select sum(SOME_INT) from PHERF.Z11"/>
+            </querySet>
+
+        </scenario>
+        <scenario tableName="PHERF.Z12" name="scenario_12">
+            <loadProfile>
+                <batchSize>5</batchSize>
+                <numOperations>1000</numOperations>
+                <tenantDistribution id="t121" weight="10" numTenants="5"/>
+                <tenantDistribution id="t122" weight="10" numTenants="5"/>
+                <tenantDistribution id="t123" weight="80" numTenants="5"/>
+                <opDistribution id="op121" weight="50"/>
+                <opDistribution id="op122" weight="5"/>
+                <opDistribution id="op123" weight="5"/>
+                <opDistribution id="op124" weight="40"/>
+                <opDistribution id="op125" weight="0"/>
+            </loadProfile>
+
+            <preScenarioDdls>
+                <ddl statement="CREATE VIEW IF NOT EXISTS PHERF.Z12 (field1 VARCHAR, field2 VARCHAR) AS SELECT * FROM PHERF.TEST_TABLE" />
+            </preScenarioDdls>
+
+            <upserts>
+                <upsert id="op121">
+                    <column>
+                        <type>CHAR</type>
+                        <name>PARENT_ID</name>
+                    </column>
+                    <column>
+                        <type>DATE</type>
+                        <name>CREATED_DATE</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>FIELD</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>OTHER_ID</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>OLDVAL_STRING</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>NEWVAL_STRING</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>FIELD1</name>
+                    </column>
+                </upsert>
+            </upserts>
+
+            <idleTimes>
+                <idleTime id="op124" idleTime="100"/>
+            </idleTimes>
+            <querySet>
+                <query id="op122" statement="select count(*) from PHERF.Z12"/>
+                <query id="op123" statement="select sum(SOME_INT) from PHERF.Z12"/>
+            </querySet>
+            <udfs>
+                <udf id="op125" >
+                    <clazzName>org.apache.phoenix.pherf.ConfigurationParserTest.TestUDF</clazzName>
+                    <args>Hello</args>
+                    <args>World</args>
+                </udf>
+            </udfs>
+
+        </scenario>
+        <scenario tableName="PHERF.Z13" name="scenario_13">
+            <loadProfile>
+                <batchSize>1</batchSize>
+                <numOperations>1000</numOperations>
+                <tenantDistribution useGlobalConnection="true"/>
+                <opDistribution id="op131" weight="100"/>
+            </loadProfile>
+
+
+            <preScenarioDdls>
+                <ddl statement="CREATE VIEW IF NOT EXISTS PHERF.Z13 (field1 VARCHAR, field2 VARCHAR) AS SELECT * FROM PHERF.TEST_TABLE WHERE PARENT_ID = 'aAAyYhnNbBs9kWk'" />
+            </preScenarioDdls>
+
+            <upserts>
+                <upsert id="op131" useGlobalConnection="true">
+                    <column>
+                        <type>CHAR</type>
+                        <name>PARENT_ID_SEQ</name>
+                    </column>
+                    <column>
+                        <type>DATE</type>
+                        <name>CREATED_DATE</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>FIELD</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>OTHER_ID</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>OLDVAL_STRING</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>NEWVAL_STRING</name>
+                    </column>
+                    <column>
+                        <type>VARCHAR</type>
+                        <name>FIELD1</name>
+                    </column>
+                </upsert>
+            </upserts>
+        </scenario>
+    </scenarios>
+</datamodel>
