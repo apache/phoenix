@@ -36,15 +36,20 @@ public class Scenario {
     private String tableName;
     private int rowCount;
     private Map<String, String> phoenixProperties;
+    private WriteParams writeParams = null;
     private DataOverride dataOverride;
     private List<QuerySet> querySet = new ArrayList<>();
-    private WriteParams writeParams = null;
+    private List<Upsert> upsertSet = new ArrayList<>();
+    private List<IdleTime> idleTimes = new ArrayList<>();
+    private List<UserDefined> udfs = new ArrayList<>();
+    private LoadProfile loadProfile = null;
+
     private String name;
+    private String generatorName;
     private String tenantId;
     private List<Ddl> preScenarioDdls;
     private List<Ddl> postScenarioDdls;
-    
-   
+
     public Scenario() {
     }
 
@@ -82,6 +87,20 @@ public class Scenario {
 
     public void setTableName(String tableName) {
         this.tableName = tableName;
+    }
+
+    /**
+     * Generator name for a scenario
+     *
+     * @return
+     */
+    @XmlAttribute()
+    public String getGeneratorName() {
+        return generatorName;
+    }
+
+    public void setGeneratorName(String name) {
+        this.generatorName = name;
     }
 
     /**
@@ -194,6 +213,7 @@ public class Scenario {
         this.writeParams = writeParams;
     }
 
+
     @Override
     public String toString() {
         StringBuilder stringBuilder = new StringBuilder();
@@ -232,4 +252,43 @@ public class Scenario {
 	public void setPostScenarioDdls(List<Ddl> postScenarioDdls) {
 		this.postScenarioDdls = postScenarioDdls;
 	}
+
+    public List<Upsert> getUpserts() {
+        return upsertSet;
+    }
+
+    @XmlElementWrapper(name = "upserts")
+    @XmlElement(name = "upsert")
+    public void setUpserts(List<Upsert> upsertSet) {
+        this.upsertSet = upsertSet;
+    }
+
+    public List<IdleTime> getIdleTimes() {
+        return idleTimes;
+    }
+
+    @XmlElementWrapper(name = "idleTimes")
+    @XmlElement(name = "idleTime")
+    public void setIdleTimes(List<IdleTime> idleTimes) {
+        this.idleTimes = idleTimes;
+    }
+
+    public List<UserDefined> getUdfs() {
+        return udfs;
+    }
+
+    @XmlElementWrapper(name = "udfs")
+    @XmlElement(name = "udf")
+    public void setUdfs(List<UserDefined> udfs) {
+        this.udfs = udfs;
+    }
+
+
+    public LoadProfile getLoadProfile() {
+        return loadProfile;
+    }
+
+    public void setLoadProfile(LoadProfile loadProfile) {
+        this.loadProfile = loadProfile;
+    }
 }

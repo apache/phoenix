@@ -42,6 +42,10 @@ public class ResultBaseTest {
     }
     
     @AfterClass public static synchronized void tearDown() throws Exception {
-    	new ResultUtil().deleteDir(properties.getProperty("pherf.default.results.dir"));
+        try {
+            new ResultUtil().deleteDir(properties.getProperty("pherf.default.results.dir"));
+        } catch (Exception e) {
+            // swallow
+        }
     }
 }

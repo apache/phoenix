@@ -40,7 +40,7 @@
               least once. 
          -->
         <scenario tableName="PHERF.TEST_MT_VIEW" tenantId="abcdefghijklmno" 
-                    ddl="CREATE VIEW IF NOT EXISTS PHERF.TEST_MT_VIEW (field1 VARCHAR) AS SELECT * FROM PHERF.TEST_MULTI_TENANT_TABLE" 
+                    ddl="CREATE VIEW IF NOT EXISTS PHERF.TEST_MT_VIEW (field1 VARCHAR) AS SELECT * FROM PHERF.TEST_TABLE"
                     rowCount="100" name="testMTDdlWriteScenario">
         </scenario>
         
