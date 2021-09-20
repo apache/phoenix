@@ -18,7 +18,7 @@
 
 package org.apache.phoenix.monitoring;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.InstanceResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

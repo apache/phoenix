@@ -21,7 +21,7 @@ import java.util.Map;
 
 import org.apache.phoenix.expression.function.*;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  *

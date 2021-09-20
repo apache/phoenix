@@ -28,7 +28,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.iterate.OrderedResultIterator.ResultEntry;
 import org.apache.phoenix.schema.tuple.Tuple;
 
-import com.google.common.collect.MinMaxPriorityQueue;
+import org.apache.phoenix.thirdparty.com.google.common.collect.MinMaxPriorityQueue;
 
 public class PhoenixQueues {
 

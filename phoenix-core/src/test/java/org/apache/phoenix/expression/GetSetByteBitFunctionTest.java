@@ -35,7 +35,7 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Unit tests for {@link GetByteFunction} {@link SetByteFunction} {@link GetBitFunction}

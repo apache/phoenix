@@ -24,8 +24,8 @@ import java.util.List;
 
 import org.apache.phoenix.schema.types.PDataType;
 
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Converts Objects (presumably lists) into Phoenix arrays.

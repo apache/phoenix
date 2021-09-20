@@ -76,7 +76,7 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @SuppressWarnings("deprecation")
 public class PartialIndexRebuilderIT extends BaseUniqueNamesOwnClusterIT {

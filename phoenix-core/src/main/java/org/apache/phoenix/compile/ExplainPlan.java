@@ -20,7 +20,7 @@ package org.apache.phoenix.compile;
 import java.util.Collections;
 import java.util.List;
 
-import com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 public class ExplainPlan {
     public static final ExplainPlan EMPTY_PLAN = new ExplainPlan(Collections.<String>emptyList());

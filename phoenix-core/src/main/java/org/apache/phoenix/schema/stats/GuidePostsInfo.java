@@ -25,7 +25,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SizedUtil;
 
-import com.google.common.primitives.Longs;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Longs;
 /**
  *  A class that holds the guidePosts of a region and also allows combining the 
  *  guidePosts of different regions when the GuidePostsInfo is formed for a table.

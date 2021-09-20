@@ -23,7 +23,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Map;
 
-import com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.util.SQLCloseable;
 
 /**

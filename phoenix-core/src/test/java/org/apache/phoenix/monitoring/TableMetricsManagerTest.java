@@ -18,7 +18,7 @@
 
 package org.apache.phoenix.monitoring;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.junit.Test;
 

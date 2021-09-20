@@ -52,7 +52,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
-import com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 
 public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
 

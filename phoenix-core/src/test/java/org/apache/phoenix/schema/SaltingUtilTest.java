@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.schema;
 
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.Test;
 

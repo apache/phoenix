@@ -43,9 +43,9 @@ import org.apache.phoenix.schema.RowValueConstructorOffsetNotAllowedInQueryExcep
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.types.PInteger;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 /**
  * Validates ORDER BY clause and builds up a list of referenced columns.

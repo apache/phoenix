@@ -22,7 +22,7 @@ import java.util.Map;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 public class RuntimeContextImpl implements RuntimeContext {
     Map<String, VariableEntry> correlateVariables;

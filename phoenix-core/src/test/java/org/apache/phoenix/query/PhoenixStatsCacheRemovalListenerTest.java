@@ -22,7 +22,7 @@ import static org.junit.Assert.assertTrue;
 import org.apache.phoenix.query.GuidePostsCacheImpl.PhoenixStatsCacheRemovalListener;
 import org.junit.Test;
 
-import com.google.common.cache.RemovalCause;
+import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalCause;
 
 /**
  * Test class around the PhoenixStatsCacheRemovalListener.

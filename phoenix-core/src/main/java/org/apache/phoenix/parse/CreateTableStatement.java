@@ -28,9 +28,9 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableProperty;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableListMultimap;
-import com.google.common.collect.ListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 
 public class CreateTableStatement extends MutableStatement {
     private final TableName tableName;

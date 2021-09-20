@@ -23,8 +23,8 @@ import java.util.concurrent.ExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.Futures;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ListenableFuture;
 
 /**
  * {@link TaskRunner} that attempts to run all tasks passed, but quits early if any {@link Task}

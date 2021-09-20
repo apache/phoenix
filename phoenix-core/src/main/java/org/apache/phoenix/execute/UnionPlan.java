@@ -53,7 +53,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ExpressionUtil;
 
-import com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 
 public class UnionPlan implements QueryPlan {

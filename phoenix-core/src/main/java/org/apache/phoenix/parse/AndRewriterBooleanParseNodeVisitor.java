@@ -20,7 +20,7 @@ package org.apache.phoenix.parse;
 import java.sql.SQLException;
 import java.util.List;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Base visitor for rewrite {@link ParseNode},only further visit down for {@link AndParseNode}.

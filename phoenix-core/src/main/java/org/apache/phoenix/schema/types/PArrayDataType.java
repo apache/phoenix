@@ -37,8 +37,8 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
-import com.google.common.base.Objects;
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * The datatype for PColummns that are Arrays. Any variable length array would follow the below order. Every element

@@ -20,7 +20,7 @@ package org.apache.phoenix.parse;
 import java.util.*;
 
 
-import com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.util.SchemaUtil;
 
 /**

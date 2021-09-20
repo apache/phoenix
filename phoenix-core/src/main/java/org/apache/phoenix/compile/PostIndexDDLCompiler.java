@@ -30,7 +30,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.StringUtil;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 /**

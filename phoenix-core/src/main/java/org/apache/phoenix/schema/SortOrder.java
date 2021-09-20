@@ -19,7 +19,7 @@ package org.apache.phoenix.schema;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * Specifies the sort order on disk of row key columns. The default is ASC.
