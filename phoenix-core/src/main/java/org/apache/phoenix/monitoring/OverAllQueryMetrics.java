@@ -31,7 +31,7 @@ import static org.apache.phoenix.monitoring.MetricType.WALL_CLOCK_TIME_MS;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.log.LogLevel;
 
 /**

@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.util;
 
-import com.google.common.collect.Iterables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

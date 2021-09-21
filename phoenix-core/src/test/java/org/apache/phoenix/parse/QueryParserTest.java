@@ -35,7 +35,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.schema.SortOrder;
 import org.junit.Test;
 
-import com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 
 
 public class QueryParserTest {

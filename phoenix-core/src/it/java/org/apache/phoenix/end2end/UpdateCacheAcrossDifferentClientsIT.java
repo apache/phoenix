@@ -10,7 +10,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.base.Throwables;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;

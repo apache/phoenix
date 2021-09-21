@@ -27,7 +27,7 @@ import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * Naive failure policy - kills the server on which it resides

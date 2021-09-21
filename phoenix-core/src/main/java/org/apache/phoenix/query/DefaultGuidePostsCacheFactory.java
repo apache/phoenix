@@ -17,7 +17,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 public class DefaultGuidePostsCacheFactory implements GuidePostsCacheFactory {
 

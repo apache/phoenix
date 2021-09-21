@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import static com.google.common.collect.Lists.newArrayListWithExpectedSize;
+import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayListWithExpectedSize;
 import static org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost
         .PHOENIX_META_DATA_COPROCESSOR_CONF_KEY;
 import static org.apache.phoenix.coprocessor.TaskRegionObserver.TASK_DETAILS;
@@ -94,9 +94,9 @@ import org.apache.phoenix.util.ViewUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.Collections2;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.base.Predicate;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Collections2;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.junit.experimental.categories.Category;
 
 /**

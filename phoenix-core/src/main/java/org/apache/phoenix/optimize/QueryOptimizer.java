@@ -77,7 +77,7 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class QueryOptimizer {
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();

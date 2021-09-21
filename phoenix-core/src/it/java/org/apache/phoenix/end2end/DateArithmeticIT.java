@@ -45,7 +45,7 @@ import java.util.Properties;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class DateArithmeticIT extends ParallelStatsDisabledIT {
     

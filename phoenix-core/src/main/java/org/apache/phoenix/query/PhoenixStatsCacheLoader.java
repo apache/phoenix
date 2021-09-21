@@ -17,10 +17,10 @@
  */
 package org.apache.phoenix.query;
 
-import com.google.common.cache.CacheLoader;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.ListenableFutureTask;
+import org.apache.phoenix.thirdparty.com.google.common.cache.CacheLoader;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.Futures;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ListenableFuture;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ListenableFutureTask;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;

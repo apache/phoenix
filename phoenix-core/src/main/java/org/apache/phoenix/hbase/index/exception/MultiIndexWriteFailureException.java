@@ -25,8 +25,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
-import com.google.common.base.Objects;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.MoreObjects;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Indicate a failure to write to multiple index tables.
@@ -81,6 +81,6 @@ public class MultiIndexWriteFailureException extends IndexWriteException {
 
   @Override
     public String getMessage() {
-        return Objects.firstNonNull(super.getMessage(),"") + " " + FAILURE_MSG + failures;
+        return MoreObjects.firstNonNull(super.getMessage(),"") + " " + FAILURE_MSG + failures;
     }
 }

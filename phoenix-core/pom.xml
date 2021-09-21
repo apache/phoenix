@@ -288,27 +288,18 @@
     </dependency>
     <dependency>
       <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-core</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-core</artifactId>
-      <type>test-jar</type>
-      <scope>test</scope>
+      <artifactId>tephra-core-shaded</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.tephra</groupId>
       <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
+      <classifier>shaded</classifier>
     </dependency>
   
     <!-- Make sure we have all the antlr dependencies -->
     <dependency>
       <groupId>org.antlr</groupId>
       <artifactId>antlr-runtime</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
     </dependency>
     <dependency>
       <groupId>joda-time</groupId>

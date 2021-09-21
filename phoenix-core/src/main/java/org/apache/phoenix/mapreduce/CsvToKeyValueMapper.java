@@ -30,9 +30,9 @@ import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.UpsertExecutor;
 import org.apache.phoenix.util.csv.CsvUpsertExecutor;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Iterables;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 
 /**
  * MapReduce mapper that converts CSV input lines into KeyValues that can be written to HFiles.

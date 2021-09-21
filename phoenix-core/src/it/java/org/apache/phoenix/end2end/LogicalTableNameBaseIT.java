@@ -387,7 +387,7 @@ public class LogicalTableNameBaseIT extends BaseTest {
             dataWriter.setRowKeyColumns(rowKeyColumns);
             dataWriter.setTargetEntity(schemaBuilder.getEntityTenantViewName());
             dataWriter.upsertRows(1, numOfRows);
-            com.google.common.collect.Table<String, String, Object> upsertedData = dataWriter.getDataTable();;
+            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> upsertedData = dataWriter.getDataTable();;
 
             PhoenixTestBuilder.DataReader dataReader = new PhoenixTestBuilder.BasicDataReader();
             dataReader.setValidationColumns(columns);
@@ -397,7 +397,7 @@ public class LogicalTableNameBaseIT extends BaseTest {
             dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
             dataReader.setConnection(tenantConnection);
             dataReader.readRows();
-            com.google.common.collect.Table<String, String, Object> fetchedData
+            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> fetchedData
                     = dataReader.getDataTable();
             assertNotNull("Fetched data should not be null", fetchedData);
             ViewTTLIT.verifyRowsBeforeTTLExpiration(upsertedData, fetchedData);

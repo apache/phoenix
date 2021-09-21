@@ -40,10 +40,10 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
 
-import com.google.common.base.Preconditions;
-import com.google.common.math.LongMath;
-import com.google.common.primitives.Doubles;
-import com.google.common.primitives.Longs;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.math.LongMath;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Longs;
 
 /**
  * The data types of PColumns

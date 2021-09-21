@@ -19,7 +19,7 @@ package org.apache.phoenix.schema;
 
 import org.apache.phoenix.query.QueryConstants;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 public class PTableKey {
     private final PName tenantId;

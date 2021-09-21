@@ -26,13 +26,13 @@ import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Preconditions;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.LoadingCache;
-import com.google.common.cache.RemovalCause;
-import com.google.common.cache.RemovalListener;
-import com.google.common.cache.RemovalNotification;
-import com.google.common.cache.Weigher;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
+import org.apache.phoenix.thirdparty.com.google.common.cache.LoadingCache;
+import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalCause;
+import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalListener;
+import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalNotification;
+import org.apache.phoenix.thirdparty.com.google.common.cache.Weigher;
 
 /**
  * "Client-side" cache for storing {@link GuidePostsInfo} for a column family. Intended to decouple

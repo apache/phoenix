@@ -51,7 +51,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
-import com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
 

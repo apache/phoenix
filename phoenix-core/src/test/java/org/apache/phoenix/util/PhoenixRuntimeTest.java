@@ -53,7 +53,7 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PDataType;
 import org.junit.Test;
 
-import com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
     @Test
