@@ -81,6 +81,7 @@ import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.ref.WeakReference;
+import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -376,7 +377,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final int maxConnectionsAllowed;
     private final int maxInternalConnectionsAllowed;
     private final boolean shouldThrottleNumConnections;
-    public static final byte[] MUTEX_LOCKED = "MUTEX_LOCKED".getBytes();
+    public static final byte[] MUTEX_LOCKED = "MUTEX_LOCKED".getBytes(StandardCharsets.UTF_8);
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
@@ -1250,7 +1251,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (!success) {
             throw new TimeoutException("Operation  " + op.getOperationName() + " didn't complete within "
                     + watch.elapsedMillis() + " ms "
-                    + (numTries > 1 ? ("after trying " + numTries + (numTries > 1 ? "times." : "time.")) : ""));
+                    + "after trying " + numTries + "times.");
         } else {
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("Operation "
@@ -1258,7 +1259,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         + " completed within "
                         + watch.elapsedMillis()
                         + "ms "
-                        + (numTries > 1 ? ("after trying " + numTries + (numTries > 1 ? "times." : "time.")) : ""));
+                        + "after trying " + numTries +  " times." );
             }
         }
     }
@@ -1675,7 +1676,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 + getServerVersion(serverJarVersion));
                     }
                 }
-                hasIndexWALCodec &= hasIndexWALCodec(serverJarVersion);
+                hasIndexWALCodec = hasIndexWALCodec && hasIndexWALCodec(serverJarVersion);
                 if (minHBaseVersion > MetaDataUtil.decodeHBaseVersion(serverJarVersion)) {
                     minHBaseVersion = MetaDataUtil.decodeHBaseVersion(serverJarVersion);
                 }

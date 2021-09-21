@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.trace;
 
+import java.nio.charset.StandardCharsets;
+
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.htrace.Span;
@@ -34,11 +36,13 @@ public class TracingUtils {
     public static final String METRICS_MARKER_CONTEXT = "marker";
 
     public static void addAnnotation(Span span, String message, int value) {
-        span.addKVAnnotation(message.getBytes(), Bytes.toBytes(Integer.toString(value)));
+        span.addKVAnnotation(message.getBytes(StandardCharsets.UTF_8),
+            Bytes.toBytes(Integer.toString(value)));
     }
 
     public static Pair<String, String> readAnnotation(byte[] key, byte[] value) {
-        return new Pair<String, String>(new String(key), Bytes.toString(value));
+        return new Pair<String, String>(new String(key, StandardCharsets.UTF_8),
+                Bytes.toString(value));
     }
 
     /**

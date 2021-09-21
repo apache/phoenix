@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -78,6 +79,8 @@ import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import edu.umd.cs.findbugs.annotations.SuppressWarnings;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -447,7 +450,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
                 continue;
             }
             try {
-                confValMap.put(URLDecoder.decode(familySplit[0], "UTF-8").getBytes(),
+                confValMap.put(URLDecoder.decode(familySplit[0], "UTF-8").getBytes(StandardCharsets.UTF_8),
                         URLDecoder.decode(familySplit[1], "UTF-8"));
             } catch (UnsupportedEncodingException e) {
                 // will not happen with UTF-8 encoding
@@ -478,6 +481,8 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
         TotalOrderPartitioner.setPartitionFile(conf, partitionsPath);
     }
 
+    @SuppressWarnings(value="EC_ARRAY_AND_NONARRAY",
+            justification="ImmutableBytesWritable DOES implement equals(byte])")
     private static void writePartitions(Configuration conf, Path partitionsPath,
             Set<TableRowkeyPair> tablesStartKeys) throws IOException {
         

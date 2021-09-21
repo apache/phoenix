@@ -19,6 +19,7 @@ package org.apache.phoenix.query;
 
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
@@ -462,8 +463,8 @@ public interface QueryConstants {
             ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS.name() + ",\n" +
             TableProperty.COLUMN_ENCODED_BYTES.toString()+" = 1";
     
-    byte[] OFFSET_FAMILY = "f_offset".getBytes();
-    byte[] OFFSET_COLUMN = "c_offset".getBytes();
+    byte[] OFFSET_FAMILY = "f_offset".getBytes(StandardCharsets.UTF_8);
+    byte[] OFFSET_COLUMN = "c_offset".getBytes(StandardCharsets.UTF_8);
     String LAST_SCAN = "LAST_SCAN";
     String HASH_JOIN_CACHE_RETRIES = "hashjoin.client.retries.number";
     int DEFAULT_HASH_JOIN_CACHE_RETRIES = 5;

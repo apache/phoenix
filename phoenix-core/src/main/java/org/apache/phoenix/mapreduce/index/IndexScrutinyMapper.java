@@ -112,7 +112,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             final Properties overrideProps = new Properties();
             String scn = configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE);
             overrideProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, scn);
-            scnTimestamp = new Long(scn);
+            scnTimestamp = Long.parseLong(scn);
             connection = ConnectionUtil.getOutputConnection(configuration, overrideProps);
             connection.setAutoCommit(false);
             batchSize = PhoenixConfigurationUtil.getScrutinyBatchSize(configuration);

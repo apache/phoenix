@@ -35,7 +35,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-public class ProjectedColumnExpression extends ColumnExpression {
+public class ProjectedColumnExpression extends ColumnExpression implements Cloneable {
 	private KeyValueSchema schema;
 	private ValueBitSet bitSet;
 	private int position;
