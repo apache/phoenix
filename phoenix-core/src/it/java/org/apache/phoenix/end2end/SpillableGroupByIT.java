@@ -44,7 +44,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /*
  * Run in own cluster since it updates QueryServices.MAX_MEMORY_SIZE_ATTRIB

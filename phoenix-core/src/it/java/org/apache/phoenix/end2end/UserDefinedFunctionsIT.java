@@ -74,7 +74,7 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.junit.rules.TestName;
 
 public class UserDefinedFunctionsIT extends BaseOwnClusterIT {

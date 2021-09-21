@@ -34,7 +34,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.google.common.io.Files;
+import org.apache.phoenix.thirdparty.com.google.common.io.Files;
 
 public class SpooledTmpFileDeleteIT extends ParallelStatsDisabledIT {
     private static final String PRINCIPAL = "noRenewLease";

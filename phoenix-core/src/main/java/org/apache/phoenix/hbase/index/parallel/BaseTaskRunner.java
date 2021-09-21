@@ -30,9 +30,9 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.ListeningExecutorService;
-import com.google.common.util.concurrent.MoreExecutors;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ListenableFuture;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ListeningExecutorService;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.MoreExecutors;
 
 /**
  * {@link TaskRunner} that just manages the underlying thread pool. On called to

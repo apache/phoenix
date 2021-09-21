@@ -18,7 +18,7 @@
 
 package org.apache.phoenix.expression;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 
 import java.io.DataInput;
 import java.io.DataOutput;

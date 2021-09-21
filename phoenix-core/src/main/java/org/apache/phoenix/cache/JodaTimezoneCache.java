@@ -17,10 +17,10 @@
  */
 package org.apache.phoenix.cache;
 
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
-import com.google.common.util.concurrent.UncheckedExecutionException;
+import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
+import org.apache.phoenix.thirdparty.com.google.common.cache.CacheLoader;
+import org.apache.phoenix.thirdparty.com.google.common.cache.LoadingCache;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.UncheckedExecutionException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;

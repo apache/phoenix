@@ -16,7 +16,7 @@
  */
 package org.apache.phoenix.query;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;

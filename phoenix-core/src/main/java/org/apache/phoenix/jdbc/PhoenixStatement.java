@@ -196,10 +196,10 @@ import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Throwables;
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.math.IntMath;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.math.IntMath;
 /**
  * 
  * JDBC Statement implementation of Phoenix.
@@ -292,7 +292,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     private PhoenixResultSet executeQuery(final CompilableStatement stmt,
         final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger) throws SQLException {
         GLOBAL_SELECT_SQL_COUNTER.increment();
-        
+
         try {
             return CallRunner.run(
                 new CallRunner.CallableThrowable<PhoenixResultSet, SQLException>() {
@@ -301,7 +301,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     final long startTime = EnvironmentEdgeManager.currentTimeMillis();
                     try {
                         PhoenixConnection conn = getConnection();
-                        
+
                         if (conn.getQueryServices().isUpgradeRequired() && !conn.isRunningUpgrade()
                                 && stmt.getOperation() != Operation.UPGRADE) {
                             throw new UpgradeRequiredException();
@@ -356,7 +356,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         }
                         throw e;
                     }catch (RuntimeException e) {
-                        
+
                         // FIXME: Expression.evaluate does not throw SQLException
                         // so this will unwrap throws from that.
                         if (e.getCause() instanceof SQLException) {
@@ -364,7 +364,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         }
                         throw e;
                     } finally {
-                        // Regardless of whether the query was successfully handled or not, 
+                        // Regardless of whether the query was successfully handled or not,
                         // update the time spent so far. If needed, we can separate out the
                         // success times and failure times.
                         GLOBAL_QUERY_TIME.update(EnvironmentEdgeManager.currentTimeMillis() - startTime);
@@ -382,7 +382,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
         }
     }
-    
+
     protected int executeMutation(final CompilableStatement stmt) throws SQLException {
       return executeMutation(stmt, true);
     }

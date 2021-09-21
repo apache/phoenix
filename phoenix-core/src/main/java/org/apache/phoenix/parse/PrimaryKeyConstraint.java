@@ -25,8 +25,8 @@ import java.util.Map;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.SortOrder;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 public class PrimaryKeyConstraint extends NamedNode {
     public static final PrimaryKeyConstraint EMPTY = new PrimaryKeyConstraint(null, Collections.<ColumnDefInPkConstraint>emptyList());

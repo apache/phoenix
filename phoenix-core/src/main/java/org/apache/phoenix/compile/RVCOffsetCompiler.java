@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.compile;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Optional;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import com.ibm.icu.impl.number.Parse;
 import org.apache.commons.lang.StringUtils;
 import org.apache.phoenix.expression.AndExpression;
