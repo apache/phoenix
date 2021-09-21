@@ -36,8 +36,11 @@ import org.apache.phoenix.schema.SortOrder;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -208,7 +211,8 @@ public class SchemaSynthesisProcessor implements SchemaProcessor {
     private List<String> getQueriesFromFile(String ddlFile) throws IOException {
         StringBuilder sb = new StringBuilder();
         File file = new File(ddlFile);
-        BufferedReader br = new BufferedReader(new FileReader(file));
+        BufferedReader br = new BufferedReader(new InputStreamReader(
+            new FileInputStream(file), StandardCharsets.UTF_8));
         String st;
         while ((st = br.readLine()) != null) {
             sb.append(st).append("\n");

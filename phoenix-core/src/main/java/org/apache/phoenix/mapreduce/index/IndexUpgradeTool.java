@@ -67,6 +67,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.util.SchemaUtil;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.sql.Connection;
@@ -321,7 +322,8 @@ public class IndexUpgradeTool extends Configured implements Tool {
             prop.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
 
             if (inputTables == null) {
-                inputTables = new String(Files.readAllBytes(Paths.get(inputFile)));
+                inputTables = new String(
+                        Files.readAllBytes(Paths.get(inputFile)), StandardCharsets.UTF_8);
             }
             if (inputTables == null) {
                 LOGGER.severe("Tables' list is not available; use -tb or -f option");

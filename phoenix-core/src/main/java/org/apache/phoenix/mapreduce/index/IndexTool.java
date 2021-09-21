@@ -117,6 +117,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
+import edu.umd.cs.findbugs.annotations.SuppressWarnings;
 /**
  * An MR job to populate the index table from the data table.
  *
@@ -571,7 +572,7 @@ public class IndexTool extends Configured implements Tool {
             if (pDataTable.isTransactional()) {
                 long maxTimeRange = pDataTable.getTimeStamp() + 1;
                 scan.setAttribute(BaseScannerRegionObserver.TX_SCN,
-                        Bytes.toBytes(Long.valueOf(Long.toString(TransactionUtil.convertToNanoseconds(maxTimeRange)))));
+                        Bytes.toBytes(TransactionUtil.convertToNanoseconds(maxTimeRange)));
             }
             
           

@@ -31,7 +31,7 @@ import org.apache.phoenix.util.JacksonUtil;
   */
 public class TargetTableRefFunctions {
 
-     public static Function<TargetTableRef,String> TO_JSON =  new Function<TargetTableRef,String>() {
+     public static final Function<TargetTableRef,String> TO_JSON =  new Function<TargetTableRef,String>() {
 
          @Override
          public String apply(TargetTableRef input) {
@@ -44,7 +44,7 @@ public class TargetTableRefFunctions {
          }
      };
 
-     public static Function<String,TargetTableRef> FROM_JSON =  new Function<String,TargetTableRef>() {
+     public static final Function<String,TargetTableRef> FROM_JSON =  new Function<String,TargetTableRef>() {
 
          @Override
          public TargetTableRef apply(String json) {
@@ -57,7 +57,7 @@ public class TargetTableRefFunctions {
          }
      };
 
-     public static Function<List<TargetTableRef>,String> NAMES_TO_JSON =  new Function<List<TargetTableRef>,String>() {
+     public static final Function<List<TargetTableRef>,String> NAMES_TO_JSON =  new Function<List<TargetTableRef>,String>() {
 
          @Override
          public String apply(List<TargetTableRef> input) {
@@ -74,7 +74,7 @@ public class TargetTableRefFunctions {
          }
      };
 
-    public static Function<List<TargetTableRef>,String> LOGICAL_NAMES_TO_JSON =  new Function<List<TargetTableRef>,String>() {
+    public static final Function<List<TargetTableRef>,String> LOGICAL_NAMES_TO_JSON =  new Function<List<TargetTableRef>,String>() {
 
         @Override
         public String apply(List<TargetTableRef> input) {
@@ -91,7 +91,7 @@ public class TargetTableRefFunctions {
         }
     };
 
-    public static Function<String,List<String>> NAMES_FROM_JSON =  new Function<String,List<String>>() {
+    public static final Function<String,List<String>> NAMES_FROM_JSON =  new Function<String,List<String>>() {
 
          @SuppressWarnings("unchecked")
          @Override

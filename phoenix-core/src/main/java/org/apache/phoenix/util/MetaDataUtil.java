@@ -22,6 +22,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FAMILY_NAME_INDEX;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.*;
 
@@ -80,6 +81,8 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+
+import edu.umd.cs.findbugs.annotations.SuppressWarnings;
 
 public class MetaDataUtil {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataUtil.class);
@@ -1029,7 +1032,8 @@ public class MetaDataUtil {
                 family.getPColumnForColumnNameBytes(rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX]);
         } else if (pkCount > COLUMN_NAME_INDEX
             && rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX].length > 0) {
-            col = table.getPKColumn(new String(rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX]));
+            col = table.getPKColumn(new String(
+                rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX], StandardCharsets.UTF_8));
         }
         return col;
     }
@@ -1042,7 +1046,6 @@ public class MetaDataUtil {
         try {
             connection.setAutoCommit(true);
             Set<String> physicalTablesSet = new HashSet<>();
-            Set<String> columnFamilies  = new HashSet<>();
             physicalTablesSet.add(table.getPhysicalName().getString());
             for(byte[] physicalTableName:physicalTableNames) {
                 physicalTablesSet.add(Bytes.toString(physicalTableName));

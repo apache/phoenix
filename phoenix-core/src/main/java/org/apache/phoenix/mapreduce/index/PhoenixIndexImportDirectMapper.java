@@ -18,6 +18,7 @@
 package org.apache.phoenix.mapreduce.index;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -172,8 +173,9 @@ public class PhoenixIndexImportDirectMapper extends
             }
             // We are writing some dummy key-value as map output here so that we commit only one
             // output to reducer.
-            context.write(new ImmutableBytesWritable(UUID.randomUUID().toString().getBytes()),
-                new IntWritable(0));
+            context.write(new ImmutableBytesWritable(
+                    UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8)),
+                    new IntWritable(0));
             super.cleanup(context);
         } catch (SQLException e) {
             LOGGER.error(" Error {}  while read/write of a record ", e.getMessage());

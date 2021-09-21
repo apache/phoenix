@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.monitoring;
 
-public class CombinableMetricImpl implements CombinableMetric {
+public class CombinableMetricImpl implements CombinableMetric, Cloneable {
 
     private final Metric metric;
 

@@ -216,6 +216,7 @@
           <configuration>
             <effort>Max</effort>
             <maxHeap>2048</maxHeap>
+            <excludeFilterFile>${top.dir}/src/main/config/spotbugs/spotbugs-exclude.xml</excludeFilterFile>
           </configuration>
         </plugin>
         <!--This plugin's configuration is used to store Eclipse m2e settings 
@@ -599,6 +600,9 @@
             <!-- Argparse is bundled to work around system Python version
                  issues, compatibile with ALv2 -->
             <exclude>bin/argparse-1.4.0/argparse.py</exclude>
+            <!-- tmp files -->
+            <exclude>dev/work/**</exclude>
+            <exclude>dev/artifacts/**</exclude>
           </excludes>
         </configuration>
       </plugin>
