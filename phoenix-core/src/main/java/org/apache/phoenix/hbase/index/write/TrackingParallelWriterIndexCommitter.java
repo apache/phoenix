@@ -254,7 +254,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                 throw exception;
             } else {
                 exception = new MultiIndexWriteFailureException(Collections.unmodifiableList(failedTables),
-                    disableIndexOnFailure && PhoenixIndexFailurePolicy.getDisableIndexOnFailure(env), cause);
+                    false, cause);
                 throw wrapInDoNotRetryIOException("At least one index write failed after retries", exception,
                         EnvironmentEdgeManager.currentTimeMillis());
             }

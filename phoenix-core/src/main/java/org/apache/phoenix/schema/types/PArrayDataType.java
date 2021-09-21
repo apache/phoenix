@@ -37,6 +37,8 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
+import edu.umd.cs.findbugs.annotations.SuppressWarnings;
+
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
@@ -310,6 +312,8 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         return true;
     }
 
+    @SuppressWarnings(value="RC_REF_COMPARISON",
+            justification="PDataTypes are expected to be singletons")
     private void coerceBytes(ImmutableBytesWritable ptr, Object value, PDataType actualType, Integer maxLength,
             Integer scale, Integer desiredMaxLength, Integer desiredScale, PDataType desiredType,
             SortOrder actualSortOrder, SortOrder desiredSortOrder, 

@@ -18,6 +18,7 @@
 package org.apache.phoenix.mapreduce.index;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -41,7 +42,7 @@ public class PhoenixServerBuildIndexMapper extends
         String rebuildPageRowSizeConf =
                 context.getConfiguration().get(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
         if (rebuildPageRowSizeConf != null) {
-            this.rebuildPageRowSize = Long.valueOf(rebuildPageRowSizeConf);
+            this.rebuildPageRowSize = Long.parseLong(rebuildPageRowSizeConf);
         } else {
             this.rebuildPageRowSize = -1L;
         }
@@ -63,7 +64,9 @@ public class PhoenixServerBuildIndexMapper extends
 
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException {
-        context.write(new ImmutableBytesWritable(UUID.randomUUID().toString().getBytes()), new IntWritable(0));
+        context.write(new ImmutableBytesWritable(
+                UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8)),
+                new IntWritable(0));
         super.cleanup(context);
     }
 }

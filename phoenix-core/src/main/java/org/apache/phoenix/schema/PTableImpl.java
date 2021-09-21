@@ -652,7 +652,7 @@ public class PTableImpl implements PTable {
             Collections.sort(sortedColumns, new Comparator<PColumn>() {
                 @Override
                 public int compare(PColumn o1, PColumn o2) {
-                    return Integer.valueOf(o1.getPosition()).compareTo(o2.getPosition());
+                    return Integer.compare(o1.getPosition(), o2.getPosition());
                 }
             });
 

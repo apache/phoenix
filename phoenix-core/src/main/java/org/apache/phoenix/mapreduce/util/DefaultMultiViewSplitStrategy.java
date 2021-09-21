@@ -55,7 +55,7 @@ public class DefaultMultiViewSplitStrategy implements MultiViewSplitStrategy {
      */
     public int getNumberOfMappers(int viewSize, int numViewsInSplit) {
         int numberOfMappers = viewSize / numViewsInSplit;
-        if (Math.ceil(viewSize % numViewsInSplit) > 0) {
+        if (viewSize % numViewsInSplit > 0) {
             numberOfMappers++;
         }
         return numberOfMappers;

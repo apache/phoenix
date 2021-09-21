@@ -75,7 +75,7 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
     public static final String ERROR_TYPE = "ErrorType";
     public static final byte[] ERROR_TYPE_BYTES = Bytes.toBytes(ERROR_TYPE);
 
-    public static String  VERIFICATION_PHASE = "Phase";
+    public static final String  VERIFICATION_PHASE = "Phase";
     public final static byte[] VERIFICATION_PHASE_BYTES = Bytes.toBytes(VERIFICATION_PHASE);
     public final static String EXPECTED_VALUE = "ExpectedValue";
     public final static byte[] EXPECTED_VALUE_BYTES = Bytes.toBytes(EXPECTED_VALUE);

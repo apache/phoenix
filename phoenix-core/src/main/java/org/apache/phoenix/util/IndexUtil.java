@@ -29,6 +29,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.getTable;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -232,7 +233,7 @@ public class IndexUtil {
     
     public static byte[] getLocalIndexColumnFamily(byte[] dataColumnFamilyBytes) {
         String dataCF = Bytes.toString(dataColumnFamilyBytes);
-        return getLocalIndexColumnFamily(dataCF).getBytes();
+        return getLocalIndexColumnFamily(dataCF).getBytes(StandardCharsets.UTF_8);
     }
     
     public static PColumn getDataColumn(PTable dataTable, String indexColumnName) {

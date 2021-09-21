@@ -124,11 +124,6 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
                              parameterCount + " bind parameters are defined")
                     .build().buildException();
         }
-        if (parameterIndex < 1) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.PARAM_INDEX_OUT_OF_BOUND)
-                    .setMessage("Invalid bind parameter index " + parameterIndex)
-                    .build().buildException();
-        }
         this.parameters.set(parameterIndex - 1, value);
     }
 

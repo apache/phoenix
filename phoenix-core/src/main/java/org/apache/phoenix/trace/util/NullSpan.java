@@ -31,7 +31,7 @@ import org.apache.phoenix.util.StringUtil;
  */
 public class NullSpan implements Span {
 
-  public static Span INSTANCE = new NullSpan();
+  public static final Span INSTANCE = new NullSpan();
 
   /**
    * Private constructor to limit garbage

@@ -1489,7 +1489,6 @@ public class JoinCompiler {
     }
 
     private boolean isWildCardSelectForTable(List<AliasedNode> select, TableRef tableRef, ColumnResolver resolver) throws SQLException {
-        ColumnRefParseNodeVisitor visitor = new ColumnRefParseNodeVisitor(resolver, phoenixStatement.getConnection());
         for (AliasedNode aliasedNode : select) {
             ParseNode node = aliasedNode.getNode();
             if (node instanceof TableWildcardParseNode) {
