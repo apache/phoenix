@@ -26,18 +26,19 @@ public class LocalConnectionTest {
         Statement stmt = null;
         ResultSet rset = null;
         String tableName = "phoenix_trace_test";
-        Span span = TraceUtil.getGlobalTracer().spanBuilder("phoenix-client-queries").startSpan();
-        try(Scope scope = span.makeCurrent()){
+//        Span span = TraceUtil.getGlobalTracer().spanBuilder("phoenix-client-queries").startSpan();
+//        try(Scope scope = span.makeCurrent()){
             Connection con = DriverManager.getConnection("jdbc:phoenix:localhost");
             dropTable(con, tableName);
             createTable(con, tableName);
             upsertIntoTable(con, tableName);
+            scanTable(con, tableName);
             con.close();
-        } catch (Exception e){
-            System.out.println("Error in tracing: " + e);
-        } finally {
-            span.end();
-        }
+//        } catch (Exception e){
+//            System.out.println("Error in tracing: " + e);
+//        } finally {
+//            span.end();
+//        }
     }
 
     private static void createTable(Connection connection, String tableName) throws SQLException {
@@ -56,8 +57,9 @@ public class LocalConnectionTest {
         Span span = TraceUtil.getGlobalTracer().spanBuilder(String.format("upsert-table-%s", tableName)).startSpan();
         try (Scope scope = span.makeCurrent()){
             Statement statement = connection.createStatement();
-            statement.executeUpdate(String.format("upsert into %s values (1,'Hello')", tableName));
-            statement.executeUpdate(String.format("upsert into %s values (2,'World!')", tableName));
+            for(int i = 0; i < 10000; i++){
+                statement.executeUpdate(String.format("upsert into %s values (%s,'Hello-%s')", tableName, i, i));
+            }
             connection.commit();
             statement.close();
         } finally {
