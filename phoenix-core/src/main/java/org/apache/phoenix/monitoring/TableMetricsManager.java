@@ -31,6 +31,8 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import edu.umd.cs.findbugs.annotations.SuppressWarnings;
+
 /**
  * Central place where we keep track of all the Table Level metrics. Register each tableMetrics and
  * store the instance of it associated with TableName in a map
@@ -53,6 +55,8 @@ public class TableMetricsManager {
     private static volatile MetricPublisherSupplierFactory mPublisher = null;
     private static volatile QueryServicesOptions options = null;
 
+    @SuppressWarnings(value="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD",
+            justification="This is how we implement the singleton pattern")
     public TableMetricsManager(QueryServicesOptions ops) {
         options = ops;
         isTableLevelMetricsEnabled = options.isTableLevelMetricsEnabled();

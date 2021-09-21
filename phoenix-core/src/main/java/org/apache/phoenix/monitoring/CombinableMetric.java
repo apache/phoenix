@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.monitoring;
 
-
-
 /**
  * Interface for representing a metric that could be published and possibly combined with a metric of the same
  * type.
@@ -31,9 +29,9 @@ public interface CombinableMetric extends Metric {
     
     CombinableMetric clone();
 
-    public class NoOpRequestMetric implements CombinableMetric {
+    public class NoOpRequestMetric implements CombinableMetric, Cloneable {
 
-        public static NoOpRequestMetric INSTANCE = new NoOpRequestMetric();
+        public static final NoOpRequestMetric INSTANCE = new NoOpRequestMetric();
         private static final String EMPTY_STRING = "";
 
         @Override

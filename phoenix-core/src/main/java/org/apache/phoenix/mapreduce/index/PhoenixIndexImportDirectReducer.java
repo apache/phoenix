@@ -63,7 +63,7 @@ public class PhoenixIndexImportDirectReducer extends
             throws IOException {
         Configuration configuration = context.getConfiguration();
         try (final Connection connection = ConnectionUtil.getInputConnection(configuration)) {
-            long ts = Long.valueOf(configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE));
+            long ts = Long.parseLong(configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE));
             IndexToolVerificationResult verificationResult =
                     resultRepository.getVerificationResult(connection, ts, indexTableNameBytes);
             context.getCounter(PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT).

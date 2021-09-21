@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.mapreduce;
 
+
+import java.nio.charset.StandardCharsets;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.Base64;
@@ -69,7 +72,7 @@ public class CsvBulkImportUtil {
     @VisibleForTesting
     static void setChar(Configuration conf, String confKey, Character charValue) {
         if(charValue!=null) {
-            conf.set(confKey, Base64.encodeBytes(charValue.toString().getBytes()));
+            conf.set(confKey, Base64.encodeBytes(charValue.toString().getBytes(StandardCharsets.UTF_8)));
         }
     }
 
@@ -79,7 +82,7 @@ public class CsvBulkImportUtil {
         if (strValue == null) {
             return null;
         }
-        return new String(Base64.decode(strValue)).charAt(0);
+        return new String(Base64.decode(strValue), StandardCharsets.UTF_8).charAt(0);
     }
 
     public static Path getOutputPath(Path outputdir, String tableName) {

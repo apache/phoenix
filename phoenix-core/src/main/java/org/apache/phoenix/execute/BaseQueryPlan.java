@@ -20,6 +20,7 @@ package org.apache.phoenix.execute;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.Collections;
@@ -324,7 +325,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
 
         ScanUtil.setTenantId(scan, tenantIdBytes);
         String customAnnotations = LogUtil.customAnnotationsToString(connection);
-        ScanUtil.setCustomAnnotations(scan, customAnnotations == null ? null : customAnnotations.getBytes());
+        ScanUtil.setCustomAnnotations(scan, customAnnotations == null ? null
+                : customAnnotations.getBytes(StandardCharsets.UTF_8));
         // Set local index related scan attributes. 
         if (table.getIndexType() == IndexType.LOCAL) {
             ScanUtil.setLocalIndex(scan);

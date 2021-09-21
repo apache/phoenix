@@ -374,7 +374,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final int maxConnectionsAllowed;
     private final int maxInternalConnectionsAllowed;
     private final boolean shouldThrottleNumConnections;
-    public static final byte[] MUTEX_LOCKED = "MUTEX_LOCKED".getBytes();
+    public static final byte[] MUTEX_LOCKED = "MUTEX_LOCKED".getBytes(StandardCharsets.UTF_8);
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
@@ -1258,7 +1258,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (!success) {
             throw new TimeoutException("Operation  " + op.getOperationName() + " didn't complete within "
                     + watch.elapsedMillis() + " ms "
-                    + (numTries > 1 ? ("after trying " + numTries + (numTries > 1 ? "times." : "time.")) : ""));
+                    + "after trying " + numTries + "times.");
         } else {
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("Operation "
@@ -1266,7 +1266,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         + " completed within "
                         + watch.elapsedMillis()
                         + "ms "
-                        + (numTries > 1 ? ("after trying " + numTries + (numTries > 1 ? "times." : "time.")) : ""));
+                        + "after trying " + numTries +  " times." );
             }
         }
     }
@@ -1683,7 +1683,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 + getServerVersion(serverJarVersion));
                     }
                 }
-                hasIndexWALCodec &= hasIndexWALCodec(serverJarVersion);
+                hasIndexWALCodec = hasIndexWALCodec && hasIndexWALCodec(serverJarVersion);
                 if (minHBaseVersion > MetaDataUtil.decodeHBaseVersion(serverJarVersion)) {
                     minHBaseVersion = MetaDataUtil.decodeHBaseVersion(serverJarVersion);
                 }
@@ -2264,7 +2264,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         tableProps.put(PhoenixDatabaseMetaData.IMMUTABLE_ROWS, table.isImmutableRows());
 
         // We got the properties of the physical base table but we need to create the view index table using logical name
-        byte[] viewPhysicalTableName = MetaDataUtil.getNamespaceMappedName(table.getName(), isNamespaceMapped).getBytes();
+        byte[] viewPhysicalTableName =
+                MetaDataUtil.getNamespaceMappedName(table.getName(), isNamespaceMapped)
+                .getBytes(StandardCharsets.UTF_8);
         ensureViewIndexTableCreated(viewPhysicalTableName, physicalTableName, tableProps, families, splits, timestamp, isNamespaceMapped);
     }
 

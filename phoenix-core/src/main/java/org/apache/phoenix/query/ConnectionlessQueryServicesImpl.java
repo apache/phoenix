@@ -716,10 +716,6 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public MetaDataMutationResult getSchema(String schemaName, long clientTimestamp) throws SQLException {
-        try {
-            PSchema schema = metaData.getSchema(new PTableKey(null, schemaName));
-            new MetaDataMutationResult(MutationCode.SCHEMA_ALREADY_EXISTS, schema, 0);
-        } catch (SchemaNotFoundException e) {}
         return new MetaDataMutationResult(MutationCode.SCHEMA_NOT_FOUND, 0, null);
     }
 

@@ -510,7 +510,8 @@ public class SubselectRewriter extends ParseNodeRewriter {
             ParseNode node = aliasedNode.getNode();
             if (node instanceof WildcardParseNode 
                     || (node instanceof TableWildcardParseNode 
-                            && ((TableWildcardParseNode) node).getTableName().equals(tableAlias))) {
+                            && ((TableWildcardParseNode) node).getTableName().toString().
+                                    equals(tableAlias))) {
                 for (AliasedNode aNode : subselect.getSelect()) {
                     String alias = aNode.getAlias();
                     String aliasRewrite = alias == null ? null : SchemaUtil.getColumnName(tableAlias, alias);
