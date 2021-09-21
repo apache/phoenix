@@ -59,7 +59,7 @@ public class ArrayFillFunction extends ScalarFunction {
         Arrays.fill(elements, element);
         PhoenixArray array = PDataType.instantiatePhoenixArray(getElementExpr().getDataType(), elements);
         //When max length of a char array is not the max length of the element passed in
-        if (getElementExpr().getDataType().isFixedWidth() && getMaxLength() != null && getMaxLength() != array.getMaxLength()) {
+        if (getElementExpr().getDataType().isFixedWidth() && getMaxLength() != null && !getMaxLength().equals(array.getMaxLength())) {
             array = new PhoenixArray(array, getMaxLength());
         }
         ptr.set(((PArrayDataType) getDataType()).toBytes(array, getElementExpr().getDataType(), getElementExpr().getSortOrder()));

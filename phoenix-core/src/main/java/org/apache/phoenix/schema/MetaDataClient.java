@@ -119,6 +119,7 @@ import static org.apache.phoenix.schema.types.PDataType.FALSE_BYTES;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -274,6 +275,8 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Ints;
+
+import edu.umd.cs.findbugs.annotations.SuppressWarnings;
 
 public class MetaDataClient {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataClient.class);
@@ -2089,7 +2092,8 @@ public class MetaDataClient {
 
                 // TODO: PHOENIX_TABLE_TTL
                 if (tableType == VIEW  && parentPhysicalName != null) {
-                    TableDescriptor desc = connection.getQueryServices().getTableDescriptor(parentPhysicalName.getBytes());
+                    TableDescriptor desc = connection.getQueryServices().getTableDescriptor(
+                        parentPhysicalName.getBytes(StandardCharsets.UTF_8));
                     if (desc != null) {
                         Integer tableTTLProp = desc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(parent)).getTimeToLive();
                         if ((tableTTLProp != null) && (tableTTLProp != HConstants.FOREVER)) {
@@ -3022,7 +3026,7 @@ public class MetaDataClient {
             }
             tableUpsert.setBoolean(24, isAppendOnlySchema);
             if (guidePostsWidth == null) {
-                tableUpsert.setNull(25, Types.BIGINT);                
+                tableUpsert.setNull(25, Types.BIGINT);
             } else {
                 tableUpsert.setLong(25, guidePostsWidth);
             }
@@ -3177,10 +3181,8 @@ public class MetaDataClient {
                 .setNamespaceMapped(isNamespaceMapped)
                 .setAutoPartitionSeqName(autoPartitionSeq)
                 .setAppendOnlySchema(isAppendOnlySchema)
-                .setImmutableStorageScheme(immutableStorageScheme == null ?
-                    ImmutableStorageScheme.ONE_CELL_PER_COLUMN : immutableStorageScheme)
-                .setQualifierEncodingScheme(encodingScheme == null ?
-                    QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : encodingScheme)
+                .setImmutableStorageScheme(immutableStorageScheme)
+                .setQualifierEncodingScheme(encodingScheme)
                 .setBaseColumnCount(baseTableColumnCount)
                 .setEncodedCQCounter(cqCounterToBe)
                 .setUseStatsForParallelization(useStatsForParallelizationProp)
@@ -3196,8 +3198,7 @@ public class MetaDataClient {
                 .setIndexes(Collections.<PTable>emptyList())
                 .setParentSchemaName((parent == null) ? null : parent.getSchemaName())
                 .setParentTableName((parent == null) ? null : parent.getTableName())
-                .setPhysicalNames(physicalNames == null ?
-                    ImmutableList.<PName>of() : ImmutableList.copyOf(physicalNames))
+                .setPhysicalNames(ImmutableList.copyOf(physicalNames))
                 .setColumns(columns.values())
                 .setPhoenixTTL(phoenixTTL == null ? PHOENIX_TTL_NOT_DEFINED : phoenixTTL)
                 .setPhoenixTTLHighWaterMark(phoenixTTLHighWaterMark == null ? MIN_PHOENIX_TTL_HWM : phoenixTTLHighWaterMark)
@@ -4147,7 +4148,8 @@ public class MetaDataClient {
                     connection.rollback();
                 }
 
-                byte[] family = families.size() > 0 ? families.iterator().next().getBytes() : null;
+                byte[] family = families.size() > 0 ?
+                        families.iterator().next().getBytes(StandardCharsets.UTF_8) : null;
 
                 // Figure out if the empty column family is changing as a result of adding the new column
                 byte[] emptyCF = null;

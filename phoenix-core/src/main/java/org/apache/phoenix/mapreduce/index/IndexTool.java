@@ -571,7 +571,7 @@ public class IndexTool extends Configured implements Tool {
             if (pDataTable.isTransactional()) {
                 long maxTimeRange = pDataTable.getTimeStamp() + 1;
                 scan.setAttribute(BaseScannerRegionObserver.TX_SCN,
-                        Bytes.toBytes(Long.valueOf(Long.toString(TransactionUtil.convertToNanoseconds(maxTimeRange)))));
+                        Bytes.toBytes(TransactionUtil.convertToNanoseconds(maxTimeRange)));
             }
             
           

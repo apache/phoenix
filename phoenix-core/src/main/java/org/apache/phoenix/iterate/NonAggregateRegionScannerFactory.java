@@ -138,7 +138,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
       }
       int clientVersion = ScanUtil.getClientVersion(scan);
       List<IndexMaintainer> indexMaintainers =
-          localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes, useProto);
+              IndexMaintainer.deserialize(localIndexBytes, useProto);
       indexMaintainer = indexMaintainers.get(0);
       viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
       byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
