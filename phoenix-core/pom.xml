@@ -282,27 +282,17 @@
   </dependency>
 
     <!-- Transaction dependencies -->
-    <!--
     <dependency>
       <groupId>org.apache.tephra</groupId>
       <artifactId>tephra-api</artifactId>
     </dependency>
-    -->
     <dependency>
       <groupId>org.apache.tephra</groupId>
       <artifactId>tephra-core-shaded</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-core</artifactId>
-      <version>${tephra.version}</version>
-      <type>test-jar</type>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
       <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
-      <version>${tephra.version}</version>
       <classifier>shaded</classifier>
     </dependency>
   

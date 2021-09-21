@@ -934,6 +934,7 @@
             <artifactId>tephra-core</artifactId>
           </exclusion>
         </exclusions>
+        <classifier>shaded</classifier>
       </dependency>
       <dependency>
         <groupId>org.apache.omid</groupId>
