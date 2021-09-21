@@ -87,6 +87,7 @@ import static org.apache.phoenix.util.ViewUtil.findAllDescendantViews;
 import static org.apache.phoenix.util.ViewUtil.getSystemTableForChildLinks;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.PrivilegedExceptionAction;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -1721,8 +1722,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         byte[] colBytes = rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
         byte[] famBytes = rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX];
         if ((colBytes == null || colBytes.length == 0) && (famBytes != null && famBytes.length > 0)) {
-            byte[] sName = SchemaUtil.getSchemaNameFromFullName(famBytes).getBytes();
-            byte[] tName = SchemaUtil.getTableNameFromFullName(famBytes).getBytes();
+            byte[] sName =
+                    SchemaUtil.getSchemaNameFromFullName(famBytes).getBytes(StandardCharsets.UTF_8);
+            byte[] tName =
+                    SchemaUtil.getTableNameFromFullName(famBytes).getBytes(StandardCharsets.UTF_8);
             schemaTableNames[0] = tenantId;
             schemaTableNames[1] = sName;
             schemaTableNames[2] = tName;

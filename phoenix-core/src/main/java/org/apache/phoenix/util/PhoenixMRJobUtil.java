@@ -26,6 +26,7 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.ProtocolException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -181,7 +182,7 @@ public class PhoenixMRJobUtil {
         BufferedReader in = null;
         StringBuilder response = null;
         try {
-            in = new BufferedReader(new InputStreamReader(is));
+            in = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
             String inputLine;
             response = new StringBuilder();
             while ((inputLine = in.readLine()) != null) {

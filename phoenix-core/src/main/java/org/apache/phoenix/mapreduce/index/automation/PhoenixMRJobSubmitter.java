@@ -298,7 +298,6 @@ public class PhoenixMRJobSubmitter {
                 toScheduleJobs.remove(candidateJobs.get(jobId));
             }
         }
-        toScheduleJobs.removeAll(submittedJobs);
         return toScheduleJobs;
     }
 

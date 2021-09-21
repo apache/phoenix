@@ -150,15 +150,15 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
 
         try (final Connection connection = ConnectionUtil.getInputConnection(configuration, overridingProps)) {
             PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);
-            Long scn = (currentScnValue != null) ? Long.valueOf(currentScnValue) : EnvironmentEdgeManager.currentTimeMillis();
+            Long scn = (currentScnValue != null) ? Long.parseLong(currentScnValue) : EnvironmentEdgeManager.currentTimeMillis();
             setCurrentScnValue(configuration, scn);
 
-            Long startTime = (startTimeValue == null) ? 0L : Long.valueOf(startTimeValue);
+            Long startTime = (startTimeValue == null) ? 0L : Long.parseLong(startTimeValue);
 
             queryPlan = queryPlanBuilder.getQueryPlan(phoenixConnection, dataTableFullName, indexTableFullName);
             Scan scan = queryPlan.getContext().getScan();
 
-            Long lastVerifyTimeValue = lastVerifyTime == null ? 0L : Long.valueOf(lastVerifyTime);
+            Long lastVerifyTimeValue = lastVerifyTime == null ? 0L : Long.parseLong(lastVerifyTime);
             try {
                 scan.setTimeRange(startTime, scn);
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING, TRUE_BYTES);
@@ -167,7 +167,7 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
                         configuration.get(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
                 if (rebuildPageRowSize != null) {
                     scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGE_ROWS,
-                        Bytes.toBytes(Long.valueOf(rebuildPageRowSize)));
+                        Bytes.toBytes(Long.parseLong(rebuildPageRowSize)));
                 }
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_VERIFY_TYPE, getIndexVerifyType(configuration).toBytes());
                 scan.setAttribute(BaseScannerRegionObserver.INDEX_RETRY_VERIFY, Bytes.toBytes(lastVerifyTimeValue));
@@ -184,7 +184,7 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
             }
             // since we can't set a scn on connections with txn set TX_SCN attribute so that the max time range is set by BaseScannerRegionObserver
             if (txnScnValue != null) {
-                scan.setAttribute(BaseScannerRegionObserver.TX_SCN, Bytes.toBytes(Long.valueOf(txnScnValue)));
+                scan.setAttribute(BaseScannerRegionObserver.TX_SCN, Bytes.toBytes(Long.parseLong(txnScnValue)));
             }
             return queryPlan;
         } catch (Exception exception) {

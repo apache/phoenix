@@ -23,6 +23,7 @@ import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.util.SchemaUtil;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 /**
@@ -44,7 +45,7 @@ public class ChangePermsStatement implements BindableStatement {
         // To comply with SQL standards, we may support the user given permissions to revoke specific permissions in future.
         // GRANT permissions statement requires this parameter and the parsing will fail if it is not specified in SQL
         if(permsString != null) {
-            Permission permission = new Permission(permsString.getBytes());
+            Permission permission = new Permission(permsString.getBytes(StandardCharsets.UTF_8));
             permsList = permission.getActions();
         }
         if(isSchemaName) {

@@ -457,7 +457,7 @@ public final class PhoenixConfigurationUtil {
     public static int getMultiViewQueryMoreSplitSize(final Configuration configuration) {
         final String batchSize = configuration.get(MAPREDUCE_MULTI_INPUT_QUERY_BATCH_SIZE);
         Preconditions.checkNotNull(batchSize);
-        return Integer.valueOf(batchSize);
+        return Integer.parseInt(batchSize);
     }
 
     public static List<ColumnInfo> getSelectColumnMetadataList(final Configuration configuration) throws SQLException {
@@ -487,7 +487,7 @@ public final class PhoenixConfigurationUtil {
     public static int getMultiViewSplitSize(final Configuration configuration) {
         final String splitSize = configuration.get(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE);
         Preconditions.checkNotNull(splitSize);
-        return Integer.valueOf(splitSize);
+        return Integer.parseInt(splitSize);
     }
 
     private static List<String> getSelectColumnList(

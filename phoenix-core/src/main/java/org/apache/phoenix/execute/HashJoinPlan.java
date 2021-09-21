@@ -23,6 +23,7 @@ import static org.apache.phoenix.util.NumberUtil.add;
 import static org.apache.phoenix.util.NumberUtil.getMin;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
@@ -542,7 +543,8 @@ public class HashJoinPlan extends DelegateQueryPlan {
                     final byte[] cacheId;
                     String queryString = plan.getStatement().toString().replaceAll("\\$[0-9]+", "\\$");
                     if (usePersistentCache) {
-                        cacheId = Arrays.copyOfRange(digest.digest(queryString.getBytes()), 0, 8);
+                        cacheId = Arrays.copyOfRange(digest.digest(
+                            queryString.getBytes(StandardCharsets.UTF_8)), 0, 8);
                         boolean retrying = parent.delegate.getContext().getRetryingPersistentCache(Bytes.toLong(cacheId));
                         if (!retrying) {
                             try {

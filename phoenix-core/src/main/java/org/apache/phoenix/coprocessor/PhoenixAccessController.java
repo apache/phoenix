@@ -69,6 +69,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.nio.charset.StandardCharsets;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -621,7 +622,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                     && accessChecker.getAuthManager().userHasAccess(user, table, action)) {
                 return true;
             }
-            List<UserPermission> permissionsForUser = getPermissionForUser(perms, user.getShortName().getBytes());
+            List<UserPermission> permissionsForUser = getPermissionForUser(perms,
+                user.getShortName().getBytes(StandardCharsets.UTF_8));
             if (permissionsForUser != null) {
                 for (UserPermission permissionForUser : permissionsForUser) {
                     if (permissionForUser.implies(action)) { return true; }
@@ -739,7 +741,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         StringBuilder sb = new StringBuilder();
         sb.append(" (user=").append(user != null ? user : "UNKNOWN").append(", ");
         sb.append("scope=").append(table == null ? "GLOBAL" : table.getNameWithNamespaceInclAsString()).append(", ");
-        sb.append(actions.size() > 1 ? "actions=" : "action=").append(actions != null ? actions.toString() : "")
+        sb.append(actions.size() > 1 ? "actions=" : "action=").append(actions.toString())
                 .append(")");
         return sb.toString();
     }

@@ -220,7 +220,7 @@ public final class QueryUtil {
                                 new Function<String, String>() {
                                     @Nullable
                                     @Override
-                                    public String apply(@Nullable String columnName) {
+                                    public String apply(String columnName) {
                                         return getEscapedFullColumnName(columnName);
                                     }
                                 })),
