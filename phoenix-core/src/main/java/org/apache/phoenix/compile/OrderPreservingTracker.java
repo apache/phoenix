@@ -310,7 +310,8 @@ public class OrderPreservingTracker {
             for (int i = 0; i < orderPreservingTrackInfos.size(); i++) {
                 Info entry = orderPreservingTrackInfos.get(i);
                 int pos = entry.pkPosition;
-                isOrderPreserving &= entry.orderPreserving != OrderPreserving.NO &&
+                isOrderPreserving = isOrderPreserving &&
+                        entry.orderPreserving != OrderPreserving.NO &&
                         prevOrderPreserving == OrderPreserving.YES &&
                         (pos == prevPos ||
                          pos - prevSlotSpan == prevPos  ||

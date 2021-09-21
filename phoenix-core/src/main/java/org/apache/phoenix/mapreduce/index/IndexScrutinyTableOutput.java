@@ -54,7 +54,7 @@ public class IndexScrutinyTableOutput {
      * This table holds the invalid rows in the source table (either missing a target, or a bad
      * covered column value). Dynamic columns hold the original source and target table column data.
      */
-    public static String OUTPUT_TABLE_NAME = "PHOENIX_INDEX_SCRUTINY";
+    public static final String OUTPUT_TABLE_NAME = "PHOENIX_INDEX_SCRUTINY";
     public static final String SCRUTINY_EXECUTE_TIME_COL_NAME = "SCRUTINY_EXECUTE_TIME";
     public static final String TARGET_TABLE_COL_NAME = "TARGET_TABLE";
     public static final String SOURCE_TABLE_COL_NAME = "SOURCE_TABLE";

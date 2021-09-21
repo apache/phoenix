@@ -175,6 +175,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private LogLevel auditLogLevel;
     private Double logSamplingRate;
     private String sourceOfOperation;
+    private static final String[] CONNECTION_PROPERTIES;
 
     private final ConcurrentLinkedQueue<PhoenixConnection> childConnections =
         new ConcurrentLinkedQueue<>();
@@ -185,6 +186,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     static {
         Tracing.addTraceMetricsSource();
+        CONNECTION_PROPERTIES = PhoenixRuntime.getConnectionProperties();
     }
 
     private static Properties newPropsWithSCN(long scn, Properties props) {
@@ -264,8 +266,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         }
 
         // Copy so client cannot change
-        this.info = info == null ? new Properties() : PropertiesUtil
-                .deepCopy(info);
+        this.info = PropertiesUtil.deepCopy(info);
         final PName tenantId = JDBCUtil.getTenantId(url, info);
         if (this.info.isEmpty() && tenantId == null) {
             this.services = services;
@@ -437,7 +438,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     private static Properties filterKnownNonProperties(Properties info) {
         Properties prunedProperties = info;
-        for (String property : PhoenixRuntime.CONNECTION_PROPERTIES) {
+        for (String property : CONNECTION_PROPERTIES) {
             if (info.containsKey(property)) {
                 if (prunedProperties == info) {
                     prunedProperties = PropertiesUtil.deepCopy(info);

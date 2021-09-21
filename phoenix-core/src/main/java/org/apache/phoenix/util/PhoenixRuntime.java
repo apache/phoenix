@@ -22,9 +22,11 @@ import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions
 import static org.apache.phoenix.schema.types.PDataType.ARRAY_TYPE_SUFFIX;
 
 import java.io.File;
-import java.io.FileReader;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -32,6 +34,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
@@ -51,6 +54,7 @@ import org.apache.phoenix.thirdparty.org.apache.commons.cli.HelpFormatter;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
+
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
@@ -209,7 +213,7 @@ public class PhoenixRuntime {
      * All Phoenix specific connection properties
      * TODO: use enum instead
      */
-    public final static String[] CONNECTION_PROPERTIES = {
+    private final static String[] CONNECTION_PROPERTIES = {
             CURRENT_SCN_ATTRIB,
             TENANT_ID_ATTRIB,
             UPSERT_BATCH_SIZE_ATTRIB,
@@ -295,7 +299,9 @@ public class PhoenixRuntime {
             } else {
                 for (String inputFile : execCmd.getInputFiles()) {
                     if (inputFile.endsWith(SQL_FILE_EXT)) {
-                        PhoenixRuntime.executeStatements(conn, new FileReader(inputFile), Collections.emptyList());
+                        PhoenixRuntime.executeStatements(conn, new InputStreamReader(
+                            new FileInputStream(inputFile), StandardCharsets.UTF_8),
+                            Collections.emptyList());
                     } else if (inputFile.endsWith(CSV_FILE_EXT)) {
 
                         String tableName = execCmd.getTableName();
@@ -330,6 +336,10 @@ public class PhoenixRuntime {
     public static final String SCHEMA_ATTRIB = "schema";
 
     private PhoenixRuntime() {
+    }
+
+    public static final String[] getConnectionProperties() {
+        return Arrays.copyOf(CONNECTION_PROPERTIES, CONNECTION_PROPERTIES.length);
     }
 
     /**
