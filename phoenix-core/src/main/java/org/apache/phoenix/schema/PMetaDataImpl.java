@@ -195,7 +195,7 @@ public class PMetaDataImpl implements PMetaData {
                         PTableImpl.Builder parentTableBuilder =
                                 PTableImpl.builderWithColumns(parentTableRef.getTable(),
                                         getColumnsToClone(parentTableRef.getTable()))
-                                .setIndexes(newIndexes == null ? Collections.<PTable>emptyList() : newIndexes);
+                                .setIndexes(newIndexes);
                         if (tableTimeStamp != HConstants.LATEST_TIMESTAMP) {
                             parentTableBuilder.setTimeStamp(tableTimeStamp);
                         }

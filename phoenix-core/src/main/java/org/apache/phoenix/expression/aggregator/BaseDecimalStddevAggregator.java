@@ -71,8 +71,7 @@ public abstract class BaseDecimalStddevAggregator extends DistinctValueWithCount
             }
             BigDecimal result = new BigDecimal(Math.sqrt(ssd.doubleValue()), new MathContext(resultPrecision,
                     RoundingMode.HALF_UP));
-            result.setScale(this.colScale, RoundingMode.HALF_UP);
-            cachedResult = result;
+            cachedResult = result.setScale(this.colScale, RoundingMode.HALF_UP);
         }
         if (buffer == null) {
             initBuffer();

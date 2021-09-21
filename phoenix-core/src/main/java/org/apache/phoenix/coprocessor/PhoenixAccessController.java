@@ -739,7 +739,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         StringBuilder sb = new StringBuilder();
         sb.append(" (user=").append(user != null ? user : "UNKNOWN").append(", ");
         sb.append("scope=").append(table == null ? "GLOBAL" : table.getNameWithNamespaceInclAsString()).append(", ");
-        sb.append(actions.size() > 1 ? "actions=" : "action=").append(actions != null ? actions.toString() : "")
+        sb.append(actions.size() > 1 ? "actions=" : "action=").append(actions.toString())
                 .append(")");
         return sb.toString();
     }

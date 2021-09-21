@@ -19,6 +19,7 @@ package org.apache.phoenix.compile;
 
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
@@ -520,7 +521,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 byte[] wildcardString = new byte[pattern.length()];
                 byte[] wildcard = {StringUtil.MULTI_CHAR_LIKE};
                 StringUtil.fill(wildcardString, 0, pattern.length(), wildcard, 0, 1, false);
-                if (pattern.equals(new String (wildcardString))) {
+                if (pattern.equals(new String(wildcardString, StandardCharsets.UTF_8))) {
                     List<Expression> compareChildren = Arrays.asList(lhs, NOT_NULL_STRING);
                     return new ComparisonExpression(compareChildren, node.isNegate() ? CompareOp.LESS : CompareOp.GREATER_OR_EQUAL);
                 }

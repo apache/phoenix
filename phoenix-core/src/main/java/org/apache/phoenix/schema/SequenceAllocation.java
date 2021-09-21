@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema;
 
+import edu.umd.cs.findbugs.annotations.SuppressWarnings;
+
 /**
  * A SequenceKey and the number of slots requested to be allocated for the sequence. 
  * It binds these two together to allow operations such as sorting
@@ -53,6 +55,8 @@ public class SequenceAllocation implements Comparable<SequenceAllocation> {
     }
     
     @Override
+    @SuppressWarnings(value="EQ_CHECK_FOR_OPERAND_NOT_COMPATIBLE_WITH_THIS",
+            justification="Checked in called function")
     public boolean equals(Object obj) {
         return sequenceKey.equals(obj);
     }

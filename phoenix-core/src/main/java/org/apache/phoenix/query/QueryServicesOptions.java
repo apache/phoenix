@@ -189,7 +189,7 @@ public class QueryServicesOptions {
     // Spillable GroupBy - SPGBY prefix
     //
     // Enable / disable spillable group by
-    public static boolean DEFAULT_GROUPBY_SPILLABLE = true;
+    public static final boolean DEFAULT_GROUPBY_SPILLABLE = true;
     // Number of spill files / partitions the keys are distributed to
     // Each spill file fits 2GB of data
     public static final int DEFAULT_GROUPBY_SPILL_FILES = 2;

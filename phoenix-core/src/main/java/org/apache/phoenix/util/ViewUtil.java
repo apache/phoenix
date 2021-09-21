@@ -29,6 +29,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -284,9 +285,11 @@ public class ViewUtil {
                     continue;
                 }
                 byte[] viewSchemaName = SchemaUtil.getSchemaNameFromFullName(
-                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
+                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
+                        .getBytes(StandardCharsets.UTF_8);
                 byte[] viewName = SchemaUtil.getTableNameFromFullName(
-                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
+                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
+                        .getBytes(StandardCharsets.UTF_8);
                 tableInfoList.add(new TableInfo(viewTenantId, viewSchemaName, viewName));
             }
             return new TableViewFinderResult(tableInfoList);

@@ -56,13 +56,21 @@ public abstract class LikeExpression extends BaseCompoundExpression {
     private static final String ZERO_OR_MORE = "\\E.*\\Q";
     private static final String ANY_ONE = "\\E.\\Q";
 
+    private static final String[] LIKE_ESCAPE_SEQS;
+    private static final String[] LIKE_UNESCAPED_SEQS;
+
+    static {
+        LIKE_ESCAPE_SEQS = StringUtil.getLikeEscapeSeqs();
+        LIKE_UNESCAPED_SEQS = StringUtil.getLikeUnescapedSeqs();
+    }
+
     /**
      * Store whether this like expression has to be case sensitive or not.
      */
     private LikeType likeType;
 
     public static String unescapeLike(String s) {
-        return StringUtil.replace(s, StringUtil.LIKE_ESCAPE_SEQS, StringUtil.LIKE_UNESCAPED_SEQS);
+        return StringUtil.replace(s, LIKE_ESCAPE_SEQS, LIKE_UNESCAPED_SEQS);
     }
 
     /**

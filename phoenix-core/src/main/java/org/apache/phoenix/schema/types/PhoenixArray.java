@@ -172,7 +172,7 @@ public class PhoenixArray implements Array,SQLCloseable {
 	}
 
 	private void boundaryCheck(long index, int count, Object[] arr) {
-		if ((--index) + count > arr.length) {
+		if (index - 1 + count > arr.length) {
 			throw new IllegalArgumentException("The array index is out of range of the total number of elements in the array " + arr.length);
 		}
 	}

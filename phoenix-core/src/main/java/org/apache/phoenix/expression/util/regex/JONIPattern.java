@@ -52,7 +52,7 @@ public class JONIPattern extends AbstractBasePattern implements AbstractBaseSpli
     public JONIPattern(String patternString, int flags, Encoding coding) {
         this.patternString = patternString;
         if (patternString != null) {
-            byte[] bytes = patternString.getBytes();
+            byte[] bytes = patternString.getBytes(coding.getCharset());
             pattern = new Regex(bytes, 0, bytes.length, flags, coding, Syntax.Java);
         } else {
             pattern = null;
