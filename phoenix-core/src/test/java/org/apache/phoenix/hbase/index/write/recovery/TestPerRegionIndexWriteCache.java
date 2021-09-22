@@ -47,8 +47,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 public class TestPerRegionIndexWriteCache {
   private static final HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility(); 

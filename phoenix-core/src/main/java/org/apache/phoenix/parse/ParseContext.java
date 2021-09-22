@@ -19,7 +19,7 @@ package org.apache.phoenix.parse;
 
 import java.util.List;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class ParseContext {
     private boolean isAggregate;

@@ -23,7 +23,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
 
-import com.google.common.collect.Iterables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 
 
 /**

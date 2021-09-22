@@ -56,8 +56,8 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.SequenceUtil;
 
-import com.google.common.collect.Lists;
-import com.google.common.math.LongMath;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.math.LongMath;
 
 public class Sequence {
     public static final int SUCCESS = 0;

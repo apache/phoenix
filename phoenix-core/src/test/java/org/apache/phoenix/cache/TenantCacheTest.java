@@ -33,7 +33,7 @@ import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.util.ByteUtil;
 import org.junit.Test;
 
-import com.google.common.base.Ticker;
+import org.apache.phoenix.thirdparty.com.google.common.base.Ticker;
 
 import static org.junit.Assert.*;
 

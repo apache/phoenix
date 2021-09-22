@@ -60,8 +60,8 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
-import com.google.common.base.Joiner;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 public class RowValueConstructorIT extends ParallelStatsDisabledIT {

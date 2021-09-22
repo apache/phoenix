@@ -37,7 +37,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 
 /**

@@ -63,7 +63,7 @@ import java.util.List;
 
 import org.apache.phoenix.query.QueryServicesOptions;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -7,7 +7,7 @@ import java.util.Map;
 import org.apache.phoenix.monitoring.MetricType;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one

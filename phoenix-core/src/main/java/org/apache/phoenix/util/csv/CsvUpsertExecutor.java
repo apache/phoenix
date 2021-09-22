@@ -48,8 +48,8 @@ import org.apache.phoenix.util.UpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 
 /** {@link UpsertExecutor} over {@link CSVRecord}s. */
 public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {

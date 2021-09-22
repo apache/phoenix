@@ -18,10 +18,10 @@
 
 package org.apache.phoenix.end2end;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -1567,7 +1567,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                             .getConnection(tenantConnectUrl, props)) {
 
                         dataReader.setConnection(readConnection);
-                        com.google.common.collect.Table<String, String, Object>
+                        org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object>
                                 fetchedData =
                                 fetchData(dataReader);
                         assertTrue("Deleted rows should not be fetched",
@@ -1985,7 +1985,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
 
             dataReader.setConnection(readConnection);
-            com.google.common.collect.Table<String, String, Object>
+            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object>
                     fetchedData =
                     fetchData(dataReader);
             assertEquals("Deleted rows should not be fetched", 0,fetchedData.rowKeySet().size());
@@ -2347,7 +2347,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         // Verify before TTL expiration
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl)) {
             dataReader.setConnection(readConnection);
-            com.google.common.collect.Table<String, String, Object> fetchedData
+            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> fetchedData
                     = fetchData(dataReader);
             assertNotNull("Fetched data should not be null", fetchedData);
             assertTrue("Rows should exists before expiration",
@@ -2361,7 +2361,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
 
             dataReader.setConnection(readConnection);
-            com.google.common.collect.Table<String, String, Object> fetchedData =
+            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> fetchedData =
                     fetchData(dataReader);
             assertNotNull("Fetched data should not be null", fetchedData);
             assertEquals("Expired rows should not be fetched", 0,
@@ -2370,7 +2370,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     }
 
     private void validateExpiredRowsAreNotReturnedUsingData(long phoenixTTL,
-            com.google.common.collect.Table<String, String, Object> upsertedData,
+                                                            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> upsertedData,
             DataReader dataReader, SchemaBuilder schemaBuilder) throws SQLException {
 
         String tenantConnectUrl =
@@ -2384,7 +2384,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
 
             dataReader.setConnection(readConnection);
-            com.google.common.collect.Table<String, String, Object>
+            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object>
                     fetchedData =
                     fetchData(dataReader);
             assertNotNull("Upserted data should not be null", upsertedData);
@@ -2398,7 +2398,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
 
             dataReader.setConnection(readConnection);
-            com.google.common.collect.Table<String, String, Object>
+            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object>
                     fetchedData =
                     fetchData(dataReader);
             assertNotNull("Fetched data should not be null", fetchedData);
@@ -2421,7 +2421,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
 
             dataReader.setConnection(readConnection);
-            com.google.common.collect.Table<String, String, Object>
+            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object>
                     fetchedData =
                     fetchData(dataReader);
             assertNotNull("Fetched data should not be null", fetchedData);
@@ -2434,7 +2434,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
 
             dataReader.setConnection(readConnection);
-            com.google.common.collect.Table<String, String, Object>
+            org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object>
                     fetchedData =
                     fetchData(dataReader);
             assertNotNull("Fetched data should not be null", fetchedData);
@@ -2444,8 +2444,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     }
 
     private void verifyRowsBeforeTTLExpiration(
-            com.google.common.collect.Table<String, String, Object> upsertedData,
-            com.google.common.collect.Table<String, String, Object> fetchedData) {
+        org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> upsertedData,
+        org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> fetchedData) {
 
         Set<String> upsertedRowKeys = upsertedData.rowKeySet();
         Set<String> fetchedRowKeys = fetchedData.rowKeySet();
@@ -2468,14 +2468,14 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private com.google.common.collect.Table<String, String, Object> upsertData(
+    private org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> upsertData(
             DataWriter dataWriter, int numRowsToUpsert) throws Exception {
         // Upsert rows
         dataWriter.upsertRows(1, numRowsToUpsert);
         return dataWriter.getDataTable();
     }
 
-    private com.google.common.collect.Table<String, String, Object> fetchData(DataReader dataReader)
+    private org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> fetchData(DataReader dataReader)
             throws SQLException {
 
         dataReader.readRows();
@@ -2611,7 +2611,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     }
 
     private void runValidations(long phoenixTTL,
-                                com.google.common.collect.Table<String, String, Object> table,
+                                org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> table,
             DataReader dataReader, SchemaBuilder schemaBuilder)
             throws Exception {
 

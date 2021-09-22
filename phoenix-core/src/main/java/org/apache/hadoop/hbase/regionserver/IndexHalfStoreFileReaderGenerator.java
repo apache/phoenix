@@ -62,7 +62,7 @@ import org.apache.phoenix.util.RepairUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
     

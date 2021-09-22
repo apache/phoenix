@@ -25,7 +25,7 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.coprocessor.SystemCatalogRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;

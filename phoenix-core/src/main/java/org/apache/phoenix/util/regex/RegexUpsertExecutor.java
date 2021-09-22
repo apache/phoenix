@@ -28,7 +28,7 @@ import org.apache.phoenix.util.json.JsonUpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 /** {@link UpsertExecutor} over {@link Map} objects, convert input record into {@link Map} objects by using regex. */
 public class RegexUpsertExecutor extends JsonUpsertExecutor {

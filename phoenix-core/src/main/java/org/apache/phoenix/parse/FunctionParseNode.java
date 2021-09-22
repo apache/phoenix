@@ -49,7 +49,7 @@ import org.apache.phoenix.schema.types.PDataTypeFactory;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.ImmutableSet;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
 
 
 

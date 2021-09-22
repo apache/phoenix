@@ -23,7 +23,7 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Pair;
 
-import com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 import org.apache.phoenix.schema.SortOrder;
 

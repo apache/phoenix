@@ -21,7 +21,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Order;
 import org.apache.phoenix.schema.SortOrder;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * Unsigned integer type that restricts values to be from 0 to {@link Integer#MAX_VALUE}

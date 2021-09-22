@@ -174,9 +174,9 @@ tokens
 package org.apache.phoenix.parse;
 
 ///CLOVER:OFF
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import java.lang.Boolean;

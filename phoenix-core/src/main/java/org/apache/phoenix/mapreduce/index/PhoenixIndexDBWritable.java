@@ -26,8 +26,8 @@ import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.util.ColumnInfo;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * A {@link DBWritable} class that reads and write records.

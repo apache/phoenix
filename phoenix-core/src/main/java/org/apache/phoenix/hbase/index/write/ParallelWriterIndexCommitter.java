@@ -18,7 +18,7 @@ import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * Write index updates to the index tables in parallel. We attempt to early exit from the writes if any of the index
