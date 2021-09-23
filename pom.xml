@@ -1500,7 +1500,6 @@
   </dependencyManagement>
 
   <profiles>
-    <!-- this profile should be activated for release builds -->
     <profile>
       <id>shade-and-assembly</id>
       <activation>
@@ -1516,6 +1515,7 @@
         <module>phoenix-assembly</module>
       </modules>
     </profile>
+    <!-- this profile should be activated for release builds -->
     <profile>
       <id>release</id>
       <build>
