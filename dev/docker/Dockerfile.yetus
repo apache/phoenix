@@ -43,4 +43,12 @@ RUN mkdir -p /run/user/910/gnupg/ \
     && mkdir -p /var/run/user/910/gnupg \
     && chown -R 910:910 /var/run/user/910 \
     && chmod -R 700 /var/run/user/910
+#####
+# Update Java 11 packages to 11.0.11 (to avoid Java 11.0.9.1 version Jetty bug)
+#####
+RUN apt-get update \
+    && apt-get -q install --no-install-recommends -y openjdk-11-jdk-headless=11.0.11+9-0ubuntu2~20.04 openjdk-11-jre-headless=11.0.11+9-0ubuntu2~20.04 openjdk-11-jre=11.0.11+9-0ubuntu2~20.04
+#####
+# Set default JDK to 11
+#####
 ENV JAVA_HOME /usr/lib/jvm/java-11-openjdk-amd64
