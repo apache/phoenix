@@ -54,6 +54,9 @@ pipeline {
                             timeout(time: 30, unit: 'MINUTES')
                         }
                         environment {
+                            //HBase 2.2.7 cannot be built with Java 11
+                            PATH = "/usr/usr/lib/jvm/java-8-openjdk-amd64/bin:$PATH"
+                            JAVA_HOME = "/usr/usr/lib/jvm/java-8-openjdk-amd64/"
                             HBASE_VERSION = sh(returnStdout: true, script: "mvn help:evaluate -Dexpression=hbase-${HBASE_PROFILE}.runtime.version -q -DforceStdout").trim()
                         }
                         steps {
