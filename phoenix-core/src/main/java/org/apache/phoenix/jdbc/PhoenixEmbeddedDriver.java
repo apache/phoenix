@@ -403,8 +403,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             } // else, no connection, no need to login
 
             // Will use the current User from UGI
-            return new ConnectionInfo(zookeeperQuorum, port, rootNode, principal, keytab,
-                    HBaseRegistryBootstrapFactory.normalize(this.bootstrap));
+            return new ConnectionInfo(zookeeperQuorum, port, rootNode, principal, keytab, this.bootstrap.normalize());
         }
 
         // Visible for testing

@@ -10,8 +10,15 @@ import java.util.List;
 import java.util.Map;
 
 public class HRpcHBaseRegistryBootstrap extends HBaseRegistryBootstrap {
-    public HRpcHBaseRegistryBootstrap() {
-        super(HBaseRegistryBootstrapType.HRPC);
+
+    @Override
+    public HBaseRegistryBootstrap normalize() {
+        return new HRpcHBaseRegistryBootstrap();
+    }
+
+    @Override
+    public HBaseRegistryBootstrapType getBootstrapType() {
+        return HBaseRegistryBootstrapType.HRPC;
     }
 
     @Override

@@ -6,8 +6,15 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import java.util.Map;
 
 public class ZookeeperHBaseRegistryBootstrap extends HBaseRegistryBootstrap {
-    public ZookeeperHBaseRegistryBootstrap() {
-        super(HBaseRegistryBootstrapType.ZK);
+
+    @Override
+    public HBaseRegistryBootstrap normalize() {
+        return new ZookeeperHBaseRegistryBootstrap();
+    }
+
+    @Override
+    public HBaseRegistryBootstrapType getBootstrapType() {
+        return HBaseRegistryBootstrapType.ZK;
     }
 
     @Override

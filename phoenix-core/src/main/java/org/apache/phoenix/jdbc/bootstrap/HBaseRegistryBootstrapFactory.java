@@ -8,10 +8,6 @@ import java.sql.SQLException;
 
 public class HBaseRegistryBootstrapFactory {
 
-    public static HBaseRegistryBootstrap normalize(HBaseRegistryBootstrap from) {
-        return resolve(from.getBootstrapType());
-    }
-
     public static HBaseRegistryBootstrap resolve(HBaseRegistryBootstrapType theType) {
         if (theType == HBaseRegistryBootstrapType.HRPC) {
             return new HRpcHBaseRegistryBootstrap();

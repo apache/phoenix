@@ -3,28 +3,21 @@ package org.apache.phoenix.jdbc.bootstrap;
 import java.util.Map;
 
 public abstract class HBaseRegistryBootstrap {
-    public HBaseRegistryBootstrapType getBootstrapType() {
-        return bootstrapType;
-    }
 
-    private final HBaseRegistryBootstrapType bootstrapType;
+    public abstract HBaseRegistryBootstrap normalize();
 
-    public HBaseRegistryBootstrap(HBaseRegistryBootstrapType bootstrapType) {
-        this.bootstrapType = bootstrapType;
-    }
+    public abstract HBaseRegistryBootstrapType getBootstrapType();
 
     public abstract Map<String, String> generateConnectionProps(String quorum, Integer port, String rootNode);
 
-
-
     @Override
     public String toString() {
-        return bootstrapType.toString();
+        return getBootstrapType().toString();
     }
 
     @Override
     public int hashCode() {
-        return bootstrapType.hashCode();
+        return getBootstrapType().hashCode();
     }
 
     @Override
@@ -32,6 +25,6 @@ public abstract class HBaseRegistryBootstrap {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         HBaseRegistryBootstrap that = (HBaseRegistryBootstrap) o;
-        return bootstrapType == that.bootstrapType;
+        return getBootstrapType() == that.getBootstrapType();
     }
 }
