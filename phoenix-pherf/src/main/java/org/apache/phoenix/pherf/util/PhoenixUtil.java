@@ -49,13 +49,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
@@ -114,6 +108,11 @@ public class PhoenixUtil {
     public Connection getConnection(String tenantId) throws Exception {
         return getConnection(tenantId, testEnabled, null);
     }
+
+    public Connection getConnection(String tenantId, Properties phoenixProperties) throws  Exception {
+        Map<String, String> phoenixProperty = getPropertyHashMap(phoenixProperties);
+        return getConnection(tenantId, testEnabled, phoenixProperty);
+    }
     
     public Connection getConnection(String tenantId, Map<String, String> phoenixProperty) throws Exception {
         return getConnection(tenantId, testEnabled, phoenixProperty);
@@ -155,6 +154,17 @@ public class PhoenixUtil {
             String url = "jdbc:phoenix:" + zookeeper + (testEnabled ? ";test=true" : "");
             return DriverManager.getConnection(url, props);
         }
+    }
+
+    private Map<String, String> getPropertyHashMap(Properties props) {
+        if(props == null) {
+            return null;
+        }
+        Map<String, String> propsMaps = new HashMap<>();
+        for (String prop : props.stringPropertyNames()) {
+            propsMaps.put(prop, props.getProperty(prop));
+        }
+        return propsMaps;
     }
 
     public boolean executeStatement(String sql, Scenario scenario) throws Exception {

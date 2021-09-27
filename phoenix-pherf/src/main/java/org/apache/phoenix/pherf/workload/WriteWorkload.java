@@ -70,24 +70,24 @@ public class WriteWorkload implements Workload {
     private final int batchSize;
     private final GeneratePhoenixStats generateStatistics;
     private final boolean useBatchApi;
+    private final Properties phoenixProperties;
 
     public WriteWorkload(XMLConfigParser parser) throws Exception {
-        this(PhoenixUtil.create(), parser, GeneratePhoenixStats.NO);
+        this(PhoenixUtil.create(),  parser, new Properties(), GeneratePhoenixStats.NO);
     }
-    
-    public WriteWorkload(XMLConfigParser parser, GeneratePhoenixStats generateStatistics) throws Exception {
-        this(PhoenixUtil.create(), parser, generateStatistics);
-    }
-
-    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser, GeneratePhoenixStats generateStatistics) throws Exception {
-        this(util, parser, null, generateStatistics);
+    public WriteWorkload(XMLConfigParser parser, Properties phoenixProperties, GeneratePhoenixStats generateStatistics) throws Exception {
+        this(PhoenixUtil.create(), parser, phoenixProperties, generateStatistics);
     }
 
-    public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser, Scenario scenario, GeneratePhoenixStats generateStatistics)
+    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser, Properties phoenixProperties, GeneratePhoenixStats generateStatistics) throws Exception {
+        this(util,  parser, phoenixProperties, null, generateStatistics);
+    }
+
+    public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser, Properties phoenixProperties, Scenario scenario, GeneratePhoenixStats generateStatistics)
             throws Exception {
         this(phoenixUtil,
                 PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, true),
-                parser, scenario, generateStatistics);
+                parser, phoenixProperties, scenario, generateStatistics);
     }
 
     /**
@@ -103,13 +103,14 @@ public class WriteWorkload implements Workload {
      *                    it will run against all scenarios in the parsers list.
      * @throws Exception
      */
-    public WriteWorkload(PhoenixUtil phoenixUtil, Properties properties, XMLConfigParser parser,
+    public WriteWorkload(PhoenixUtil phoenixUtil, Properties properties, XMLConfigParser parser, Properties phoenixProperties,
             Scenario scenario, GeneratePhoenixStats generateStatistics) throws Exception {
         this.pUtil = phoenixUtil;
         this.parser = parser;
         this.rulesApplier = new RulesApplier(parser);
         this.resultUtil = new ResultUtil();
         this.generateStatistics = generateStatistics;
+        this.phoenixProperties = phoenixProperties;
         int size = Integer.parseInt(properties.getProperty("pherf.default.dataloader.threadpool"));
         
         // Overwrite defaults properties with those given in the configuration. This indicates the
@@ -262,7 +263,7 @@ public class WriteWorkload implements Workload {
                 Connection connection = null;
                 PreparedStatement stmt = null;
                 try {
-                    connection = pUtil.getConnection(scenario.getTenantId());
+                    connection = pUtil.getConnection(scenario.getTenantId(), phoenixProperties);
                     long logStartTime = EnvironmentEdgeManager.currentTimeMillis();
                     long maxDuration = (WriteWorkload.this.writeParams == null) ? Long.MAX_VALUE :
                         WriteWorkload.this.writeParams.getExecutionDurationInMs();

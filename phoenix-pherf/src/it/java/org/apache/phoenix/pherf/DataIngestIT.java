@@ -75,7 +75,7 @@ public class DataIngestIT extends ResultBaseTestIT {
                             scenario.getTableNameWithoutSchemaName(), util.getConnection());
             assertTrue("Could not get phoenix columns.", columnListFromPhoenix.size() > 0);
 
-            WriteWorkload loader = new WriteWorkload(util, parser, scenario, GeneratePhoenixStats.NO);
+            WriteWorkload loader = new WriteWorkload(util, parser, null, scenario, GeneratePhoenixStats.NO);
             WorkloadExecutor executor = new WorkloadExecutor();
             executor.add(loader);
             executor.get();
@@ -122,7 +122,7 @@ public class DataIngestIT extends ResultBaseTestIT {
     public void testPreAndPostDataLoadDdls() throws Exception {
         Scenario scenario = parser.getScenarioByName("testPreAndPostDdls");
         WorkloadExecutor executor = new WorkloadExecutor();
-        executor.add(new WriteWorkload(util, parser, scenario, GeneratePhoenixStats.NO));
+        executor.add(new WriteWorkload(util, parser, null, scenario, GeneratePhoenixStats.NO));
         
         try {
             executor.get();
@@ -185,7 +185,7 @@ public class DataIngestIT extends ResultBaseTestIT {
         // Arrange
         Scenario scenario = parser.getScenarioByName("testMTWriteScenario");
         WorkloadExecutor executor = new WorkloadExecutor();
-        executor.add(new WriteWorkload(util, parser, scenario, GeneratePhoenixStats.NO));
+        executor.add(new WriteWorkload(util, parser, null, scenario, GeneratePhoenixStats.NO));
         
         // Act
         try {
@@ -205,7 +205,7 @@ public class DataIngestIT extends ResultBaseTestIT {
         // Arrange
         Scenario scenario = parser.getScenarioByName("testMTDdlWriteScenario");
         WorkloadExecutor executor = new WorkloadExecutor();
-        executor.add(new WriteWorkload(util, parser, scenario, GeneratePhoenixStats.NO));
+        executor.add(new WriteWorkload(util, parser, null, scenario, GeneratePhoenixStats.NO));
         
         // Act
         try {

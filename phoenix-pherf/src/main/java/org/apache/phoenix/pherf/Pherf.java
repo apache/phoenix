@@ -127,9 +127,15 @@ public class Pherf {
     private final CompareType compareType;
     private final boolean thinDriver;
     private final String queryServerUrl;
+    private Properties phoenixProperties;
 
     @VisibleForTesting
     WorkloadExecutor workloadExecutor;
+
+    public Pherf(String[] args, Properties phoenixProperties) throws Exception {
+        this(args);
+        this.phoenixProperties = phoenixProperties;
+    }
 
     public Pherf(String[] args) throws Exception {
         CommandLineParser parser = new DefaultParser(false, false);
@@ -323,7 +329,7 @@ public class Pherf {
                             }
                         }
                     } else {
-                        newWorkloads.add(new WriteWorkload(parser, generateStatistics));
+                        newWorkloads.add(new WriteWorkload(parser, phoenixProperties, generateStatistics));
                     }
 
                     if (newWorkloads.isEmpty()) {
