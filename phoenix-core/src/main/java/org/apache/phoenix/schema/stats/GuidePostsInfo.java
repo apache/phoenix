@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.schema.stats;
 
-
 import java.util.Collections;
 import java.util.List;
 

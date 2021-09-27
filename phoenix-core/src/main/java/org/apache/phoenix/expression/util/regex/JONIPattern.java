@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.expression.util.regex;
 
-import java.nio.charset.StandardCharsets;
 import java.util.LinkedList;
 import java.util.List;
 

@@ -117,7 +117,6 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
-import edu.umd.cs.findbugs.annotations.SuppressWarnings;
 /**
  * An MR job to populate the index table from the data table.
  *

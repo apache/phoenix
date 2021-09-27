@@ -101,7 +101,8 @@ public class PFunction implements PMetaDataEntity {
         this.returnType = PNameFactory.newName(returnType);
         this.functionKey = new PTableKey(this.tenantId, this.functionName.getString());
         this.timeStamp = timeStamp;
-        estimatedSize = SizedUtil.OBJECT_SIZE * 2 + 23 * SizedUtil.POINTER_SIZE + 4 * SizedUtil.INT_SIZE + 2 * SizedUtil.LONG_SIZE + 2 * SizedUtil.INT_OBJECT_SIZE +
+        this.estimatedSize = SizedUtil.OBJECT_SIZE * 2 + 23 * SizedUtil.POINTER_SIZE +
+                4 * SizedUtil.INT_SIZE + 2 * SizedUtil.LONG_SIZE + 2 * SizedUtil.INT_OBJECT_SIZE +
                 PNameFactory.getEstimatedSize(tenantId) +
                 PNameFactory.getEstimatedSize(this.functionName) +
                 PNameFactory.getEstimatedSize(this.className) +

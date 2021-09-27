@@ -498,7 +498,6 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
         TreeSet<TableRowkeyPair> sorted = new TreeSet<TableRowkeyPair>(tablesStartKeys);
 
         TableRowkeyPair first = sorted.first();
-
         if (!first.getRowkey().equals(HConstants.EMPTY_BYTE_ARRAY)) {
           throw new IllegalArgumentException(
               "First region of table should have empty start key. Instead has: "

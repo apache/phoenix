@@ -82,8 +82,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
-import edu.umd.cs.findbugs.annotations.SuppressWarnings;
-
 public class MetaDataUtil {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataUtil.class);
   

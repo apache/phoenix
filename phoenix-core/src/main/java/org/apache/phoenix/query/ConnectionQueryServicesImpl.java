@@ -312,8 +312,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
-import edu.umd.cs.findbugs.annotations.SuppressWarnings;
-
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
