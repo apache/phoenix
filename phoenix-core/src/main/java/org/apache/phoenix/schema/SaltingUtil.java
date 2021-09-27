@@ -27,7 +27,7 @@ import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 /**

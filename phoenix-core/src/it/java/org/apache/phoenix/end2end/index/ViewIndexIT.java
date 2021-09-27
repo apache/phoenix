@@ -55,6 +55,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.IndexToolIT;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.SplitSystemCatalogIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.Indexer;
@@ -76,10 +77,12 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class ViewIndexIT extends SplitSystemCatalogIT {
     private boolean isNamespaceMapped;

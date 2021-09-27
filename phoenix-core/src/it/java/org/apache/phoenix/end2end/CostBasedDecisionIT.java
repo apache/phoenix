@@ -39,10 +39,11 @@ import org.apache.phoenix.util.ReadOnlyProps;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-import com.google.common.collect.Maps;
-
-public class CostBasedDecisionIT extends BaseUniqueNamesOwnClusterIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class CostBasedDecisionIT extends BaseTest {
     private final String testTable500;
     private final String testTable990;
     private final String testTable1000;

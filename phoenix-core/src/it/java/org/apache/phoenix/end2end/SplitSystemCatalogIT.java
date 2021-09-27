@@ -31,14 +31,13 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Base class for tests that run with split SYSTEM.CATALOG.
  * 
  */
-@Category(NeedsOwnMiniClusterTest.class)
-public class SplitSystemCatalogIT extends BaseTest {
+public abstract class SplitSystemCatalogIT extends BaseTest {
 
     protected static String SCHEMA1 = "SCHEMA1";
     protected static String SCHEMA2 = "SCHEMA2";

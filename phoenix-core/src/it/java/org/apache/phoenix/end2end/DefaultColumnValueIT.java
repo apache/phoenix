@@ -39,8 +39,10 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
     private String sharedTable1;
     private String sharedTable2;

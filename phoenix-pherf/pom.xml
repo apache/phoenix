@@ -21,7 +21,7 @@
 	<parent>
 		<groupId>org.apache.phoenix</groupId>
 		<artifactId>phoenix</artifactId>
-		<version>4.16.1</version>
+		<version>4.16.2-SNAPSHOT</version>
 	</parent>
 
 	<artifactId>phoenix-pherf</artifactId>
@@ -29,7 +29,6 @@
 	<name>Phoenix - Pherf</name>
 
 	<properties>
-		<top.dir>${project.basedir}/..</top.dir>
 		<shaded.package>org.apache.phoenix.shaded</shaded.package>
 		<!-- JaCoCo thresholds overriden for phoenix-pherf -->
 		<jacoco.instruction.coverage.percentage>0.650</jacoco.instruction.coverage.percentage>
@@ -64,15 +63,29 @@
 			<version>3.3.2</version>
 		</dependency>
 		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+			<version>2.4</version>
+		</dependency>
+		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-math3</artifactId>
 			<version>3.3</version>
 		</dependency>
-    <dependency>
-      <groupId>org.apache.phoenix.thirdparty</groupId>
-      <artifactId>phoenix-shaded-commons-cli</artifactId>
-    </dependency>
-
+		<dependency>
+			<groupId>com.google.code.gson</groupId>
+			<artifactId>gson</artifactId>
+			<version>2.8.6</version>
+		</dependency>
+		<!-- shaded thirdparty dependencies -->
+		<dependency>
+			<groupId>org.apache.phoenix.thirdparty</groupId>
+			<artifactId>phoenix-shaded-guava</artifactId>
+		</dependency>
+		<dependency>
+		  <groupId>org.apache.phoenix.thirdparty</groupId>
+		  <artifactId>phoenix-shaded-commons-cli</artifactId>
+		</dependency>
 		<!-- Test Dependencies -->
 		<dependency>
 			<groupId>junit</groupId>
@@ -108,12 +121,6 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.apache.tephra</groupId>
-			<artifactId>tephra-core</artifactId>
-			<type>test-jar</type>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
 			<groupId>org.apache.hadoop</groupId>
 			<artifactId>hadoop-minicluster</artifactId>
 			<scope>test</scope>
@@ -128,7 +135,7 @@
 	<build>
 		<resources>
 			<resource>
-				<directory>src/main/resources</directory>
+				<directory>src/it/resources</directory>
 			</resource>
 			<resource>
 				<directory>config</directory>
@@ -141,6 +148,9 @@
 		<testResources>
 			<testResource>
 				<directory>src/test/resources</directory>
+			</testResource>
+			<testResource>
+				<directory>src/it/resources</directory>
 			</testResource>
 			<testResource>
 				<directory>${project.basedir}/config</directory>
@@ -213,7 +223,7 @@
 						<artifactSet>
 							<includes>
 								<include>org.apache.phoenix:phoenix-pherf</include>
-                                <include>com.google.guava:guava</include>
+								<include>org.apache.phoenix.thirdparty:phoenix-shaded-guava</include>
 								<include>com.googlecode.java-diff-utils:diffutils</include>
 								<include>org.apache.commons:commons-lang3</include>
 								<include>org.apache.commons:commons-math3</include>
@@ -221,6 +231,10 @@
 								<include>joda-time:joda-time</include>
 								<include>org.apache.commons:commons-csv</include>
 								<include>commons-lang:commons-lang</include>
+								<include>commons-io:commons-io</include>
+								<include>com.google.code.gson:gson</include>
+								<include>com.lmax:disruptor</include>
+								<include>commons-io:commons-io</include>
 							</includes>
 						</artifactSet>
 						<filters>

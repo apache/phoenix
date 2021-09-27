@@ -24,8 +24,8 @@ import java.util.Map;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.PTable.IndexType;
 
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 
 
 public class CreateIndexStatement extends SingleTableStatement {
@@ -52,6 +52,19 @@ public class CreateIndexStatement extends SingleTableStatement {
         this.indexType = indexType;
         this.async = async;
         this.udfParseNodes = udfParseNodes;
+    }
+
+    public CreateIndexStatement(CreateIndexStatement createStmt, ListMultimap<String, Pair<String, Object>> finalProps) {
+        super(createStmt.getTable(), createStmt.getBindCount());
+        this.indexTableName = createStmt.getIndexTableName();
+        this.indexKeyConstraint = createStmt.getIndexConstraint();
+        this.includeColumns = createStmt.getIncludeColumns();
+        this.splitNodes = createStmt.getSplitNodes();
+        this.props = finalProps;
+        this.ifNotExists = createStmt.ifNotExists();
+        this.indexType = createStmt.getIndexType();
+        this.async = createStmt.isAsync();
+        this.udfParseNodes = createStmt.getUdfParseNodes();
     }
 
     public IndexKeyConstraint getIndexConstraint() {

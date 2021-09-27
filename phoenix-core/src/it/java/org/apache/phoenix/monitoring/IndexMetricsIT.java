@@ -17,11 +17,12 @@
  */
 package org.apache.phoenix.monitoring;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.metrics2.lib.DynamicMetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableFastCounter;
 import org.apache.hadoop.metrics2.lib.MutableHistogram;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSourceImpl;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSource;
@@ -31,11 +32,13 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 
+@Category(ParallelStatsDisabledTest.class)
 public class IndexMetricsIT extends ParallelStatsDisabledIT {
     private static final String TABLE_NAME = "MyTable";
     private static final String INDEX_NAME = "MyIndex";

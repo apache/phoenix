@@ -33,8 +33,10 @@ import java.util.Properties;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class FunkyNamesIT extends ParallelStatsDisabledIT {
 
     protected static String initTableValues(byte[][] splits) throws Exception {

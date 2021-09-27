@@ -29,15 +29,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -52,7 +53,7 @@ import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
-public class NoLookbackMutableIndexExtendedIT extends BaseUniqueNamesOwnClusterIT {
+public class NoLookbackMutableIndexExtendedIT extends BaseTest {
     protected final boolean localIndex;
     protected final String tableDDLOptions;
 

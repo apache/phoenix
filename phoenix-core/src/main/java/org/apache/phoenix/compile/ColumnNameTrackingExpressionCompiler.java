@@ -23,7 +23,7 @@ import java.util.List;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class ColumnNameTrackingExpressionCompiler extends StatelessTraverseAllParseNodeVisitor {
 

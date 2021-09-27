@@ -38,7 +38,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.mapreduce.OrphanViewTool;
 import org.apache.phoenix.schema.PTable;
@@ -48,12 +48,14 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class OrphanViewToolIT extends BaseOwnClusterIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(OrphanViewToolIT.class);

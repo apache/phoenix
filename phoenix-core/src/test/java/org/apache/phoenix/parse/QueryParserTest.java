@@ -26,8 +26,6 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
@@ -37,7 +35,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.schema.SortOrder;
 import org.junit.Test;
 
-import com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 
 
 public class QueryParserTest {
@@ -893,7 +891,41 @@ public class QueryParserTest {
 
     @Test
     public void testLimitRVCOffsetQuery() throws Exception {
-        String sql = "SELECT * FROM T LIMIT 10 OFFSET (A,B,C)=('a','b','c')";
-        parseQuery(sql);
+      String sql = "SELECT * FROM T LIMIT 10 OFFSET (A,B,C)=('a','b','c')";
+      parseQuery(sql);
+    }
+
+    @Test
+    public void testShowStmt() throws Exception {
+        // Happy paths
+        parseQuery("show schemas");
+        parseQuery("show schemas like 'foo%'");
+        parseQuery("show tables");
+        parseQuery("show tables in foo");
+        parseQuery("show tables in foo like 'bar%'");
+        parseQuery("show tables like 'bar%'");
+
+        // Expected failures.
+        parseQueryThatShouldFail("show schemas like foo");
+        parseQueryThatShouldFail("show schemas in foo");
+        parseQueryThatShouldFail("show tables 'foo'");
+        parseQueryThatShouldFail("show tables in 'foo'");
+        parseQueryThatShouldFail("show tables like foo");
+    }
+
+    @Test
+    public void testShowCreateTable() throws Exception {
+        // Happy paths
+        parseQuery("SHOW CREATE TABLE FOO");
+        parseQuery("show create table FOO");
+        parseQuery("SHOW CREATE TABLE s.FOO");
+        parseQuery("SHOW CREATE TABLE \"foo\"");
+        parseQuery("SHOW CREATE TABLE s.\"foo\"");
+        parseQuery("SHOW CREATE TABLE \"s\".FOO");
+
+        // Expected failures.
+        parseQueryThatShouldFail("SHOW CREATE VIEW foo");
+        parseQueryThatShouldFail("SHOW CREATE TABLE 'foo'");
+
     }
 }

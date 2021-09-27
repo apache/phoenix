@@ -28,7 +28,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * Utility class to return a {@link Connection} .

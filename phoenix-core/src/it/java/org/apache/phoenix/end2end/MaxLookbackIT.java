@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -26,6 +26,7 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -41,6 +42,7 @@ import org.junit.Test;
 import org.junit.AfterClass;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.junit.experimental.categories.Category;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -59,8 +61,8 @@ import static org.apache.phoenix.util.TestUtil.assertTableHasTtl;
 import static org.apache.phoenix.util.TestUtil.assertTableHasVersions;
 import static org.junit.Assert.assertFalse;
 
-@NeedsOwnMiniClusterTest
-public class MaxLookbackIT extends BaseUniqueNamesOwnClusterIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class MaxLookbackIT extends BaseTest {
     private static final Logger LOG = LoggerFactory.getLogger(MaxLookbackIT.class);
     private static final int MAX_LOOKBACK_AGE = 15;
     private static final int ROWS_POPULATED = 2;

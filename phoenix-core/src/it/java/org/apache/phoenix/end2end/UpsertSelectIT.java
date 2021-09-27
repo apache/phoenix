@@ -48,7 +48,7 @@ import java.sql.Timestamp;
 import java.util.Map;
 import java.util.Properties;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -68,10 +68,12 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+@Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class UpsertSelectIT extends ParallelStatsDisabledIT {
     private final String allowServerSideMutations;

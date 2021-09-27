@@ -27,7 +27,7 @@ import org.apache.phoenix.compat.hbase.CompatHBaseRpcController;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import com.google.protobuf.RpcController;
 
 /**

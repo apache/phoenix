@@ -19,11 +19,15 @@ package org.apache.phoenix.end2end.index;
 
 import java.util.Map;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
+import org.junit.experimental.categories.Category;
 
+//FIXME shouldn't this be @NeedsOwnMiniClusterTest ?
+@Category(ParallelStatsDisabledTest.class)
 public class GlobalMutableNonTxIndexWithLazyPostBatchWriteIT extends GlobalMutableNonTxIndexIT {
 
     public GlobalMutableNonTxIndexWithLazyPostBatchWriteIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded, boolean skipPostIndexUpdates) {

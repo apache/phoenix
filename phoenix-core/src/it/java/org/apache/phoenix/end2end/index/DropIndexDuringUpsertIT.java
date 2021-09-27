@@ -58,8 +58,9 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
+//FIXME this test is marked abstract, but has no children, so it never run.
 @Category(NeedsOwnMiniClusterTest.class)
 public abstract class DropIndexDuringUpsertIT extends BaseTest {
     private static final int NUM_SLAVES = 4;

@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.execute.ClientAggregatePlan;
 import org.apache.phoenix.execute.ClientScanPlan;
 import org.apache.phoenix.execute.SortMergeJoinPlan;
@@ -41,12 +42,14 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
+@Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
 

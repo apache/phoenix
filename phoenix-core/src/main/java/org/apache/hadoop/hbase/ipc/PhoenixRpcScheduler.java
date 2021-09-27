@@ -24,7 +24,7 @@ import org.apache.phoenix.compat.hbase.CompatPhoenixRpcScheduler;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 /**
  * {@link RpcScheduler} that first checks to see if this is an index or metedata update before passing off the

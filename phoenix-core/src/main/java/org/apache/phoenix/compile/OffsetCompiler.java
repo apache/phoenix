@@ -30,7 +30,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 
-import com.google.common.base.Optional;
+import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 
 public class OffsetCompiler {
 

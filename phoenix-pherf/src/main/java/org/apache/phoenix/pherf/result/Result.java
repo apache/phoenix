@@ -36,7 +36,7 @@ public class Result {
      * @param type          {@link org.apache.phoenix.pherf.result.file.ResultFileDetails} Currently unused, but gives metadata about the
      *                      contents of the result.
      * @param header        Used for CSV, otherwise pass null. For CSV pass comma separated string of header fields.
-     * @param messageValues List<{@link ResultValue} All fields combined represent the data
+     * @param messageValues {@code List<ResultValue> } All fields combined represent the data
      *                      for a row to be written.
      */
     public Result(ResultFileDetails type, String header, List<ResultValue> messageValues) {

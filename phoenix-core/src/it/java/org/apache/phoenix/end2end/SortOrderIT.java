@@ -47,14 +47,15 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import com.google.common.collect.Lists;
+import org.junit.experimental.categories.Category;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * @since 1.2
  */
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class SortOrderIT extends ParallelStatsDisabledIT {
     private String baseTableName;
     

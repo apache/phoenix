@@ -27,7 +27,7 @@ import static org.junit.Assert.assertTrue;
 import java.util.Map;
 import java.util.Properties;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.query.QueryServices;
 import org.junit.Test;

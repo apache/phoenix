@@ -34,7 +34,7 @@ import org.joni.Option;
 import org.joni.Regex;
 import org.joni.Syntax;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 public class JONIPattern extends AbstractBasePattern implements AbstractBaseSplitter {
 

@@ -17,16 +17,19 @@
  */
 package org.apache.phoenix.schema.stats;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
+import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized;
 
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class NamespaceEnabledStatsCollectorIT extends BaseStatsCollectorIT {
 
     public NamespaceEnabledStatsCollectorIT(boolean userTableNamespaceMapped, boolean collectStatsOnSnapshot) {

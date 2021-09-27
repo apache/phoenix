@@ -33,7 +33,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class SortMergeJoinNoSpoolingIT extends SortMergeJoinNoIndexIT {

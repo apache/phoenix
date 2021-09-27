@@ -42,15 +42,16 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
-
-import com.google.common.primitives.Doubles;
-import com.google.common.primitives.Floats;
+import org.junit.experimental.categories.Category;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
+import org.apache.phoenix.thirdparty.com.google.common.primitives.Floats;
 
 /**
  * 
  * End to end tests for {@link RoundFunction}, {@link FloorFunction}, {@link CeilFunction} 
  *
  */
+@Category(ParallelStatsDisabledTest.class)
 public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
     private static final long millisPart = 660;
     private static final int nanosPart = 500100;

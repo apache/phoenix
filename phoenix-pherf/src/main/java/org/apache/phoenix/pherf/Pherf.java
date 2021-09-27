@@ -24,7 +24,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
@@ -33,6 +34,8 @@ import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
 import org.apache.phoenix.pherf.PherfConstants.CompareType;
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
+import org.apache.phoenix.pherf.configuration.DataModel;
+import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.jmx.MonitorManager;
 import org.apache.phoenix.pherf.result.ResultUtil;
@@ -40,6 +43,7 @@ import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.GoogleChartGenerator;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.util.ResourceList;
+import org.apache.phoenix.pherf.workload.mt.MultiTenantWorkload;
 import org.apache.phoenix.pherf.workload.QueryExecutor;
 import org.apache.phoenix.pherf.workload.Workload;
 import org.apache.phoenix.pherf.workload.WorkloadExecutor;
@@ -60,10 +64,14 @@ public class Pherf {
                 "HBase Zookeeper address for connection. Default: localhost");
         options.addOption("q", "query", false, "Executes multi-threaded query sets");
         options.addOption("listFiles", false, "List available resource files");
+        options.addOption("mt", "multi-tenant", false,
+                "Multi tenanted workloads based on load profiles.");
         options.addOption("l", "load", false,
                 "Pre-loads data according to specified configuration values.");
         options.addOption("scenarioFile", true,
                 "Regex or file name for the Test Scenario configuration .xml file to use.");
+        options.addOption("scenarioName", true,
+                "Regex or scenario name from the Test Scenario configuration .xml file to use.");
         options.addOption("drop", true, "Regex drop all tables with schema name as PHERF. "
                 + "\nExample drop Event tables: -drop .*(EVENT).* Drop all: -drop .* or -drop all");
         options.addOption("schemaFile", true,
@@ -99,10 +107,12 @@ public class Pherf {
 
     private final String zookeeper;
     private final String scenarioFile;
+    private final String scenarioName;
     private final String schemaFile;
     private final String queryHint;
     private final Properties properties;
     private final boolean preLoadData;
+    private final boolean multiTenantWorkload;
     private final String dropPherfTablesRegEx;
     private final boolean executeQuerySets;
     private final boolean isFunctional;
@@ -148,6 +158,7 @@ public class Pherf {
         properties.setProperty(PherfConstants.LOG_PER_NROWS_NAME, getLogPerNRow(command));
 
         preLoadData = command.hasOption("l");
+        multiTenantWorkload = command.hasOption("mt");
         executeQuerySets = command.hasOption("q");
         zookeeper = command.getOptionValue("z", "localhost");
         queryHint = command.getOptionValue("hint", null);
@@ -157,6 +168,8 @@ public class Pherf {
         writeRuntimeResults = !command.hasOption("disableRuntimeResult");
         scenarioFile =
                 command.hasOption("scenarioFile") ? command.getOptionValue("scenarioFile") : null;
+        scenarioName =
+                command.hasOption("scenarioName") ? command.getOptionValue("scenarioName") : null;
         schemaFile = command.hasOption("schemaFile") ? command.getOptionValue("schemaFile") : null;
         rowCountOverride = Integer.parseInt(command.getOptionValue("rowCountOverride", "0"));
         generateStatistics = command.hasOption("stats") ? GeneratePhoenixStats.YES : GeneratePhoenixStats.NO;
@@ -259,8 +272,6 @@ public class Pherf {
                 new GoogleChartGenerator(compareResults, compareType).readAndRender();
                 return;
             }
-            
-            XMLConfigParser parser = new XMLConfigParser(scenarioFile);
 
             // Drop tables with PHERF schema and regex comparison
             if (null != dropPherfTablesRegEx) {
@@ -270,12 +281,6 @@ public class Pherf {
                 phoenixUtil.deleteTables(dropPherfTablesRegEx);
             }
 
-            if (monitor) {
-                monitorManager =
-                        new MonitorManager(Integer.parseInt(
-                                properties.getProperty("pherf.default.monitorFrequency")));
-                workloadExecutor.add(monitorManager);
-            }
 
             if (applySchema) {
                 LOGGER.info("\nStarting to apply schema...");
@@ -287,18 +292,54 @@ public class Pherf {
                 reader.applySchema();
             }
 
+            // If no scenario file specified then we are done.
+            if (scenarioFile == null) {
+                return;
+            }
+
+            XMLConfigParser parser = new XMLConfigParser(scenarioFile);
+            if (monitor) {
+                monitorManager =
+                        new MonitorManager(Integer.parseInt(
+                                properties.getProperty("pherf.default.monitorFrequency")));
+                workloadExecutor.add(monitorManager);
+            }
+
             // Schema and Data Load
-            if (preLoadData) {
+            if (preLoadData || multiTenantWorkload) {
                 LOGGER.info("\nStarting Data Load...");
-                Workload workload = new WriteWorkload(parser, generateStatistics);
+                List<Workload> newWorkloads = Lists.newArrayList();
                 try {
-                    workloadExecutor.add(workload);
+                    if (multiTenantWorkload) {
+                        for (DataModel model : parser.getDataModels()) {
+                            for (Scenario scenario : model.getScenarios()) {
+                                if ((scenarioName != null) && (scenarioName.compareTo(scenario.getName()) != 0)) {
+                                    continue;
+                                }
+                                Workload workload = new MultiTenantWorkload(phoenixUtil,
+                                        model, scenario, properties);
+                                newWorkloads.add(workload);
+                            }
+                        }
+                    } else {
+                        newWorkloads.add(new WriteWorkload(parser, generateStatistics));
+                    }
+
+                    if (newWorkloads.isEmpty()) {
+                        throw new IllegalArgumentException("Found no new workload");
+                    }
+
+                    for (Workload workload : newWorkloads) {
+                        workloadExecutor.add(workload);
+                    }
 
                     // Wait for dataLoad to complete
-                    workloadExecutor.get(workload);
+                    workloadExecutor.get();
                 } finally {
-                    if (null != workload) {
-                        workload.complete();
+                    if (!newWorkloads.isEmpty()) {
+                        for (Workload workload : newWorkloads) {
+                            workload.complete();
+                        }
                     }
                 }
             } else {

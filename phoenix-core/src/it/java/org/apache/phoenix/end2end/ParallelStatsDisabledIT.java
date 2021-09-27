@@ -18,7 +18,7 @@
 
 package org.apache.phoenix.end2end;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.phoenix.query.BaseTest;
@@ -52,7 +52,6 @@ import static org.junit.Assert.fail;
  * You must create unique names using {@link #generateUniqueName()} for each
  * table and sequence used to prevent collisions.
  */
-@Category(ParallelStatsDisabledTest.class)
 public abstract class ParallelStatsDisabledIT extends BaseTest {
 
     @BeforeClass

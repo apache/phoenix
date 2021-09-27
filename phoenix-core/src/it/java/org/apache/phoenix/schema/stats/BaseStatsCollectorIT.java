@@ -42,7 +42,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -61,7 +61,7 @@ import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.SnapshotDescriptio
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
-import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
@@ -85,12 +85,13 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Base Test class for all Statistics Collection
@@ -101,7 +102,7 @@ import com.google.common.collect.Maps;
  * 4. Stats collection via SQL or MR job
  */
 @RunWith(Parameterized.class)
-public abstract class BaseStatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
+public abstract class BaseStatsCollectorIT extends BaseTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseStatsCollectorIT.class);
 

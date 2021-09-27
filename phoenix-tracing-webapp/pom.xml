@@ -22,7 +22,7 @@
     <parent>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix</artifactId>
-      <version>4.16.1</version>
+      <version>4.16.2-SNAPSHOT</version>
     </parent>
 
     <artifactId>phoenix-tracing-webapp</artifactId>
@@ -30,11 +30,9 @@
     <description>Tracing web application will visualize the phoenix traces</description>
 
     <properties>
-       <top.dir>${project.basedir}/..</top.dir>
-
        <!-- tracing webapp only versions -->
        <servlet.api.version>3.1.0</servlet.api.version>
-       <jetty.version>9.3.27.v20190418</jetty.version>
+       <jetty.version>9.4.43.v20210629</jetty.version>
     </properties>
 
     <dependencies>

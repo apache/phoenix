@@ -17,10 +17,10 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -45,7 +45,7 @@ import java.util.Set;
 import static org.apache.phoenix.util.UpgradeUtil.UPSERT_UPDATE_CACHE_FREQUENCY;
 import static org.junit.Assert.assertEquals;
 
-
+//FIXME this class no @Category, and will not be run by maven
 public class SyncUpdateCacheFreqIT extends BaseTest {
 
     private static final String SCHEMA_NAME = "SCHEMA2";

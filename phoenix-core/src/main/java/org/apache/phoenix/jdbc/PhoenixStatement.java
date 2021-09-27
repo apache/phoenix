@@ -25,6 +25,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.sql.ParameterMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
@@ -114,6 +115,8 @@ import org.apache.phoenix.parse.DMLStatement;
 import org.apache.phoenix.parse.DeclareCursorStatement;
 import org.apache.phoenix.parse.DeleteJarStatement;
 import org.apache.phoenix.parse.DeleteStatement;
+import org.apache.phoenix.parse.ShowCreateTableStatement;
+import org.apache.phoenix.parse.ShowCreateTable;
 import org.apache.phoenix.parse.DropColumnStatement;
 import org.apache.phoenix.parse.DropFunctionStatement;
 import org.apache.phoenix.parse.DropIndexStatement;
@@ -141,6 +144,8 @@ import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.parse.ShowSchemasStatement;
+import org.apache.phoenix.parse.ShowTablesStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TraceStatement;
@@ -191,10 +196,10 @@ import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Throwables;
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.math.IntMath;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.math.IntMath;
 /**
  * 
  * JDBC Statement implementation of Phoenix.
@@ -288,7 +293,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     private PhoenixResultSet executeQuery(final CompilableStatement stmt,
         final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger) throws SQLException {
         GLOBAL_SELECT_SQL_COUNTER.increment();
-        
+
         try {
             return CallRunner.run(
                 new CallRunner.CallableThrowable<PhoenixResultSet, SQLException>() {
@@ -297,7 +302,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     final long startTime = EnvironmentEdgeManager.currentTimeMillis();
                     try {
                         PhoenixConnection conn = getConnection();
-                        
+
                         if (conn.getQueryServices().isUpgradeRequired() && !conn.isRunningUpgrade()
                                 && stmt.getOperation() != Operation.UPGRADE) {
                             throw new UpgradeRequiredException();
@@ -352,7 +357,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         }
                         throw e;
                     }catch (RuntimeException e) {
-                        
+
                         // FIXME: Expression.evaluate does not throw SQLException
                         // so this will unwrap throws from that.
                         if (e.getCause() instanceof SQLException) {
@@ -360,7 +365,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         }
                         throw e;
                     } finally {
-                        // Regardless of whether the query was successfully handled or not, 
+                        // Regardless of whether the query was successfully handled or not,
                         // update the time spent so far. If needed, we can separate out the
                         // success times and failure times.
                         GLOBAL_QUERY_TIME.update(EnvironmentEdgeManager.currentTimeMillis() - startTime);
@@ -378,7 +383,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
         }
     }
-    
+
     protected int executeMutation(final CompilableStatement stmt) throws SQLException {
       return executeMutation(stmt, true);
     }
@@ -1101,6 +1106,51 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
     }
 
+    private static class ExecutableShowTablesStatement extends ShowTablesStatement
+        implements CompilableStatement {
+
+        public ExecutableShowTablesStatement(String schema, String pattern) {
+          super(schema, pattern);
+        }
+
+        @Override
+        public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
+            throws SQLException {
+            PreparedStatement delegateStmt = QueryUtil.getTablesStmt(stmt.getConnection(), null,
+                getTargetSchema(), getDbPattern(), null);
+            return ((PhoenixPreparedStatement) delegateStmt).compileQuery();
+        }
+    }
+
+    // Delegates to a SELECT query against SYSCAT.
+    private static class ExecutableShowSchemasStatement extends ShowSchemasStatement implements CompilableStatement {
+
+        public ExecutableShowSchemasStatement(String pattern) { super(pattern); }
+
+        @Override
+        public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            PreparedStatement delegateStmt =
+                QueryUtil.getSchemasStmt(stmt.getConnection(), null, getSchemaPattern());
+            return ((PhoenixPreparedStatement) delegateStmt).compileQuery();
+        }
+    }
+
+    private static class ExecutableShowCreateTable extends ShowCreateTableStatement
+            implements CompilableStatement {
+
+        public ExecutableShowCreateTable(TableName tableName) {
+            super(tableName);
+        }
+
+        @Override
+        public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
+                throws SQLException {
+            PreparedStatement delegateStmt = QueryUtil.getShowCreateTableStmt(stmt.getConnection(), null,
+                    getTableName());
+            return ((PhoenixPreparedStatement) delegateStmt).compileQuery();
+        }
+    }
+
     private static class ExecutableCreateIndexStatement extends CreateIndexStatement implements CompilableStatement {
 
         public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
@@ -1676,6 +1726,21 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         public ExecutableChangePermsStatement changePermsStatement(String permsString, boolean isSchemaName, TableName tableName,
                                                          String schemaName, boolean isGroupName, LiteralParseNode userOrGroup, boolean isGrantStatement) {
             return new ExecutableChangePermsStatement(permsString, isSchemaName, tableName, schemaName, isGroupName, userOrGroup,isGrantStatement);
+        }
+
+        @Override
+        public ShowTablesStatement showTablesStatement(String schema, String pattern) {
+            return new ExecutableShowTablesStatement(schema, pattern);
+        }
+
+        @Override
+        public ShowSchemasStatement showSchemasStatement(String pattern) {
+            return new ExecutableShowSchemasStatement(pattern);
+        }
+
+        @Override
+        public ShowCreateTable showCreateTable(TableName tableName) {
+            return new ExecutableShowCreateTable(tableName);
         }
 
     }

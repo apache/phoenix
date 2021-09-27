@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import static com.google.common.collect.Lists.newArrayListWithExpectedSize;
+import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayListWithExpectedSize;
 import static org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost
         .PHOENIX_META_DATA_COPROCESSOR_CONF_KEY;
 import static org.apache.phoenix.util.TestUtil.analyzeTable;
@@ -66,15 +66,17 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Basic test suite for views
  */
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class ViewIT extends SplitSystemCatalogIT {
 

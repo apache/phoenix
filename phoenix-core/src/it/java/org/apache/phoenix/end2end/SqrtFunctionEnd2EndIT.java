@@ -29,10 +29,12 @@ import java.sql.ResultSet;
 import org.apache.phoenix.expression.function.SqrtFunction;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * End to end tests for {@link SqrtFunction}
  */
+@Category(ParallelStatsDisabledTest.class)
 public class SqrtFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

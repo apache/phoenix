@@ -23,8 +23,8 @@ import java.util.List;
 
 import org.apache.phoenix.util.JacksonUtil;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
   * Utility functions to get/put json.

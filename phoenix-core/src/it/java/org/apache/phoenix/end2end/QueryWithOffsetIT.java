@@ -41,10 +41,12 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+@Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
 

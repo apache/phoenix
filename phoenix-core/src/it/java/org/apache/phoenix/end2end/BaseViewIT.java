@@ -49,10 +49,12 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+@Category(ParallelStatsEnabledTest.class)
 @RunWith(Parameterized.class)
 public abstract class BaseViewIT extends ParallelStatsEnabledIT {
 	

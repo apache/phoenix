@@ -18,15 +18,17 @@
 
 package org.apache.phoenix.end2end;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.RunUntilFailure;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,9 +48,10 @@ import static org.apache.phoenix.end2end.ConcurrentMutationsExtendedIT
 import static org.junit.Assert.assertTrue;
 
 
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(RunUntilFailure.class)
 public class ConcurrentUpsertsWithoutIndexedColsIT
-        extends BaseUniqueNamesOwnClusterIT {
+        extends BaseTest {
 
     private static final Random RANDOM = new Random(5);
     private static final Logger LOGGER =

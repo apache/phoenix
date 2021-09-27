@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -35,6 +35,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -51,6 +52,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
+@Category(ParallelStatsDisabledTest.class)
 public class IndexToolForDeleteBeforeRebuildIT extends ParallelStatsDisabledIT {
     private Connection conn;
     private String dataTableName;

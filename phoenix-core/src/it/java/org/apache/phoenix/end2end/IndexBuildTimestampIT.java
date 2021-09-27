@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdge;
@@ -43,13 +44,15 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
-public class IndexBuildTimestampIT extends BaseUniqueNamesOwnClusterIT {
+public class IndexBuildTimestampIT extends BaseTest {
     private final boolean localIndex;
     private final boolean async;
     private final boolean view;

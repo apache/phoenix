@@ -16,8 +16,8 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Throwables;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
 import org.apache.hadoop.conf.Configuration;
@@ -81,7 +81,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-@Category(NeedsOwnMiniClusterTest.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public abstract class BasePermissionsIT extends BaseTest {
 

@@ -122,8 +122,8 @@ import org.apache.phoenix.util.ServerUtil.ConnectionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Throwables;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Region observer that aggregates ungrouped rows(i.e. SQL query with aggregation function and no GROUP BY).

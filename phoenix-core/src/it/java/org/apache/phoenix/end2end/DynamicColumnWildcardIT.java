@@ -26,7 +26,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
 import static org.junit.Assert.assertEquals;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -51,6 +51,7 @@ import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS
  * {@link org.apache.phoenix.query.QueryServices#WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB} config is
  * turned on
  */
+//FIXME this class has no @Category and is never run by maven
 @RunWith(Parameterized.class)
 public class DynamicColumnWildcardIT extends BaseTest {
     private final boolean mutableTable;

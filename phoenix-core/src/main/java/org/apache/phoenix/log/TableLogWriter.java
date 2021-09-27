@@ -33,7 +33,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 
 /**
  * Writes RingBuffer log event into table 
@@ -41,7 +41,7 @@ import com.google.common.collect.ImmutableMap;
  */
 public class TableLogWriter implements LogWriter {
     private static final Logger LOGGER = LoggerFactory.getLogger(LogWriter.class);
-    private Connection connection;
+    private volatile Connection connection;
     private boolean isClosed;
     private PreparedStatement upsertStatement;
     private Configuration config;

@@ -57,10 +57,11 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
-import com.google.common.collect.Lists;
 
-
+@Category(ParallelStatsDisabledTest.class)
 public class SequenceIT extends ParallelStatsDisabledIT {
     private static final String SELECT_NEXT_VALUE_SQL = "SELECT NEXT VALUE FOR %s";
     private static final String SCHEMA_NAME = "S";

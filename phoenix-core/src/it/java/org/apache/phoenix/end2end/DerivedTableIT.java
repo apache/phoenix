@@ -51,14 +51,16 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
+@Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class DerivedTableIT extends ParallelStatsDisabledIT {
     private static final String tenantId = getOrganizationId();

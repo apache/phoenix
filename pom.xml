@@ -20,7 +20,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>4.16.1</version>
+  <version>4.16.2-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -45,13 +45,8 @@
     <module>phoenix-hbase-compat-1.3.0</module>
     <module>phoenix-core</module>
     <module>phoenix-pherf</module>
-    <module>phoenix-client-parent</module>
-    <module>phoenix-client-parent/phoenix-client</module>
-    <!-- phoenix-client-embedded is added in profile "embedded" -->
-    <module>phoenix-server</module>
-    <module>phoenix-assembly</module>
-    <module>phoenix-tools</module>
     <module>phoenix-tracing-webapp</module>
+    <!-- shaded artifact and assembly modules are added in shade-and-assembly profile -->
   </modules>
 
   <repositories>
@@ -96,18 +91,16 @@
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
     <antlr-output.dir>target/generated-sources/antlr3</antlr-output.dir>
     <test.output.tofile>true</test.output.tofile>
-    <top.dir>${project.basedir}</top.dir>
+    <top.dir>${project.basedir}/..</top.dir>
 
     <!-- Dependency versions -->
-    <hive.version>1.2.1</hive.version>
     <hadoop.version>2.7.1</hadoop.version>
-    <pig.version>0.13.0</pig.version>
-    <jackson.version>2.10.3</jackson.version>
+    <jackson.version>2.12.4</jackson.version>
     <antlr.version>3.5.2</antlr.version>
     <log4j.version>1.2.17</log4j.version>
     <disruptor.version>3.3.6</disruptor.version>
     <slf4j.version>1.6.4</slf4j.version>
-    <commons-io.version>2.1</commons-io.version>
+    <commons-io.version>2.6</commons-io.version>
     <commons-lang.version>2.5</commons-lang.version>
     <!-- com.google repo will be used except on Aarch64 platform. -->
     <protobuf.group>com.google.protobuf</protobuf.group>
@@ -115,9 +108,6 @@
     <protoc.version>2.5.0</protoc.version>
     <commons-csv.version>1.0</commons-csv.version>
     <sqlline.version>1.5.0</sqlline.version>
-    <guava.version>13.0.1</guava.version>
-    <flume.version>1.4.0</flume.version>
-    <kafka.version>0.9.0.0</kafka.version>
     <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jline.version>2.11</jline.version>
@@ -150,10 +140,10 @@
     <maven-shade-plugin.version>3.2.4</maven-shade-plugin.version>
     <maven-project-info-reports-plugin.version>3.1.1</maven-project-info-reports-plugin.version>
     <!-- Override property in ASF parent -->
-    <surefire.version>2.22.2</surefire.version>
+    <surefire.version>3.0.0-M5</surefire.version>
     <spotbugs-maven-plugin.version>4.1.3</spotbugs-maven-plugin.version>
     <spotbugs.version>4.1.3</spotbugs.version>
-    <jacoco-maven-plugin.version>0.8.5</jacoco-maven-plugin.version>
+    <jacoco-maven-plugin.version>0.8.7</jacoco-maven-plugin.version>
 
     <!-- Plugin options -->
     <numForkedUT>8</numForkedUT>
@@ -171,7 +161,7 @@
     <jacoco.branch.coverage.percentage>0.600</jacoco.branch.coverage.percentage>
     <curator.version>2.12.0</curator.version>
 
-    <maven-owasp-plugin.version>5.3.2</maven-owasp-plugin.version>
+    <maven-owasp-plugin.version>6.3.1</maven-owasp-plugin.version>
     <protobuf.plugin.version>0.6.1</protobuf.plugin.version>
     <os.maven.version>1.5.0.Final</os.maven.version>
   </properties>
@@ -312,16 +302,19 @@
             <forkCount>${numForkedIT}</forkCount>
             <runOrder>alphabetical</runOrder>
             <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-            <shutdown>kill</shutdown>
+            <forkedProcessExitTimeoutInSeconds>180</forkedProcessExitTimeoutInSeconds>
+            <shutdown>exit</shutdown>
             <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
             <trimStackTrace>false</trimStackTrace>
+            <!-- https://www.orpiske.net/2021/04/test-woes-with-maven-failsafe-3-0-0-m5 -->
+            <useModulePath>false</useModulePath>
           </configuration>
           <executions>
             <execution>
               <id>ParallelStatsEnabledTest</id>
               <configuration>
                 <reuseForks>true</reuseForks>
-                <argLine>@{jacocoArgLine} -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 </argLine>
+                <argLine>@{jacocoArgLine} -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
               </configuration>
               <goals>
@@ -333,7 +326,7 @@
               <id>ParallelStatsDisabledTest</id>
               <configuration>
                 <reuseForks>true</reuseForks>
-                <argLine>@{jacocoArgLine} -Xmx3000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 </argLine>
+                <argLine>@{jacocoArgLine} -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
               </configuration>
               <goals>
@@ -345,7 +338,7 @@
               <id>NeedTheirOwnClusterTests</id>
               <configuration>
                  <reuseForks>false</reuseForks>
-                 <argLine>@{jacocoArgLine} -enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
+                 <argLine>@{jacocoArgLine} -enableassertions -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
               </configuration>
               <goals>
@@ -420,6 +413,19 @@
                       <bannedImport>org.apache.commons.logging.LogFactory</bannedImport>
                     </bannedImports>
                   </restrictImports>
+                  <restrictImports implementation="de.skuzzle.enforcer.restrictimports.rule.RestrictImports">
+                    <includeTestCode>true</includeTestCode>
+                    <reason>Use shaded version in phoenix-thirdparty, except for collections required by HBase 1.x coprocs and APIs</reason>
+                    <allowedImports>
+                      <!--Used by HBase AccessController, an IA.Private class we use for testing -->
+                      <allowedImport>com.google.common.collect.ListMultimap</allowedImport>
+                      <!-- Used in mandatory overrides of the RegionObserver coproc interface -->
+                      <allowedImport>com.google.common.collect.ImmutableList</allowedImport>
+                    </allowedImports>
+                    <bannedImports>
+                      <bannedImport>com.google.common.**</bannedImport>
+                    </bannedImports>
+                  </restrictImports>
                 </rules>
               </configuration>
             </execution>
@@ -433,18 +439,20 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
         <version>3.1.0</version>
+        <configuration>
+          <configLocation>${top.dir}/src/main/config/checkstyle/checker.xml</configLocation>
+          <suppressionsLocation>${top.dir}/src/main/config/checkstyle/suppressions.xml</suppressionsLocation>
+          <consoleOutput>true</consoleOutput>
+          <headerLocation>${top.dir}/src/main/config/checkstyle/header.txt</headerLocation>
+          <failOnViolation><!--true-->false</failOnViolation>
+          <includeTestSourceDirectory><!--true-->false</includeTestSourceDirectory>
+        </configuration>
         <executions>
           <execution>
             <id>validate</id>
             <phase>validate</phase>
             <configuration>
               <skip>true</skip>
-              <configLocation>${top.dir}/src/main/config/checkstyle/checker.xml</configLocation>
-              <suppressionsLocation>${top.dir}/src/main/config/checkstyle/suppressions.xml</suppressionsLocation>
-              <consoleOutput>true</consoleOutput>
-              <headerLocation>${top.dir}/src/main/config/checkstyle/header.txt</headerLocation>
-              <failOnViolation><!--true-->false</failOnViolation>
-              <includeTestSourceDirectory><!--true-->false</includeTestSourceDirectory>
             </configuration>
             <goals>
               <goal>check</goal>
@@ -493,10 +501,11 @@
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
-          <argLine>@{jacocoArgLine} -enableassertions -Xmx2250m -XX:MaxPermSize=128m
+          <argLine>@{jacocoArgLine} -enableassertions -Xmx2250m
             -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-          <shutdown>kill</shutdown>
+          <shutdown>exit</shutdown>
+          <trimStackTrace>false</trimStackTrace>
         </configuration>
       </plugin>
       <!-- All projects create a test jar -->
@@ -607,7 +616,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-server-hbase-2.1</artifactId>
+        <artifactId>phoenix-server-hbase-1.3</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -632,13 +641,13 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-tools</artifactId>
+        <artifactId>phoenix-tracing-webapp</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-tracing-webapp</artifactId>
-        <version>${project.version}</version>
+        <groupId>org.apache.phoenix.thirdparty</groupId>
+        <artifactId>phoenix-shaded-guava</artifactId>
+        <version>${phoenix.thirdparty.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
@@ -905,7 +914,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-core</artifactId>
+        <artifactId>tephra-core-shaded</artifactId>
         <version>${tephra.version}</version>
         <exclusions>
           <exclusion>
@@ -920,7 +929,7 @@
       </dependency>
       <dependency>
         <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-core</artifactId>
+        <artifactId>tephra-core-shaded</artifactId>
         <type>test-jar</type>
         <version>${tephra.version}</version>
         <scope>test</scope>
@@ -939,6 +948,14 @@
         <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
         <version>${tephra.version}</version>
+        <!-- use tephra-core-shaded instead -->
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.tephra</groupId>
+            <artifactId>tephra-core</artifactId>
+          </exclusion>
+        </exclusions>
+        <classifier>shaded</classifier>
       </dependency>
       <dependency>
         <groupId>org.apache.omid</groupId>
@@ -1002,11 +1019,6 @@
         <groupId>sqlline</groupId>
         <artifactId>sqlline</artifactId>
         <version>${sqlline.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.google.guava</groupId>
-        <artifactId>guava</artifactId>
-        <version>${guava.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.flume</groupId>
@@ -1157,6 +1169,21 @@
       </properties>
     </profile>
     <!-- this profile should be activated for release builds -->
+    <profile>
+      <id>shade-and-assembly</id>
+      <activation>
+        <property>
+          <name>!PhoenixPatchProcess</name>
+        </property>
+      </activation>
+      <modules>
+        <module>phoenix-client-parent</module>
+        <module>phoenix-client-parent/phoenix-client</module>
+        <module>phoenix-client-parent/phoenix-client-embedded</module>
+        <module>phoenix-server</module>
+        <module>phoenix-assembly</module>
+      </modules>
+    </profile>
     <profile>
       <id>release</id>
       <build>
@@ -1336,17 +1363,6 @@
           </plugin>
         </plugins>
       </build>
-    </profile>
-    <profile>
-      <id>embedded</id>
-      <activation>
-        <property>
-            <name>!skip.embedded</name>
-        </property>
-      </activation>
-      <modules>
-        <module>phoenix-client-parent/phoenix-client-embedded</module>
-      </modules>
     </profile>
     <profile>
       <id>spotbugs-site</id>

@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.filter;
 
-import static com.google.common.base.Preconditions.checkArgument;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_BYTES;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 
@@ -41,8 +41,8 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterables;
+import org.apache.phoenix.thirdparty.com.google.common.base.Predicate;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 
 public class EncodedQualifiersColumnProjectionFilter extends FilterBase implements Writable {
 

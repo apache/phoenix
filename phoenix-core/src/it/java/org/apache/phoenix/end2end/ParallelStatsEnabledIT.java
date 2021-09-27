@@ -30,14 +30,13 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Base class for tests whose methods run in parallel with statistics enabled.
  * You must create unique names using {@link #generateUniqueName()} for each
  * table and sequence used to prevent collisions.
  */
-@Category(ParallelStatsEnabledTest.class)
 public abstract class ParallelStatsEnabledIT extends BaseTest {
 
     protected static RegionCoprocessorEnvironment TaskRegionEnvironment;

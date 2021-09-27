@@ -64,9 +64,9 @@ import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Preconditions;
-import com.google.common.base.Splitter;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Splitter;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Base tool for running MapReduce-based ingests of data.
@@ -85,6 +85,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
     static final Option IGNORE_ERRORS_OPT = new Option("g", "ignore-errors", false, "Ignore input errors");
     static final Option HELP_OPT = new Option("h", "help", false, "Show this help and quit");
     static final Option SKIP_HEADER_OPT = new Option("k", "skip-header", false, "Skip the first line of CSV files (the header)");
+    static final Option ENABLE_CORRUPT_INDEXES = new Option( "corruptindexes", "corruptindexes", false, "Allow bulk loading into non-empty tables with global secondary indexes");
 
     /**
      * Set configuration values based on parsed command line options.
@@ -109,6 +110,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         options.addOption(IGNORE_ERRORS_OPT);
         options.addOption(HELP_OPT);
         options.addOption(SKIP_HEADER_OPT);
+        options.addOption(ENABLE_CORRUPT_INDEXES);
         return options;
     }
 
@@ -223,6 +225,12 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         configureOptions(cmdLine, importColumns, conf);
         String sName = SchemaUtil.normalizeIdentifier(schemaName);
         String tName = SchemaUtil.normalizeIdentifier(tableName);
+
+        String tn = SchemaUtil.getEscapedTableName(sName, tName);
+        ResultSet rsempty = conn.createStatement().executeQuery("SELECT * FROM " + tn + " LIMIT 1");
+        boolean tableNotEmpty = rsempty.next();
+        rsempty.close();
+
         try {
             validateTable(conn, sName, tName);
         } finally {
@@ -241,14 +249,26 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         PTable table = PhoenixRuntime.getTable(conn, qualifiedTableName);
         tablesToBeLoaded.add(new TargetTableRef(qualifiedTableName, table.getPhysicalName().getString()));
         boolean hasLocalIndexes = false;
+        boolean hasGlobalIndexes = false;
         for(PTable index: table.getIndexes()) {
             if (index.getIndexType() == IndexType.LOCAL) {
                 hasLocalIndexes =
                         qualifiedIndexTableName == null ? true : index.getTableName().getString()
                                 .equals(qualifiedIndexTableName);
-                if (hasLocalIndexes) break;
+                if (hasLocalIndexes && hasGlobalIndexes) break;
+            }
+            if (index.getIndexType() == IndexType.GLOBAL) {
+                hasGlobalIndexes = true;
+                if (hasLocalIndexes && hasGlobalIndexes) break;
             }
         }
+
+        if(hasGlobalIndexes && tableNotEmpty && !cmdLine.hasOption(ENABLE_CORRUPT_INDEXES.getOpt())){
+            throw new IllegalStateException("Bulk Loading error: Bulk loading is disabled for non" +
+                    " empty tables with global indexes, because it will corrupt the global index table in most cases.\n" +
+                    "Use the --corruptindexes option to override this check.");
+        }
+
         // using conn after it's been closed... o.O
         tablesToBeLoaded.addAll(getIndexTables(conn, qualifiedTableName));
 

@@ -292,17 +292,17 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
-import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger LOGGER =
@@ -4949,7 +4949,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         for (SequenceAllocation sequenceAllocation : sequenceAllocations) {
             SequenceKey key = sequenceAllocation.getSequenceKey();
             Sequence newSequences = new Sequence(key);
-            Sequence sequence = sequenceMap.putIfAbsent(key, newSequences);
+            Sequence sequence = getSequence(sequenceAllocation);
             if (sequence == null) {
                 sequence = newSequences;
             }
@@ -5020,6 +5020,44 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sequence.getLock().unlock();
             }
         }
+    }
+
+    /**
+     * checks if sequenceAllocation's sequence there in sequenceMap, also returns Global Sequences
+     * from Tenant sequenceAllocations
+     * @param sequenceAllocation
+     * @return
+     */
+
+    private Sequence getSequence(SequenceAllocation sequenceAllocation) {
+        SequenceKey key = sequenceAllocation.getSequenceKey();
+        if (key.getTenantId() == null) {
+            return sequenceMap.putIfAbsent(key, new Sequence(key));
+        } else {
+            Sequence sequence = sequenceMap.get(key);
+            if (sequence == null) {
+                for (Map.Entry<SequenceKey,Sequence> entry : sequenceMap.entrySet()) {
+                    if (compareSequenceKeysWithoutTenant(key, entry.getKey())) {
+                        return entry.getValue();
+                    }
+                }
+            } else {
+                return sequence;
+            }
+        }
+        return null;
+    }
+
+    private boolean compareSequenceKeysWithoutTenant(SequenceKey keyToCompare, SequenceKey availableKey) {
+        if (availableKey.getTenantId() != null) {
+            return false;
+        }
+        boolean sameSchema = keyToCompare.getSchemaName() == null ? availableKey.getSchemaName() == null :
+                keyToCompare.getSchemaName().equals(availableKey.getSchemaName());
+        if (!sameSchema) {
+            return false;
+        }
+        return keyToCompare.getSequenceName().equals(availableKey.getSequenceName());
     }
 
     @Override

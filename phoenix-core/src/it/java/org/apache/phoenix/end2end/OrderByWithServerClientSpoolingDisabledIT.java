@@ -25,14 +25,14 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Same as the order by test but with spooling disabled both on the server and client. This will use
  * {@link SizeBoundQueue} for all its operations
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class OrderByWithServerClientSpoolingDisabledIT extends OrderByIT {
+public class OrderByWithServerClientSpoolingDisabledIT extends BaseOrderByIT {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {

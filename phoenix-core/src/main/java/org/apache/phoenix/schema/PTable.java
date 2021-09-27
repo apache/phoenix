@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
-import static com.google.common.base.Preconditions.checkArgument;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
 import static org.apache.phoenix.util.EncodedColumnsUtil.isReservedColumnQualifier;
 
@@ -43,7 +43,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 
 /**

@@ -34,8 +34,8 @@ import org.apache.phoenix.util.regex.RegexUpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * MapReduce mapper that converts input lines into KeyValues based on the Regex that can be written to HFiles.

@@ -34,7 +34,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Properties;
 
-import com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.io.FileUtils;
@@ -48,8 +48,10 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.rules.TemporaryFolder;
 
+@Category(ParallelStatsDisabledTest.class)
 public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
 
     private static final String DATATYPE_TABLE = "DATATYPE";

@@ -17,9 +17,10 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -30,6 +31,7 @@ import org.apache.phoenix.util.SchemaUtil;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -44,7 +46,8 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 
-public class IndexVerificationOldDesignIT extends  BaseUniqueNamesOwnClusterIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class IndexVerificationOldDesignIT extends BaseTest {
 
     ManualEnvironmentEdge injectEdge;
 

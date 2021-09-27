@@ -48,7 +48,7 @@ import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /*
  * Class for flattening derived-tables when possible. A derived-table can be

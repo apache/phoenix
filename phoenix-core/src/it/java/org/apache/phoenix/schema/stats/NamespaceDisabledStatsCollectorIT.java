@@ -18,11 +18,14 @@
 
 package org.apache.phoenix.schema.stats;
 
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized;
 
 import java.util.Arrays;
 import java.util.Collection;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class NamespaceDisabledStatsCollectorIT extends BaseStatsCollectorIT {
 
     public NamespaceDisabledStatsCollectorIT(boolean userTableNamespaceMapped, boolean collectStatsOnSnapshot) {

@@ -35,9 +35,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
-import com.google.common.base.Function;
-import com.google.common.base.Joiner;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
@@ -53,8 +53,10 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class InListIT extends ParallelStatsDisabledIT {
     private static final String TENANT_SPECIFIC_URL1 = getUrl() + ';' + TENANT_ID_ATTRIB + "=tenant1";
     private static boolean isInitialized = false;

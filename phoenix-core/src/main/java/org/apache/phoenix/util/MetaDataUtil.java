@@ -25,7 +25,8 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.*;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -75,9 +76,9 @@ import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import com.google.protobuf.ServiceException;
 
 
@@ -100,6 +101,11 @@ public class MetaDataUtil {
     public static final String DATA_TABLE_NAME_PROP_NAME = "DATA_TABLE_NAME";
 
     public static final byte[] DATA_TABLE_NAME_PROP_BYTES = Bytes.toBytes(DATA_TABLE_NAME_PROP_NAME);
+
+    private static final Map<MajorMinorVersion, MajorMinorVersion> ALLOWED_SERVER_CLIENT_MAJOR_VERSION =
+            ImmutableMap.of(
+                    new MajorMinorVersion(5, 1), new MajorMinorVersion(4, 16)
+            );
 
     // See PHOENIX-3955
     public static final List<String> SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES = ImmutableList.of(
@@ -177,13 +183,22 @@ public class MetaDataUtil {
             compatibility.setCompatible(false);
             return compatibility;
         } else if (VersionUtil.encodeMaxMinorVersion(clientMajorVersion) < serverVersion) { // Client major version must at least be up to server major version
-            compatibility.setErrorCode(SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR.getErrorCode());
-            compatibility.setCompatible(false);
-            return compatibility;
+            MajorMinorVersion serverMajorMinorVersion = new MajorMinorVersion(
+                    VersionUtil.decodeMajorVersion(serverVersion),
+                    VersionUtil.decodeMinorVersion(serverVersion));
+            MajorMinorVersion clientMajorMinorVersion =
+                    new MajorMinorVersion(clientMajorVersion, clientMinorVersion);
+            if (!clientMajorMinorVersion.equals(
+                    ALLOWED_SERVER_CLIENT_MAJOR_VERSION.get(serverMajorMinorVersion))) {
+                // Incompatible if not whitelisted by ALLOWED_SERVER_CLIENT_MAJOR_VERSION
+                compatibility.setErrorCode(SQLExceptionCode
+                        .INCOMPATIBLE_CLIENT_SERVER_JAR.getErrorCode());
+                compatibility.setCompatible(false);
+                return compatibility;
+            }
         }
         compatibility.setCompatible(true);
         return compatibility;
-
     }
 
     // Given the encoded integer representing the phoenix version in the encoded version value.

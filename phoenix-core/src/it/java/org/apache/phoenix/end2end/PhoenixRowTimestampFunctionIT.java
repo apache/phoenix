@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Get;
@@ -33,6 +33,7 @@ import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
@@ -50,6 +51,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+@Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
     private final boolean encoded;
@@ -493,4 +495,23 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
             }
         }
     }
+
+    @Test
+    public void testPhoenixRowTimestampWithWildcard() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            conn.createStatement().execute("create table " + dataTableName +
+                    " (pk1 integer not null primary key, x.v1 float, y.v2 float, z.v3 float)" + this.tableDDLOptions);
+            conn.createStatement().execute("upsert into " + dataTableName + " values(rand() * 100000000, rand(), rand(), rand())");
+            conn.commit();
+            ResultSet rs = conn.createStatement().executeQuery("SELECT v1 from " + dataTableName);
+            assertTrue(rs.next());
+            float v1 = rs.getFloat(1);
+            rs = conn.createStatement().executeQuery("SELECT * from " + dataTableName + " order by phoenix_row_timestamp()");
+            assertTrue(rs.next());
+            System.out.println(v1);
+            assertTrue(v1 == rs.getFloat(2));
+        }
+    }
+
 }

@@ -27,8 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ArrayListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.expression.Expression;
@@ -54,10 +54,10 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.SchemaUtil;
 
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * 
@@ -945,4 +945,15 @@ public class ParseNodeFactory {
         return new ChangePermsStatement(permsString, isSchemaName, tableName, schemaName, isGroupName, userOrGroup, isGrantStatement);
     }
 
+    public ShowTablesStatement showTablesStatement(String schema, String pattern) {
+        return new ShowTablesStatement(schema, pattern);
+    }
+
+    public ShowSchemasStatement showSchemasStatement(String pattern) {
+        return new ShowSchemasStatement(pattern);
+    }
+
+    public ShowCreateTable showCreateTable(TableName tableName) {
+        return new ShowCreateTableStatement(tableName);
+    }
 }

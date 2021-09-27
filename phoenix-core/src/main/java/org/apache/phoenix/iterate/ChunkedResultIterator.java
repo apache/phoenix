@@ -43,7 +43,7 @@ import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * {@code PeekingResultIterator} implementation that loads data in chunks. This is intended for

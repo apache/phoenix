@@ -40,17 +40,22 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.text.DecimalFormat;
 import java.util.Properties;
 import java.util.Random;
+import java.util.UUID;
 
 import org.apache.phoenix.util.CursorUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     private String tableName = generateUniqueName();
 
@@ -668,5 +673,94 @@ public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
             conn.prepareStatement(sql).execute();
             conn.close();
         }
+    }
+
+    @Test
+    public void testCursorWithIndex() throws Exception {
+        String cursorName = generateUniqueName();
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        Statement stmt = conn.createStatement();
+
+        String createTable = "CREATE TABLE IF NOT EXISTS " + tableName +"\n" +
+                "(  \n" +
+                "   ID                             VARCHAR    NOT NULL,\n" +
+                "   NAME                           VARCHAR    ,\n" +
+                "   ANOTHER_VALUE                  VARCHAR    ,\n" +
+                "   TRANSACTION_TIME               TIMESTAMP  ,\n" +
+                "   CONSTRAINT pk PRIMARY KEY(ID)\n" +
+                ")";
+        stmt.execute(createTable);
+
+        //Creating an index
+        String createIndex = "CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(NAME, TRANSACTION_TIME DESC) INCLUDE(ANOTHER_VALUE)";
+        stmt.execute(createIndex);
+
+        //Insert Some  Items.
+        DecimalFormat dmf = new DecimalFormat("0000");
+        final String prefix = "ReferenceData.Country/";
+        for (int i = 0; i < 10; i++)
+        {
+            for (int j = 0; j < 10; j++)
+            {
+                PreparedStatement prstmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?,?,?)");
+                prstmt.setString(1, UUID.randomUUID().toString());
+                prstmt.setString(2,prefix + dmf.format(i+j*1000));
+                prstmt.setString(3,UUID.randomUUID().toString());
+                prstmt.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
+                prstmt.execute();
+                conn.commit();
+                prstmt.close();
+            }
+        }
+
+        String countSQL = "SELECT COUNT(1) AS TOTAL_ITEMS FROM " + tableName + " where NAME like 'ReferenceData.Country/2%' ";
+        ResultSet rs = stmt.executeQuery(countSQL);
+        rs.next();
+        final int totalCount = rs.getInt("TOTAL_ITEMS");
+        rs.close();
+
+        //Now a Cursor
+        String cursorSQL = "DECLARE " + cursorName + " CURSOR FOR SELECT NAME,ANOTHER_VALUE FROM "
+                + tableName + " where NAME like 'ReferenceData.Country/2%' ORDER BY TRANSACTION_TIME DESC";
+        PreparedStatement cursorStatement = conn.prepareStatement(cursorSQL);
+        cursorStatement.execute();
+        PreparedStatement openCursorStatement = conn.prepareStatement("OPEN " + cursorName);
+        openCursorStatement.execute();
+
+        rs = stmt.executeQuery("EXPLAIN FETCH NEXT 10 ROWS FROM " + cursorName);
+        rs.next();
+        assertTrue(rs.getString(1)
+                .contains("CLIENT PARALLEL 1-WAY RANGE SCAN"));
+        PreparedStatement next10Rows = conn.prepareStatement("FETCH NEXT 10 ROWS FROM " + cursorName);
+        int itemsReturnedByCursor = 0;
+        while(true)
+        {
+            ResultSet cursorRS = next10Rows.executeQuery();
+            int rowsReadBeforeEmpty = 0;
+            while(cursorRS.next())
+            {
+                itemsReturnedByCursor++;
+                rowsReadBeforeEmpty++;
+            }
+            if(rowsReadBeforeEmpty > 0 )
+            {
+                cursorRS.close();
+            }
+            else
+            {
+                conn.prepareStatement("CLOSE " + cursorName).executeUpdate();
+                break;
+            }
+
+            if(itemsReturnedByCursor > (totalCount * 3))
+            {
+                break;
+            }
+        }
+        assertEquals(totalCount, itemsReturnedByCursor);
     }
 }

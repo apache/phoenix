@@ -24,10 +24,10 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 
-import com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class OrderByWithSpillingIT extends OrderByIT {
+public class OrderByWithSpillingIT extends BaseOrderByIT {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);

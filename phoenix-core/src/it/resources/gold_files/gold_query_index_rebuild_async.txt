@@ -17,7 +17,7 @@
  */
 
 'TASK_TYPE','TABLE_NAME','TASK_STATUS','TASK_PRIORITY'
-'2','TI','COMPLETED','4'
+'2','TI','CREATED','4'
 'K','V'
 'key1','val2'
 'key3','val3'

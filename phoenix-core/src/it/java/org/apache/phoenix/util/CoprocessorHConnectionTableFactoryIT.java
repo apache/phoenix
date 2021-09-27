@@ -28,9 +28,11 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.query.BaseTest;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +41,8 @@ import org.slf4j.LoggerFactory;
  * close should not close the shared connections 2. region server close should close the shared
  * connections
  */
-public class CoprocessorHConnectionTableFactoryIT extends BaseUniqueNamesOwnClusterIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class CoprocessorHConnectionTableFactoryIT extends BaseTest {
   private static String ORG_PREFIX = "ORG";
   private static final Logger LOGGER =
           LoggerFactory.getLogger(CoprocessorHConnectionTableFactoryIT.class);

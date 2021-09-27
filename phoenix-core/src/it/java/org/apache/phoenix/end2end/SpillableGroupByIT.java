@@ -43,8 +43,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import com.google.common.collect.Maps;
+import org.junit.experimental.categories.Category;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /*
  * Run in own cluster since it updates QueryServices.MAX_MEMORY_SIZE_ATTRIB
@@ -52,6 +52,7 @@ import com.google.common.collect.Maps;
  * cluster.
  */
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class SpillableGroupByIT extends BaseOwnClusterIT {
 
     private static final int NUM_ROWS_INSERTED = 1000;

@@ -44,14 +44,20 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.Assert;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test
     public void testGroupByWithLimitOverRowKey() throws Exception {
@@ -670,5 +676,147 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
             assertTrue(next.containsColumn(Bytes.toBytes("CF2"), PInteger.INSTANCE.toBytes(3)));
         }
     }
-    
+
+
+    @Test
+    public void testUpsertValueWithDiffSequenceAndConnections() throws Exception {
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            PreparedStatement createTableStatement = conn.prepareStatement(String.format("CREATE TABLE IF NOT EXISTS " +
+                    "%s (SERVICE VARCHAR NOT NULL, SEQUENCE_NUMBER BIGINT NOT NULL , " +
+                    "CONSTRAINT PK PRIMARY KEY (SERVICE, SEQUENCE_NUMBER)) MULTI_TENANT = TRUE", tableName));
+            createTableStatement.execute();
+        }
+
+        testGlobalSequenceUpsertWithTenantConnection(tableName);
+        testGlobalSequenceUpsertWithGlobalConnection(tableName);
+        testTenantSequenceUpsertWithSameTenantConnection(tableName);
+        testTenantSequenceUpsertWithDifferentTenantConnection(tableName);
+        testTenantSequenceUpsertWithGlobalConnection(tableName);
+
+    }
+
+    private void testTenantSequenceUpsertWithGlobalConnection(String tableName) throws Exception {
+        String sequenceName = generateUniqueSequenceName();
+
+        try (Connection conn = getTenantConnection("PHOENIX")) {
+            conn.setAutoCommit(true);
+            PreparedStatement createSequenceStatement = conn.prepareStatement(String.format("CREATE SEQUENCE " +
+                    "IF NOT EXISTS %s", sequenceName));
+            createSequenceStatement.execute();
+        }
+
+        try (Connection tenantConn = DriverManager.getConnection(getUrl())) {
+            tenantConn.setAutoCommit(true);
+            Statement executeUpdateStatement = tenantConn.createStatement();
+            try {
+                executeUpdateStatement.execute(String.format("UPSERT INTO %s ( SERVICE, SEQUENCE_NUMBER) VALUES " +
+                        "( 'PHOENIX', NEXT VALUE FOR %s)", tableName, sequenceName));
+                Assert.fail();
+            } catch (SequenceNotFoundException e) {
+                assertTrue(true);
+            } catch (Exception e) {
+                Assert.fail();
+            }
+        }
+    }
+
+    private void testTenantSequenceUpsertWithDifferentTenantConnection(String tableName) throws Exception {
+        String sequenceName = generateUniqueSequenceName();
+
+        try (Connection conn = getTenantConnection("PHOENIX")) {
+            conn.setAutoCommit(true);
+            PreparedStatement createSequenceStatement = conn.prepareStatement(String.format("CREATE SEQUENCE " +
+                    "IF NOT EXISTS %s", sequenceName));
+            createSequenceStatement.execute();
+        }
+
+        try (Connection tenantConn = getTenantConnection("HBASE")) {
+            tenantConn.setAutoCommit(true);
+
+            Statement executeUpdateStatement = tenantConn.createStatement();
+            try {
+                executeUpdateStatement.execute(String.format("UPSERT INTO %s ( SEQUENCE_NUMBER) VALUES " +
+                        "( NEXT VALUE FOR %s)", tableName, sequenceName));
+                Assert.fail();
+            } catch (SequenceNotFoundException e) {
+                assertTrue(true);
+            } catch (Exception e) {
+                Assert.fail();
+            }
+        }
+    }
+
+    private void testTenantSequenceUpsertWithSameTenantConnection(String tableName) throws Exception {
+        String sequenceName = generateUniqueSequenceName();
+
+        try (Connection conn = getTenantConnection("ZOOKEEPER")) {
+            conn.setAutoCommit(true);
+            PreparedStatement createSequenceStatement = conn.prepareStatement(String.format("CREATE SEQUENCE " +
+                    "IF NOT EXISTS %s", sequenceName));
+            createSequenceStatement.execute();
+            Statement executeUpdateStatement = conn.createStatement();
+            executeUpdateStatement.execute(String.format("UPSERT INTO %s ( SEQUENCE_NUMBER) VALUES " +
+                    "( NEXT VALUE FOR %s)", tableName, sequenceName));
+            ResultSet rs = executeUpdateStatement.executeQuery("select * from " + tableName);
+            assertTrue(rs.next());
+            assertEquals("1", rs.getString(1));
+            assertFalse(rs.next());
+        }
+
+    }
+
+    private void testGlobalSequenceUpsertWithGlobalConnection(String tableName) throws Exception {
+        String sequenceName = generateUniqueSequenceName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            PreparedStatement createSequenceStatement = conn.prepareStatement(String.format("CREATE SEQUENCE " +
+                    "IF NOT EXISTS %s", sequenceName));
+            createSequenceStatement.execute();
+            Statement executeUpdateStatement = conn.createStatement();
+            executeUpdateStatement.execute(String.format("UPSERT INTO %s ( SERVICE, SEQUENCE_NUMBER) VALUES " +
+                    "( 'PHOENIX', NEXT VALUE FOR %s)", tableName, sequenceName));
+            ResultSet rs = executeUpdateStatement.executeQuery("select * from " + tableName);
+            assertTrue(rs.next());
+            assertEquals("HBASE", rs.getString(1));
+            assertEquals("1", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("PHOENIX", rs.getString(1));
+            assertEquals("1", rs.getString(2));
+            assertFalse(rs.next());
+        }
+    }
+
+    private void testGlobalSequenceUpsertWithTenantConnection(String tableName) throws Exception {
+        String sequenceName = generateUniqueSequenceName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.setAutoCommit(true);
+            PreparedStatement createSequenceStatement = conn.prepareStatement(String.format("CREATE SEQUENCE " +
+                    "IF NOT EXISTS %s", sequenceName));
+            createSequenceStatement.execute();
+        }
+
+        try (Connection tenantConn = getTenantConnection("HBASE")) {
+            tenantConn.setAutoCommit(true);
+
+            Statement executeUpdateStatement = tenantConn.createStatement();
+            executeUpdateStatement.execute(String.format("UPSERT INTO %s ( SEQUENCE_NUMBER) VALUES " +
+                    "( NEXT VALUE FOR %s)", tableName, sequenceName));
+
+            ResultSet rs = executeUpdateStatement.executeQuery("select * from " + tableName);
+            assertTrue(rs.next());
+            assertEquals("1", rs.getString(1));
+            assertFalse(rs.next());
+
+        }
+    }
+
+    private static Connection getTenantConnection(String tenantId) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        return DriverManager.getConnection(getUrl(), props);
+    }
 }

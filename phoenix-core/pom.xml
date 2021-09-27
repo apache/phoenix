@@ -21,15 +21,11 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.16.1</version>
+    <version>4.16.2-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-core</artifactId>
   <name>Phoenix Core</name>
   <description>Core Phoenix codebase</description>
-
-  <properties>
-    <top.dir>${project.basedir}/..</top.dir>
-  </properties>
 
   <build>
     <plugins>
@@ -292,27 +288,18 @@
     </dependency>
     <dependency>
       <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-core</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-core</artifactId>
-      <type>test-jar</type>
-      <scope>test</scope>
+      <artifactId>tephra-core-shaded</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.tephra</groupId>
       <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
+      <classifier>shaded</classifier>
     </dependency>
   
     <!-- Make sure we have all the antlr dependencies -->
     <dependency>
       <groupId>org.antlr</groupId>
       <artifactId>antlr-runtime</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
     </dependency>
     <dependency>
       <groupId>joda-time</groupId>
