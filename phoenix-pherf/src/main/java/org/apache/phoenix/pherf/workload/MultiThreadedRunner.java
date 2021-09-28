@@ -164,7 +164,8 @@ class MultiThreadedRunner implements Callable<Void> {
             LOGGER.debug("Executing iteration: " + queryIteration + ": " + statementString);
             
             if (scenario.getWriteParams() != null) {
-            	Workload writes = new WriteWorkload(PhoenixUtil.create(), parser, null, scenario, GeneratePhoenixStats.NO);
+            	Workload writes = new WriteWorkload(PhoenixUtil.create(), parser, null,
+                        scenario, GeneratePhoenixStats.NO);
             	workloadExecutor.add(writes);
             }
             

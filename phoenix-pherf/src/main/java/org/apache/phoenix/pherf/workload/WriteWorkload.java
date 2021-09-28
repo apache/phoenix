@@ -75,16 +75,18 @@ public class WriteWorkload implements Workload {
     public WriteWorkload(XMLConfigParser parser) throws Exception {
         this(PhoenixUtil.create(),  parser, new Properties(), GeneratePhoenixStats.NO);
     }
-    public WriteWorkload(XMLConfigParser parser, Properties phoenixProperties, GeneratePhoenixStats generateStatistics) throws Exception {
+    public WriteWorkload(XMLConfigParser parser, Properties phoenixProperties,
+                         GeneratePhoenixStats generateStatistics) throws Exception {
         this(PhoenixUtil.create(), parser, phoenixProperties, generateStatistics);
     }
 
-    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser, Properties phoenixProperties, GeneratePhoenixStats generateStatistics) throws Exception {
+    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser,
+                         Properties phoenixProperties, GeneratePhoenixStats generateStatistics) throws Exception {
         this(util,  parser, phoenixProperties, null, generateStatistics);
     }
 
-    public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser, Properties phoenixProperties, Scenario scenario, GeneratePhoenixStats generateStatistics)
-            throws Exception {
+    public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser, Properties phoenixProperties,
+                         Scenario scenario, GeneratePhoenixStats generateStatistics) throws Exception {
         this(phoenixUtil,
                 PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, true),
                 parser, phoenixProperties, scenario, generateStatistics);
@@ -103,8 +105,9 @@ public class WriteWorkload implements Workload {
      *                    it will run against all scenarios in the parsers list.
      * @throws Exception
      */
-    public WriteWorkload(PhoenixUtil phoenixUtil, Properties properties, XMLConfigParser parser, Properties phoenixProperties,
-            Scenario scenario, GeneratePhoenixStats generateStatistics) throws Exception {
+    public WriteWorkload(PhoenixUtil phoenixUtil, Properties properties, XMLConfigParser parser,
+                         Properties phoenixProperties, Scenario scenario,
+                         GeneratePhoenixStats generateStatistics) throws Exception {
         this.pUtil = phoenixUtil;
         this.parser = parser;
         this.rulesApplier = new RulesApplier(parser);

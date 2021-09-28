@@ -49,7 +49,13 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Properties;
+import java.util.Set;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
@@ -109,16 +115,19 @@ public class PhoenixUtil {
         return getConnection(tenantId, testEnabled, null);
     }
 
-    public Connection getConnection(String tenantId, Properties phoenixProperties) throws  Exception {
+    public Connection getConnection(String tenantId,
+                                    Properties phoenixProperties) throws  Exception {
         Map<String, String> phoenixProperty = getPropertyHashMap(phoenixProperties);
         return getConnection(tenantId, testEnabled, phoenixProperty);
     }
     
-    public Connection getConnection(String tenantId, Map<String, String> phoenixProperty) throws Exception {
+    public Connection getConnection(String tenantId,
+                                    Map<String, String> phoenixProperty) throws Exception {
         return getConnection(tenantId, testEnabled, phoenixProperty);
     }
 
-    public Connection getConnection(String tenantId, boolean testEnabled, Map<String, String> phoenixProperty) throws Exception {
+    public Connection getConnection(String tenantId, boolean testEnabled,
+                                    Map<String, String> phoenixProperty) throws Exception {
         if (useThinDriver) {
             if (null == queryServerUrl) {
                 throw new IllegalArgumentException("QueryServer URL must be set before" +
@@ -157,7 +166,7 @@ public class PhoenixUtil {
     }
 
     private Map<String, String> getPropertyHashMap(Properties props) {
-        if(props == null) {
+        if (props == null) {
             return null;
         }
         Map<String, String> propsMaps = new HashMap<>();

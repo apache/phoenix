@@ -329,7 +329,8 @@ public class Pherf {
                             }
                         }
                     } else {
-                        newWorkloads.add(new WriteWorkload(parser, phoenixProperties, generateStatistics));
+                        newWorkloads.add(new WriteWorkload(parser, phoenixProperties,
+                                generateStatistics));
                     }
 
                     if (newWorkloads.isEmpty()) {
