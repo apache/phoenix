@@ -154,7 +154,7 @@ public class PhoenixUtil {
             if (phoenixProperty != null) {
             	for (Map.Entry<String, String> phxProperty: phoenixProperty.entrySet()) {
             		props.setProperty(phxProperty.getKey(), phxProperty.getValue());
-					System.out.println("Setting connection property "
+					LOGGER.debug("Setting connection property "
 							+ phxProperty.getKey() + " to "
 							+ phxProperty.getValue());
             	}

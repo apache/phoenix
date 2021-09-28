@@ -127,7 +127,7 @@ public class Pherf {
     private final CompareType compareType;
     private final boolean thinDriver;
     private final String queryServerUrl;
-    private Properties phoenixProperties;
+    private Properties phoenixProperties = new Properties();
 
     @VisibleForTesting
     WorkloadExecutor workloadExecutor;
