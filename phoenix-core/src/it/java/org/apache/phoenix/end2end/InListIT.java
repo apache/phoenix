@@ -592,6 +592,58 @@ public class InListIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testUpperWithInChar() throws Exception {
+        String baseTable = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE  TABLE " + baseTable +
+                    " (ID BIGINT NOT NULL primary key, A CHAR(2))");
+            PreparedStatement pstmt = conn.prepareStatement("UPSERT INTO  " + baseTable +
+                    " VALUES (?, ?)");
+            pstmt.setInt(1, 1);
+            pstmt.setString(2, "a");
+            pstmt.executeUpdate();
+            conn.commit();
+            pstmt.setInt(1, 2);
+            pstmt.setString(2, "b");
+            pstmt.executeUpdate();
+            conn.commit();
+
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + baseTable  +
+                    " WHERE UPPER(A) IN ('A', 'C')");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(2), "a");
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLowerWithInChar() throws Exception {
+        String baseTable = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE  TABLE " + baseTable +
+                    " (ID BIGINT NOT NULL primary key, A CHAR(2))");
+            PreparedStatement pstmt = conn.prepareStatement("UPSERT INTO  " + baseTable +
+                    " VALUES (?, ?)");
+            pstmt.setInt(1, 1);
+            pstmt.setString(2, "A");
+            pstmt.executeUpdate();
+            conn.commit();
+            pstmt.setInt(1, 2);
+            pstmt.setString(2, "B");
+            pstmt.executeUpdate();
+            conn.commit();
+
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + baseTable  +
+                    " WHERE LOWER(A) IN ('a', 'c')");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(2), "A");
+            assertFalse(rs.next());
+        }
+    }
+
     @Test(expected = TypeMismatchException.class)
     public void testInListExpressionWithNotValidElements() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
