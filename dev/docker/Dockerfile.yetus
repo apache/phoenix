@@ -20,15 +20,11 @@ FROM apache/yetus:0.13.0
 # Update SpotBugs
 #####
 RUN rm -rf /opt/spotbugs \
-    && git clone https://github.com/stoty/spotbugs.git \
-    && cd spotbugs \
-    && git checkout PHOENIX-1161-backport \
-    && ./gradlew clean build -x test \
+    && curl -L https://github.com/spotbugs/spotbugs/releases/download/4.4.1/spotbugs-4.4.1.tgz --output spotbugs-4.4.1.tgz \
     && mkdir /opt/spotbugs \
-    && tar -C /opt/spotbugs --strip-components 1 -xpf spotbugs/build/distributions/spotbugs-4.1.2.tgz \
+    && tar -C /opt/spotbugs --strip-components 1 -xpf spotbugs-4.4.1.tgz \
     && chmod a+rx /opt/spotbugs/bin/* \
-    && cd .. \
-    && rm -rf ./spotbugs
+    && rm -rf ./spotbugs-4.4.1.tgz
 ENV SPOTBUGS_HOME /opt/spotbugs
 #####
 # Enable spotbugs prefix for maven
