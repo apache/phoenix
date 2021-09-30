@@ -80,13 +80,14 @@ public class WriteWorkload implements Workload {
         this(PhoenixUtil.create(), parser, phoenixProperties, generateStatistics);
     }
 
-    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser,
-                         Properties phoenixProperties, GeneratePhoenixStats generateStatistics) throws Exception {
+    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser, Properties phoenixProperties,
+                         GeneratePhoenixStats generateStatistics) throws Exception {
         this(util,  parser, phoenixProperties, null, generateStatistics);
     }
 
-    public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser, Properties phoenixProperties,
-                         Scenario scenario, GeneratePhoenixStats generateStatistics) throws Exception {
+    public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser,
+                         Properties phoenixProperties, Scenario scenario,
+                         GeneratePhoenixStats generateStatistics) throws Exception {
         this(phoenixUtil,
                 PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, true),
                 parser, phoenixProperties, scenario, generateStatistics);

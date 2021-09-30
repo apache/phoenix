@@ -51,12 +51,12 @@ import java.sql.Types;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
-import java.util.HashMap;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
@@ -155,9 +155,9 @@ public class PhoenixUtil {
             if (phoenixProperty != null) {
             	for (Map.Entry<String, String> phxProperty: phoenixProperty.entrySet()) {
             		props.setProperty(phxProperty.getKey(), phxProperty.getValue());
-					LOGGER.debug("Setting connection property "
-							+ phxProperty.getKey() + " to "
-							+ phxProperty.getValue());
+					LOGGER.debug("Setting connection property " +
+                            phxProperty.getKey() + " to " +
+                            phxProperty.getValue());
             	}
             }
             
