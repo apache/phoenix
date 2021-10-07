@@ -1265,8 +1265,6 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         // Reset table metrics as well as global metrics
         PhoenixRuntime.clearTableLevelMetrics();
         PhoenixMetricsIT.resetGlobalMetrics();
-        DelayedOrFailingRegionServer.setDelayEnabled(true);
-        DelayedOrFailingRegionServer.setDelayScan(30);
         try (Connection conn =  getConnFromTestDriver();
                 Statement statement = conn.createStatement()) {
             String select = "SELECT * FROM " + tableName;

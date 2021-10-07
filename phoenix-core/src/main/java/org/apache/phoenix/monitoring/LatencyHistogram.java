@@ -29,6 +29,7 @@ import org.apache.phoenix.query.QueryServices;
  */
 public class LatencyHistogram extends RangeHistogram {
 
+    //default range of time buckets in milli seconds.
     public final static long[] DEFAULT_RANGE =
             { 1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000, 60000, 120000, 300000, 600000};
 
