@@ -17,11 +17,9 @@
  */
 package org.apache.phoenix.monitoring;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 public class TableHistograms {
     private String tableName;
@@ -104,17 +102,26 @@ public class TableHistograms {
     }
 
     public List<HistogramDistribution> getTableLatencyHistogramsDistribution() {
-        List<HistogramDistribution> list = new ArrayList<>(Arrays.asList(queryLatencyHisto.getRangeHistogramDistribution(),
-                upsertLatencyHisto.getRangeHistogramDistribution(), deleteLatencyHisto.getRangeHistogramDistribution(),
-                pointLookupLatencyHisto.getRangeHistogramDistribution(), rangeScanLatencyHisto.getRangeHistogramDistribution()));
-        return Collections.unmodifiableList(list);
+        ImmutableList<HistogramDistribution>
+                list =
+                ImmutableList.of(queryLatencyHisto.getRangeHistogramDistribution(),
+                        upsertLatencyHisto.getRangeHistogramDistribution(),
+                        deleteLatencyHisto.getRangeHistogramDistribution(),
+                        pointLookupLatencyHisto.getRangeHistogramDistribution(),
+                        rangeScanLatencyHisto.getRangeHistogramDistribution());
+        return list;
     }
 
     public List<HistogramDistribution> getTableSizeHistogramsDistribution() {
-        List<HistogramDistribution> list = new ArrayList<>(Arrays.asList(querySizeHisto.getRangeHistogramDistribution(),
-                upsertSizeHisto.getRangeHistogramDistribution(), deleteSizeHisto.getRangeHistogramDistribution(),
-                pointLookupSizeHisto.getRangeHistogramDistribution(), rangeScanSizeHisto.getRangeHistogramDistribution()));
-        return Collections.unmodifiableList(list);
+        ImmutableList<HistogramDistribution>
+                list =
+                ImmutableList.of(querySizeHisto.getRangeHistogramDistribution(),
+                        upsertSizeHisto.getRangeHistogramDistribution(),
+                        deleteSizeHisto.getRangeHistogramDistribution(),
+                        pointLookupSizeHisto.getRangeHistogramDistribution(),
+                        rangeScanSizeHisto.getRangeHistogramDistribution());
+        return list;
+
     }
 
 }

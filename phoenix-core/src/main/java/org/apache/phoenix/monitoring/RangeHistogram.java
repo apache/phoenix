@@ -62,7 +62,7 @@ public class RangeHistogram {
     public void add(long value) {
         if (value > histogram.getHighestTrackableValue()) {
             // Ignoring recording value more than maximum trackable value.
-            LOGGER.debug("Histogram recording higher value than maximum. Ignoring it.");
+            LOGGER.warn("Histogram recording higher value than maximum. Ignoring it.");
             return;
         }
         histogram.recordValue(value);
@@ -87,11 +87,10 @@ public class RangeHistogram {
     public HistogramDistribution getRangeHistogramDistribution() {
         // Generate distribution from the snapshot.
         Histogram snapshot = histogram.copy();
-        HistogramDistributionImpl distribution = new HistogramDistributionImpl(name);
-        distribution.setMin(snapshot.getMinValue());
-        distribution.setMax(snapshot.getMaxValue());
-        distribution.setCount(snapshot.getTotalCount());
-        distribution.setRangeDistributionMap(generateDistributionMap(snapshot));
+        HistogramDistributionImpl
+                distribution =
+                new HistogramDistributionImpl(name, snapshot.getMinValue(), snapshot.getMaxValue(),
+                        snapshot.getTotalCount(), generateDistributionMap(snapshot));
         return distribution;
     }
 

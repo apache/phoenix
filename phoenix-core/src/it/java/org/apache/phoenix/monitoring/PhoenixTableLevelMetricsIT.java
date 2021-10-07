@@ -462,8 +462,6 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
     private static void assertMetricValue(Metric m, MetricType checkType, long compareValue,
             CompareOp op) {
         if (m.getMetricType().equals(checkType)) {
-            System.out.println("THe Type:"+m.getMetricType().toString() + "expected value:"+m.getValue() +
-                    "\t compare value:"+compareValue);
             switch (op) {
             case EQ:
                 assertEquals(compareValue, m.getValue());
@@ -1165,7 +1163,6 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     writeMutMetrics, conn);
         }
     }
-
     @Test public void testDeleteCommitTimeSlowRS() throws Throwable {
         String tableName = generateUniqueName();
         int numRows = 15;
@@ -1310,8 +1307,6 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         // Reset table metrics as well as global metrics
         PhoenixRuntime.clearTableLevelMetrics();
         PhoenixMetricsIT.resetGlobalMetrics();
-        DelayedOrFailingRegionServer.setDelayEnabled(true);
-        DelayedOrFailingRegionServer.setDelayScan(30);
         try (Connection conn =  getConnFromTestDriver();
                 Statement statement = conn.createStatement()) {
             String select = "SELECT * FROM " + tableName;

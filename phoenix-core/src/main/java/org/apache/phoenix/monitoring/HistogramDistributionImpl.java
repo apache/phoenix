@@ -26,23 +26,11 @@ public class HistogramDistributionImpl implements HistogramDistribution {
     private long count;
     private Map<String, Long> rangeDistribution;
 
-    public HistogramDistributionImpl(String histoName) {
+    public HistogramDistributionImpl(String histoName, long min, long max, long count, Map<String, Long> distributionMap ) {
         this.histoName = histoName;
-    }
-
-    public void setMin(long min) {
-        this.min = min;
-    }
-
-    public void setMax(long max) {
+        this.min  = min;
         this.max = max;
-    }
-
-    public void setCount(long count) {
         this.count = count;
-    }
-
-    public void setRangeDistributionMap(Map<String, Long> distributionMap) {
         this.rangeDistribution = distributionMap;
     }
 
