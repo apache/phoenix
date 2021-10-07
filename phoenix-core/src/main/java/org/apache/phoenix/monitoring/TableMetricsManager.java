@@ -403,7 +403,6 @@ public class TableMetricsManager {
                 tableMetrics.getTableHistograms().getRangeScanLatencyHisto().add(elapsedTime);
             }
         }
-
     }
 
     public static void updateHistogramMetricsForQueryScanBytes(long scanBytes,
