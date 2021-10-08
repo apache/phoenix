@@ -26,7 +26,7 @@ public class HistogramDistributionImpl implements HistogramDistribution {
     private long count;
     private Map<String, Long> rangeDistribution;
 
-    public HistogramDistributionImpl(String histoName, long min, long max, long count, Map<String, Long> distributionMap ) {
+    public HistogramDistributionImpl(final String histoName, final long min, final long max, final long count, final Map<String, Long> distributionMap ) {
         this.histoName = histoName;
         this.min  = min;
         this.max = max;
