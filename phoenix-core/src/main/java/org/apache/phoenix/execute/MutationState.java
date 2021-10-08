@@ -1501,7 +1501,7 @@ public class MutationState implements SQLCloseable {
                         }
                         // Update size and latency histogram metrics.
                         TableMetricsManager.updateSizeHistogramMetricsForMutations(htableNameStr,
-                                committedMutationsMetric.getMutationsSizeBytes().getValue(), allUpsertsMutations);
+                                committedMutationsMetric.getTotalMutationsSizeBytes().getValue(), allUpsertsMutations);
                         Long latency = timeInExecuteMutationMap.get(htableNameStr);
                         if (latency == null) {
                             latency = 0l;

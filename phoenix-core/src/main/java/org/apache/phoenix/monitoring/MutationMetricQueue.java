@@ -88,7 +88,7 @@ public class MutationMetricQueue {
             publishedMetricsForTable.put(metric.getNumOfIndexCommitFailedMutations().getMetricType(), metric.getNumOfIndexCommitFailedMutations().getValue());
             publishedMetricsForTable.put(metric.getUpsertMutationSqlCounterSuccess().getMetricType(), metric.getUpsertMutationSqlCounterSuccess().getValue());
             publishedMetricsForTable.put(metric.getDeleteMutationSqlCounterSuccess().getMetricType(), metric.getDeleteMutationSqlCounterSuccess().getValue());
-            publishedMetricsForTable.put(metric.getMutationsSizeBytes().getMetricType(), metric.getMutationsSizeBytes().getValue());
+            publishedMetricsForTable.put(metric.getTotalMutationsSizeBytes().getMetricType(), metric.getTotalMutationsSizeBytes().getValue());
             publishedMetricsForTable.put(metric.getUpsertBatchFailedSize().getMetricType(), metric.getUpsertBatchFailedSize().getValue());
             publishedMetricsForTable.put(metric.getUpsertBatchFailedCounter().getMetricType(), metric.getUpsertBatchFailedCounter().getValue());
             publishedMetricsForTable.put(metric.getDeleteBatchFailedSize().getMetricType(), metric.getDeleteBatchFailedSize().getValue());
@@ -107,7 +107,7 @@ public class MutationMetricQueue {
      */
     public static class MutationMetric {
         private final CombinableMetric numMutations = new CombinableMetricImpl(MUTATION_BATCH_SIZE);
-        private final CombinableMetric mutationsSizeBytes = new CombinableMetricImpl(MUTATION_BYTES);
+        private final CombinableMetric totalMutationsSizeBytes = new CombinableMetricImpl(MUTATION_BYTES);
         private final CombinableMetric totalCommitTimeForMutations = new CombinableMetricImpl(MUTATION_COMMIT_TIME);
         private final CombinableMetric numFailedMutations = new CombinableMetricImpl(MUTATION_BATCH_FAILED_SIZE);
         private final CombinableMetric totalCommitTimeForUpserts = new CombinableMetricImpl(UPSERT_COMMIT_TIME);
@@ -144,7 +144,7 @@ public class MutationMetricQueue {
             this.numOfIndexCommitFailMutations.change(numOfPhase3Failed);
             this.upsertMutationsSizeBytes.change(upsertMutationsSizeBytes);
             this.deleteMutationsSizeBytes.change(deleteMutationsSizeBytes);
-            this.mutationsSizeBytes.change(totalMutationBytes);
+            this.totalMutationsSizeBytes.change(totalMutationBytes);
             this.upsertMutationSqlCounterSuccess.change(upsertMutationSqlCounterSuccess);
             this.deleteMutationSqlCounterSuccess.change(deleteMutationSqlCounterSuccess);
             this.upsertBatchFailedSize.change(upsertBatchFailedSize);
@@ -171,8 +171,8 @@ public class MutationMetricQueue {
             return numMutations;
         }
 
-        public CombinableMetric getMutationsSizeBytes() {
-            return mutationsSizeBytes;
+        public CombinableMetric getTotalMutationsSizeBytes() {
+            return totalMutationsSizeBytes;
         }
 
         public CombinableMetric getNumFailedMutations() {
@@ -225,7 +225,7 @@ public class MutationMetricQueue {
             this.numOfIndexCommitFailMutations.combine(other.numOfIndexCommitFailMutations);
             this.upsertMutationsSizeBytes.combine(other.upsertMutationsSizeBytes);
             this.deleteMutationsSizeBytes.combine(other.deleteMutationsSizeBytes);
-            this.mutationsSizeBytes.combine(other.mutationsSizeBytes);
+            this.totalMutationsSizeBytes.combine(other.totalMutationsSizeBytes);
             this.upsertMutationSqlCounterSuccess.combine(other.upsertMutationSqlCounterSuccess);
             this.deleteMutationSqlCounterSuccess.combine(other.deleteMutationSqlCounterSuccess);
             this.upsertBatchFailedSize.combine(other.upsertBatchFailedSize);
