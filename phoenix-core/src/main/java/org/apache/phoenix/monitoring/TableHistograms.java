@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.monitoring;
 
-import java.util.Collections;
 import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
