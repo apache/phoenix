@@ -20,13 +20,13 @@ package org.apache.phoenix.monitoring;
 import java.util.Map;
 
 public class HistogramDistributionImpl implements HistogramDistribution {
-    private String histoName;
-    private long min;
-    private long max;
-    private long count;
-    private Map<String, Long> rangeDistribution;
+    private final String histoName;
+    private final long min;
+    private final long max;
+    private final long count;
+    private final Map<String, Long> rangeDistribution;
 
-    public HistogramDistributionImpl(final String histoName, final long min, final long max, final long count, final Map<String, Long> distributionMap ) {
+    public HistogramDistributionImpl(String histoName, long min,long max,long count, Map<String, Long> distributionMap ) {
         this.histoName = histoName;
         this.min  = min;
         this.max = max;
