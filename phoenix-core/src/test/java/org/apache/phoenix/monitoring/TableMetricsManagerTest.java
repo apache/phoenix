@@ -228,32 +228,32 @@ public class TableMetricsManagerTest {
         TableMetricsManager.updateLatencyHistogramForMutations(tableName, 1, true);
         MutationMetricQueue.MutationMetric metric = new MutationMetricQueue.MutationMetric(
                 0L, 5L, 0L, 0L, 0L,
-                0L, 1L, 0L, 5L, 0L, 0L, 0L, 0L, 0L);
+                0L, 1L, 0L, 5L, 0L, 0L, 0L, 0L, 0L,0L);
         TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getMutationsSizeBytes().getValue(), true);
 
         TableMetricsManager.updateLatencyHistogramForMutations(tableName, 2, true);
         metric = new MutationMetricQueue.MutationMetric(0L, 10L, 0L, 0L, 0L,
-                0L, 1L, 0L, 10L, 0L, 0L, 0L, 0L, 0L);
+                0L, 1L, 0L, 10L, 0L, 0L, 0L, 0L, 0L,0L);
         TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getMutationsSizeBytes().getValue(), true);
 
         TableMetricsManager.updateLatencyHistogramForMutations(tableName, 4, true);
         metric = new MutationMetricQueue.MutationMetric(0L, 50L, 0L, 0L, 0L,
-                0L, 1L, 0L, 50L, 0L, 0L, 0L, 0L, 0L);
+                0L, 1L, 0L, 50L, 0L, 0L, 0L, 0L, 0L,0L);
         TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getMutationsSizeBytes().getValue(), true);
 
         TableMetricsManager.updateLatencyHistogramForMutations(tableName, 5, true);
         metric = new MutationMetricQueue.MutationMetric(0L, 100L, 0L, 0L, 0L,
-                0L, 1L, 0L, 100L, 0L, 0L, 0L, 0L, 0L);
+                0L, 1L, 0L, 100L, 0L, 0L, 0L, 0L, 0L,0L);
         TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getMutationsSizeBytes().getValue(), true);
 
         TableMetricsManager.updateLatencyHistogramForMutations(tableName, 6, true);
         metric = new MutationMetricQueue.MutationMetric(0L, 500L, 0L, 0L, 0L,
-                0L, 1L, 0L, 500L, 0L, 0L, 0L, 0L, 0L);
+                0L, 1L, 0L, 500L, 0L, 0L, 0L, 0L, 0L,0L);
         TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getMutationsSizeBytes().getValue(), true);
 
         TableMetricsManager.updateLatencyHistogramForMutations(tableName, 8, true);
         metric = new MutationMetricQueue.MutationMetric(0L, 1000L, 0L, 0L, 0L,
-                0L, 1L, 0L, 1000L, 0L, 0L, 0L, 0L, 0L);
+                0L, 1L, 0L, 1000L, 0L, 0L, 0L, 0L, 0L,0L);
         TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getMutationsSizeBytes().getValue(), true);
 
         // Generate distribution map from histogram snapshots.
@@ -291,32 +291,32 @@ public class TableMetricsManagerTest {
         TableMetricsManager.updateLatencyHistogramForMutations(tableName, 1, false);
         MutationMetricQueue.MutationMetric metric = new MutationMetricQueue.MutationMetric(
                 0L, 0L, 5L, 0L, 0L,
-                0L, 0L, 1L, 5L, 0L, 0L, 0L, 0L, 0L);
+                0L, 0L, 1L, 5L, 0L, 0L, 0L, 0L, 0L,0L);
         TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getMutationsSizeBytes().getValue(), false);
 
         TableMetricsManager.updateLatencyHistogramForMutations(tableName, 2, false);
         metric = new MutationMetricQueue.MutationMetric(0L, 0L, 10L, 0L, 0L,
-                0L, 0L, 1L, 10L, 0L, 0L, 0L, 0L, 0L);
+                0L, 0L, 1L, 10L, 0L, 0L, 0L, 0L, 0L, 0L);
         TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getMutationsSizeBytes().getValue(), false);
 
         TableMetricsManager.updateLatencyHistogramForMutations(tableName, 4, false);
         metric = new MutationMetricQueue.MutationMetric(0L, 0L, 50L, 0L, 0L,
-                0L, 0L, 1L, 50L, 0L, 0L, 0L, 0L, 0L);
+                0L, 0L, 1L, 50L, 0L, 0L, 0L, 0L, 0L, 0L);
         TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getMutationsSizeBytes().getValue(), false);
 
         TableMetricsManager.updateLatencyHistogramForMutations(tableName, 5,false);
         metric = new MutationMetricQueue.MutationMetric(0L, 0L, 100L, 0L, 0L,
-                0L, 0L, 1L, 100L, 0L, 0L, 0L, 0L, 0L);
+                0L, 0L, 1L, 100L, 0L, 0L, 0L, 0L, 0L, 0L);
         TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getMutationsSizeBytes().getValue(), false);
 
         TableMetricsManager.updateLatencyHistogramForMutations(tableName, 6,false);
         metric = new MutationMetricQueue.MutationMetric(0L, 0L, 500L, 0L, 0L,
-                0L, 0L, 1L, 500L, 0L, 0L, 0L, 0L, 0L);
+                0L, 0L, 1L, 500L, 0L, 0L, 0L, 0L, 0L, 0L);
         TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getMutationsSizeBytes().getValue(), false);
 
         TableMetricsManager.updateLatencyHistogramForMutations(tableName, 8, false);
         metric = new MutationMetricQueue.MutationMetric(0L, 0L, 1000L, 0L, 0L,
-                0L, 0L, 1L, 1000L, 0L, 0L, 0L, 0L, 0L);
+                0L, 0L, 1L, 1000L, 0L, 0L, 0L, 0L, 0L, 0L);
         TableMetricsManager.updateSizeHistogramMetricsForMutations(tableName, metric.getMutationsSizeBytes().getValue(), false);
 
         // Generate distribution map from histogram snapshots.

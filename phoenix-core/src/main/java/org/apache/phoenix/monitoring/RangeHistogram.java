@@ -17,11 +17,12 @@
  */
 package org.apache.phoenix.monitoring;
 
-import com.google.common.base.Preconditions;
+
 import java.util.HashMap;
 import java.util.Map;
 import org.HdrHistogram.ConcurrentHistogram;
 import org.HdrHistogram.Histogram;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
