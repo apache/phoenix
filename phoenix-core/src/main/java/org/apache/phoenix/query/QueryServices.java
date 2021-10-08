@@ -373,9 +373,11 @@ public interface QueryServices extends SQLCloseable {
     public static final String PENDING_MUTATIONS_DDL_THROW_ATTRIB = "phoenix.pending.mutations.before.ddl.throw";
 
     // The range of bins for latency metrics for histogram.
-    public static final String PHOENIX_HISTOGRAM_LATENCY_RANGES = "phoenix.histogram.latency.ranges";
+    public static final String
+            PHOENIX_HISTOGRAM_LATENCY_RANGES = "phoenix.histogram.latency.ranges";
     // The range of bins for size metrics for histogram.
-    public static final String PHOENIX_HISTOGRAM_SIZE_RANGES = "phoenix.histogram.size.ranges";
+    public static final String
+            PHOENIX_HISTOGRAM_SIZE_RANGES = "phoenix.histogram.size.ranges";
 
     /**
      * Parameter to indicate the source of operation attribute.
