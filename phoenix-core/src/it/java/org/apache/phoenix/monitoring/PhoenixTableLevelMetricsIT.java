@@ -462,6 +462,8 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
     private static void assertMetricValue(Metric m, MetricType checkType, long compareValue,
             CompareOp op) {
         if (m.getMetricType().equals(checkType)) {
+            System.out.println("THe Type:"+m.getMetricType().toString() + "expected value:"+m.getValue() +
+                    "\t compare value:"+compareValue);
             switch (op) {
             case EQ:
                 assertEquals(compareValue, m.getValue());
@@ -1163,6 +1165,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                     writeMutMetrics, conn);
         }
     }
+
     @Test public void testDeleteCommitTimeSlowRS() throws Throwable {
         String tableName = generateUniqueName();
         int numRows = 15;
@@ -1203,7 +1206,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         Connection conn = null;
         Throwable exception = null;
         int numAtomicUpserts = 4;
-        try {x
+        try {
             conn = getConnFromTestDriver();
             String ddl = "create table " + tableName + "(pk varchar primary key, counter1 bigint)";
             conn.createStatement().execute(ddl);
@@ -1240,6 +1243,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             assertEquals(numAtomicUpserts, getMetricFromTableMetrics(tableName, ATOMIC_UPSERT_SQL_COUNTER));
             assertTrue(getMetricFromTableMetrics(tableName, ATOMIC_UPSERT_COMMIT_TIME) > 0);
         }
+    }
 
     @Test
     public void testHistogramMetricsForMutations() throws Exception {
@@ -1307,6 +1311,8 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         // Reset table metrics as well as global metrics
         PhoenixRuntime.clearTableLevelMetrics();
         PhoenixMetricsIT.resetGlobalMetrics();
+        DelayedOrFailingRegionServer.setDelayEnabled(true);
+        DelayedOrFailingRegionServer.setDelayScan(30);
         try (Connection conn =  getConnFromTestDriver();
                 Statement statement = conn.createStatement()) {
             String select = "SELECT * FROM " + tableName;
@@ -1379,7 +1385,6 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         Long scanBytes = GLOBAL_SCAN_BYTES.getMetric().getValue();
         long maxSzValue = sizeHistogram.getHistogram().getMaxValue();
         Assert.assertTrue(sizeHistogram.getHistogram().valuesAreEquivalent(scanBytes, maxSzValue));
->>>>>>> PHOENIX-5838 Add Histograms for Table level Metrics
     }
 
     private Connection getConnFromTestDriver() throws SQLException {
