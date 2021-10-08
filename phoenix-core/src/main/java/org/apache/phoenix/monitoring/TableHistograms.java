@@ -103,25 +103,19 @@ public class TableHistograms {
     }
 
     public List<HistogramDistribution> getTableLatencyHistogramsDistribution() {
-        ImmutableList<HistogramDistribution>
-                list =
-                ImmutableList.of(queryLatencyHisto.getRangeHistogramDistribution(),
-                        upsertLatencyHisto.getRangeHistogramDistribution(),
-                        deleteLatencyHisto.getRangeHistogramDistribution(),
-                        pointLookupLatencyHisto.getRangeHistogramDistribution(),
-                        rangeScanLatencyHisto.getRangeHistogramDistribution());
-        return Collections.unmodifiableList(list);
+        return ImmutableList.of(queryLatencyHisto.getRangeHistogramDistribution(),
+                upsertLatencyHisto.getRangeHistogramDistribution(),
+                deleteLatencyHisto.getRangeHistogramDistribution(),
+                pointLookupLatencyHisto.getRangeHistogramDistribution(),
+                rangeScanLatencyHisto.getRangeHistogramDistribution());
     }
 
     public List<HistogramDistribution> getTableSizeHistogramsDistribution() {
-        ImmutableList<HistogramDistribution>
-                list =
-                ImmutableList.of(querySizeHisto.getRangeHistogramDistribution(),
-                        upsertSizeHisto.getRangeHistogramDistribution(),
-                        deleteSizeHisto.getRangeHistogramDistribution(),
-                        pointLookupSizeHisto.getRangeHistogramDistribution(),
-                        rangeScanSizeHisto.getRangeHistogramDistribution());
-        return Collections.unmodifiableList(list);
+        return ImmutableList.of(querySizeHisto.getRangeHistogramDistribution(),
+                upsertSizeHisto.getRangeHistogramDistribution(),
+                deleteSizeHisto.getRangeHistogramDistribution(),
+                pointLookupSizeHisto.getRangeHistogramDistribution(),
+                rangeScanSizeHisto.getRangeHistogramDistribution());
     }
 
 }
