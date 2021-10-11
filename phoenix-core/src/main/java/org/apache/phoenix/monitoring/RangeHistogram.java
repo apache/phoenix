@@ -17,14 +17,16 @@
  */
 package org.apache.phoenix.monitoring;
 
-
 import java.util.HashMap;
 import java.util.Map;
+
 import org.HdrHistogram.ConcurrentHistogram;
 import org.HdrHistogram.Histogram;
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /*
     Creates a histogram with the specified range.
@@ -39,7 +41,7 @@ public class RangeHistogram {
     public RangeHistogram(long[] ranges, String name, String description) {
         Preconditions.checkNotNull(ranges);
         Preconditions.checkArgument(ranges.length != 0);
-        this.ranges = ranges;
+        this.ranges = ranges; // the ranges are static or either provided by user
         this.name = name;
         this.desc = description;
         /*
@@ -56,7 +58,7 @@ public class RangeHistogram {
             |-----------------------------------------|
          */
         // highestTrackable value is the last value in the provided range.
-        this.histogram = new ConcurrentHistogram(this.ranges[this.ranges.length-1], 2);
+        this.histogram = new ConcurrentHistogram(this.ranges[this.ranges.length - 1], 2);
     }
 
     public void add(long value) {

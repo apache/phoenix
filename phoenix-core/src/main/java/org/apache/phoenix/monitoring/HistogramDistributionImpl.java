@@ -55,6 +55,7 @@ public class HistogramDistributionImpl implements HistogramDistribution {
     }
 
     @Override
+    //The caller making the list immutable
     public Map<String, Long> getRangeDistributionMap() {
         return rangeDistribution;
     }
