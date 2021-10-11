@@ -30,7 +30,9 @@ import org.apache.phoenix.query.QueryServices;
 public class SizeHistogram extends RangeHistogram {
 
     //default range of bins for size Histograms
-    public static long[] DEFAULT_RANGE = {10,100,1000,10000,100000,1000000,10000000,100000000};
+    public static long[]
+            DEFAULT_RANGE =
+            { 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000 };
     public SizeHistogram(String name, String description, Configuration conf) {
         super(initializeRanges(conf), name, description);
         initializeRanges(conf);

@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.util;
 
-import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
-import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.schema.types.PDataType.ARRAY_TYPE_SUFFIX;
 
 import java.io.File;
@@ -47,10 +45,6 @@ import java.util.TreeSet;
 
 import javax.annotation.Nullable;
 
-import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.phoenix.monitoring.HistogramDistribution;
-import org.apache.phoenix.monitoring.PhoenixTableMetric;
-import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
@@ -99,6 +93,9 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.monitoring.HistogramDistribution;
+import org.apache.phoenix.monitoring.PhoenixTableMetric;
+import org.apache.phoenix.monitoring.TableMetricsManager;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
@@ -106,6 +103,9 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Splitter;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 
 /**
  *
