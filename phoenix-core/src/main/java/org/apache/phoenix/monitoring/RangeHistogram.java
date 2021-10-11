@@ -39,7 +39,7 @@ public class RangeHistogram {
     public RangeHistogram(long[] ranges, String name, String description) {
         Preconditions.checkNotNull(ranges);
         Preconditions.checkArgument(ranges.length != 0);
-        this.ranges = ranges;
+        this.ranges = ranges; // the ranges are static or either provided by user
         this.name = name;
         this.desc = description;
         /*
