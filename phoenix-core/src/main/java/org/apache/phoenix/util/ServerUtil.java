@@ -308,13 +308,13 @@ public class ServerUtil {
             this.connectionType = connectionType;
         }
 
-        private ClusterConnection getConnection() throws IOException {
+        public ClusterConnection getConnection() throws IOException {
             return ConnectionFactory.getConnection(connectionType, conf, server);
         }
 
         @Override
         public HTableInterface getTable(ImmutableBytesPtr tablename) throws IOException {
-            return getConnection().getTable(tablename.copyBytesIfNecessary());
+            return getTable(tablename, null);
         }
 
         @Override
@@ -328,7 +328,19 @@ public class ServerUtil {
         @Override
         public HTableInterface getTable(ImmutableBytesPtr tablename, ExecutorService pool)
                 throws IOException {
-            return getConnection().getTable(tablename.copyBytesIfNecessary(), pool);
+            ClusterConnection connection = null;
+            try {
+                connection = getConnection();
+                if (pool == null) {
+                    return connection.getTable(tablename.copyBytesIfNecessary());
+                }
+                return connection.getTable(tablename.copyBytesIfNecessary(), pool);
+            } catch (IllegalArgumentException e) {
+                if (connection == null || connection.isClosed()) {
+                    throw new IOException("Connection is null or closed. Please retry again.");
+                }
+                throw e;
+            }
         }
     }
 
