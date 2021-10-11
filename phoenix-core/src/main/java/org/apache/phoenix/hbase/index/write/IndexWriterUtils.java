@@ -106,7 +106,7 @@ public class IndexWriterUtils {
      * factory was added as a workaround to the bug reported in
      * https://issues.apache.org/jira/browse/HBASE-18359
      */
-    private static class CoprocessorHConnectionTableFactory implements HTableFactory {
+    public static class CoprocessorHConnectionTableFactory implements HTableFactory {
         @GuardedBy("CoprocessorHConnectionTableFactory.this")
         private RegionCoprocessorEnvironment env;
         private ConnectionType connectionType;
@@ -116,12 +116,12 @@ public class IndexWriterUtils {
             this.connectionType = connectionType;
         }
 
-        private Connection getConnection() throws IOException {
+        public Connection getConnection() throws IOException {
             return ConnectionFactory.getConnection(connectionType, env);
         }
         @Override
         public Table getTable(ImmutableBytesPtr tablename) throws IOException {
-            return getConnection().getTable(TableName.valueOf(tablename.copyBytesIfNecessary()));
+            return getTable(tablename, null);
         }
 
         @Override
@@ -132,7 +132,19 @@ public class IndexWriterUtils {
         @Override
         public Table getTable(ImmutableBytesPtr tablename, ExecutorService pool)
                 throws IOException {
-            return getConnection().getTable(TableName.valueOf(tablename.copyBytesIfNecessary()), pool);
+          Connection connection = null;
+          try {
+            connection = getConnection();
+            if (pool == null) {
+              return connection.getTable(TableName.valueOf(tablename.copyBytesIfNecessary()));
+            }
+            return connection.getTable(TableName.valueOf(tablename.copyBytesIfNecessary()), pool);
+          } catch (IllegalArgumentException e) {
+            if (connection == null || connection.isClosed()) {
+              throw new IOException("Connection is null or closed. Please retry again.");
+            }
+            throw e;
+          }
         }
     }
 }
