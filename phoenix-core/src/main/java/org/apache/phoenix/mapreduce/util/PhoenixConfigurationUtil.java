@@ -878,4 +878,27 @@ public final class PhoenixConfigurationUtil {
         return isSnapshotRestoreManagedExternally;
     }
 
+    /**
+     * Get the value of the <code>name</code> property as a set of comma-delimited
+     * <code>long</code> values.
+     * If no such property exists, null is returned.
+     * Hadoop Configuration object has support for getting ints delimited by comma
+     * but doesn't support for long.
+     * @param name property name
+     * @return property value interpreted as an array of comma-delimited
+     *         <code>long</code> values
+     */
+    public static long[] getLongs(Configuration conf, String name) {
+        String[] strings = conf.getTrimmedStrings(name);
+        // Configuration#getTrimmedStrings will never return null.
+        // If key is not found, it will return empty array.
+        if (strings.length == 0) {
+            return null;
+        }
+        long[] longs = new long[strings.length];
+        for (int i = 0; i < strings.length; i++) {
+            longs[i] = Long.parseLong(strings[i]);
+        }
+        return longs;
+    }
 }

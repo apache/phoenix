@@ -17,22 +17,17 @@
  */
 package org.apache.phoenix.monitoring;
 
-/**
- * Class that exposes the various phoenix metrics collected
- * at the Table level. Because metrics are dynamic in nature, it is not guaranteed that the
- * state exposed will always be in sync with each other. One should use
- * these metrics primarily for monitoring and debugging purposes.
- */
-public interface PhoenixTableMetric extends Metric {
+import java.util.Map;
 
-    /**
-     * @return Number of samples collected since the last {@link #reset()} call.
-     */
-    public long getNumberOfSamples();
+public interface HistogramDistribution {
+    public long getMin();
 
-    /**
-     * @return Sum of the values of the metric sampled since the last {@link #reset()} call.
-     */
-    public long getTotalSum();
+    public long getMax();
+
+    public long getCount();
+
+    public String getHistoName();
+
+    public Map<String, Long> getRangeDistributionMap();
 
 }

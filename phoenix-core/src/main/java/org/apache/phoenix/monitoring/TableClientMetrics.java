@@ -21,6 +21,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.conf.Configuration;
+
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BYTES;
@@ -139,14 +141,16 @@ public class TableClientMetrics {
 
     private final String tableName;
     private final Map<MetricType, PhoenixTableMetric> metricRegister;
+    private TableHistograms tableHistograms;
 
-    public TableClientMetrics(final String tableName) {
+    public TableClientMetrics(final String tableName, Configuration conf) {
         this.tableName = tableName;
         metricRegister = new HashMap<>();
         for (TableMetrics tableMetric : TableMetrics.values()) {
             tableMetric.metric = new PhoenixTableMetricImpl(tableMetric.metricType);
             metricRegister.put(tableMetric.metricType, tableMetric.metric);
         }
+        tableHistograms = new TableHistograms(tableName, conf);
     }
 
     /**
@@ -183,6 +187,10 @@ public class TableClientMetrics {
 
     public Map<MetricType, PhoenixTableMetric> getMetricRegistry() {
         return metricRegister;
+    }
+
+    public TableHistograms getTableHistograms() {
+        return tableHistograms;
     }
 
 }
