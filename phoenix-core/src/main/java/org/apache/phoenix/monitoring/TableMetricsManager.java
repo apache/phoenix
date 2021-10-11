@@ -49,14 +49,15 @@ public class TableMetricsManager {
     private static final Set<String> allowedListOfTableNames = new HashSet<>();
     private static volatile boolean isTableLevelMetricsEnabled;
     private static volatile boolean isMetricPublisherEnabled;
-    private static volatile ConcurrentMap<String, TableClientMetrics> tableClientMetricsMapping = null;
+    private static volatile ConcurrentMap<String, TableClientMetrics>
+            tableClientMetricsMapping =
+            null;
     // Singleton object
     private static volatile TableMetricsManager tableMetricsManager = null;
     private static volatile MetricPublisherSupplierFactory mPublisher = null;
     private static volatile QueryServicesOptions options = null;
 
-    @SuppressWarnings(value="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD",
-            justification="This is how we implement the singleton pattern")
+    @SuppressWarnings(value = "ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD", justification = "This is how we implement the singleton pattern")
     public TableMetricsManager(QueryServicesOptions ops) {
         options = ops;
         isTableLevelMetricsEnabled = options.isTableLevelMetricsEnabled();
@@ -92,8 +93,9 @@ public class TableMetricsManager {
                 if (localRef == null) {
                     QueryServicesOptions options = QueryServicesOptions.withDefaults();
                     if (!options.isTableLevelMetricsEnabled()) {
-                        localRef = tableMetricsManager =
-                                NoOpTableMetricsManager.noOpsTableMetricManager;
+                        localRef =
+                                tableMetricsManager =
+                                        NoOpTableMetricsManager.noOpsTableMetricManager;
                         return localRef;
                     }
                     localRef = tableMetricsManager = new TableMetricsManager(options);
@@ -185,7 +187,7 @@ public class TableMetricsManager {
     public void pushMetricsFromConnInstance(Map<String, Map<MetricType, Long>> map) {
 
         if (map == null) {
-            LOGGER.debug("Phoenix table level metrics input map cannott be null");
+            LOGGER.debug("Phoenix table level metrics input map cannot be null");
             return;
         }
 
@@ -230,7 +232,7 @@ public class TableMetricsManager {
      * @param tableName
      * @return TableClientMetrics object
      */
-    private TableClientMetrics getTableClientMetrics(String tableName) {
+    public TableClientMetrics getTableClientMetrics(String tableName) {
 
         if (Strings.isNullOrEmpty(tableName)) {
             LOGGER.debug("Phoenix Table metrics TableName cannot be null or empty");
@@ -249,7 +251,7 @@ public class TableMetricsManager {
                 if (tInstance == null) {
                     LOGGER.info(String.format("Phoenix Table metrics creating object for table: %s",
                             tableName));
-                    tInstance = new TableClientMetrics(tableName);
+                    tInstance = new TableClientMetrics(tableName, options.getConfiguration());
                     if (isMetricPublisherEnabled && mPublisher != null) {
                         mPublisher.registerMetrics(tInstance);
                     }
@@ -291,4 +293,169 @@ public class TableMetricsManager {
     public void clear() {
         TableMetricsManager.clearTableLevelMetricsMethod();
     }
+
+    public static Map<String, List<HistogramDistribution>> getSizeHistogramsForAllTables() {
+        Map<String, List<HistogramDistribution>> map = new HashMap<>();
+        for (Map.Entry<String, TableClientMetrics> entry : tableClientMetricsMapping.entrySet()) {
+            TableHistograms tableHistograms = entry.getValue().getTableHistograms();
+        }
+        return map;
+    }
+
+    public static Map<String, List<HistogramDistribution>> getLatencyHistogramsForAllTables() {
+
+        Map<String, List<HistogramDistribution>> map = new HashMap<>();
+        for (Map.Entry<String, TableClientMetrics> entry : tableClientMetricsMapping.entrySet()) {
+            TableHistograms tableHistograms = entry.getValue().getTableHistograms();
+            map.put(entry.getKey(), tableHistograms.getTableLatencyHistogramsDistribution());
+        }
+        return map;
+    }
+
+    public static LatencyHistogram getUpsertLatencyHistogramForTable(String tableName) {
+        TableClientMetrics tableMetrics;
+        if ((tableMetrics = getTableClientMetricsInstance(tableName)) != null) {
+            return tableMetrics.getTableHistograms().getUpsertLatencyHisto();
+        }
+        return null;
+    }
+
+    public static SizeHistogram getUpsertSizeHistogramForTable(String tableName) {
+        TableClientMetrics tableMetrics;
+        if ((tableMetrics = getTableClientMetricsInstance(tableName)) != null) {
+            return tableMetrics.getTableHistograms().getUpsertSizeHisto();
+        }
+        return null;
+    }
+
+    public static LatencyHistogram getDeleteLatencyHistogramForTable(String tableName) {
+        TableClientMetrics tableMetrics;
+        if ((tableMetrics = getTableClientMetricsInstance(tableName)) != null) {
+            return tableMetrics.getTableHistograms().getDeleteLatencyHisto();
+        }
+        return null;
+    }
+
+    public static SizeHistogram getDeleteSizeHistogramForTable(String tableName) {
+        TableClientMetrics tableMetrics;
+        if ((tableMetrics = getTableClientMetricsInstance(tableName)) != null) {
+            return tableMetrics.getTableHistograms().getDeleteSizeHisto();
+        }
+        return null;
+    }
+
+    public static LatencyHistogram getQueryLatencyHistogramForTable(String tableName) {
+        TableClientMetrics tableMetrics;
+        if ((tableMetrics = getTableClientMetricsInstance(tableName)) != null) {
+            return tableMetrics.getTableHistograms().getQueryLatencyHisto();
+        }
+        return null;
+    }
+
+    public static SizeHistogram getQuerySizeHistogramForTable(String tableName) {
+        TableClientMetrics tableMetrics;
+        if ((tableMetrics = getTableClientMetricsInstance(tableName)) != null) {
+            return tableMetrics.getTableHistograms().getQuerySizeHisto();
+        }
+        return null;
+    }
+
+    public static LatencyHistogram getPointLookupLatencyHistogramForTable(String tableName) {
+        TableClientMetrics tableMetrics;
+        if ((tableMetrics = getTableClientMetricsInstance(tableName)) != null) {
+            return tableMetrics.getTableHistograms().getPointLookupLatencyHisto();
+        }
+        return null;
+    }
+
+    public static SizeHistogram getPointLookupSizeHistogramForTable(String tableName) {
+        TableClientMetrics tableMetrics;
+        if ((tableMetrics = getTableClientMetricsInstance(tableName)) != null) {
+            return tableMetrics.getTableHistograms().getPointLookupSizeHisto();
+        }
+        return null;
+    }
+
+    public static LatencyHistogram getRangeScanLatencyHistogramForTable(String tableName) {
+        TableClientMetrics tableMetrics;
+        if ((tableMetrics = getTableClientMetricsInstance(tableName)) != null) {
+            return tableMetrics.getTableHistograms().getRangeScanLatencyHisto();
+        }
+        return null;
+    }
+
+    public static SizeHistogram getRangeScanSizeHistogramForTable(String tableName) {
+        TableClientMetrics tableMetrics;
+        if ((tableMetrics = getTableClientMetricsInstance(tableName)) != null) {
+            return tableMetrics.getTableHistograms().getRangeScanSizeHisto();
+        }
+        return null;
+    }
+
+    public static void updateHistogramMetricsForQueryLatency(String tableName, long elapsedTime,
+            boolean isPointLookup) {
+        TableClientMetrics tableMetrics;
+        if ((tableMetrics = getTableClientMetricsInstance(tableName)) != null) {
+            LOGGER.trace("Updating latency histograms for select query: tableName: " + tableName
+                    + " isPointLookup: " + isPointLookup + " elapsedTime: " + elapsedTime);
+            tableMetrics.getTableHistograms().getQueryLatencyHisto().add(elapsedTime);
+            if (isPointLookup) {
+                tableMetrics.getTableHistograms().getPointLookupLatencyHisto().add(elapsedTime);
+            } else {
+                tableMetrics.getTableHistograms().getRangeScanLatencyHisto().add(elapsedTime);
+            }
+        }
+    }
+
+    public static void updateHistogramMetricsForQueryScanBytes(long scanBytes, String tableName,
+            boolean isPointLookup) {
+        TableClientMetrics tableMetrics;
+        if ((tableMetrics = getTableClientMetricsInstance(tableName)) != null) {
+            tableMetrics.getTableHistograms().getQuerySizeHisto().add(scanBytes);
+            if (isPointLookup) {
+                tableMetrics.getTableHistograms().getPointLookupSizeHisto().add(scanBytes);
+            } else {
+                tableMetrics.getTableHistograms().getRangeScanSizeHisto().add(scanBytes);
+            }
+        }
+    }
+
+    public static void updateSizeHistogramMetricsForMutations(String tableName, long mutationBytes,
+            boolean isUpsert) {
+        TableClientMetrics tableMetrics;
+        if ((tableMetrics = getTableClientMetricsInstance(tableName)) != null) {
+            LOGGER.trace("Updating size histograms for mutations: tableName: " + tableName
+                    + " isUpsert: " + isUpsert + "  mutation bytes: " + mutationBytes);
+
+            if (isUpsert) {
+                tableMetrics.getTableHistograms().getUpsertSizeHisto().add(mutationBytes);
+            } else {
+                tableMetrics.getTableHistograms().getDeleteSizeHisto().add(mutationBytes);
+            }
+        }
+    }
+
+    private static TableClientMetrics getTableClientMetricsInstance(String tableName) {
+        TableClientMetrics tableMetrics = getInstance().getTableClientMetrics(tableName);
+        if (tableMetrics == null) {
+            LOGGER.trace("Table level client metrics are disabled for table: " + tableName);
+            return null;
+        }
+        return tableMetrics;
+    }
+
+    public static void updateLatencyHistogramForMutations(String tableName, long elapsedTime,
+            boolean isUpsert) {
+        TableClientMetrics tableMetrics;
+        if ((tableMetrics = getTableClientMetricsInstance(tableName)) != null) {
+            LOGGER.trace("Updating latency histograms for mutations: tableName: " + tableName
+                    + " isUpsert: " + isUpsert + "  elapsedTime: " + elapsedTime);
+            if (isUpsert) {
+                tableMetrics.getTableHistograms().getUpsertLatencyHisto().add(elapsedTime);
+            } else {
+                tableMetrics.getTableHistograms().getDeleteLatencyHisto().add(elapsedTime);
+            }
+        }
+    }
+
 }

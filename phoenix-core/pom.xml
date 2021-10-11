@@ -507,6 +507,11 @@
       <groupId> org.jruby.jcodings</groupId>
       <artifactId>jcodings</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.hdrhistogram</groupId>
+      <artifactId>HdrHistogram</artifactId>
+      <version>2.1.12</version>
+    </dependency>
 
     <!-- Other test dependencies -->
     <dependency>

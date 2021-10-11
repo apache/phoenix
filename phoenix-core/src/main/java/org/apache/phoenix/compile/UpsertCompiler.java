@@ -1038,7 +1038,7 @@ public class UpsertCompiler {
         }
     }
 
-    private class ServerUpsertSelectMutationPlan implements MutationPlan {
+    public class ServerUpsertSelectMutationPlan implements MutationPlan {
         private final QueryPlan queryPlan;
         private final TableRef tableRef;
         private final QueryPlan originalQueryPlan;

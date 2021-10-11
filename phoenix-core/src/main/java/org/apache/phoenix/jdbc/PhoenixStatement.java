@@ -620,6 +620,17 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                             TableMetricsManager.updateMetricsMethod(tableName, isUpsert ? UPSERT_AGGREGATE_FAILURE_SQL_COUNTER:
                                                     DELETE_AGGREGATE_FAILURE_SQL_COUNTER, 1);
                                         }
+                                        if (plan instanceof DeleteCompiler.ServerSelectDeleteMutationPlan
+                                                || plan instanceof UpsertCompiler.ServerUpsertSelectMutationPlan) {
+                                            TableMetricsManager.updateLatencyHistogramForMutations(
+                                                    tableName, executeMutationTimeSpent, false);
+                                            // We won't have size histograms for delete mutations when auto commit is set to true and
+                                            // if plan is of ServerSelectDeleteMutationPlan or ServerUpsertSelectMutationPlan
+                                            // since the update happens on server.
+                                        } else {
+                                            state.addExecuteMutationTime(
+                                                    executeMutationTimeSpent, tableName);
+                                        }
                                     }
                                 }
 
