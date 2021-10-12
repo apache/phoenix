@@ -22,6 +22,7 @@ import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_FAILURE_
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_SUCCESS_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILURES;
 import static org.apache.phoenix.query.QueryServices.SOURCE_OPERATION_ATTRIB;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_FAILED_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_SIZE;
@@ -899,55 +900,64 @@ public class MutationState implements SQLCloseable {
             throws SQLException {
         MetaDataClient client = new MetaDataClient(connection);
         long serverTimeStamp = tableRef.getTimeStamp();
-        // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
-        // so no need to do it again here.
-        PTable table = tableRef.getTable();
+        PTable table = null;
+        try {
+            // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
+            // so no need to do it again here.
+            table = tableRef.getTable();
 
-        // We generally don't re-resolve SYSTEM tables, but if it relies on ROW_TIMESTAMP, we must
-        // get the latest timestamp in order to upsert data with the correct server-side timestamp
-        // in case the ROW_TIMESTAMP is not provided in the UPSERT statement.
-        boolean hitServerForLatestTimestamp =
-                table.getRowTimestampColPos() != -1 && table.getType() == PTableType.SYSTEM;
-        MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(),
-                table.getTableName().getString(), hitServerForLatestTimestamp);
-        PTable resolvedTable = result.getTable();
-        if (resolvedTable == null) { throw new TableNotFoundException(table.getSchemaName().getString(), table
-                .getTableName().getString()); }
-        // Always update tableRef table as the one we've cached may be out of date since when we executed
-        // the UPSERT VALUES call and updated in the cache before this.
-        tableRef.setTable(resolvedTable);
-        List<PTable> indexes = resolvedTable.getIndexes();
-        for (PTable idxTtable : indexes) {
-            // If index is still active, but has a non zero INDEX_DISABLE_TIMESTAMP value, then infer that
-            // our failure mode is block writes on index failure.
-            if ((idxTtable.getIndexState() == PIndexState.ACTIVE || idxTtable.getIndexState() == PIndexState.PENDING_ACTIVE)
-                    && idxTtable.getIndexDisableTimestamp() > 0) { throw new SQLExceptionInfo.Builder(
-                    SQLExceptionCode.INDEX_FAILURE_BLOCK_WRITE).setSchemaName(table.getSchemaName().getString())
-                    .setTableName(table.getTableName().getString()).build().buildException(); }
-        }
-        long timestamp = result.getMutationTime();
-        if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
-            serverTimeStamp = timestamp;
-            if (result.wasUpdated()) {
-                List<PColumn> columns = Lists.newArrayListWithExpectedSize(table.getColumns().size());
-                for (Map.Entry<ImmutableBytesPtr, RowMutationState> rowEntry : rowKeyToColumnMap.entrySet()) {
-                    RowMutationState valueEntry = rowEntry.getValue();
-                    if (valueEntry != null) {
-                        Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
-                        if (colValues != PRow.DELETE_MARKER) {
-                            for (PColumn column : colValues.keySet()) {
-                                if (!column.isDynamic()) columns.add(column);
+            // We generally don't re-resolve SYSTEM tables, but if it relies on ROW_TIMESTAMP, we must
+            // get the latest timestamp in order to upsert data with the correct server-side timestamp
+            // in case the ROW_TIMESTAMP is not provided in the UPSERT statement.
+            boolean hitServerForLatestTimestamp =
+                    table.getRowTimestampColPos() != -1 && table.getType() == PTableType.SYSTEM;
+            MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(),
+                    table.getTableName().getString(), hitServerForLatestTimestamp);
+            PTable resolvedTable = result.getTable();
+            if (resolvedTable == null) { throw new TableNotFoundException(table.getSchemaName().getString(), table
+                    .getTableName().getString()); }
+            // Always update tableRef table as the one we've cached may be out of date since when we executed
+            // the UPSERT VALUES call and updated in the cache before this.
+            tableRef.setTable(resolvedTable);
+            List<PTable> indexes = resolvedTable.getIndexes();
+            for (PTable idxTtable : indexes) {
+                // If index is still active, but has a non zero INDEX_DISABLE_TIMESTAMP value, then infer that
+                // our failure mode is block writes on index failure.
+                if ((idxTtable.getIndexState() == PIndexState.ACTIVE || idxTtable.getIndexState() == PIndexState.PENDING_ACTIVE)
+                        && idxTtable.getIndexDisableTimestamp() > 0) { throw new SQLExceptionInfo.Builder(
+                        SQLExceptionCode.INDEX_FAILURE_BLOCK_WRITE).setSchemaName(table.getSchemaName().getString())
+                        .setTableName(table.getTableName().getString()).build().buildException(); }
+            }
+            long timestamp = result.getMutationTime();
+            if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
+                serverTimeStamp = timestamp;
+                if (result.wasUpdated()) {
+                    List<PColumn> columns = Lists.newArrayListWithExpectedSize(table.getColumns().size());
+                    for (Map.Entry<ImmutableBytesPtr, RowMutationState> rowEntry : rowKeyToColumnMap.entrySet()) {
+                        RowMutationState valueEntry = rowEntry.getValue();
+                        if (valueEntry != null) {
+                            Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
+                            if (colValues != PRow.DELETE_MARKER) {
+                                for (PColumn column : colValues.keySet()) {
+                                    if (!column.isDynamic()) columns.add(column);
+                                }
                             }
                         }
                     }
-                }
-                for (PColumn column : columns) {
-                    if (column != null) {
-                        resolvedTable.getColumnFamily(column.getFamilyName().getString()).getPColumnForColumnName(
-                                column.getName().getString());
+                    for (PColumn column : columns) {
+                        if (column != null) {
+                            resolvedTable.getColumnFamily(column.getFamilyName().getString()).getPColumnForColumnName(
+                                    column.getName().getString());
+                        }
                     }
                 }
             }
+        } catch(Throwable e) {
+            if(table != null) {
+                TableMetricsManager.updateMetricsForSystemCatalogTableMethod(table.getTableName().toString(),
+                        NUM_METADATA_LOOKUP_FAILURES, 1);
+            }
+            throw e;
         }
         return serverTimeStamp == QueryConstants.UNSET_TIMESTAMP ? HConstants.LATEST_TIMESTAMP : serverTimeStamp;
     }
@@ -1915,39 +1925,50 @@ public class MutationState implements SQLCloseable {
         PMetaData cache = connection.getMetaDataCache();
         boolean addedAnyIndexes = false;
         boolean allImmutableTables = !txTableRefs.isEmpty();
-        for (TableRef tableRef : txTableRefs) {
-            PTable dataTable = tableRef.getTable();
-            List<PTable> oldIndexes;
-            PTableRef ptableRef = cache.getTableRef(dataTable.getKey());
-            oldIndexes = ptableRef.getTable().getIndexes();
-            // Always check at server for metadata change, as it's possible that the table is configured to not check
-            // for metadata changes
-            // but in this case, the tx manager is telling us it's likely that there has been a change.
-            MetaDataMutationResult result = client.updateCache(dataTable.getTenantId(), dataTable.getSchemaName()
-                    .getString(), dataTable.getTableName().getString(), true);
-            long timestamp = TransactionUtil.getResolvedTime(connection, result);
-            tableRef.setTimeStamp(timestamp);
-            PTable updatedDataTable = result.getTable();
-            if (updatedDataTable == null) { throw new TableNotFoundException(dataTable.getSchemaName().getString(),
-                    dataTable.getTableName().getString()); }
-            allImmutableTables &= updatedDataTable.isImmutableRows();
-            tableRef.setTable(updatedDataTable);
-            if (!addedAnyIndexes) {
-                // TODO: in theory we should do a deep equals check here, as it's possible
-                // that an index was dropped and recreated with the same name but different
-                // indexed/covered columns.
-                addedAnyIndexes = (!oldIndexes.equals(updatedDataTable.getIndexes()));
-                if (LOGGER.isInfoEnabled())
-                    LOGGER.info((addedAnyIndexes ? "Updates " : "No updates ") + "as of " + timestamp + " to "
-                            + updatedDataTable.getName().getString() + " with indexes " + updatedDataTable.getIndexes());
+        PTable dataTable = null;
+        try {
+            for (TableRef tableRef : txTableRefs) {
+                dataTable = tableRef.getTable();
+                List<PTable> oldIndexes;
+                PTableRef ptableRef = cache.getTableRef(dataTable.getKey());
+                oldIndexes = ptableRef.getTable().getIndexes();
+                // Always check at server for metadata change, as it's possible that the table is configured to not check
+                // for metadata changes
+                // but in this case, the tx manager is telling us it's likely that there has been a change.
+                MetaDataMutationResult result = client.updateCache(dataTable.getTenantId(), dataTable.getSchemaName()
+                        .getString(), dataTable.getTableName().getString(), true);
+                long timestamp = TransactionUtil.getResolvedTime(connection, result);
+                tableRef.setTimeStamp(timestamp);
+                PTable updatedDataTable = result.getTable();
+                if (updatedDataTable == null) {
+                    throw new TableNotFoundException(dataTable.getSchemaName().getString(),
+                            dataTable.getTableName().getString());
+                }
+                allImmutableTables &= updatedDataTable.isImmutableRows();
+                tableRef.setTable(updatedDataTable);
+                if (!addedAnyIndexes) {
+                    // TODO: in theory we should do a deep equals check here, as it's possible
+                    // that an index was dropped and recreated with the same name but different
+                    // indexed/covered columns.
+                    addedAnyIndexes = (!oldIndexes.equals(updatedDataTable.getIndexes()));
+                    if (LOGGER.isInfoEnabled())
+                        LOGGER.info((addedAnyIndexes ? "Updates " : "No updates ") + "as of " + timestamp + " to "
+                                + updatedDataTable.getName().getString() + " with indexes " + updatedDataTable.getIndexes());
+                }
             }
+            if (LOGGER.isInfoEnabled())
+                LOGGER.info((addedAnyIndexes ? "Updates " : "No updates ") + "to indexes as of " + getInitialWritePointer()
+                        + " over " + (allImmutableTables ? " all immutable tables" : " some mutable tables"));
+            // If all tables are immutable, we know the conflict we got was due to our DDL/DML fence.
+            // If any indexes were added, then the conflict might be due to DDL/DML fence.
+            return allImmutableTables || addedAnyIndexes;
+        } catch (Throwable e) {
+            if (dataTable != null) {
+                TableMetricsManager.updateMetricsForSystemCatalogTableMethod(
+                        dataTable.getTableName().toString(), NUM_METADATA_LOOKUP_FAILURES, 1);
+            }
+            throw e;
         }
-        if (LOGGER.isInfoEnabled())
-            LOGGER.info((addedAnyIndexes ? "Updates " : "No updates ") + "to indexes as of " + getInitialWritePointer()
-                    + " over " + (allImmutableTables ? " all immutable tables" : " some mutable tables"));
-        // If all tables are immutable, we know the conflict we got was due to our DDL/DML fence.
-        // If any indexes were added, then the conflict might be due to DDL/DML fence.
-        return allImmutableTables || addedAnyIndexes;
     }
 
     /**

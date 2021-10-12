@@ -157,8 +157,16 @@ public enum MetricType {
     COUNT_ROWS_SCANNED("ws", "Number of rows scanned",LogLevel.DEBUG, PLong.INSTANCE),
     COUNT_ROWS_FILTERED("wf", "Number of rows filtered",LogLevel.DEBUG,PLong.INSTANCE),
     COUNTER_METADATA_INCONSISTENCY("mi", "Number of times the metadata inconsistencies ",
-            LogLevel.DEBUG, PLong.INSTANCE);
-	
+            LogLevel.DEBUG, PLong.INSTANCE),
+    NUM_SYSTEM_TABLE_RPC_SUCCESS("nstrs", "Number of successful system table RPC calls",
+            LogLevel.DEBUG,PLong.INSTANCE),
+    NUM_SYSTEM_TABLE_RPC_FAILURES("nstcf", "Number of Failed system table RPC calls ",
+            LogLevel.DEBUG,PLong.INSTANCE),
+    NUM_METADATA_LOOKUP_FAILURES("nmlf", "Number of Failed  metadata lookup calls",
+            LogLevel.DEBUG,PLong.INSTANCE),
+    TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS("tsistrc", "Time spent in RPC calls for systemTable lookup",
+            LogLevel.DEBUG,PLong.INSTANCE);
+
     private final String description;
     private final String shortName;
     private LogLevel logLevel;
