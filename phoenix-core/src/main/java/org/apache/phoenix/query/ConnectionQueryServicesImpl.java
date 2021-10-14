@@ -1824,6 +1824,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableName,
                                 NUM_SYSTEM_TABLE_RPC_FAILURES, 1);
                     }
+                    Closeables.closeQuietly(ht);
                 }
             }
         } catch (IOException e) {
