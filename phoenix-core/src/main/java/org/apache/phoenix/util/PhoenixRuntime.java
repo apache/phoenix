@@ -19,6 +19,7 @@ package org.apache.phoenix.util;
 
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILURES;
 import static org.apache.phoenix.schema.types.PDataType.ARRAY_TYPE_SUFFIX;
 
 import java.io.File;
@@ -75,6 +76,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.GlobalMetric;
 import org.apache.phoenix.monitoring.MetricType;
@@ -460,7 +462,7 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     public static PTable getTable(Connection conn, String name) throws SQLException {
-        PTable table = null;
+        PTable table;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         try {
             table = pconn.getTable(new PTableKey(pconn.getTenantId(), name));
@@ -470,6 +472,7 @@ public class PhoenixRuntime {
             MetaDataMutationResult result =
                     new MetaDataClient(pconn).updateCache(schemaName, tableName);
             if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+                TableMetricsManager.updateMetricsForSystemCatalogTableMethod(name, NUM_METADATA_LOOKUP_FAILURES, 1);
                 throw e;
             }
             table = result.getTable();

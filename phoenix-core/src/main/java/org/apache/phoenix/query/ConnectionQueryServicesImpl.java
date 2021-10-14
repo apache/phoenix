@@ -66,6 +66,9 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HCONNECTI
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_SERVICES_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY;
+import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_FAILURES;
+import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS;
+import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_ENABLED;
@@ -222,6 +225,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
+import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.protobuf.ProtobufUtil;
@@ -1629,36 +1633,47 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         int minHBaseVersion = Integer.MAX_VALUE;
         boolean isTableNamespaceMappingEnabled = false;
         long systemCatalogTimestamp = Long.MAX_VALUE;
+        long startTime = 0L;
+        long systemCatalogRpcTime;
+        Map<byte[], GetVersionResponse> results;
         HTableInterface ht = null;
+
         try {
-            ht = this.getTable(metaTable);
-            final byte[] tablekey = PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
-            Map<byte[], GetVersionResponse> results;
             try {
+                startTime = EnvironmentEdgeManager.currentTimeMillis();
+                ht = this.getTable(metaTable);
+                final byte[] tableKey = PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
                 results =
-                        ht.coprocessorService(MetaDataService.class, tablekey, tablekey,
-                            new Batch.Call<MetaDataService, GetVersionResponse>() {
-                                @Override
-                                public GetVersionResponse call(MetaDataService instance)
-                                        throws IOException {
-                                    ServerRpcController controller = new ServerRpcController();
-                                    BlockingRpcCallback<GetVersionResponse> rpcCallback =
-                                            new BlockingRpcCallback<>();
-                                    GetVersionRequest.Builder builder =
-                                            GetVersionRequest.newBuilder();
-                                    builder.setClientVersion(
-                                        VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION,
-                                            PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
-                                    instance.getVersion(controller, builder.build(), rpcCallback);
-                                    if (controller.getFailedOn() != null) {
-                                        throw controller.getFailedOn();
+                        ht.coprocessorService(MetaDataService.class, tableKey, tableKey,
+                                new Batch.Call<MetaDataService, GetVersionResponse>() {
+                                    @Override
+                                    public GetVersionResponse call(MetaDataService instance)
+                                            throws IOException {
+                                        ServerRpcController controller = new ServerRpcController();
+                                        BlockingRpcCallback<GetVersionResponse> rpcCallback =
+                                                new BlockingRpcCallback<>();
+                                        GetVersionRequest.Builder builder =
+                                                GetVersionRequest.newBuilder();
+                                        builder.setClientVersion(
+                                                VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION,
+                                                        PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
+                                        instance.getVersion(controller, builder.build(), rpcCallback);
+                                        if (controller.getFailedOn() != null) {
+                                            throw controller.getFailedOn();
+                                        }
+                                        return rpcCallback.get();
                                     }
-                                    return rpcCallback.get();
-                                }
-                            });
-            } catch (Throwable t) {
-                throw ServerUtil.parseServerException(t);
+                                });
+                TableMetricsManager.updateMetricsForSystemCatalogTableMethod(null, NUM_SYSTEM_TABLE_RPC_SUCCESS, 1);
+            } catch (Throwable e) {
+                TableMetricsManager.updateMetricsForSystemCatalogTableMethod(null, NUM_SYSTEM_TABLE_RPC_FAILURES, 1);
+                throw ServerUtil.parseServerException(e);
+            } finally {
+                systemCatalogRpcTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
+                TableMetricsManager.updateMetricsForSystemCatalogTableMethod(null,
+                        TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS, systemCatalogRpcTime);
             }
+
             for (Map.Entry<byte[], GetVersionResponse> result : results.entrySet()) {
                 // This is the "phoenix.jar" is in-place, but server is out-of-sync with client case.
                 GetVersionResponse versionResponse = result.getValue();
@@ -1761,29 +1776,32 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * Invoke meta data coprocessor with one retry if the key was found to not be in the regions
      * (due to a table split)
      */
-    private MetaDataMutationResult metaDataCoprocessorExec(byte[] tableKey,
-            Batch.Call<MetaDataService, MetaDataResponse> callable) throws SQLException {
-        return metaDataCoprocessorExec(tableKey, callable, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+    private MetaDataMutationResult metaDataCoprocessorExec(String tableName, byte[] tableKey,
+                                                           Batch.Call<MetaDataService, MetaDataResponse> callable)
+            throws SQLException {
+        return metaDataCoprocessorExec(tableName, tableKey, callable, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+
     }
 
     /**
      * Invoke meta data coprocessor with one retry if the key was found to not be in the regions
      * (due to a table split)
      */
-    private MetaDataMutationResult metaDataCoprocessorExec(byte[] tableKey,
-            Batch.Call<MetaDataService, MetaDataResponse> callable, byte[] tableName) throws SQLException {
-
+    private MetaDataMutationResult metaDataCoprocessorExec(String tableName, byte[] tableKey,
+            Batch.Call<MetaDataService, MetaDataResponse> callable, byte[] systemTableName) throws SQLException {
+        Map<byte[], MetaDataResponse> results;
         try {
+            boolean success = false;
             boolean retried = false;
+            long startTime = EnvironmentEdgeManager.currentTimeMillis();
             while (true) {
                 if (retried) {
-                    connection.relocateRegion(SchemaUtil.getPhysicalName(tableName, this.getProps()), tableKey);
+                    connection.relocateRegion(SchemaUtil.getPhysicalName(systemTableName, this.getProps()), tableKey);
                 }
-
-                HTableInterface ht = this.getTable(SchemaUtil.getPhysicalName(tableName, this.getProps()).getName());
+                HTableInterface ht =
+                        this.getTable(SchemaUtil.getPhysicalName(systemTableName, this.getProps()).getName());
                 try {
-                    final Map<byte[], MetaDataResponse> results =
-                            ht.coprocessorService(MetaDataService.class, tableKey, tableKey, callable);
+                    results = ht. coprocessorService(MetaDataService.class, tableKey, tableKey, callable);
 
                     assert(results.size() == 1);
                     MetaDataResponse result = results.values().iterator().next();
@@ -1793,8 +1811,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         retried = true;
                         continue;
                     }
+                    success = true;
                     return MetaDataMutationResult.constructFromProto(result);
                 } finally {
+                    long systemCatalogRpcTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
+                    TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableName,
+                            TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS, systemCatalogRpcTime);
+                    if (success) {
+                        TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableName,
+                                NUM_SYSTEM_TABLE_RPC_SUCCESS, 1);
+                    } else {
+                        TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableName,
+                                NUM_SYSTEM_TABLE_RPC_FAILURES, 1);
+                    }
                     Closeables.closeQuietly(ht);
                 }
             }
@@ -1977,7 +2006,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
         // Send the remaining metadata mutations to SYSTEM.CATALOG
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
-        return metaDataCoprocessorExec(tableKey,
+        return metaDataCoprocessorExec(
+                SchemaUtil.getPhysicalHBaseTableName(schemaBytes, tableBytes,
+                        SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, this.props)).toString(),
+                tableKey,
                 new Batch.Call<MetaDataService, MetaDataResponse>() {
             @Override
             public MetaDataResponse call(MetaDataService instance) throws IOException {
@@ -2011,7 +2043,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             final byte[] tableBytes, final long tableTimestamp, final long clientTimestamp) throws SQLException {
         final byte[] tenantIdBytes = tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getBytes();
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
-        return metaDataCoprocessorExec(tableKey,
+
+        ;
+        return metaDataCoprocessorExec(
+                SchemaUtil.getPhysicalHBaseTableName(schemaBytes, tableBytes,
+                        SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, this.props)).toString(),
+                tableKey,
                 new Batch.Call<MetaDataService, MetaDataResponse>() {
             @Override
             public MetaDataResponse call(MetaDataService instance) throws IOException {
@@ -2043,7 +2080,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] schemaBytes = rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
         byte[] tableBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantIdBytes, schemaBytes, tableBytes);
-        final MetaDataMutationResult result =  metaDataCoprocessorExec(tableKey,
+        final MetaDataMutationResult result =  metaDataCoprocessorExec(
+                SchemaUtil.getPhysicalHBaseTableName(schemaBytes, tableBytes,
+                        SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, this.props)).toString(),
+                tableKey,
                 new Batch.Call<MetaDataService, MetaDataResponse>() {
             @Override
             public MetaDataResponse call(MetaDataService instance) throws IOException {
@@ -2130,7 +2170,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] functionBytes = rowKeyMetadata[PhoenixDatabaseMetaData.FUNTION_NAME_INDEX];
         byte[] functionKey = SchemaUtil.getFunctionKey(tenantIdBytes, functionBytes);
 
-        final MetaDataMutationResult result =  metaDataCoprocessorExec(functionKey,
+        final MetaDataMutationResult result =  metaDataCoprocessorExec(null, functionKey,
                 new Batch.Call<MetaDataService, MetaDataResponse>() {
             @Override
             public MetaDataResponse call(MetaDataService instance) throws IOException {
@@ -2342,7 +2382,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             final boolean addingColumns = columns != null && columns.size() > 0;
-            result =  metaDataCoprocessorExec(tableKey,
+            result =  metaDataCoprocessorExec(
+                    SchemaUtil.getPhysicalHBaseTableName(schemaBytes, tableBytes,
+                            SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, this.props)).toString(),
+                    tableKey,
                     new Batch.Call<MetaDataService, MetaDataResponse>() {
                 @Override
                 public MetaDataResponse call(MetaDataService instance) throws IOException {
@@ -3038,7 +3081,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] schemaBytes = rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
         byte[] tableBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
-        MetaDataMutationResult result = metaDataCoprocessorExec(tableKey,
+
+        MetaDataMutationResult result = metaDataCoprocessorExec(
+                SchemaUtil.getPhysicalHBaseTableName(schemaBytes, tableBytes,
+                        SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, this.props)).toString() ,
+                tableKey,
                 new Batch.Call<MetaDataService, MetaDataResponse>() {
             @Override
             public MetaDataResponse call(MetaDataService instance) throws IOException {
@@ -4762,30 +4809,44 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             latestMetaData = newEmptyMetaData();
         }
         tableStatsCache.invalidateAll();
+        long startTime = 0L;
+        long systemCatalogRpcTime;
+        Map<byte[], Long> results;
         try (HTableInterface htable =
                 this.getTable(
                     SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
                         this.getProps()).getName())) {
-            final Map<byte[], Long> results =
-                    htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW,
-                        HConstants.EMPTY_END_ROW, new Batch.Call<MetaDataService, Long>() {
-                            @Override
-                            public Long call(MetaDataService instance) throws IOException {
-                                ServerRpcController controller = new ServerRpcController();
-                                BlockingRpcCallback<ClearCacheResponse> rpcCallback =
-                                        new BlockingRpcCallback<ClearCacheResponse>();
-                                ClearCacheRequest.Builder builder = ClearCacheRequest.newBuilder();
-                                builder.setClientVersion(
-                                    VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION,
-                                        PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
-                                instance.clearCache(controller, builder.build(), rpcCallback);
-                                if (controller.getFailedOn() != null) {
-                                    throw controller.getFailedOn();
+            try {
+            startTime = EnvironmentEdgeManager.currentTimeMillis();
+            results = htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW,
+                            HConstants.EMPTY_END_ROW, new Batch.Call<MetaDataService, Long>() {
+                                @Override
+                                public Long call(MetaDataService instance) throws IOException {
+                                    ServerRpcController controller = new ServerRpcController();
+                                    BlockingRpcCallback<ClearCacheResponse> rpcCallback =
+                                            new BlockingRpcCallback<ClearCacheResponse>();
+                                    ClearCacheRequest.Builder builder = ClearCacheRequest.newBuilder();
+                                    builder.setClientVersion(
+                                            VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION,
+                                                    PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
+                                    instance.clearCache(controller, builder.build(), rpcCallback);
+                                    if (controller.getFailedOn() != null) {
+                                        throw controller.getFailedOn();
+                                    }
+                                    return rpcCallback.get().getUnfreedBytes();
                                 }
-                                return rpcCallback.get().getUnfreedBytes();
-                            }
-                        });
-            long unfreedBytes = 0;
+                            });
+            TableMetricsManager.updateMetricsForSystemCatalogTableMethod(null,NUM_SYSTEM_TABLE_RPC_SUCCESS, 1);
+        } catch(Throwable e) {
+            TableMetricsManager.updateMetricsForSystemCatalogTableMethod(null, NUM_SYSTEM_TABLE_RPC_FAILURES, 1);
+            throw ServerUtil.parseServerException(e);
+        } finally {
+            systemCatalogRpcTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
+            TableMetricsManager.updateMetricsForSystemCatalogTableMethod(null,
+                    TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS, systemCatalogRpcTime);
+        }
+
+        long unfreedBytes = 0;
             for (Map.Entry<byte[], Long> result : results.entrySet()) {
                 if (result.getValue() != null) {
                     unfreedBytes += result.getValue();
@@ -4833,7 +4894,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 SchemaUtil.getTableKey(rowKeyMetadata[PhoenixDatabaseMetaData.TENANT_ID_INDEX],
                     rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX],
                     rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX]);
-        return metaDataCoprocessorExec(tableKey,
+        byte[] schemaBytes = rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
+        byte[] tableBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+        return metaDataCoprocessorExec(
+                SchemaUtil.getPhysicalHBaseTableName(schemaBytes, tableBytes,
+                        SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, this.props)).toString(),
+                tableKey,
                 new Batch.Call<MetaDataService, MetaDataResponse>() {
             @Override
             public MetaDataResponse call(MetaDataService instance) throws IOException {
@@ -5097,12 +5163,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public void clearTableFromCache(final byte[] tenantId, final byte[] schemaName, final byte[] tableName,
             final long clientTS) throws SQLException {
         // clear the meta data cache for the table here
+        boolean success = false;
         try {
             SQLException sqlE = null;
+            long startTime = 0L;
+            long systemCatalogRpcTime;
             HTableInterface htable = this.getTable(SchemaUtil
                     .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
 
             try {
+                startTime = EnvironmentEdgeManager.currentTimeMillis();
                 htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW,
                         new Batch.Call<MetaDataService, ClearTableFromCacheResponse>() {
                     @Override
@@ -5120,6 +5190,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         return rpcCallback.get();
                     }
                 });
+                success = true;
             } catch (IOException e) {
                 throw ServerUtil.parseServerException(e);
             } catch (Throwable e) {
@@ -5127,6 +5198,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } finally {
                 try {
                     htable.close();
+                    systemCatalogRpcTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
+                    TableMetricsManager.updateMetricsForSystemCatalogTableMethod(Bytes.toString(tableName),
+                            TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS, systemCatalogRpcTime);
+                    if (success) {
+                        TableMetricsManager.updateMetricsForSystemCatalogTableMethod(Bytes.toString(tableName),
+                                NUM_SYSTEM_TABLE_RPC_SUCCESS, 1);
+                    } else {
+                        TableMetricsManager.updateMetricsForSystemCatalogTableMethod(Bytes.toString(tableName),
+                                NUM_SYSTEM_TABLE_RPC_FAILURES, 1);
+                    }
                 } catch (IOException e) {
                     if (sqlE == null) {
                         sqlE = ServerUtil.parseServerException(e);
@@ -5414,7 +5495,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public MetaDataMutationResult getFunctions(PName tenantId, final List<Pair<byte[], Long>> functions,
             final long clientTimestamp) throws SQLException {
         final byte[] tenantIdBytes = tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getBytes();
-        return metaDataCoprocessorExec(tenantIdBytes,
+        return metaDataCoprocessorExec(null, tenantIdBytes,
                 new Batch.Call<MetaDataService, MetaDataResponse>() {
             @Override
             public MetaDataResponse call(MetaDataService instance) throws IOException {
@@ -5441,7 +5522,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public MetaDataMutationResult getSchema(final String schemaName, final long clientTimestamp) throws SQLException {
-        return metaDataCoprocessorExec(SchemaUtil.getSchemaKey(schemaName),
+        return metaDataCoprocessorExec(null, SchemaUtil.getSchemaKey(schemaName),
                 new Batch.Call<MetaDataService, MetaDataResponse>() {
             @Override
             public MetaDataResponse call(MetaDataService instance) throws IOException {
@@ -5471,7 +5552,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] tenantIdBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
         byte[] functionBytes = rowKeyMetadata[PhoenixDatabaseMetaData.FUNTION_NAME_INDEX];
         byte[] functionKey = SchemaUtil.getFunctionKey(tenantIdBytes, functionBytes);
-        MetaDataMutationResult result = metaDataCoprocessorExec(functionKey,
+        MetaDataMutationResult result = metaDataCoprocessorExec(null, functionKey,
                 new Batch.Call<MetaDataService, MetaDataResponse>() {
             @Override
             public MetaDataResponse call(MetaDataService instance) throws IOException {
@@ -5660,7 +5741,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         ensureNamespaceCreated(schemaName);
         Mutation m = MetaDataUtil.getPutOnlyTableHeaderRow(schemaMutations);
         byte[] key = m.getRow();
-        MetaDataMutationResult result = metaDataCoprocessorExec(key,
+        MetaDataMutationResult result = metaDataCoprocessorExec(null, key,
                 new Batch.Call<MetaDataService, MetaDataResponse>() {
             @Override
             public MetaDataResponse call(MetaDataService instance) throws IOException {
@@ -5695,7 +5776,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public MetaDataMutationResult dropSchema(final List<Mutation> schemaMetaData, final String schemaName)
             throws SQLException {
-        final MetaDataMutationResult result = metaDataCoprocessorExec(SchemaUtil.getSchemaKey(schemaName),
+        final MetaDataMutationResult result = metaDataCoprocessorExec(null, SchemaUtil.getSchemaKey(schemaName),
                 new Batch.Call<MetaDataService, MetaDataResponse>() {
             @Override
             public MetaDataResponse call(MetaDataService instance) throws IOException {

@@ -30,6 +30,8 @@ import static org.apache.phoenix.monitoring.MetricType.MUTATION_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_TIMEOUT_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_FAILURES;
+import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS;
 import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.SELECT_POINTLOOKUP_FAILED_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.SELECT_POINTLOOKUP_SUCCESS_SQL_COUNTER;
@@ -39,6 +41,7 @@ import static org.apache.phoenix.monitoring.MetricType.SELECT_SQL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.MetricType.TASK_END_TO_END_TIME;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_MUTATION_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -69,6 +72,9 @@ public class TableLevelMetricsTestData {
     public static final long[] selectPointLookUpSuccessCounter = { 10, 20, 55 };
     public static final long[] selectScanSuccessCounter = { 200000, 300000, 4444 };
     public static final long[] selectScanFailedCounter = { 1000000, 20000000, 3455 };
+    public static final long[] numRpcSuccessCallsSystemCatalog = {200, 100, 300};
+    public static final long[] numRpcFailureCallsSystemCatalog = {100, 200, 300};
+    public static final long[] timeTakenForRpcCallsSystemCatalog = {500, 600, 370};
 
     public static void populateMetrics() {
         for (int i = 0; i < tableMetricsMap.length; i++) {
@@ -95,6 +101,10 @@ public class TableLevelMetricsTestData {
             metrics.put(MetricType.SELECT_SQL_QUERY_TIME, selectSqlQueryTimeCounter[i]);
             metrics.put(SELECT_SCAN_SUCCESS_SQL_COUNTER, selectScanSuccessCounter[i]);
             metrics.put(MetricType.SELECT_SCAN_FAILED_SQL_COUNTER, selectScanFailedCounter[i]);
+            metrics.put(NUM_SYSTEM_TABLE_RPC_SUCCESS, numRpcSuccessCallsSystemCatalog[i]);
+            metrics.put(NUM_SYSTEM_TABLE_RPC_FAILURES, numRpcFailureCallsSystemCatalog[i]);
+            metrics.put(TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS, timeTakenForRpcCallsSystemCatalog[i]);
+
             tableMetricsMap[i].put(tableNames[i], metrics);
         }
     }

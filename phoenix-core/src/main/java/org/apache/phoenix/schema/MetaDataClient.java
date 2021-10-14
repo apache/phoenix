@@ -101,6 +101,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
+import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILURES;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
@@ -191,6 +192,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ChangePermsStatement;
@@ -732,6 +734,8 @@ public class MetaDataClient {
                                                 : table.getParentName().getString(),
                                         table.getTimeStamp());
                         }
+                        TableMetricsManager.updateMetricsForSystemCatalogTableMethod(
+                                null, NUM_METADATA_LOOKUP_FAILURES, 1);
                     }
                 }
                 tenantId = null; // Try again with global tenantId
@@ -895,35 +899,41 @@ public class MetaDataClient {
         PTable table = result.getTable();
         boolean hasIndexId = table.getViewIndexId() != null;
         // only need to inherit columns and indexes for view indexes and views
-        if ( (table.getType()==PTableType.INDEX && hasIndexId)
+        if ((table.getType()==PTableType.INDEX && hasIndexId)
                 || (table.getType() == PTableType.VIEW && table.getViewType() != ViewType.MAPPED)) {
-            String parentName = table.getParentName().getString();
-            String parentSchemaName = SchemaUtil.getSchemaNameFromFullName(parentName);
-            String parentTableName = SchemaUtil.getTableNameFromFullName(parentName);
-            MetaDataMutationResult parentResult = updateCache(connection.getTenantId(), parentSchemaName, parentTableName,
-                    false, resolvedTimestamp);
-            PTable parentTable = parentResult.getTable();
-            if (LOGGER.isTraceEnabled()) {
-                LOGGER.trace("addColumnsAndIndexesFromAncestors parent logical name " + table.getBaseTableLogicalName().getString() + " parent name " + table.getParentName().getString() + " tableName=" + table.getName());
+            String tableName = null;
+            try {
+                String parentName = table.getParentName().getString();
+                String parentSchemaName = SchemaUtil.getSchemaNameFromFullName(parentName);
+                tableName = SchemaUtil.getTableNameFromFullName(parentName);
+                MetaDataMutationResult parentResult = updateCache(connection.getTenantId(), parentSchemaName, tableName,
+                        false, resolvedTimestamp);
+                PTable parentTable = parentResult.getTable();
+                if (LOGGER.isTraceEnabled()) {
+                    LOGGER.trace("addColumnsAndIndexesFromAncestors parent logical name " + table.getBaseTableLogicalName().getString() + " parent name " + table.getParentName().getString() + " tableName=" + table.getName());
+                }
+                if (parentResult.getMutationCode() == MutationCode.TABLE_NOT_FOUND || parentTable == null) {
+                    // this mean the parent table was dropped and the child views have not yet been
+                    // dropped by the TaskRegionObserver
+                    String schemaName = table.getSchemaName() != null ? table.getSchemaName().getString() : null;
+                    throw new TableNotFoundException(schemaName, parentName);
+                }
+                // only inherit columns view indexes (and not local indexes on regular tables which also have a viewIndexId)
+                if (hasIndexId && parentTable.getType() != PTableType.VIEW) {
+                    return false;
+                }
+                // if alwaysAddAncestorColumnsAndIndexes is false we only recalculate if the ancestor table or table
+                // was updated from the server
+                if (!alwaysAddAncestorColumnsAndIndexes && !result.wasUpdated() && !parentResult.wasUpdated()) {
+                    return false;
+                }
+                result.setTable(ViewUtil.addDerivedColumnsAndIndexesFromParent(
+                        connection, table, parentTable));
+                return true;
+            } catch (Throwable e) {
+                TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableName, NUM_METADATA_LOOKUP_FAILURES, 1);
+                throw e;
             }
-            if (parentResult.getMutationCode() == MutationCode.TABLE_NOT_FOUND || parentTable == null) {
-                // this mean the parent table was dropped and the child views have not yet been
-                // dropped by the TaskRegionObserver
-                String schemaName = table.getSchemaName()!=null ? table.getSchemaName().getString() : null;
-                throw new TableNotFoundException(schemaName, parentName);
-            }
-            // only inherit columns view indexes (and not local indexes on regular tables which also have a viewIndexId)
-            if (hasIndexId && parentTable.getType() != PTableType.VIEW) {
-                return false;
-            }
-            // if alwaysAddAncestorColumnsAndIndexes is false we only recalculate if the ancestor table or table
-            // was updated from the server
-            if (!alwaysAddAncestorColumnsAndIndexes && !result.wasUpdated() && !parentResult.wasUpdated()) {
-                return false;
-            }
-            result.setTable(ViewUtil.addDerivedColumnsAndIndexesFromParent(
-                    connection, table, parentTable));
-            return true;
         }
         return false;
     }
@@ -1099,6 +1109,8 @@ public class MetaDataClient {
             if (result.getMutationCode()==MutationCode.TABLE_ALREADY_EXISTS) {
                 table = result.getTable();
                 if (!statement.ifNotExists()) {
+                    TableMetricsManager.updateMetricsForSystemCatalogTableMethod(
+                            tableName.toString(), NUM_METADATA_LOOKUP_FAILURES, 1);
                     throw new NewerTableAlreadyExistsException(tableName.getSchemaName(), tableName.getTableName(), table);
                 }
 
@@ -2032,6 +2044,7 @@ public class MetaDataClient {
             Map<String,Object> commonFamilyProps) throws SQLException {
         final PTableType tableType = statement.getTableType();
         boolean wasAutoCommit = connection.getAutoCommit();
+        TableName tableNameNode = null;
         boolean allowSystemCatalogRollback =
                 connection.getQueryServices().getProps().getBoolean(
                     QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK,
@@ -2048,7 +2061,7 @@ public class MetaDataClient {
             connection.setAutoCommit(false);
             List<Mutation> tableMetaData = Lists.newArrayListWithExpectedSize(statement.getColumnDefs().size() + 3);
 
-            TableName tableNameNode = statement.getTableName();
+            tableNameNode = statement.getTableName();
             final String schemaName = connection.getSchema() != null && tableNameNode.getSchemaName() == null ? connection.getSchema() : tableNameNode.getSchemaName();
             final String tableName = tableNameNode.getTableName();
             String parentTableName = null;
@@ -3116,111 +3129,116 @@ public class MetaDataClient {
                 : null, tableType, tableProps, familyPropList, splits, isNamespaceMapped,
                 allocateIndexId, UpgradeUtil.isNoUpgradeSet(connection.getClientInfo()), parent);
             MutationCode code = result.getMutationCode();
-            if (code != MutationCode.TABLE_NOT_FOUND) {
-                boolean tableAlreadyExists = handleCreateTableMutationCode(result, code, statement,
-                        schemaName, tableName, parent);
-                if (tableAlreadyExists) {
-                    return null;
-                }
-            }
-            // If the parent table of the view has the auto partition sequence name attribute,
-            // set the view statement and relevant partition column attributes correctly
-            if (parent!=null && parent.getAutoPartitionSeqName()!=null) {
-                final PColumn autoPartitionCol = parent.getPKColumns().get(MetaDataUtil
-                        .getAutoPartitionColIndex(parent));
-                final Long autoPartitionNum = Long.valueOf(result.getAutoPartitionNum());
-                columns.put(autoPartitionCol, new DelegateColumn(autoPartitionCol) {
-                    @Override
-                    public byte[] getViewConstant() {
-                        PDataType dataType = autoPartitionCol.getDataType();
-                        Object val = dataType.toObject(autoPartitionNum, PLong.INSTANCE);
-                        byte[] bytes = new byte [dataType.getByteSize() + 1];
-                        dataType.toBytes(val, bytes, 0);
-                        return bytes;
+            try {
+                if (code != MutationCode.TABLE_NOT_FOUND) {
+                    boolean tableAlreadyExists = handleCreateTableMutationCode(result, code, statement,
+                            schemaName, tableName, parent);
+                    if (tableAlreadyExists) {
+                        return null;
                     }
-                    @Override
-                    public boolean isViewReferenced() {
-                        return true;
+                }
+                // If the parent table of the view has the auto partition sequence name attribute,
+                // set the view statement and relevant partition column attributes correctly
+                if (parent != null && parent.getAutoPartitionSeqName() != null) {
+                    final PColumn autoPartitionCol = parent.getPKColumns().get(MetaDataUtil
+                            .getAutoPartitionColIndex(parent));
+                    final Long autoPartitionNum = Long.valueOf(result.getAutoPartitionNum());
+                    columns.put(autoPartitionCol, new DelegateColumn(autoPartitionCol) {
+                        @Override
+                        public byte[] getViewConstant() {
+                            PDataType dataType = autoPartitionCol.getDataType();
+                            Object val = dataType.toObject(autoPartitionNum, PLong.INSTANCE);
+                            byte[] bytes = new byte[dataType.getByteSize() + 1];
+                            dataType.toBytes(val, bytes, 0);
+                            return bytes;
+                        }
+
+                        @Override
+                        public boolean isViewReferenced() {
+                            return true;
+                        }
+                    });
+                    String viewPartitionClause = QueryUtil.getViewPartitionClause(MetaDataUtil
+                            .getAutoPartitionColumnName(parent), autoPartitionNum);
+                    if (viewStatement != null) {
+                        viewStatement = viewStatement + " AND " + viewPartitionClause;
+                    } else {
+                        viewStatement = QueryUtil.getViewStatement(parent.getSchemaName().getString(),
+                                parent.getTableName().getString(), viewPartitionClause);
                     }
-                });
-                String viewPartitionClause = QueryUtil.getViewPartitionClause(MetaDataUtil
-                        .getAutoPartitionColumnName(parent), autoPartitionNum);
-                if (viewStatement!=null) {
-                    viewStatement = viewStatement + " AND " + viewPartitionClause;
                 }
-                else {
-                    viewStatement = QueryUtil.getViewStatement(parent.getSchemaName().getString(),
-                            parent.getTableName().getString(), viewPartitionClause);
-                }
+                PName newSchemaName = PNameFactory.newName(schemaName);
+                /*
+                 * It doesn't hurt for the PTable of views to have the cqCounter. However, views always
+                 * rely on the parent table's counter to dole out encoded column qualifiers. So setting
+                 * the counter as NULL_COUNTER for extra safety.
+                 */
+                EncodedCQCounter cqCounterToBe = tableType == PTableType.VIEW ? NULL_COUNTER : cqCounter;
+                PTable table = new PTableImpl.Builder()
+                        .setType(tableType)
+                        .setState(indexState)
+                        .setTimeStamp(timestamp != null ? timestamp : result.getMutationTime())
+                        .setIndexDisableTimestamp(0L)
+                        .setSequenceNumber(PTable.INITIAL_SEQ_NUM)
+                        .setImmutableRows(isImmutableRows)
+                        .setViewStatement(viewStatement)
+                        .setDisableWAL(Boolean.TRUE.equals(disableWAL))
+                        .setMultiTenant(multiTenant)
+                        .setStoreNulls(storeNulls)
+                        .setViewType(viewType)
+                        .setViewIndexIdType(viewIndexIdType)
+                        .setViewIndexId(result.getViewIndexId())
+                        .setIndexType(indexType)
+                        .setTransactionProvider(transactionProvider)
+                        .setUpdateCacheFrequency(updateCacheFrequency)
+                        .setNamespaceMapped(isNamespaceMapped)
+                        .setAutoPartitionSeqName(autoPartitionSeq)
+                        .setAppendOnlySchema(isAppendOnlySchema)
+                        .setImmutableStorageScheme(immutableStorageScheme)
+                        .setQualifierEncodingScheme(encodingScheme)
+                        .setBaseColumnCount(baseTableColumnCount)
+                        .setEncodedCQCounter(cqCounterToBe)
+                        .setUseStatsForParallelization(useStatsForParallelizationProp)
+                        .setExcludedColumns(ImmutableList.<PColumn>of())
+                        .setTenantId(tenantId)
+                        .setSchemaName(newSchemaName)
+                        .setTableName(PNameFactory.newName(tableName))
+                        .setPkName(pkName == null ? null : PNameFactory.newName(pkName))
+                        .setDefaultFamilyName(defaultFamilyName == null ?
+                                null : PNameFactory.newName(defaultFamilyName))
+                        .setRowKeyOrderOptimizable(rowKeyOrderOptimizable)
+                        .setBucketNum(saltBucketNum)
+                        .setIndexes(Collections.<PTable>emptyList())
+                        .setParentSchemaName((parent == null) ? null : parent.getSchemaName())
+                        .setParentTableName((parent == null) ? null : parent.getTableName())
+                        .setPhysicalNames(ImmutableList.copyOf(physicalNames))
+                        .setColumns(columns.values())
+                        .setPhoenixTTL(phoenixTTL == null ? PHOENIX_TTL_NOT_DEFINED : phoenixTTL)
+                        .setPhoenixTTLHighWaterMark(phoenixTTLHighWaterMark == null ? MIN_PHOENIX_TTL_HWM : phoenixTTLHighWaterMark)
+                        .setViewModifiedUpdateCacheFrequency(tableType == PTableType.VIEW &&
+                                parent != null &&
+                                parent.getUpdateCacheFrequency() != updateCacheFrequency)
+                        .setViewModifiedUseStatsForParallelization(tableType == PTableType.VIEW &&
+                                parent != null &&
+                                parent.useStatsForParallelization()
+                                        != useStatsForParallelizationProp)
+                        .setViewModifiedPhoenixTTL(tableType == PTableType.VIEW &&
+                                parent != null && phoenixTTL != null &&
+                                parent.getPhoenixTTL() != phoenixTTL)
+                        .setLastDDLTimestamp(result.getTable() != null ?
+                                result.getTable().getLastDDLTimestamp() : null)
+                        .setIsChangeDetectionEnabled(isChangeDetectionEnabledProp)
+                        .setSchemaVersion(schemaVersion)
+                        .build();
+                result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
+                addTableToCache(result);
+                return table;
+            } catch (Throwable e) {
+                TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableNameNode.toString(),
+                        NUM_METADATA_LOOKUP_FAILURES, 1);
+                throw e;
             }
-            PName newSchemaName = PNameFactory.newName(schemaName);
-            /*
-             * It doesn't hurt for the PTable of views to have the cqCounter. However, views always
-             * rely on the parent table's counter to dole out encoded column qualifiers. So setting
-             * the counter as NULL_COUNTER for extra safety.
-             */
-            EncodedCQCounter cqCounterToBe = tableType == PTableType.VIEW ? NULL_COUNTER : cqCounter;
-            PTable table = new PTableImpl.Builder()
-                .setType(tableType)
-                .setState(indexState)
-                .setTimeStamp(timestamp != null ? timestamp : result.getMutationTime())
-                .setIndexDisableTimestamp(0L)
-                .setSequenceNumber(PTable.INITIAL_SEQ_NUM)
-                .setImmutableRows(isImmutableRows)
-                .setViewStatement(viewStatement)
-                .setDisableWAL(Boolean.TRUE.equals(disableWAL))
-                .setMultiTenant(multiTenant)
-                .setStoreNulls(storeNulls)
-                .setViewType(viewType)
-                .setViewIndexIdType(viewIndexIdType)
-                .setViewIndexId(result.getViewIndexId())
-                .setIndexType(indexType)
-                .setTransactionProvider(transactionProvider)
-                .setUpdateCacheFrequency(updateCacheFrequency)
-                .setNamespaceMapped(isNamespaceMapped)
-                .setAutoPartitionSeqName(autoPartitionSeq)
-                .setAppendOnlySchema(isAppendOnlySchema)
-                .setImmutableStorageScheme(immutableStorageScheme)
-                .setQualifierEncodingScheme(encodingScheme)
-                .setBaseColumnCount(baseTableColumnCount)
-                .setEncodedCQCounter(cqCounterToBe)
-                .setUseStatsForParallelization(useStatsForParallelizationProp)
-                .setExcludedColumns(ImmutableList.<PColumn>of())
-                .setTenantId(tenantId)
-                .setSchemaName(newSchemaName)
-                .setTableName(PNameFactory.newName(tableName))
-                .setPkName(pkName == null ? null : PNameFactory.newName(pkName))
-                .setDefaultFamilyName(defaultFamilyName == null ?
-                    null : PNameFactory.newName(defaultFamilyName))
-                .setRowKeyOrderOptimizable(rowKeyOrderOptimizable)
-                .setBucketNum(saltBucketNum)
-                .setIndexes(Collections.<PTable>emptyList())
-                .setParentSchemaName((parent == null) ? null : parent.getSchemaName())
-                .setParentTableName((parent == null) ? null : parent.getTableName())
-                .setPhysicalNames(ImmutableList.copyOf(physicalNames))
-                .setColumns(columns.values())
-                .setPhoenixTTL(phoenixTTL == null ? PHOENIX_TTL_NOT_DEFINED : phoenixTTL)
-                .setPhoenixTTLHighWaterMark(phoenixTTLHighWaterMark == null ? MIN_PHOENIX_TTL_HWM : phoenixTTLHighWaterMark)
-                .setViewModifiedUpdateCacheFrequency(tableType == PTableType.VIEW &&
-                    parent != null &&
-                    parent.getUpdateCacheFrequency() != updateCacheFrequency)
-                .setViewModifiedUseStatsForParallelization(tableType == PTableType.VIEW &&
-                    parent != null &&
-                    parent.useStatsForParallelization()
-                        != useStatsForParallelizationProp)
-                .setViewModifiedPhoenixTTL(tableType == PTableType.VIEW &&
-                    parent != null && phoenixTTL != null &&
-                    parent.getPhoenixTTL() != phoenixTTL)
-                .setLastDDLTimestamp(result.getTable() != null ?
-                    result.getTable().getLastDDLTimestamp() : null)
-                .setIsChangeDetectionEnabled(isChangeDetectionEnabledProp)
-                .setSchemaVersion(schemaVersion)
-                .build();
-            result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
-            addTableToCache(result);
-            return table;
-        }
-        finally {
+        } finally {
             connection.setAutoCommit(wasAutoCommit);
             deleteMutexCells(parentPhysicalSchemaName, parentPhysicalTableName,
                     acquiredColumnMutexSet);
@@ -4287,6 +4305,10 @@ public class MetaDataClient {
                         LOGGER.debug(LogUtil.addCustomAnnotations("Caught ConcurrentTableMutationException for table " + SchemaUtil.getTableName(schemaName, tableName) + ". Will try again...", connection));
                     }
                     retried = true;
+                } catch(Throwable e) {
+                    TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableName,
+                            NUM_METADATA_LOOKUP_FAILURES, 1);
+                    throw e;
                 }
             }
         } finally {
@@ -4765,6 +4787,9 @@ public class MetaDataClient {
                     }
                     table = connection.getTable(new PTableKey(tenantId, fullTableName));
                     retried = true;
+                } catch (Throwable e) {
+                    TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableName, NUM_METADATA_LOOKUP_FAILURES, 1);
+                    throw e;
                 }
             }
         } finally {
@@ -4776,8 +4801,9 @@ public class MetaDataClient {
     public MutationState alterIndex(AlterIndexStatement statement) throws SQLException {
         connection.rollback();
         boolean wasAutoCommit = connection.getAutoCommit();
+        String dataTableName;
         try {
-            String dataTableName = statement.getTableName();
+            dataTableName = statement.getTableName();
             final String indexName = statement.getTable().getName().getTableName();
             boolean isAsync = statement.isAsync();
             boolean isRebuildAll = statement.isRebuildAll();
@@ -4840,122 +4866,126 @@ public class MetaDataClient {
             }
 
             MetaDataMutationResult result = connection.getQueryServices().updateIndexState(tableMetadata, dataTableName, properties, table);
-
-            MutationCode code = result.getMutationCode();
-            if (code == MutationCode.TABLE_NOT_FOUND) {
-                throw new TableNotFoundException(schemaName,indexName);
-            }
-            if (code == MutationCode.UNALLOWED_TABLE_MUTATION) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_INDEX_STATE_TRANSITION)
-                .setMessage(" currentState=" + indexRef.getTable().getIndexState() + ". requestedState=" + newIndexState )
-                .setSchemaName(schemaName).setTableName(indexName).build().buildException();
-            }
-            if (code == MutationCode.TABLE_ALREADY_EXISTS) {
-                if (result.getTable() != null) { // To accommodate connection-less update of index state
-                    addTableToCache(result);
-                    // Set so that we get the table below with the potentially modified rowKeyOrderOptimizable flag set
-                    indexRef.setTable(result.getTable());
-                    if (newIndexState == PIndexState.BUILDING && isAsync) {
-                        if (isRebuildAll) {
-                            List<Task.TaskRecord> tasks = Task.queryTaskTable(connection, null, schemaName, tableName, PTable.TaskType.INDEX_REBUILD,
-                                    tenantId, indexName);
-                            if (tasks == null || tasks.size() == 0) {
-                                Timestamp ts = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
-                                Map<String, Object> props = new HashMap<String, Object>() {{
-                                    put(INDEX_NAME, indexName);
-                                    put(REBUILD_ALL, true);
-                                }};
-                                try {
-                                    String json = JacksonUtil.getObjectWriter().writeValueAsString(props);
-                                    List<Mutation> sysTaskUpsertMutations = Task.getMutationsForAddTask(new SystemTaskParams.SystemTaskParamsBuilder()
-                                        .setConn(connection)
-                                        .setTaskType(
-                                            PTable.TaskType.INDEX_REBUILD)
-                                        .setTenantId(tenantId)
-                                        .setSchemaName(schemaName)
-                                        .setTableName(dataTableName)
-                                        .setTaskStatus(
-                                            PTable.TaskStatus.CREATED.toString())
-                                        .setData(json)
-                                        .setPriority(null)
-                                        .setStartTs(ts)
-                                        .setEndTs(null)
-                                        .setAccessCheckEnabled(true)
-                                        .build());
-                                    byte[] rowKey = sysTaskUpsertMutations
-                                        .get(0).getRow();
-                                    MetaDataMutationResult metaDataMutationResult =
-                                        Task.taskMetaDataCoprocessorExec(connection, rowKey,
-                                            new TaskMetaDataServiceCallBack(sysTaskUpsertMutations));
-                                    if (MutationCode.UNABLE_TO_UPSERT_TASK.equals(
-                                            metaDataMutationResult.getMutationCode())) {
-                                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNABLE_TO_UPSERT_TASK)
-                                          .setSchemaName(SYSTEM_SCHEMA_NAME)
-                                          .setTableName(SYSTEM_TASK_TABLE).build().buildException();
+            try {
+                MutationCode code = result.getMutationCode();
+                if (code == MutationCode.TABLE_NOT_FOUND) {
+                    throw new TableNotFoundException(schemaName, indexName);
+                }
+                if (code == MutationCode.UNALLOWED_TABLE_MUTATION) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_INDEX_STATE_TRANSITION)
+                            .setMessage(" currentState=" + indexRef.getTable().getIndexState() + ". requestedState=" + newIndexState)
+                            .setSchemaName(schemaName).setTableName(indexName).build().buildException();
+                }
+                if (code == MutationCode.TABLE_ALREADY_EXISTS) {
+                    if (result.getTable() != null) { // To accommodate connection-less update of index state
+                        addTableToCache(result);
+                        // Set so that we get the table below with the potentially modified rowKeyOrderOptimizable flag set
+                        indexRef.setTable(result.getTable());
+                        if (newIndexState == PIndexState.BUILDING && isAsync) {
+                            if (isRebuildAll) {
+                                List<Task.TaskRecord> tasks = Task.queryTaskTable(connection, null, schemaName, tableName, PTable.TaskType.INDEX_REBUILD,
+                                        tenantId, indexName);
+                                if (tasks == null || tasks.size() == 0) {
+                                    Timestamp ts = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
+                                    Map<String, Object> props = new HashMap<String, Object>() {{
+                                        put(INDEX_NAME, indexName);
+                                        put(REBUILD_ALL, true);
+                                    }};
+                                    try {
+                                        String json = JacksonUtil.getObjectWriter().writeValueAsString(props);
+                                        List<Mutation> sysTaskUpsertMutations = Task.getMutationsForAddTask(new SystemTaskParams.SystemTaskParamsBuilder()
+                                                .setConn(connection)
+                                                .setTaskType(
+                                                        PTable.TaskType.INDEX_REBUILD)
+                                                .setTenantId(tenantId)
+                                                .setSchemaName(schemaName)
+                                                .setTableName(dataTableName)
+                                                .setTaskStatus(
+                                                        PTable.TaskStatus.CREATED.toString())
+                                                .setData(json)
+                                                .setPriority(null)
+                                                .setStartTs(ts)
+                                                .setEndTs(null)
+                                                .setAccessCheckEnabled(true)
+                                                .build());
+                                        byte[] rowKey = sysTaskUpsertMutations
+                                                .get(0).getRow();
+                                        MetaDataMutationResult metaDataMutationResult =
+                                                Task.taskMetaDataCoprocessorExec(connection, rowKey,
+                                                        new TaskMetaDataServiceCallBack(sysTaskUpsertMutations));
+                                        if (MutationCode.UNABLE_TO_UPSERT_TASK.equals(
+                                                metaDataMutationResult.getMutationCode())) {
+                                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNABLE_TO_UPSERT_TASK)
+                                                    .setSchemaName(SYSTEM_SCHEMA_NAME)
+                                                    .setTableName(SYSTEM_TASK_TABLE).build().buildException();
+                                        }
+                                    } catch (IOException e) {
+                                        throw new SQLException("Exception happened while adding a System.Task" + e.toString());
                                     }
-                                } catch (IOException e) {
-                                    throw new SQLException("Exception happened while adding a System.Task" + e.toString());
                                 }
-                            }
-                        } else {
-                            try {
-                                tableUpsert = connection.prepareStatement(UPDATE_INDEX_REBUILD_ASYNC_STATE);
-                                tableUpsert.setString(1, connection.getTenantId() == null ?
-                                        null :
-                                        connection.getTenantId().getString());
-                                tableUpsert.setString(2, schemaName);
-                                tableUpsert.setString(3, indexName);
-                                long beginTimestamp = result.getTable().getTimeStamp();
-                                tableUpsert.setLong(4, beginTimestamp);
-                                tableUpsert.execute();
-                                connection.commit();
-                            } finally {
-                                if (tableUpsert != null) {
-                                    tableUpsert.close();
+                            } else {
+                                try {
+                                    tableUpsert = connection.prepareStatement(UPDATE_INDEX_REBUILD_ASYNC_STATE);
+                                    tableUpsert.setString(1, connection.getTenantId() == null ?
+                                            null :
+                                            connection.getTenantId().getString());
+                                    tableUpsert.setString(2, schemaName);
+                                    tableUpsert.setString(3, indexName);
+                                    long beginTimestamp = result.getTable().getTimeStamp();
+                                    tableUpsert.setLong(4, beginTimestamp);
+                                    tableUpsert.execute();
+                                    connection.commit();
+                                } finally {
+                                    if (tableUpsert != null) {
+                                        tableUpsert.close();
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-            if (newIndexState == PIndexState.BUILDING && !isAsync) {
-                PTable index = indexRef.getTable();
-                // First delete any existing rows of the index
-                if (index.getIndexType().equals(IndexType.GLOBAL) && index.getViewIndexId() == null){
-                    //for a global index of a normal base table, it's safe to just truncate and
-                    //rebuild. We preserve splits to reduce the amount of splitting we need to do
-                    //during rebuild
-                    org.apache.hadoop.hbase.TableName physicalTableName =
-                        org.apache.hadoop.hbase.TableName.valueOf(index.getPhysicalName().getBytes());
-                    try (Admin admin = connection.getQueryServices().getAdmin()) {
-                        admin.disableTable(physicalTableName);
-                        admin.truncateTable(physicalTableName, true);
-                        //trunateTable automatically re-enables when it's done
-                    } catch(IOException ie) {
-                        String failedTable = physicalTableName.getNameAsString();
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNKNOWN_ERROR_CODE).
-                            setMessage("Error when truncating index table [" + failedTable +
-                                "] before rebuilding: " + ie.getMessage()).
-                            setTableName(failedTable).build().buildException();
+                if (newIndexState == PIndexState.BUILDING && !isAsync) {
+                    PTable index = indexRef.getTable();
+                    // First delete any existing rows of the index
+                    if (index.getIndexType().equals(IndexType.GLOBAL) && index.getViewIndexId() == null) {
+                        //for a global index of a normal base table, it's safe to just truncate and
+                        //rebuild. We preserve splits to reduce the amount of splitting we need to do
+                        //during rebuild
+                        org.apache.hadoop.hbase.TableName physicalTableName =
+                                org.apache.hadoop.hbase.TableName.valueOf(index.getPhysicalName().getBytes());
+                        try (Admin admin = connection.getQueryServices().getAdmin()) {
+                            admin.disableTable(physicalTableName);
+                            admin.truncateTable(physicalTableName, true);
+                            //trunateTable automatically re-enables when it's done
+                        } catch (IOException ie) {
+                            String failedTable = physicalTableName.getNameAsString();
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNKNOWN_ERROR_CODE).
+                                    setMessage("Error when truncating index table [" + failedTable +
+                                            "] before rebuilding: " + ie.getMessage()).
+                                    setTableName(failedTable).build().buildException();
+                        }
+                    } else {
+                        Long scn = connection.getSCN();
+                        long ts = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
+                        MutationPlan plan = new PostDDLCompiler(connection).compile(Collections.singletonList(indexRef), null, null, Collections.<PColumn>emptyList(), ts);
+                        connection.getQueryServices().updateData(plan);
                     }
-                } else {
-                    Long scn = connection.getSCN();
-                    long ts = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
-                    MutationPlan plan = new PostDDLCompiler(connection).compile(Collections.singletonList(indexRef), null, null, Collections.<PColumn>emptyList(), ts);
-                    connection.getQueryServices().updateData(plan);
+                    NamedTableNode dataTableNode = NamedTableNode.create(null,
+                            TableName.create(schemaName, dataTableName), Collections.<ColumnDef>emptyList());
+                    // Next rebuild the index
+                    connection.setAutoCommit(true);
+                    if (connection.getSCN() != null) {
+                        return buildIndexAtTimeStamp(index, dataTableNode);
+                    }
+                    TableRef dataTableRef = FromCompiler.getResolver(dataTableNode, connection).getTables().get(0);
+                    return buildIndex(index, dataTableRef);
                 }
-                NamedTableNode dataTableNode = NamedTableNode.create(null,
-                    TableName.create(schemaName, dataTableName), Collections.<ColumnDef>emptyList());
-                // Next rebuild the index
-                connection.setAutoCommit(true);
-                if (connection.getSCN() != null) {
-                    return buildIndexAtTimeStamp(index, dataTableNode);
-                }
-                TableRef dataTableRef = FromCompiler.getResolver(dataTableNode, connection).getTables().get(0);
-                return buildIndex(index, dataTableRef);
-            }
 
-            return new MutationState(1, 1000, connection);
+                return new MutationState(1, 1000, connection);
+            } catch (Throwable e) {
+                TableMetricsManager.updateMetricsForSystemCatalogTableMethod(dataTableName, NUM_METADATA_LOOKUP_FAILURES, 1);
+                throw e;
+            }
         } catch (TableNotFoundException e) {
             if (!statement.ifExists()) {
                 throw e;
@@ -5036,18 +5066,25 @@ public class MetaDataClient {
             MetaDataMutationResult result = connection.getQueryServices().createSchema(schemaMutations,
                     schema.getSchemaName());
             MutationCode code = result.getMutationCode();
-            switch (code) {
-            case SCHEMA_ALREADY_EXISTS:
-                if (result.getSchema() != null) {
-                    addSchemaToCache(result);
+            try {
+                switch (code) {
+                    case SCHEMA_ALREADY_EXISTS:
+                        if (result.getSchema() != null) {
+                            addSchemaToCache(result);
+                        }
+                        if (!isIfNotExists) {
+                            throw new SchemaAlreadyExistsException(schema.getSchemaName());
+                        }
+                        break;
+                    case NEWER_SCHEMA_FOUND:
+                        throw new NewerSchemaAlreadyExistsException(schema.getSchemaName());
+                    default:
+                        result = new MetaDataMutationResult(code, schema, result.getMutationTime());
+                        addSchemaToCache(result);
                 }
-                if (!isIfNotExists) { throw new SchemaAlreadyExistsException(schema.getSchemaName()); }
-                break;
-            case NEWER_SCHEMA_FOUND:
-                throw new NewerSchemaAlreadyExistsException(schema.getSchemaName());
-            default:
-                result = new MetaDataMutationResult(code, schema, result.getMutationTime());
-                addSchemaToCache(result);
+            } catch(Throwable e) {
+                TableMetricsManager.updateMetricsForSystemCatalogTableMethod(null, NUM_METADATA_LOOKUP_FAILURES, 1);
+                throw e;
             }
         } finally {
             connection.setAutoCommit(wasAutoCommit);
@@ -5078,19 +5115,26 @@ public class MetaDataClient {
             MetaDataMutationResult result = connection.getQueryServices().dropSchema(schemaMetaData, schemaName);
             MutationCode code = result.getMutationCode();
             schema = result.getSchema();
-            switch (code) {
-            case SCHEMA_NOT_FOUND:
-                if (!ifExists) { throw new SchemaNotFoundException(schemaName); }
-                break;
-            case NEWER_SCHEMA_FOUND:
-                throw new NewerSchemaAlreadyExistsException(schemaName);
-            case TABLES_EXIST_ON_SCHEMA:
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MUTATE_SCHEMA).setSchemaName(schemaName)
-                .build().buildException();
-            default:
-                connection.removeSchema(schema, result.getMutationTime());
-                break;
-            }
+            try {
+                switch (code) {
+                    case SCHEMA_NOT_FOUND:
+                        if (!ifExists) {
+                            throw new SchemaNotFoundException(schemaName);
+                        }
+                        break;
+                    case NEWER_SCHEMA_FOUND:
+                        throw new NewerSchemaAlreadyExistsException(schemaName);
+                    case TABLES_EXIST_ON_SCHEMA:
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MUTATE_SCHEMA).setSchemaName(schemaName)
+                                .build().buildException();
+                    default:
+                        connection.removeSchema(schema, result.getMutationTime());
+                        break;
+                }
+            } catch (Throwable e) {
+                    TableMetricsManager.updateMetricsForSystemCatalogTableMethod(null, NUM_METADATA_LOOKUP_FAILURES, 1);
+                    throw e;
+                }
             return new MutationState(0, 0, connection);
         } finally {
             connection.setAutoCommit(wasAutoCommit);
