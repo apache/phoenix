@@ -42,6 +42,8 @@ import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.mutationSq
 import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.mutationSqlCounter;
 import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.queryFailedCounter;
 import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.queryTimeOutCounter;
+import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.numRpcFailureCallsSystemCatalog;
+import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.numRpcSuccessCallsSystemCatalog;
 import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.scanBytesCounter;
 import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.selectPointLookUpFailedCounter;
 import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.selectPointLookUpSuccessCounter;
@@ -51,6 +53,7 @@ import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.selectSqlQ
 import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.tableNames;
 import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.tableMetricsMap;
 import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.populateMetrics;
+import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.timeTakenForRpcCallsSystemCatalog;
 import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.taskEndToEndTimeCounter;
 import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.upsertMutationBytesCounter;
 import static org.apache.phoenix.monitoring.TableLevelMetricsTestData.upsertMutationSqlCounter;
@@ -177,7 +180,12 @@ public class TableMetricsManagerTest {
             TableMetricsManager.updateMetricsMethod(tableNames[i],MetricType.SELECT_SQL_QUERY_TIME, selectSqlQueryTimeCounter[i]);
             TableMetricsManager.updateMetricsMethod(tableNames[i],MetricType.SELECT_SCAN_FAILED_SQL_COUNTER, selectScanFailedCounter[i]);
             TableMetricsManager.updateMetricsMethod(tableNames[i],MetricType.SELECT_SCAN_SUCCESS_SQL_COUNTER, selectScanSuccessCounter[i]);
-
+            TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableNames[i],
+                    MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS, numRpcSuccessCallsSystemCatalog[i]);
+            TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableNames[i],
+                    MetricType.NUM_SYSTEM_TABLE_RPC_FAILURES, numRpcFailureCallsSystemCatalog[i]);
+            TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableNames[i],
+                    MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS, timeTakenForRpcCallsSystemCatalog[i]);
         }
         testData.verifyMetricsInjection(3);
         TableMetricsManager.clearTableLevelMetricsMethod();
