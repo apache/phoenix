@@ -27,12 +27,14 @@ import java.util.concurrent.ConcurrentMap;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import edu.umd.cs.findbugs.annotations.SuppressWarnings;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 /**
  * Central place where we keep track of all the Table Level metrics. Register each tableMetrics and
  * store the instance of it associated with TableName in a map
@@ -280,6 +282,15 @@ public class TableMetricsManager {
         return map;
     }
 
+    private void updateMetricsForSystemCatalogTable(String userTable, MetricType mType, long value) {
+
+        if (userTable != null && !userTable.equals(SYSTEM_CATALOG_NAME)) {
+            updateMetricsMethod(userTable, mType, value);
+        }
+
+        updateMetricsMethod(SYSTEM_CATALOG_NAME, mType, value);
+    }
+
     /**
      * Helps reset the localstore(tableClientMetricsMapping)
      */
@@ -288,6 +299,20 @@ public class TableMetricsManager {
             tableClientMetricsMapping.clear();
         }
         LOGGER.info("Phoenix Table metrics clearing complete");
+    }
+
+    /**
+     *  Update the Metrics for systemCatalog Table.
+     *  For every userTable which is non empty we update success/Failure RPC call metric
+     *  and for systemCatalog table we update the total no. of success/failure rpc calls made.
+     */
+    public static void updateMetricsForSystemCatalogTableMethod(String userTable, MetricType mType, long value) {
+        try {
+            TableMetricsManager.getInstance()
+                    .updateMetricsForSystemCatalogTable(userTable, mType, value);
+        } catch (Exception e) {
+            LOGGER.error("Failed updating Metrics for System catalog Table", e);
+        }
     }
 
     public void clear() {
