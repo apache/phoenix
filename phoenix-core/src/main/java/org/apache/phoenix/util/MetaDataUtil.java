@@ -806,11 +806,11 @@ public class MetaDataUtil {
             throws SQLException {
         String schemaName = getViewIndexSequenceSchemaName(name, isNamespaceMapped);
         String sequenceName = getViewIndexSequenceName(name, null, isNamespaceMapped);
-        connection.createStatement().executeUpdate("DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE "
-                + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA
-                + (schemaName.length() > 0 ? "='" + schemaName + "'" : " IS NULL") + (isNamespaceMapped
-                        ? " AND " + PhoenixDatabaseMetaData.SEQUENCE_NAME + " = '" + sequenceName + "'" : ""));
-
+        connection.createStatement().executeUpdate("DELETE FROM "
+                + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
+                + " WHERE " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA
+                + (schemaName.length() > 0 ? "='" + schemaName + "'" : " IS NULL")
+                + " AND " + PhoenixDatabaseMetaData.SEQUENCE_NAME + " = '" + sequenceName + "'" );
     }
     
     /**
