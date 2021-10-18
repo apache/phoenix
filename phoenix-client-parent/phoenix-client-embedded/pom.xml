@@ -54,6 +54,7 @@
                 <excludes>
                   <exclude>org.apache.phoenix:phoenix-client</exclude>
                   <exclude>xom:xom</exclude>
+                  <exclude>io.opentelemetry.*</exclude>
                 </excludes>
               </artifactSet>
             </configuration>

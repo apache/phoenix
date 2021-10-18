@@ -13,3 +13,5 @@
 
  eg:
  `-Dphoenix.traceserver.http.port=8887` server will start in 8887
+
+!commandhandler org.apache.phoenix.tracing.TraceCommandHandler

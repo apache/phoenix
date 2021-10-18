@@ -402,6 +402,7 @@
     <dependency>
       <groupId>io.opentelemetry</groupId>
       <artifactId>opentelemetry-api</artifactId>
+      <version>${opentelemetry.version}</version>
     </dependency>
     <dependency>
       <groupId>io.opentelemetry</groupId>

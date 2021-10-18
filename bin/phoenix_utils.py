@@ -78,15 +78,17 @@ def findClasspath(command_name):
 
 def setPath():
     PHOENIX_CLIENT_EMBEDDED_JAR_PATTERN = "phoenix-client-embedded-hbase-*[!s].jar"
-    PHOENIX_TRACESERVER_JAR_PATTERN = "phoenix-tracing-webapp-*-runnable.jar"
+    PHOENIX_TRACESERVER_JAR_PATTERN = "phoenix-tracing-webapp-*[!s].jar"
     PHOENIX_TESTS_JAR_PATTERN = "phoenix-core-*-tests*.jar"
     PHOENIX_PHERF_JAR_PATTERN = "phoenix-pherf-*[!s].jar"
     SLF4J_LOG4J12_JAR_PATTERN = "slf4j-log4j12-*[!s].jar"
     SQLLINE_WITH_DEPS_PATTERN = "sqlline-*-jar-with-dependencies.jar"
+    OPENTELEMTRY_JAVAAGENT_JAR_PATTERN = "opentelemetry-javaagent-*[!s]-all.jar"
 
 
     OVERRIDE_SLF4J_BACKEND = "OVERRIDE_SLF4J_BACKEND_JAR_LOCATION"
     OVERRIDE_SQLLINE = "OVERRIDE_SQLLINE_JAR_LOCATION"
+    OVERRIDE_OPENTELEMETRY_JAVAAGENT = "OVERRIDE_OPENTELEMETRY_JAVAAGENT_LOCATION"
 
     # Backward support old env variable PHOENIX_LIB_DIR replaced by PHOENIX_CLASS_PATH
     global phoenix_class_path
@@ -157,7 +159,7 @@ def setPath():
     global phoenix_traceserver_jar
     phoenix_traceserver_jar = find(PHOENIX_TRACESERVER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-tracing-webapp", "target", "*"))
     if phoenix_traceserver_jar == "":
-        phoenix_traceserver_jar = findFileInPathWithoutRecursion(PHOENIX_TRACESERVER_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
+        phoenix_traceserver_jar = findFileInPathWithoutRecursion(PHOENIX_TRACESERVER_JAR_PATTERN, os.path.join(current_dir, "..", "trace"))
     if phoenix_traceserver_jar == "":
         phoenix_traceserver_jar = findFileInPathWithoutRecursion(PHOENIX_TRACESERVER_JAR_PATTERN, os.path.join(current_dir, ".."))
 
@@ -177,6 +179,14 @@ def setPath():
     slf4j_backend_jar = os.environ.get(OVERRIDE_SLF4J_BACKEND)
     if slf4j_backend_jar is None or slf4j_backend_jar == "":
         slf4j_backend_jar = findFileInPathWithoutRecursion(SLF4J_LOG4J12_JAR_PATTERN, os.path.join(current_dir, "..","lib"))
+
+    global phoenix_tracing_jar
+    phoenix_tracing_jar = phoenix_traceserver_jar
+
+    global opentelemetry_javaagent_jar
+    opentelemetry_javaagent_jar = os.environ.get(OVERRIDE_OPENTELEMETRY_JAVAAGENT)
+    if opentelemetry_javaagent_jar is None or opentelemetry_javaagent_jar == "":
+        opentelemetry_javaagent_jar = findFileInPathWithoutRecursion(OPENTELEMTRY_JAVAAGENT_JAR_PATTERN, os.path.join(current_dir, "..","trace"))
 
     return ""
 
@@ -212,3 +222,6 @@ if __name__ == "__main__":
     print("hadoop_classpath:", hadoop_classpath)
     print("sqlline_with_deps_jar:", sqlline_with_deps_jar)
     print("slf4j_backend_jar:", slf4j_backend_jar)
+    print("phoenix_tracing_jar:", phoenix_tracing_jar)
+    print("phoenix_traceserver_jar:", phoenix_traceserver_jar)
+    print("opentelemetry_javaagent_jar", opentelemetry_javaagent_jar)

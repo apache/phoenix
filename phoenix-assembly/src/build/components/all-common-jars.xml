@@ -63,5 +63,13 @@
         <include>phoenix-tools.jar</include>
       </includes>
     </fileSet>
+    <fileSet>
+      <directory>${project.basedir}/../phoenix-tracing-webapp/target</directory>
+      <outputDirectory>/trace</outputDirectory>
+      <includes>
+        <include>phoenix-tracing-webapp-${project.version}.jar</include>
+        <include>phoenix-tracing-webapp.jar</include>
+      </includes>
+    </fileSet>
   </fileSets>
 </component>
