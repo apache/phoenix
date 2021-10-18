@@ -24,6 +24,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.nio.file.Files;
 
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -34,7 +35,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.apache.phoenix.thirdparty.com.google.common.io.Files;
 
 @Category(ParallelStatsDisabledTest.class)
 public class SpooledTmpFileDeleteIT extends ParallelStatsDisabledIT {
@@ -58,7 +58,11 @@ public class SpooledTmpFileDeleteIT extends ParallelStatsDisabledIT {
     @Before
     public void setup() throws Exception {
         tableName = generateUniqueName();
-        spoolDir = Files.createTempDir();
+        File tempDirBase =
+                new File(System.getProperty("java.io.tmpdir"));
+        
+        spoolDir = Files.createTempDirectory(
+                tempDirBase.toPath(), System.currentTimeMillis() + "-").toFile();
         try (Connection conn = getConnection()) {
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + tableName + " (ID varchar NOT NULL PRIMARY KEY) SPLIT ON ('EA','EZ')");
