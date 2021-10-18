@@ -33,6 +33,7 @@ import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
@@ -1464,6 +1465,27 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         assertEquals(5, rs.getInt(2));
+    }
+
+    @Test
+    public void testBug6574() throws Exception {
+        String sequenceName = generateSequenceNameWithSchema();
+        String tableName = generateTableNameWithSchema();
+
+        try(Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE SEQUENCE " + sequenceName);
+            stmt.execute("CREATE TABLE " + tableName + " (id integer primary key)");
+
+            String query = "SELECT * FROM SYSTEM.\"SEQUENCE\" where SEQUENCE_NAME = '" + getNameWithoutSchema(sequenceName) + "'";
+            ResultSet rs = stmt.executeQuery(query);
+            assertTrue(rs.next());
+            rs.close();
+
+            stmt.execute("DROP TABLE " + tableName);
+            rs = stmt.executeQuery(query);
+            assertTrue(rs.next());
+            rs.close();
+        }
     }
 
     private static String getSchemaName(String tableName) {
