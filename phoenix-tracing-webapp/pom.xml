@@ -79,6 +79,11 @@
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-common</artifactId>
       </dependency>
+      <dependency>
+        <groupId>sqlline</groupId>
+        <artifactId>sqlline</artifactId>
+        <scope>compile</scope>
+      </dependency>
     </dependencies>
 
     <build>

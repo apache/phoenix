@@ -1498,6 +1498,12 @@
         <version>${sqlline.version}</version>
         <scope>runtime</scope>
       </dependency>
+      <dependency>
+        <groupId>io.opentelemetry.javaagent</groupId>
+        <artifactId>opentelemetry-javaagent</artifactId>
+        <version>${opentelemetry-instrumentation.version}</version>
+        <classifier>all</classifier>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 

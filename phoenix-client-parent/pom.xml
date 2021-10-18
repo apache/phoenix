@@ -192,6 +192,7 @@
                   <exclude>io/skip/checksum/errors</exclude>
                   <exclude>io/sort/*</exclude>
                   <exclude>io/serializations</exclude>
+                  <exclude>io/opentelemetry/**</exclude>
                 </excludes>
               </relocation>
               <!-- JSRs that haven't made it to inclusion in J2SE -->

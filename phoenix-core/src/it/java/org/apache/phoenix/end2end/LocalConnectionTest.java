@@ -26,19 +26,17 @@ public class LocalConnectionTest {
         Statement stmt = null;
         ResultSet rset = null;
         String tableName = "phoenix_trace_test";
-//        Span span = TraceUtil.getGlobalTracer().spanBuilder("phoenix-client-queries").startSpan();
-//        try(Scope scope = span.makeCurrent()){
+        try {
+
             Connection con = DriverManager.getConnection("jdbc:phoenix:localhost");
             dropTable(con, tableName);
             createTable(con, tableName);
             upsertIntoTable(con, tableName);
             scanTable(con, tableName);
             con.close();
-//        } catch (Exception e){
-//            System.out.println("Error in tracing: " + e);
-//        } finally {
-//            span.end();
-//        }
+        } catch (Exception e){
+            System.out.println("Error in tracing: " + e);
+        }
     }
 
     private static void createTable(Connection connection, String tableName) throws SQLException {
