@@ -102,8 +102,6 @@ public class PermissionsCacheIT extends BasePermissionsIT {
         } catch (Exception e) {
             System.out.println("Exception occurred: " + e);
             throw e;
-        } finally {
-            revokeAll();
         }
     }
 
