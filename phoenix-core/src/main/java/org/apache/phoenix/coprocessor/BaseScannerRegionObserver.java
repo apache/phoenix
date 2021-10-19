@@ -281,7 +281,9 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
                             try {
                                 delegate.close();
                             } finally {
-                                child.end();
+                                if (child != null) {
+                                    child.end();
+                                }
                             }
                         }
                     };

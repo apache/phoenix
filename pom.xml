@@ -79,7 +79,7 @@
     <!-- Hadoop and Hbase-thirdparty version -->
     <!-- These are expected to be overridden to conform to cluster versions
     along with hbase.version (defined in profiles) -->
-    <hadoop.version>3.4.0-SNAPSHOT</hadoop.version>
+    <hadoop.version>3.1.4</hadoop.version>
     <hbase.thirdparty.version>2.2.1</hbase.thirdparty.version>
 
     <phoenix.thirdparty.version>1.1.0</phoenix.thirdparty.version>
@@ -92,7 +92,7 @@
     <hbase-2.2.runtime.version>2.2.6</hbase-2.2.runtime.version>
     <hbase-2.3.runtime.version>2.3.5</hbase-2.3.runtime.version>
     <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
-    <hbase-2.4.runtime.version>2.4.5</hbase-2.4.runtime.version>
+    <hbase-2.4.runtime.version>2.4.4</hbase-2.4.runtime.version>
 
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>

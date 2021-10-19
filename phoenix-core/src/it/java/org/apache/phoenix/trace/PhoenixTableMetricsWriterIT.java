@@ -83,9 +83,6 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
         Span span = createNewSpan(traceid, parentid, spanid, description, startTime, endTime,
             processid, annotation);
 
-        //Tracer.getInstance().deliver(span);
-        //assertTrue("Span never committed to table", latch.await(30, TimeUnit.SECONDS));
-
         // make sure we only get expected stat entry (matcing the trace id), otherwise we could the
         // stats for the update as well
         TraceReader reader = new TraceReader(conn, tracingTableName);

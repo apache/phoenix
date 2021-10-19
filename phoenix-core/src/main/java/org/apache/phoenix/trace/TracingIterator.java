@@ -24,7 +24,6 @@ import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.schema.tuple.Tuple;
 
-
 /**
  * A simple iterator that closes the trace scope when the iterator is closed.
  */
