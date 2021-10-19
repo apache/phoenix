@@ -1377,6 +1377,11 @@
         <version>${opentelemetry.version}</version>
       </dependency>
       <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-context</artifactId>
+        <version>${opentelemetry.version}</version>
+      </dependency>
+      <dependency>
         <groupId>io.opentelemetry.javaagent</groupId>
         <artifactId>opentelemetry-javaagent</artifactId>
         <version>${opentelemetry-instrumentation.version}</version>
@@ -1497,12 +1502,6 @@
         <artifactId>sqlline</artifactId>
         <version>${sqlline.version}</version>
         <scope>runtime</scope>
-      </dependency>
-      <dependency>
-        <groupId>io.opentelemetry.javaagent</groupId>
-        <artifactId>opentelemetry-javaagent</artifactId>
-        <version>${opentelemetry-instrumentation.version}</version>
-        <classifier>all</classifier>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -1649,7 +1648,6 @@
         <hbase.version>${hbase-2.4.0.runtime.version}</hbase.version>
         <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
         <zookeeper.version>3.5.7</zookeeper.version>
-        <hadoop.version>3.4.0-SNAPSHOT</hadoop.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
       </properties>
     </profile>
