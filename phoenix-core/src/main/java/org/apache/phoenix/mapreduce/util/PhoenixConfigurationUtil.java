@@ -463,7 +463,7 @@ public final class PhoenixConfigurationUtil {
     public static int getMultiViewQueryMoreSplitSize(final Configuration configuration) {
         final String batchSize = configuration.get(MAPREDUCE_MULTI_INPUT_QUERY_BATCH_SIZE);
         Preconditions.checkNotNull(batchSize);
-        return Integer.valueOf(batchSize);
+        return Integer.parseInt(batchSize);
     }
 
     public static List<ColumnInfo> getSelectColumnMetadataList(final Configuration configuration) throws SQLException {
@@ -493,7 +493,7 @@ public final class PhoenixConfigurationUtil {
     public static int getMultiViewSplitSize(final Configuration configuration) {
         final String splitSize = configuration.get(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE);
         Preconditions.checkNotNull(splitSize);
-        return Integer.valueOf(splitSize);
+        return Integer.parseInt(splitSize);
     }
 
     private static List<String> getSelectColumnList(
@@ -902,6 +902,30 @@ public final class PhoenixConfigurationUtil {
         boolean isSnapshotRestoreManagedExternally =
                 configuration.getBoolean(MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE, DEFAULT_MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE);
         return isSnapshotRestoreManagedExternally;
+    }
+
+    /**
+     * Get the value of the <code>name</code> property as a set of comma-delimited
+     * <code>long</code> values.
+     * If no such property exists, null is returned.
+     * Hadoop Configuration object has support for getting ints delimited by comma
+     * but doesn't support for long.
+     * @param name property name
+     * @return property value interpreted as an array of comma-delimited
+     *         <code>long</code> values
+     */
+    public static long[] getLongs(Configuration conf, String name) {
+        String[] strings = conf.getTrimmedStrings(name);
+        // Configuration#getTrimmedStrings will never return null.
+        // If key is not found, it will return empty array.
+        if (strings.length == 0) {
+            return null;
+        }
+        long[] longs = new long[strings.length];
+        for (int i = 0; i < strings.length; i++) {
+            longs[i] = Long.parseLong(strings[i]);
+        }
+        return longs;
     }
 
 }

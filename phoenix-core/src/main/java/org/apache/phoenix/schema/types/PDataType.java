@@ -178,9 +178,6 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
                 rhsConverted = ((PArrayDataType)this).toBytes(o, PArrayDataType.arrayBaseType(this), lhsSortOrder, PArrayDataType.isRowKeyOrderOptimized(this, lhsSortOrder, lhs, lhsOffset, lhsLength));
             } else {
                 rhsConverted = this.toBytes(o);
-                if (rhsSortOrder == SortOrder.DESC) {
-                    rhsSortOrder = SortOrder.ASC;
-                }
                 if (lhsSortOrder == SortOrder.DESC) {
                     lhs = SortOrder.invert(lhs, lhsOffset, new byte[lhsLength], 0, lhsLength);
                     lhsOffset = 0;
@@ -199,9 +196,6 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
                 lhsConverted = ((PArrayDataType)rhsType).toBytes(o, PArrayDataType.arrayBaseType(rhsType), rhsSortOrder, PArrayDataType.isRowKeyOrderOptimized(rhsType, rhsSortOrder, rhs, rhsOffset, rhsLength));
             } else {
                 lhsConverted = rhsType.toBytes(o);
-                if (lhsSortOrder == SortOrder.DESC) {
-                    lhsSortOrder = SortOrder.ASC;
-                }
                 if (rhsSortOrder == SortOrder.DESC) {
                     rhs = SortOrder.invert(rhs, rhsOffset, new byte[rhsLength], 0, rhsLength);
                 }
@@ -312,7 +306,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
 
     @Override
     public boolean equals(Object o) {
-        // PDataType's are expected to be singletons.
+        // PDataTypes are expected to be singletons.
         // TODO: this doesn't jive with HBase's DataType
         if (o == null) return false;
         return getClass() == o.getClass();

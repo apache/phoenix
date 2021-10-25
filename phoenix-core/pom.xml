@@ -184,6 +184,27 @@
               <outputFile>${project.build.directory}/cached_classpath.txt</outputFile>
             </configuration>
           </execution>
+          <!-- copies libraries for use by sqlline when it is started from source dir -->
+          <execution>
+            <id>copy-for-sqlline</id>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>org.slf4j</groupId>
+                  <artifactId>slf4j-log4j12</artifactId>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>sqlline</groupId>
+                  <artifactId>sqlline</artifactId>
+                  <classifier>jar-with-dependencies</classifier>
+                </artifactItem>
+              </artifactItems>
+              <outputDirectory>${project.basedir}/../lib</outputDirectory>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
       <plugin>
@@ -506,6 +527,11 @@
     <dependency>
       <groupId> org.jruby.jcodings</groupId>
       <artifactId>jcodings</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.hdrhistogram</groupId>
+      <artifactId>HdrHistogram</artifactId>
+      <version>2.1.12</version>
     </dependency>
 
     <!-- Other test dependencies -->

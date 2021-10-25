@@ -52,7 +52,7 @@ public class UpperFunction extends ScalarFunction {
     }
 
     private void initialize() {
-        if(children.size() > 1) {
+        if (children.size() > 1) {
             String localeISOCode = getLiteralValue(1, String.class);
             locale = LocaleUtils.get().getLocaleByIsoCode(localeISOCode);
         }
@@ -84,6 +84,11 @@ public class UpperFunction extends ScalarFunction {
     @Override
     public PDataType getDataType() {
         return getStrExpression().getDataType();
+    }
+
+    @Override
+    public Integer getMaxLength() {
+        return getStrExpression().getMaxLength();
     }
 
     @Override

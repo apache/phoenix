@@ -41,7 +41,7 @@ if not os.path.exists(cp_file_path):
 logging_config = os.path.join(base_dir, 'bin', 'sandbox-log4j.properties')
 
 cp_components = [phoenix_target_dir + "/*"]
-with open(cp_file_path, 'rb') as cp_file:
+with open(cp_file_path, 'r') as cp_file:
     cp_components.append(cp_file.read())
 
 java_cmd = ("java $PHOENIX_OPTS -Dlog4j.configuration=file:%s " +

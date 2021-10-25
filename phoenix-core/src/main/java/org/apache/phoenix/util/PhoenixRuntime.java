@@ -17,14 +17,14 @@
  */
 package org.apache.phoenix.util;
 
-import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
-import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.schema.types.PDataType.ARRAY_TYPE_SUFFIX;
 
 import java.io.File;
-import java.io.FileReader;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -32,6 +32,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
@@ -44,9 +45,6 @@ import java.util.TreeSet;
 
 import javax.annotation.Nullable;
 
-import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.phoenix.monitoring.PhoenixTableMetric;
-import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
@@ -54,6 +52,7 @@ import org.apache.phoenix.thirdparty.org.apache.commons.cli.HelpFormatter;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
+
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
@@ -71,6 +70,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.GlobalMetric;
 import org.apache.phoenix.monitoring.MetricType;
@@ -94,6 +94,9 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.monitoring.HistogramDistribution;
+import org.apache.phoenix.monitoring.PhoenixTableMetric;
+import org.apache.phoenix.monitoring.TableMetricsManager;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
@@ -101,6 +104,10 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Splitter;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
+import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILURES;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 
 /**
  *
@@ -212,7 +219,7 @@ public class PhoenixRuntime {
      * All Phoenix specific connection properties
      * TODO: use enum instead
      */
-    public final static String[] CONNECTION_PROPERTIES = {
+    private final static String[] CONNECTION_PROPERTIES = {
             CURRENT_SCN_ATTRIB,
             TENANT_ID_ATTRIB,
             UPSERT_BATCH_SIZE_ATTRIB,
@@ -298,7 +305,9 @@ public class PhoenixRuntime {
             } else {
                 for (String inputFile : execCmd.getInputFiles()) {
                     if (inputFile.endsWith(SQL_FILE_EXT)) {
-                        PhoenixRuntime.executeStatements(conn, new FileReader(inputFile), Collections.emptyList());
+                        PhoenixRuntime.executeStatements(conn, new InputStreamReader(
+                            new FileInputStream(inputFile), StandardCharsets.UTF_8),
+                            Collections.emptyList());
                     } else if (inputFile.endsWith(CSV_FILE_EXT)) {
 
                         String tableName = execCmd.getTableName();
@@ -333,6 +342,10 @@ public class PhoenixRuntime {
     public static final String SCHEMA_ATTRIB = "schema";
 
     private PhoenixRuntime() {
+    }
+
+    public static final String[] getConnectionProperties() {
+        return Arrays.copyOf(CONNECTION_PROPERTIES, CONNECTION_PROPERTIES.length);
     }
 
     /**
@@ -449,7 +462,7 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     public static PTable getTable(Connection conn, String name) throws SQLException {
-        PTable table = null;
+        PTable table;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         try {
             table = pconn.getTable(new PTableKey(pconn.getTenantId(), name));
@@ -459,6 +472,7 @@ public class PhoenixRuntime {
             MetaDataMutationResult result =
                     new MetaDataClient(pconn).updateCache(schemaName, tableName);
             if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+                TableMetricsManager.updateMetricsForSystemCatalogTableMethod(name, NUM_METADATA_LOOKUP_FAILURES, 1);
                 throw e;
             }
             table = result.getTable();
@@ -1378,6 +1392,14 @@ public class PhoenixRuntime {
      */
     public static Map<String,List<PhoenixTableMetric>> getPhoenixTableClientMetrics() {
         return TableMetricsManager.getTableMetricsMethod();
+    }
+
+    public static Map<String, List<HistogramDistribution>> getLatencyHistograms() {
+        return TableMetricsManager.getLatencyHistogramsForAllTables();
+    }
+
+    public static Map<String, List<HistogramDistribution>> getSizeHistograms() {
+        return TableMetricsManager.getSizeHistogramsForAllTables();
     }
 
     /**

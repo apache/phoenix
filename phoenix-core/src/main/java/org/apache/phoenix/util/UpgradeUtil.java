@@ -59,6 +59,7 @@ import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COU
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.Date;
@@ -149,6 +150,10 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
+import edu.umd.cs.findbugs.annotations.SuppressWarnings;
+
+@SuppressWarnings(value = "SQL_PREPARED_STATEMENT_GENERATED_FROM_NONCONSTANT_STRING",
+        justification="Not possible to avoid")
 public class UpgradeUtil {
     private static final Logger LOGGER = LoggerFactory.getLogger(UpgradeUtil.class);
     private static final byte[] SEQ_PREFIX_BYTES = ByteUtil.concat(QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("_SEQ_"));
@@ -159,7 +164,7 @@ public class UpgradeUtil {
      * of this attribute overrides a true value for {@value QueryServices#AUTO_UPGRADE_ENABLED}.     
      */
     private static final String DO_NOT_UPGRADE = "DoNotUpgrade";
-    public static String UPSERT_BASE_COLUMN_COUNT_IN_HEADER_ROW = "UPSERT "
+    public static final String UPSERT_BASE_COLUMN_COUNT_IN_HEADER_ROW = "UPSERT "
             + "INTO SYSTEM.CATALOG "
             + "(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, BASE_COLUMN_COUNT) "
             + "VALUES (?, ?, ?, ?, ?, ?) ";
@@ -172,7 +177,7 @@ public class UpgradeUtil {
             UPDATE_CACHE_FREQUENCY +
             ") VALUES (?, ?, ?, ?)";
 
-    public static String SELECT_BASE_COLUMN_COUNT_FROM_HEADER_ROW = "SELECT "
+    public static final String SELECT_BASE_COLUMN_COUNT_FROM_HEADER_ROW = "SELECT "
             + "BASE_COLUMN_COUNT "
             + "FROM \"SYSTEM\".CATALOG "
             + "WHERE "
@@ -2110,8 +2115,9 @@ public class UpgradeUtil {
             String destTableName, ReadOnlyProps props, Long ts, String phoenixTableName, PTableType pTableType,PName tenantId)
                     throws SnapshotCreationException, IllegalArgumentException, IOException, InterruptedException,
                     SQLException {
-        if (!SchemaUtil.isNamespaceMappingEnabled(pTableType,
-                props)) { throw new IllegalArgumentException(SchemaUtil.isSystemTable(srcTableName.getBytes())
+        if (!SchemaUtil.isNamespaceMappingEnabled(pTableType, props)) {
+            throw new IllegalArgumentException(
+                SchemaUtil.isSystemTable(srcTableName.getBytes(StandardCharsets.UTF_8))
                         ? "For system table " + QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE
                                 + " also needs to be enabled along with " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
                         : QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " is not enabled"); }
@@ -2226,8 +2232,9 @@ public class UpgradeUtil {
                     byte[] tenantId = conn.getTenantId() != null ?
                             conn.getTenantId().getBytes() : null;
                     ViewUtil.findAllRelatives(sysCatOrSysChildLinkTable, tenantId,
-                            schemaName.getBytes(),
-                            tableName.getBytes(), LinkType.CHILD_TABLE, childViewsResult);
+                            schemaName.getBytes(StandardCharsets.UTF_8),
+                            tableName.getBytes(StandardCharsets.UTF_8), LinkType.CHILD_TABLE,
+                            childViewsResult);
                     break;
                 } catch (TableNotFoundException ex) {
                     // try again with SYSTEM.CATALOG in case the schema is old
@@ -2278,7 +2285,7 @@ public class UpgradeUtil {
                                 index.getName(), srcTableName));
                         destTableName = Bytes
                                 .toString(MetaDataUtil.getLocalIndexPhysicalName(
-                                        newPhysicalTablename.getBytes()));
+                                        newPhysicalTablename.getBytes(StandardCharsets.UTF_8)));
                         // update parent_table property in local index table descriptor
                         conn.createStatement()
                                 .execute(String.format("ALTER TABLE %s set " +
@@ -2289,7 +2296,7 @@ public class UpgradeUtil {
                                 index.getName(), srcTableName));
                         destTableName = Bytes
                                 .toString(MetaDataUtil.getViewIndexPhysicalName(
-                                        newPhysicalTablename.getBytes()));
+                                        newPhysicalTablename.getBytes(StandardCharsets.UTF_8)));
                     } else {
                         LOGGER.info(String.format("Global index '%s' found with physical hbase table name ''..",
                                 index.getName(), srcTableName));

@@ -31,4 +31,5 @@ public interface MetricPublisherSupplierFactory extends MetricsRegistry {
      * Interface for UnRegistering Publisher Method
      */
     void unregisterMetricProvider();
+
 }

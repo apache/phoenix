@@ -132,7 +132,7 @@ public class ServerBuildIndexCompiler {
                                 .get(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
                 if (rebuildPageRowSize != null) {
                     scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGE_ROWS,
-                        Bytes.toBytes(Long.valueOf(rebuildPageRowSize)));
+                        Bytes.toBytes(Long.parseLong(rebuildPageRowSize)));
                 }
                 BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
                 addEmptyColumnToScan(scan, indexMaintainer.getDataEmptyKeyValueCF(), indexMaintainer.getEmptyKeyValueQualifier());

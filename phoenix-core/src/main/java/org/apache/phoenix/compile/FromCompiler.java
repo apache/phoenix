@@ -34,6 +34,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.BindTableNode;
 import org.apache.phoenix.parse.ColumnDef;
@@ -91,6 +92,7 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TransactionUtil;
+import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -99,6 +101,8 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+
+import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILURES;
 
 /**
  * Validates FROM clause and builds a ColumnResolver for resolving column references
@@ -730,27 +734,38 @@ public class FromCompiler {
             long timeStamp = QueryConstants.UNSET_TIMESTAMP;
             PSchema theSchema = null;
             MetaDataClient client = new MetaDataClient(connection);
-            if (updateCacheImmediately) {
-                MetaDataMutationResult result = client.updateCache(schemaName, true);
-                timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
-                theSchema = result.getSchema();
-                if (theSchema == null) { throw new SchemaNotFoundException(schemaName, timeStamp); }
-            } else {
-                try {
-                    theSchema = connection.getSchema(new PTableKey(null, schemaName));
-                } catch (SchemaNotFoundException e1) {}
-                // We always attempt to update the cache in the event of a
-                // SchemaNotFoundException
-                if (theSchema == null) {
+            try {
+                if (updateCacheImmediately) {
                     MetaDataMutationResult result = client.updateCache(schemaName, true);
-                    if (result.wasUpdated()) {
-                        timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
-                        theSchema = result.getSchema();
+                    timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
+                    theSchema = result.getSchema();
+                    if (theSchema == null) {
+                        throw new SchemaNotFoundException(schemaName, timeStamp);
+                    }
+                } else {
+                    try {
+                        theSchema = connection.getSchema(new PTableKey(null, schemaName));
+                    } catch (SchemaNotFoundException e1) {
+                    }
+                    // We always attempt to update the cache in the event of a
+                    // SchemaNotFoundException
+                    if (theSchema == null) {
+                        MetaDataMutationResult result = client.updateCache(schemaName, true);
+                        if (result.wasUpdated()) {
+                            timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
+                            theSchema = result.getSchema();
+                        }
+                    }
+                    if (theSchema == null) {
+                        throw new SchemaNotFoundException(schemaName, timeStamp);
                     }
                 }
-                if (theSchema == null) { throw new SchemaNotFoundException(schemaName, timeStamp); }
+                return theSchema;
+            } catch(Throwable e) {
+                TableMetricsManager.updateMetricsForSystemCatalogTableMethod(null,
+                        NUM_METADATA_LOOKUP_FAILURES, 1);
+                throw e;
             }
-            return theSchema;
         }
 
         protected TableRef createTableRef(String connectionSchemaName, NamedTableNode tableNode,
@@ -762,59 +777,78 @@ public class FromCompiler {
             String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
             PName tenantId = connection.getTenantId();
             PTable theTable = null;
-            if (updateCacheImmediately) {
-                //Force update cache when mutating and ref table are same except for meta tables
-                if(!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName) &&
-                    mutatingTableName!=null && tableNode!=null &&
-                    tableNode.getName().equals(mutatingTableName) ){
-                  alwaysHitServer = true;
-                }
-                MetaDataMutationResult result = client.updateCache(tenantId, schemaName, tableName, alwaysHitServer);
-                timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
-                theTable = result.getTable();
-                MutationCode mutationCode = result.getMutationCode();
-                if (theTable == null) {
-					throw new TableNotFoundException(schemaName, tableName, timeStamp);
-                }
-            } else {
-                try {
-                    theTable = connection.getTable(new PTableKey(tenantId, fullTableName));
-                } catch (TableNotFoundException e1) {
-                    if (tenantId != null) { // Check with null tenantId next
-                        try {
-                            theTable = connection.getTable(new PTableKey(null, fullTableName));
-                        } catch (TableNotFoundException e2) {
+            boolean error = false;
+
+            try {
+                if (updateCacheImmediately) {
+                    //Force update cache when mutating and ref table are same except for meta tables
+                    if (!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName) &&
+                            mutatingTableName != null && tableNode != null &&
+                            tableNode.getName().equals(mutatingTableName)) {
+                        alwaysHitServer = true;
+                    }
+                    try {
+                        MetaDataMutationResult result = client.updateCache(tenantId, schemaName, tableName, alwaysHitServer);
+                        timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
+                        theTable = result.getTable();
+                        MutationCode mutationCode = result.getMutationCode();
+                        if (theTable == null) {
+                            throw new TableNotFoundException(schemaName, tableName, timeStamp);
+                        }
+                    } catch (Throwable e) {
+                        error = true;
+                        throw e;
+                    }
+                } else {
+                    try {
+                        theTable = connection.getTable(new PTableKey(tenantId, fullTableName));
+                    } catch (TableNotFoundException e1) {
+                        if (tenantId != null) { // Check with null tenantId next
+                            try {
+                                theTable = connection.getTable(new PTableKey(null, fullTableName));
+                            } catch (TableNotFoundException e2) {
+                            }
                         }
                     }
-                }
-                // We always attempt to update the cache in the event of a TableNotFoundException
-                if (theTable == null) {
-                    MetaDataMutationResult result = client.updateCache(schemaName, tableName);
-                    if (result.wasUpdated()) {
-                    	timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
-                        theTable = result.getTable();
+                    // We always attempt to update the cache in the event of a TableNotFoundException
+                    try {
+                        if (theTable == null) {
+                            MetaDataMutationResult result = client.updateCache(schemaName, tableName);
+                            if (result.wasUpdated()) {
+                                timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
+                                theTable = result.getTable();
+                            }
+                        }
+                        if (theTable == null) {
+                            throw new TableNotFoundException(schemaName, tableName, timeStamp);
+                        }
+                    } catch (Throwable e) {
+                        error = true;
+                        throw e;
                     }
                 }
-                if (theTable == null) {
-                    throw new TableNotFoundException(schemaName, tableName, timeStamp);
+                // Add any dynamic columns to the table declaration
+                List<ColumnDef> dynamicColumns = tableNode.getDynamicColumns();
+                theTable = addDynamicColumns(dynamicColumns, theTable);
+                if (timeStamp != QueryConstants.UNSET_TIMESTAMP) {
+                    timeStamp += tsAddition;
+                }
+                TableRef tableRef = new TableRef(tableNode.getAlias(), theTable, timeStamp, !dynamicColumns.isEmpty());
+                if (LOGGER.isDebugEnabled() && timeStamp != QueryConstants.UNSET_TIMESTAMP) {
+                    LOGGER.debug(LogUtil.addCustomAnnotations(
+                            "Re-resolved stale table " + fullTableName + " with seqNum "
+                                    + tableRef.getTable().getSequenceNumber() + " at timestamp "
+                                    + tableRef.getTable().getTimeStamp() + " with "
+                                    + tableRef.getTable().getColumns().size() + " columns: "
+                                    + tableRef.getTable().getColumns(), connection));
+                }
+                return tableRef;
+            } finally {
+                if (error) {
+                    TableMetricsManager.updateMetricsForSystemCatalogTableMethod(fullTableName,
+                            NUM_METADATA_LOOKUP_FAILURES, 1);
                 }
             }
-            // Add any dynamic columns to the table declaration
-            List<ColumnDef> dynamicColumns = tableNode.getDynamicColumns();
-            theTable = addDynamicColumns(dynamicColumns, theTable);
-            if (timeStamp != QueryConstants.UNSET_TIMESTAMP) {
-                timeStamp += tsAddition;
-            }
-            TableRef tableRef = new TableRef(tableNode.getAlias(), theTable, timeStamp, !dynamicColumns.isEmpty());
-            if (LOGGER.isDebugEnabled() && timeStamp != QueryConstants.UNSET_TIMESTAMP) {
-                LOGGER.debug(LogUtil.addCustomAnnotations(
-                        "Re-resolved stale table " + fullTableName + " with seqNum "
-                                + tableRef.getTable().getSequenceNumber() + " at timestamp "
-                                + tableRef.getTable().getTimeStamp() + " with "
-                                + tableRef.getTable().getColumns().size() + " columns: "
-                                + tableRef.getTable().getColumns(), connection));
-            }
-            return tableRef;
         }
 
         protected PTable addDynamicColumns(List<ColumnDef> dynColumns, PTable theTable)

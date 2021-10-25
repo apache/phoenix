@@ -89,6 +89,7 @@ import static org.apache.phoenix.util.ViewUtil.findAllDescendantViews;
 import static org.apache.phoenix.util.ViewUtil.getSystemTableForChildLinks;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.PrivilegedExceptionAction;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -1276,8 +1277,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     // famName contains the logical name of the parent table. We need to get the actual physical name of the table
                     PTable parentTable = null;
                     if (indexType != IndexType.LOCAL) {
-                        parentTable = getTable(null, SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(),
-                                SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(), clientTimeStamp, clientVersion);
+                        parentTable = getTable(null, SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8),
+                                SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8), clientTimeStamp, clientVersion);
                         if (parentTable == null) {
                             // parentTable is not in the cache. Since famName is only logical name, we need to find the physical table.
                             try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
@@ -1290,8 +1291,13 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
                     if (parentTable == null) {
                         if (indexType == IndexType.LOCAL) {
-                            PName tablePhysicalName = getPhysicalTableName(env.getRegion(),null, SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(),
-                                    SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(), clientTimeStamp);
+                            PName tablePhysicalName = getPhysicalTableName(
+                                env.getRegion(),null,
+                                SchemaUtil.getSchemaNameFromFullName(
+                                    famName.getBytes()).getBytes(StandardCharsets.UTF_8),
+                                SchemaUtil.getTableNameFromFullName(
+                                    famName.getBytes()).getBytes(StandardCharsets.UTF_8),
+                                clientTimeStamp);
                             if (tablePhysicalName == null) {
                                 physicalTables.add(famName);
                             } else {
@@ -1821,8 +1827,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         byte[] colBytes = rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
         byte[] famBytes = rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX];
         if ((colBytes == null || colBytes.length == 0) && (famBytes != null && famBytes.length > 0)) {
-            byte[] sName = SchemaUtil.getSchemaNameFromFullName(famBytes).getBytes();
-            byte[] tName = SchemaUtil.getTableNameFromFullName(famBytes).getBytes();
+            byte[] sName =
+                    SchemaUtil.getSchemaNameFromFullName(famBytes).getBytes(StandardCharsets.UTF_8);
+            byte[] tName =
+                    SchemaUtil.getTableNameFromFullName(famBytes).getBytes(StandardCharsets.UTF_8);
             schemaTableNames[0] = tenantId;
             schemaTableNames[1] = sName;
             schemaTableNames[2] = tName;
@@ -1980,7 +1988,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     // The view index physical table name is constructed from logical name of base table.
                     // For example, _IDX_SC.TBL1 is the view index name and SC.TBL1 is the logical name of the base table.
                     String namepaceMappedParentLogicalName = MetaDataUtil.getNamespaceMappedName(parentTable.getBaseTableLogicalName(), isNamespaceMapped);
-                    cPhysicalName = MetaDataUtil.getViewIndexPhysicalName(namepaceMappedParentLogicalName.getBytes());
+                    cPhysicalName = MetaDataUtil.getViewIndexPhysicalName(namepaceMappedParentLogicalName.getBytes(StandardCharsets.UTF_8));
                     cParentPhysicalName = parentTable.getPhysicalName().getBytes();
                 } else {
                     cParentPhysicalName = SchemaUtil
