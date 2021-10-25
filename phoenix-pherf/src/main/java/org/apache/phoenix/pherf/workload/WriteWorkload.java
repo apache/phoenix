@@ -18,13 +18,9 @@
 
 package org.apache.phoenix.pherf.workload;
 
-import java.math.BigDecimal;
-import java.sql.Array;
 import java.sql.Connection;
-import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,7 +40,6 @@ import org.apache.phoenix.pherf.exception.PherfException;
 import org.apache.phoenix.pherf.result.DataLoadThreadTime;
 import org.apache.phoenix.pherf.result.DataLoadTimeSummary;
 import org.apache.phoenix.pherf.result.ResultUtil;
-import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.util.RowCalculator;
@@ -70,27 +65,27 @@ public class WriteWorkload implements Workload {
     private final int batchSize;
     private final GeneratePhoenixStats generateStatistics;
     private final boolean useBatchApi;
-    private final Properties phoenixProperties;
+    private final Properties connProperties;
 
     public WriteWorkload(XMLConfigParser parser) throws Exception {
         this(PhoenixUtil.create(),  parser, new Properties(), GeneratePhoenixStats.NO);
     }
-    public WriteWorkload(XMLConfigParser parser, Properties phoenixProperties,
+    public WriteWorkload(XMLConfigParser parser, Properties connProperties,
                          GeneratePhoenixStats generateStatistics) throws Exception {
-        this(PhoenixUtil.create(), parser, phoenixProperties, generateStatistics);
+        this(PhoenixUtil.create(), parser, connProperties, generateStatistics);
     }
 
-    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser, Properties phoenixProperties,
+    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser, Properties connProperties,
                          GeneratePhoenixStats generateStatistics) throws Exception {
-        this(util,  parser, phoenixProperties, null, generateStatistics);
+        this(util,  parser, connProperties, null, generateStatistics);
     }
 
     public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser,
-                         Properties phoenixProperties, Scenario scenario,
+                         Properties connProperties, Scenario scenario,
                          GeneratePhoenixStats generateStatistics) throws Exception {
         this(phoenixUtil,
                 PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, true),
-                parser, phoenixProperties, scenario, generateStatistics);
+                parser, connProperties, scenario, generateStatistics);
     }
 
     /**
@@ -107,14 +102,14 @@ public class WriteWorkload implements Workload {
      * @throws Exception
      */
     public WriteWorkload(PhoenixUtil phoenixUtil, Properties properties, XMLConfigParser parser,
-                         Properties phoenixProperties, Scenario scenario,
+                         Properties connProperties, Scenario scenario,
                          GeneratePhoenixStats generateStatistics) throws Exception {
         this.pUtil = phoenixUtil;
         this.parser = parser;
         this.rulesApplier = new RulesApplier(parser);
         this.resultUtil = new ResultUtil();
         this.generateStatistics = generateStatistics;
-        this.phoenixProperties = phoenixProperties;
+        this.connProperties = connProperties;
         int size = Integer.parseInt(properties.getProperty("pherf.default.dataloader.threadpool"));
         
         // Overwrite defaults properties with those given in the configuration. This indicates the
@@ -267,7 +262,7 @@ public class WriteWorkload implements Workload {
                 Connection connection = null;
                 PreparedStatement stmt = null;
                 try {
-                    connection = pUtil.getConnection(scenario.getTenantId(), phoenixProperties);
+                    connection = pUtil.getConnection(scenario.getTenantId(), connProperties);
                     long logStartTime = EnvironmentEdgeManager.currentTimeMillis();
                     long maxDuration = (WriteWorkload.this.writeParams == null) ? Long.MAX_VALUE :
                         WriteWorkload.this.writeParams.getExecutionDurationInMs();
