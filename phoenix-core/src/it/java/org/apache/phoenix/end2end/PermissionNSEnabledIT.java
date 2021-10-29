@@ -18,8 +18,14 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.access.Permission;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
@@ -29,11 +35,13 @@ import org.junit.experimental.categories.Category;
 import java.security.PrivilegedExceptionAction;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Collections;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -47,6 +55,43 @@ public class PermissionNSEnabledIT extends BasePermissionsIT {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         BasePermissionsIT.initCluster(true);
+    }
+    private AccessTestAction createMappedView(final String schemaName, final String tableName) throws SQLException {
+        return new AccessTestAction() {
+            @Override
+            public Object run() throws Exception {
+                try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
+                    String viewStmtSQL = "CREATE VIEW \"" + schemaName + "\".\"" + tableName + "\" ( PK varchar primary key)";
+                    assertFalse(stmt.execute(viewStmtSQL));
+                }
+                return null;
+            }
+        };
+    }
+
+
+    @Test
+    public void testCreateMappedView() throws Throwable {
+        final String schema = generateUniqueName();
+        final String tableName = generateUniqueName();
+        verifyAllowed(createSchema(schema), superUser1);
+        grantPermissions(regularUser1.getShortName(), schema, Permission.Action.WRITE,
+                Permission.Action.READ, Permission.Action.EXEC, Permission.Action.ADMIN);
+        grantPermissions(regularUser1.getShortName(), "SYSTEM", Permission.Action.WRITE,
+                Permission.Action.READ, Permission.Action.EXEC);
+        superUser1.runAs(new PrivilegedExceptionAction<Void>() {
+            @Override
+            public Void run() throws Exception {
+                Admin admin = testUtil.getAdmin();
+                TableDescriptorBuilder tdb = TableDescriptorBuilder.newBuilder(TableName.valueOf(schema + ":" + tableName));
+                ColumnFamilyDescriptor cfd = ColumnFamilyDescriptorBuilder.newBuilder(Bytes.toBytes("0")).build();
+                tdb.setColumnFamily(cfd);
+                TableDescriptor td = tdb.build();
+                admin.createTable(td);
+                return null;
+            }
+        });
+        verifyAllowed(createMappedView(schema, tableName), regularUser1);
     }
 
     @Test

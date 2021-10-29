@@ -99,7 +99,7 @@ public abstract class BasePermissionsIT extends BaseTest {
 
     private static final String SUPER_USER = System.getProperty("user.name");
 
-    private static HBaseTestingUtility testUtil;
+    static HBaseTestingUtility testUtil;
     private static final Set<String> PHOENIX_SYSTEM_TABLES =
             new HashSet<>(Arrays.asList("SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS",
                 "SYSTEM.FUNCTION", "SYSTEM.MUTEX", "SYSTEM.CHILD_LINK", "SYSTEM.TRANSFORM"));
@@ -365,7 +365,7 @@ public abstract class BasePermissionsIT extends BaseTest {
     // UG Object
     // 1. Instance of String --> represents GROUP name
     // 2. Instance of User --> represents HBase user
-    private AccessTestAction grantPermissions(final String actions, final Object ug,
+    AccessTestAction grantPermissions(final String actions, final Object ug,
                                       final String tableOrSchemaList, final boolean isSchema) throws SQLException {
         return grantPermissions(actions, ug, Collections.singleton(tableOrSchemaList), isSchema);
     }
@@ -958,7 +958,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         }
     }
 
-    private String surroundWithDoubleQuotes(String input) {
+    String surroundWithDoubleQuotes(String input) {
         return "\"" + input + "\"";
     }
 
