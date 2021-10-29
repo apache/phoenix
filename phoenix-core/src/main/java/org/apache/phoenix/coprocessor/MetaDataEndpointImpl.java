@@ -1867,7 +1867,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     }
                 } else {
                     // Mapped View
-                    cParentPhysicalName = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
+                    cParentPhysicalName = SchemaUtil.getPhysicalHBaseTableName(
+                            schemaName, tableName, isNamespaceMapped).getBytes();
+
                 }
                 parentSchemaName = parentPhysicalSchemaTableNames[1];
                 parentTableName = parentPhysicalSchemaTableNames[2];
