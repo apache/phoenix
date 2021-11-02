@@ -65,28 +65,21 @@ public class WriteWorkload implements Workload {
     private final int batchSize;
     private final GeneratePhoenixStats generateStatistics;
     private final boolean useBatchApi;
-    private final Properties connProperties;
+    private final Properties properties;
 
     public WriteWorkload(XMLConfigParser parser) throws Exception {
         this(PhoenixUtil.create(),  parser, new Properties(), GeneratePhoenixStats.NO);
     }
-    public WriteWorkload(XMLConfigParser parser, Properties connProperties,
+    public WriteWorkload(XMLConfigParser parser, Properties properties,
                          GeneratePhoenixStats generateStatistics) throws Exception {
-        this(PhoenixUtil.create(), parser, connProperties, generateStatistics);
+        this(PhoenixUtil.create(), parser, properties, generateStatistics);
     }
 
-    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser, Properties connProperties,
+    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser, Properties properties,
                          GeneratePhoenixStats generateStatistics) throws Exception {
-        this(util,  parser, connProperties, null, generateStatistics);
+        this(util,  parser, properties, null, generateStatistics);
     }
 
-    public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser,
-                         Properties connProperties, Scenario scenario,
-                         GeneratePhoenixStats generateStatistics) throws Exception {
-        this(phoenixUtil,
-                PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, true),
-                parser, connProperties, scenario, generateStatistics);
-    }
 
     /**
      * Default the writers to use up all available cores for threads. If writeParams are used in
@@ -95,21 +88,21 @@ public class WriteWorkload implements Workload {
      * TODO extract notion of the scenario list and have 1 write workload per scenario
      *
      * @param phoenixUtil {@link org.apache.phoenix.pherf.util.PhoenixUtil} Query helper
-     * @param properties  {@link java.util.Properties} default properties to use
      * @param parser      {@link org.apache.phoenix.pherf.configuration.XMLConfigParser}
+     * @param properties  {@link java.util.Properties} default properties to use
      * @param scenario    {@link org.apache.phoenix.pherf.configuration.Scenario} If null is passed
      *                    it will run against all scenarios in the parsers list.
      * @throws Exception
      */
-    public WriteWorkload(PhoenixUtil phoenixUtil, Properties properties, XMLConfigParser parser,
-                         Properties connProperties, Scenario scenario,
+    public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser,
+                         Properties properties, Scenario scenario,
                          GeneratePhoenixStats generateStatistics) throws Exception {
         this.pUtil = phoenixUtil;
         this.parser = parser;
         this.rulesApplier = new RulesApplier(parser);
         this.resultUtil = new ResultUtil();
         this.generateStatistics = generateStatistics;
-        this.connProperties = connProperties;
+        this.properties = properties;
         int size = Integer.parseInt(properties.getProperty("pherf.default.dataloader.threadpool"));
         
         // Overwrite defaults properties with those given in the configuration. This indicates the
@@ -262,7 +255,7 @@ public class WriteWorkload implements Workload {
                 Connection connection = null;
                 PreparedStatement stmt = null;
                 try {
-                    connection = pUtil.getConnection(scenario.getTenantId(), connProperties);
+                    connection = pUtil.getConnection(scenario.getTenantId(), properties);
                     long logStartTime = EnvironmentEdgeManager.currentTimeMillis();
                     long maxDuration = (WriteWorkload.this.writeParams == null) ? Long.MAX_VALUE :
                         WriteWorkload.this.writeParams.getExecutionDurationInMs();

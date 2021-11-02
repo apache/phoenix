@@ -117,18 +117,18 @@ public class PhoenixUtil {
     }
 
     public Connection getConnection(String tenantId,
-                                    Properties connProperties) throws  Exception {
-        Map<String, String> connPropertyMap = getPropertyHashMap(connProperties);
-        return getConnection(tenantId, testEnabled, connPropertyMap);
+                                    Properties properties) throws  Exception {
+        Map<String, String> propertyHashMap = getPropertyHashMap(properties);
+        return getConnection(tenantId, testEnabled, propertyHashMap);
     }
     
     public Connection getConnection(String tenantId,
-                                    Map<String, String> phoenixProperty) throws Exception {
-        return getConnection(tenantId, testEnabled, phoenixProperty);
+                                    Map<String, String> propertyHashMap) throws Exception {
+        return getConnection(tenantId, testEnabled, propertyHashMap);
     }
 
     public Connection getConnection(String tenantId, boolean testEnabled,
-                                    Map<String, String> connPropertyMap) throws Exception {
+                                    Map<String, String> propertyHashMap) throws Exception {
         if (useThinDriver) {
             if (null == queryServerUrl) {
                 throw new IllegalArgumentException("QueryServer URL must be set before" +
@@ -152,8 +152,8 @@ public class PhoenixUtil {
                 LOGGER.debug("\nSetting tenantId to " + tenantId);
             }
             
-            if (connPropertyMap != null) {
-            	for (Map.Entry<String, String> phxProperty: connPropertyMap.entrySet()) {
+            if (propertyHashMap != null) {
+            	for (Map.Entry<String, String> phxProperty: propertyHashMap.entrySet()) {
             		props.setProperty(phxProperty.getKey(), phxProperty.getValue());
 					LOGGER.debug("Setting connection property "
                             + phxProperty.getKey() + " to "
