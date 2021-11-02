@@ -21,13 +21,12 @@ import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
 import org.joda.time.DateTime;
-import org.joda.time.chrono.GJChronology;
 
 /**
  * 
  * Ceil function that rounds up the {@link DateTime} to next year. 
  */
-public class CeilYearExpression extends RoundJodaDateExpression {
+public class CeilYearExpression extends CeilDateExpression {
     
     public CeilYearExpression() {
         super();
@@ -38,20 +37,17 @@ public class CeilYearExpression extends RoundJodaDateExpression {
     }
 
     @Override
-    public long roundDateTime(DateTime dateTime) {
-       return dateTime.year().roundCeilingCopy().getMillis();
+    protected long applyFn(long time) {
+        return getContext().ceilYear(time, divBy, multiplier);
     }
 
     @Override
     public long rangeLower(long time) {
-        // floor(time - 1) + 1
-        return (new DateTime(time - 1, GJChronology.getInstanceUTC())).year().roundFloorCopy()
-                .getMillis() + 1;
+        return getContext().floorYear(time -1, divBy, multiplier) + 1;
     }
 
     @Override
     public long rangeUpper(long time) {
-        // ceil
-        return roundDateTime(new DateTime(time, GJChronology.getInstanceUTC()));
+        return getContext().ceilYear(time, divBy, multiplier);
     }
 }

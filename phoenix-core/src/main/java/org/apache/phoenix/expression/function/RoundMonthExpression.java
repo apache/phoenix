@@ -20,16 +20,13 @@ package org.apache.phoenix.expression.function;
 import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.util.DateUtil;
 import org.joda.time.DateTime;
-import org.joda.time.DateTimeFieldType;
-import org.joda.time.chrono.GJChronology;
 
 /**
  * 
  * Rounds off the given {@link DateTime} to month.
  */
-public class RoundMonthExpression extends RoundJodaDateExpression {
+public class RoundMonthExpression extends RoundDateExpression {
     
     public RoundMonthExpression(){}
     
@@ -38,26 +35,17 @@ public class RoundMonthExpression extends RoundJodaDateExpression {
     }
 
     @Override
-    public long roundDateTime(DateTime dateTime) {
-       return dateTime.monthOfYear().roundHalfEvenCopy().getMillis();
+    public long applyFn(long time) {
+        return getContext().roundMonth(time, divBy, multiplier);
     }
 
     @Override
-    public long rangeLower(long epochMs) {
-        // We're doing unnecessary conversions here, but this is not perf sensitive
-        DateTime rounded =
-                new DateTime(roundDateTime(new DateTime(epochMs, GJChronology.getInstanceUTC())),
-                        GJChronology.getInstanceUTC());
-        DateTime prev = rounded.minusMonths(1);
-        return DateUtil.rangeJodaHalfEven(rounded, prev, DateTimeFieldType.monthOfYear());
+    public long rangeLower(long time) {
+        return getContext().roundMonthLower(time, divBy, multiplier);
     }
 
     @Override
-    public long rangeUpper(long epochMs) {
-        DateTime rounded =
-                new DateTime(roundDateTime(new DateTime(epochMs, GJChronology.getInstanceUTC())),
-                        GJChronology.getInstanceUTC());
-        DateTime next = rounded.plusMonths(1);
-        return DateUtil.rangeJodaHalfEven(rounded, next, DateTimeFieldType.monthOfYear());
+    public long rangeUpper(long time) {
+        return getContext().roundMonthUpper(time, divBy, multiplier);
     }
 }

@@ -41,7 +41,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
 
                 "SELECT host FROM PTSDB WHERE inst IS NULL AND host IS NOT NULL AND \"DATE\" >= to_date('2013-01-01')",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [null,not null]\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY AND \"DATE\" >= DATE '2013-01-01 00:00:00.000'",
+                "    SERVER FILTER BY FIRST KEY ONLY AND \"DATE\" >= DATE '2013-01-01'",
 
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id > '000000000000002' AND entity_id < '000000000000008' AND (organization_id,entity_id) >= ('000000000000001','000000000000005') ",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000005'] - ['000000000000001','000000000000008']",
@@ -61,7 +61,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 // Since inst IS NOT NULL is unbounded, we won't continue optimizing
                 "SELECT host FROM PTSDB WHERE inst IS NOT NULL AND host IS NULL AND \"DATE\" >= to_date('2013-01-01')",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [not null]\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY AND (HOST IS NULL AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')",
+                "    SERVER FILTER BY FIRST KEY ONLY AND (HOST IS NULL AND \"DATE\" >= DATE '2013-01-01')",
 
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id = '000000000000002' AND x_integer = 2 AND a_integer < 5 ",
                 "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER ATABLE\n" + 
@@ -78,11 +78,11 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER ATABLE",
 
                 "SELECT inst,host FROM PTSDB WHERE inst IN ('na1', 'na2','na3') AND host IN ('a','b') AND \"DATE\" >= to_date('2013-01-01') AND \"DATE\" < to_date('2013-01-02')",
-                "CLIENT PARALLEL 1-WAY SKIP SCAN ON 6 RANGES OVER PTSDB ['na1','a','2013-01-01'] - ['na3','b','2013-01-02']\n" + 
+                "CLIENT PARALLEL 1-WAY SKIP SCAN ON 6 RANGES OVER PTSDB ['na1','a',DATE '2013-01-01'] - ['na3','b',DATE '2013-01-02']\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY",
 
                 "SELECT inst,host FROM PTSDB WHERE inst LIKE 'na%' AND host IN ('a','b') AND \"DATE\" >= to_date('2013-01-01') AND \"DATE\" < to_date('2013-01-02')",
-                "CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 RANGES OVER PTSDB ['na','a','2013-01-01'] - ['nb','b','2013-01-02']\n" + 
+                "CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 RANGES OVER PTSDB ['na','a',DATE '2013-01-01'] - ['nb','b',DATE '2013-01-02']\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY",
 
                 "SELECT count(*) FROM atable",
@@ -248,7 +248,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             String queryPlan = QueryUtil.getExplainPlan(rs);
             assertEquals(
-                    "CLIENT PARALLEL 20-WAY RANGE SCAN OVER FOO [X'00','a',~'2016-01-28 23:59:59.999'] - [X'13','a',~'2016-01-28 00:00:00.000']\n" +
+                    "CLIENT PARALLEL 20-WAY RANGE SCAN OVER FOO [X'00','a',~TIMESTAMP '2016-01-28 23:59:59.999'] - [X'13','a',~TIMESTAMP '2016-01-28 00:00:00.000']\n" +
                     "    SERVER FILTER BY FIRST KEY ONLY\n" + 
                     "CLIENT MERGE SORT", queryPlan);
         } finally {
@@ -274,7 +274,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             String queryPlan = QueryUtil.getExplainPlan(rs);
             assertEquals(
-                    "CLIENT PARALLEL 20-WAY ROUND ROBIN RANGE SCAN OVER " + tableName + " [X'00','a',~'2016-01-28 23:59:59.999'] - [X'13','a',~'2016-01-28 00:00:00.000']\n" +
+                    "CLIENT PARALLEL 20-WAY ROUND ROBIN RANGE SCAN OVER " + tableName + " [X'00','a',~TIMESTAMP '2016-01-28 23:59:59.999'] - [X'13','a',~TIMESTAMP '2016-01-28 00:00:00.000']\n" +
                     "    SERVER FILTER BY FIRST KEY ONLY", queryPlan);
         } finally {
             conn.close();

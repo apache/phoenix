@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker;
+import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScanOptions;
@@ -58,6 +59,7 @@ import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ThreadExpressionCtx;
 
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
 
@@ -148,6 +150,11 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String EMPTY_COLUMN_QUALIFIER_NAME = "_EmptyCQName";
     public static final String INDEX_ROW_KEY = "_IndexRowKey";
     public static final String READ_REPAIR_TRANSFORMING_TABLE = "_ReadRepairTransformingTable";
+    public static final String USE_COMPLIANT_TEMPORAL = "_UseCompliantTemporal";
+    public static final String TIME_ZONE = "_TimeZone";
+    public static final String TIMESTAMP_PATTERN = "_TimestampPattern";
+    public static final String DATE_PATTERN = "_DatePattern";
+    public static final String TIME_PATTERN = "_TimePattern";
     
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);
@@ -251,6 +258,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             TimeRange timeRange = scan.getTimeRange();
             scan.setTimeRange(timeRange.getMin(), Bytes.toLong(txnScn));
         }
+        ThreadExpressionCtx.set(ScanUtil.getExpressionContext(scan));
         if (isRegionObserverFor(scan)) {
             // For local indexes, we need to throw if out of region as we'll get inconsistent
             // results otherwise while in other cases, it may just mean out client-side data
@@ -269,6 +277,12 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 }
             }
         }
+    }
+
+    @Override
+    public void postScannerClose(ObserverContext<RegionCoprocessorEnvironment> ctx,
+            InternalScanner s) {
+        ThreadExpressionCtx.remove();
     }
 
     private class RegionScannerHolder extends DelegateRegionScanner {

@@ -34,6 +34,7 @@ import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ExpressionContext;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
@@ -1165,14 +1166,14 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
     }
 
     @Override
-    public String toStringLiteral(Object o, Format formatter) {
+    public String toStringLiteral(Object o, ExpressionContext ctx) {
         StringBuilder buf = new StringBuilder(PArrayDataType.ARRAY_TYPE_SUFFIX + "[");
         PhoenixArray array = (PhoenixArray)o;
         PDataType baseType = PDataType.arrayBaseType(this);
         int len = array.getDimensions();
         if (len != 0) {
             for (int i = 0; i < len; i++) {
-                buf.append(baseType.toStringLiteral(array.getElement(i), null));
+                buf.append(baseType.toStringLiteral(array.getElement(i), ctx));
                 buf.append(',');
             }
             buf.setLength(buf.length() - 1);

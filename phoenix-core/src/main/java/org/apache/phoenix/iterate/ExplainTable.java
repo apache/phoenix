@@ -51,6 +51,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.ExpressionContext;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -298,8 +299,8 @@ public abstract class ExplainTable {
         if (changeViewIndexId) {
             buf.append(getViewIndexValue(type, range).toString());
         } else {
-            Format formatter = context.getConnection().getFormatter(type);
-            buf.append(type.toStringLiteral(range, formatter));
+            ExpressionContext expressionContext = context.getConnection().getExpressionContext();
+            buf.append(type.toStringLiteral(range, expressionContext));
         }
     }
 

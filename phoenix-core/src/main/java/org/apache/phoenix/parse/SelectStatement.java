@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.parse;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -24,11 +25,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
+import org.apache.phoenix.util.ExpressionContext;
+import org.apache.phoenix.util.ExpressionContextWrapper;
 
 /**
  * 

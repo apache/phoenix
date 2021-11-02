@@ -54,6 +54,7 @@ import java.util.Properties;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -795,7 +796,7 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
-            Timestamp timestampWithNanos = DateUtil.getTimestamp(dateUpserted.getTime() + 2 * MILLIS_IN_DAY, 300);
+            Timestamp timestampWithNanos = PTimestamp.getTimestamp(dateUpserted.getTime() + 2 * MILLIS_IN_DAY, 300);
             timestampWithNanos.setNanos(0);
             statement.setTimestamp(2, timestampWithNanos);
             statement.setTimestamp(3, timestampWithNanos);

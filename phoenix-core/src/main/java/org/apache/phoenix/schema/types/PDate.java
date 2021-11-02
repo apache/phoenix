@@ -20,13 +20,13 @@ package org.apache.phoenix.schema.types;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Types;
-import java.text.Format;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.ExpressionContext;
 import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.ThreadExpressionCtx;
 
 public class PDate extends PDataType<Date> {
 
@@ -70,7 +70,7 @@ public class PDate extends PDataType<Date> {
         } else if (actualType == PDecimal.INSTANCE) {
             return new Date(((BigDecimal) object).longValueExact());
         } else if (actualType == PVarchar.INSTANCE) {
-            return DateUtil.parseDate((String) object);
+            return ThreadExpressionCtx.get().parseDate((String) object);
         }
         return throwConstraintViolationException(actualType, this);
     }
@@ -148,7 +148,7 @@ public class PDate extends PDataType<Date> {
         if (value == null || value.length() == 0) {
             return null;
         }
-        return DateUtil.parseDate(value);
+        return ThreadExpressionCtx.get().parseDate(value);
     }
 
     @Override
@@ -157,14 +157,12 @@ public class PDate extends PDataType<Date> {
     }
 
     @Override
-    public String toStringLiteral(Object o, Format formatter) {
-        if (formatter == null) {
-            // If default formatter has not been overridden,
-            // use default one.
-            formatter = DateUtil.DEFAULT_DATE_FORMATTER;
+    public String toStringLiteral(Object o, ExpressionContext ctx) {
+        if (ctx == null) {
+            ctx = ThreadExpressionCtx.get();
         }
-        return null == o ? String.valueOf(o) : "'"
-                + StringUtil.escapeStringConstant(super.toStringLiteral(o, formatter)) + "'";
+        return null == o ? String.valueOf(o) : getSqlTypeName() + " '"
+                + StringUtil.escapeStringConstant(ctx.getDateFormatter().format(o)) + "'";
     }
 
     @Override

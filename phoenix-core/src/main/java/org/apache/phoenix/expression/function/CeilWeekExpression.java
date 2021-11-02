@@ -21,13 +21,12 @@ import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
 import org.joda.time.DateTime;
-import org.joda.time.chrono.GJChronology;
 
 /**
  * 
  * Ceil function that rounds up the {@link DateTime} to next week. 
  */
-public class CeilWeekExpression extends RoundJodaDateExpression {
+public class CeilWeekExpression extends CeilDateExpression {
     
     public CeilWeekExpression() {
         super();
@@ -38,20 +37,17 @@ public class CeilWeekExpression extends RoundJodaDateExpression {
     }
 
     @Override
-    public long roundDateTime(DateTime dateTime) {
-        return dateTime.weekOfWeekyear().roundCeilingCopy().getMillis();
+    protected long applyFn(long time) {
+        return getContext().ceilWeek(time, divBy, multiplier);
     }
 
     @Override
     public long rangeLower(long time) {
-        // floor(time - 1) + 1
-        return (new DateTime(time - 1, GJChronology.getInstanceUTC())).weekOfWeekyear()
-                .roundFloorCopy().getMillis() + 1;
+        return getContext().floorWeek(time -1, divBy, multiplier) + 1;
     }
 
     @Override
     public long rangeUpper(long time) {
-        // ceil
-        return roundDateTime(new DateTime(time, GJChronology.getInstanceUTC()));
+        return getContext().ceilWeek(time, divBy, multiplier);
     }
 }

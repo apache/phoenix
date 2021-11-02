@@ -22,14 +22,14 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.parse.DateScalarParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
-import org.joda.time.DateTime;
-import org.joda.time.chrono.GJChronology;
+import org.apache.phoenix.util.ExpressionContext;
 
 /**
  * 
@@ -37,18 +37,27 @@ import org.joda.time.chrono.GJChronology;
  * An integer from 1 to 31 representing the day of the month in date
  * 
  */
-@BuiltInFunction(name=DayOfMonthFunction.NAME, 
+@BuiltInFunction(name=DayOfMonthFunction.NAME, nodeClass=DateScalarParseNode.class,
 args={@Argument(allowedTypes={PTimestamp.class})})
-public class DayOfMonthFunction extends DateScalarFunction {
+public class DayOfMonthFunction extends TemporalScalarFunction {
     public static final String NAME = "DAYOFMONTH";
 
     public DayOfMonthFunction() {
     }
 
-    public DayOfMonthFunction(List<Expression> children) throws SQLException {
-        super(children);
+    public DayOfMonthFunction(List<Expression> children, ExpressionContext context) throws SQLException {
+        super(children, context);
     }
-
+    
+    @Override
+    public DayOfMonthFunction clone(List<Expression> children) {
+        try {
+            return new DayOfMonthFunction(children, getContext());
+        } catch (Exception e) {
+            throw new RuntimeException(e); // Impossible, since it was originally constructed this way
+        }
+    }
+    
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         Expression expression = getChildExpression();
@@ -59,8 +68,7 @@ public class DayOfMonthFunction extends DateScalarFunction {
             return true; //means null
         }
         long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
-        DateTime dt = new DateTime(dateTime, GJChronology.getInstanceUTC());
-        int day = dt.getDayOfMonth();
+        int day = getContext().dayOfMonthImplementation(dateTime);
         PDataType returnType = getDataType();
         byte[] byteValue = new byte[returnType.getByteSize()];
         returnType.getCodec().encodeInt(day, byteValue, 0);

@@ -15,7 +15,7 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.TimeZone;
 
-import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.query.QueryServicesOptions;
 
 public class PDateArrayToStringTest extends BasePhoenixArrayToStringTest {
     private static final String DATE1 = "2001-01-01 12:15:15.123";
@@ -41,7 +41,7 @@ public class PDateArrayToStringTest extends BasePhoenixArrayToStringTest {
 
     @Override
     protected String getString1() {
-        return "'" + DATE1 + "'";
+        return "DATE '" + DATE1 + "'";
     }
 
     @Override
@@ -51,7 +51,7 @@ public class PDateArrayToStringTest extends BasePhoenixArrayToStringTest {
 
     @Override
     protected String getString2() {
-        return "'" + DATE2 + "'";
+        return "DATE '" + DATE2 + "'";
     }
 
     @Override
@@ -61,13 +61,13 @@ public class PDateArrayToStringTest extends BasePhoenixArrayToStringTest {
 
     @Override
     protected String getString3() {
-        return "'" + DATE3 + "'";
+        return "DATE '" + DATE3 + "'";
     }
 
     private Object parseDate(String dateString) {
         try {
             java.util.Date date =
-                    new SimpleDateFormat(DateUtil.DEFAULT_DATE_FORMAT).parse(dateString);
+                    new SimpleDateFormat(QueryServicesOptions.DEFAULT_DATE_FORMAT).parse(dateString);
             Calendar cal = Calendar.getInstance();
             cal.setTimeInMillis(date.getTime());
             cal.add(Calendar.MILLISECOND, TimeZone.getDefault().getOffset(date.getTime()));

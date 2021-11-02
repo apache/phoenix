@@ -29,7 +29,7 @@ import org.apache.phoenix.util.ByteUtil;
 
 public abstract class ScalarFunction extends FunctionExpression {
     public static final int NO_TRAVERSAL = -1;
-    
+
     public ScalarFunction() {
     }
     

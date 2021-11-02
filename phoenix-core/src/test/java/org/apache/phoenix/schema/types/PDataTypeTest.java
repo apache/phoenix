@@ -43,7 +43,6 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -1847,17 +1846,17 @@ public class PDataTypeTest {
     @Test
     public void testTimestampToDateComparison() {
         long now = System.currentTimeMillis();
-        Timestamp ts1 = DateUtil.getTimestamp(now,  1111);    
+        Timestamp ts1 = PTimestamp.getTimestamp(now,  1111);
         final byte[] bytes1 = PTimestamp.INSTANCE.toBytes(ts1);
         Date ts2 = new Date(now);
         final byte[] bytes2 = PDate.INSTANCE.toBytes(ts2);
         assertTrue(PTimestamp.INSTANCE.compareTo(bytes1, 0, bytes1.length, SortOrder.getDefault(), bytes2, 0, bytes2.length, SortOrder.getDefault(), PDate.INSTANCE) > 0);
 
-        Timestamp ts3 = DateUtil.getTimestamp(now,  0);    
+        Timestamp ts3 = PTimestamp.getTimestamp(now,  0);
         final byte[] bytes3 = PTimestamp.INSTANCE.toBytes(ts3);
         assertTrue(PTimestamp.INSTANCE.compareTo(bytes3, 0, bytes3.length, SortOrder.getDefault(), bytes2, 0, bytes2.length, SortOrder.getDefault(), PDate.INSTANCE) == 0);
 
-        Timestamp ts4 = DateUtil.getTimestamp(now,  0);    
+        Timestamp ts4 = PTimestamp.getTimestamp(now,  0);
         final byte[] bytes4 = PUnsignedTimestamp.INSTANCE.toBytes(ts4);
         assertTrue(PUnsignedTimestamp.INSTANCE.compareTo(bytes4, 0, bytes4.length, SortOrder.getDefault(), bytes2, 0, bytes2.length, SortOrder.getDefault(), PDate.INSTANCE) == 0);
     }
@@ -1865,9 +1864,9 @@ public class PDataTypeTest {
     @Test
     public void testTimestamp() {
         long now = System.currentTimeMillis();
-        Timestamp ts1 = DateUtil.getTimestamp(now,  1111);
+        Timestamp ts1 = PTimestamp.getTimestamp(now,  1111);
         final byte[] bytes1 = PTimestamp.INSTANCE.toBytes(ts1);
-        Timestamp ts2 = DateUtil.getTimestamp(now,  1112);
+        Timestamp ts2 = PTimestamp.getTimestamp(now,  1112);
         final byte[] bytes2 = PTimestamp.INSTANCE.toBytes(ts2);
         assertTrue(Bytes.compareTo(bytes1, bytes2) < 0);
         
@@ -1891,7 +1890,7 @@ public class PDataTypeTest {
     @Test
     public void testAscExclusiveTimestampRange() {
         long now = System.currentTimeMillis();
-        Timestamp ts1 = DateUtil.getTimestamp(now,  999999);
+        Timestamp ts1 = PTimestamp.getTimestamp(now,  999999);
         final byte[] lowerRange = PTimestamp.INSTANCE.toBytes(ts1);
         Timestamp ts2 = new Timestamp(now + MILLIS_IN_DAY);
         final byte[] upperRange = PTimestamp.INSTANCE.toBytes(ts2);
@@ -1912,7 +1911,7 @@ public class PDataTypeTest {
         Timestamp ts2 = new Timestamp(now);
         final byte[] upperRange = PTimestamp.INSTANCE.toBytes(ts2, SortOrder.DESC);
         KeyRange range = PTimestamp.INSTANCE.getKeyRange(lowerRange, false, upperRange, false);
-        Timestamp ts3 = DateUtil.getTimestamp(now + MILLIS_IN_DAY - 1,  999999);
+        Timestamp ts3 = PTimestamp.getTimestamp(now + MILLIS_IN_DAY - 1,  999999);
         // Rolled up to next millis
         final byte[] expectedLowerRange = PTimestamp.INSTANCE.toBytes(ts3, SortOrder.DESC);
         assertTrue(Bytes.compareTo(expectedLowerRange, range.getLowerRange()) == 0);

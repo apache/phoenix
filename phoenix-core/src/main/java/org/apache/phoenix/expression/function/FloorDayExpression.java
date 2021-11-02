@@ -17,38 +17,41 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDataType.PDataCodec;
-import org.apache.phoenix.util.DateUtil;
+import org.joda.time.DateTime;
 
-public abstract class DateScalarFunction extends ScalarFunction {
-    protected PDataCodec inputCodec;
+/**
+ * Floor function that rounds up the {@link DateTime} to start of day.
+ */
+public class FloorDayExpression extends FloorDateExpression {
 
-    public DateScalarFunction() {
+    public FloorDayExpression() {
+        super();
     }
 
-    public DateScalarFunction(List<Expression> children) {
+    public FloorDayExpression(List<Expression> children) {
         super(children);
-        init();
     }
 
-    protected final PDataCodec getInputCodec() {
-        return inputCodec;
-    }
-    
     @Override
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-        init();
+    public long getTimeUnitMultipier() {
+        return TIME_UNIT_MS[TimeUnit.DAY.ordinal()];
     }
-    
-    private void init() {
-        PDataType returnType = getChildren().get(0).getDataType();
-        inputCodec = DateUtil.getCodecFor(returnType);
+
+    @Override
+    protected long applyFn(long time) {
+        return getContext().floorDay(time, divBy, multiplier);
+    }
+
+    @Override
+    public long rangeLower(long time) {
+        return getContext().floorDay(time, divBy, multiplier);
+    }
+
+    @Override
+    public long rangeUpper(long time) {
+        return getContext().ceilDay(time + 1, divBy, multiplier) -1;
     }
 }

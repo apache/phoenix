@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ExpressionContext;
 import org.apache.phoenix.util.StringUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -158,10 +159,7 @@ public class PVarchar extends PDataType<String> {
     }
 
     @Override
-    public String toStringLiteral(Object o, Format formatter) {
-        if (formatter != null) {
-            return "'" + formatter.format(o) + "'";
-        }
+    public String toStringLiteral(Object o, ExpressionContext ctx) {
         return null == o ? String.valueOf(o) : "'" + StringUtil.escapeStringConstant(o.toString()) + "'";
     }
 

@@ -289,6 +289,7 @@ public class ServerCacheClient {
                     final byte[] key = getKeyInRegion(entry.getRegion().getStartKey());
                     final Table htable = services.getTable(cacheUsingTable.getPhysicalName().getBytes());
                     closeables.add(htable);
+                    //FIXME set ExecutorContext ?
                     futures.add(executor.submit(new JobCallable<Boolean>() {
                         
                         @Override

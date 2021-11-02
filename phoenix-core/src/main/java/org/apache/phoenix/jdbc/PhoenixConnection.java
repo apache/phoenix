@@ -126,6 +126,10 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ThreadExpressionCtx;
+import org.apache.phoenix.util.ExpressionContextFactory;
+import org.apache.phoenix.util.ExpressionContextWrapper;
+import org.apache.phoenix.util.ExpressionContext;
 import org.apache.phoenix.util.VarBinaryFormatter;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -160,9 +164,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     private boolean isAutoFlush = false;
     private boolean isAutoCommit = false;
     private final PName tenantId;
-    private final String datePattern;
-    private final String timePattern;
-    private final String timestampPattern;
+    private final ExpressionContext expressionContext;
     private int statementExecutionCounter;
     private TraceScope traceScope = null;
     private volatile boolean isClosed = false;
@@ -319,51 +321,37 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                     url,
                     this.info,
                     this.services.getProps().get(QueryServices.CONSISTENCY_ATTRIB,
-                            QueryServicesOptions.DEFAULT_CONSISTENCY_LEVEL));
-            // currently we are not resolving schema set through property, so if
-            // schema doesn't exists ,connection will not fail
-            // but queries may fail
-            this.schema = JDBCUtil.getSchema(
-                    url,
-                    this.info,
-                    this.services.getProps().get(QueryServices.SCHEMA_ATTRIB,
-                            QueryServicesOptions.DEFAULT_SCHEMA));
-            this.tenantId = tenantId;
-            this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info,
-                    this.services.getProps());
-            this.mutateBatchSizeBytes = JDBCUtil.getMutateBatchSizeBytes(url,
-                    this.info, this.services.getProps());
-            datePattern = this.services.getProps().get(
-                    QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
-            timePattern = this.services.getProps().get(
-                    QueryServices.TIME_FORMAT_ATTRIB, DateUtil.DEFAULT_TIME_FORMAT);
-            timestampPattern = this.services.getProps().get(
-                    QueryServices.TIMESTAMP_FORMAT_ATTRIB,
-                    DateUtil.DEFAULT_TIMESTAMP_FORMAT);
-            String numberPattern = this.services.getProps().get(
-                    QueryServices.NUMBER_FORMAT_ATTRIB,
-                    NumberUtil.DEFAULT_NUMBER_FORMAT);
-            int maxSize = this.services.getProps().getInt(
-                    QueryServices.MAX_MUTATION_SIZE_ATTRIB,
+                        QueryServicesOptions.DEFAULT_CONSISTENCY_LEVEL));
+        // currently we are not resolving schema set through property, so if
+        // schema doesn't exists ,connection will not fail
+        // but queries may fail
+        this.schema =
+                JDBCUtil.getSchema(url, this.info, this.services.getProps()
+                        .get(QueryServices.SCHEMA_ATTRIB, QueryServicesOptions.DEFAULT_SCHEMA));
+        this.tenantId = tenantId;
+        this.mutateBatchSize =
+                JDBCUtil.getMutateBatchSize(url, this.info, this.services.getProps());
+        this.mutateBatchSizeBytes =
+                JDBCUtil.getMutateBatchSizeBytes(url, this.info, this.services.getProps());
+        int maxSize =
+                this.services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,
                     QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
             long maxSizeBytes = this.services.getProps().getLongBytes(
                     QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
                     QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
-            String timeZoneID = this.services.getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
-                    DateUtil.DEFAULT_TIME_ZONE_ID);
-            Format dateFormat = DateUtil.getDateFormatter(datePattern, timeZoneID);
-            Format timeFormat = DateUtil.getDateFormatter(timePattern, timeZoneID);
-            Format timestampFormat = DateUtil.getDateFormatter(timestampPattern, timeZoneID);
-            formatters.put(PDate.INSTANCE, dateFormat);
-            formatters.put(PTime.INSTANCE, timeFormat);
-            formatters.put(PTimestamp.INSTANCE, timestampFormat);
-            formatters.put(PUnsignedDate.INSTANCE, dateFormat);
-            formatters.put(PUnsignedTime.INSTANCE, timeFormat);
-            formatters.put(PUnsignedTimestamp.INSTANCE, timestampFormat);
-            formatters.put(PDecimal.INSTANCE,
-                    FunctionArgumentType.NUMERIC.getFormatter(numberPattern));
-            formatters.put(PVarbinary.INSTANCE, VarBinaryFormatter.INSTANCE);
-            formatters.put(PBinary.INSTANCE, VarBinaryFormatter.INSTANCE);
+        String numberPattern =
+                this.services.getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB,
+                    NumberUtil.DEFAULT_NUMBER_FORMAT);
+        expressionContext = ExpressionContextFactory.get(this.services.getProps());
+        formatters.put(PDate.INSTANCE, expressionContext.getDateFormatter());
+        formatters.put(PTime.INSTANCE, expressionContext.getTimeFormatter());
+        formatters.put(PTimestamp.INSTANCE, expressionContext.getTimestampFormatter());
+        formatters.put(PUnsignedDate.INSTANCE, expressionContext.getDateFormatter());
+        formatters.put(PUnsignedTime.INSTANCE, expressionContext.getTimeFormatter());
+        formatters.put(PUnsignedTimestamp.INSTANCE, expressionContext.getTimestampFormatter());
+        formatters.put(PDecimal.INSTANCE, FunctionArgumentType.NUMERIC.getFormatter(numberPattern, expressionContext));
+        formatters.put(PVarbinary.INSTANCE, VarBinaryFormatter.INSTANCE);
+        formatters.put(PBinary.INSTANCE, VarBinaryFormatter.INSTANCE);
 
             this.logLevel = LogLevel.valueOf(this.services.getProps().get(QueryServices.LOG_LEVEL,
                     QueryServicesOptions.DEFAULT_LOGGING_LEVEL));
@@ -661,8 +649,8 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
         return mutationState;
     }
 
-    public String getDatePattern() {
-        return datePattern;
+    public ExpressionContext getExpressionContext() {
+        return expressionContext;
     }
 
     public Format getFormatter(PDataType type) {
@@ -779,7 +767,8 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                 }
                 return null;
             }
-        }, Tracing.withTracing(this, "committing mutations"));
+        }, Tracing.withTracing(this, "committing mutations"), 
+            ExpressionContextWrapper.wrap(this.getExpressionContext()));
         statementExecutionCounter = 0;
     }
 
@@ -1068,7 +1057,8 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                 mutationState.rollback();
                 return null;
             }
-        }, Tracing.withTracing(this, "rolling back"));
+        }, Tracing.withTracing(this, "rolling back"), 
+            ExpressionContextWrapper.wrap(this.getExpressionContext()));
         statementExecutionCounter = 0;
     }
 

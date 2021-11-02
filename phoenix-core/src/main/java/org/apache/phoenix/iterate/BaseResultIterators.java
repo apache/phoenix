@@ -323,6 +323,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             if (optimizeProjection) {
                 optimizeProjection(context, scan, table, statement);
             }
+            ScanUtil.setExpressionContext(plan.getContext().getExpressionContext(), scan);
         }
     }
     

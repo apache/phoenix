@@ -161,17 +161,17 @@ public class JsonUpsertExecutor extends UpsertExecutor<Map<?, ?>, Object> {
                 int dateSqlType = dataType.getResultSetSqlType();
                 if (dateSqlType == Types.DATE) {
                     dateFormat = props.getProperty(QueryServices.DATE_FORMAT_ATTRIB,
-                            DateUtil.DEFAULT_DATE_FORMAT);
+                            QueryServicesOptions.DEFAULT_DATE_FORMAT);
                 } else if (dateSqlType == Types.TIME) {
                     dateFormat = props.getProperty(QueryServices.TIME_FORMAT_ATTRIB,
-                            DateUtil.DEFAULT_TIME_FORMAT);
+                            QueryServicesOptions.DEFAULT_TIME_FORMAT);
                 } else {
                     dateFormat = props.getProperty(QueryServices.TIMESTAMP_FORMAT_ATTRIB,
-                            DateUtil.DEFAULT_TIMESTAMP_FORMAT);
+                            QueryServicesOptions.DEFAULT_TIMESTAMP_FORMAT);
                 }
                 String timeZoneId = props.getProperty(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
                         QueryServicesOptions.DEFAULT_DATE_FORMAT_TIMEZONE);
-                this.dateTimeParser = DateUtil.getDateTimeParser(dateFormat, dataType, timeZoneId);
+                this.dateTimeParser = DateUtil.getTemporalParser(dateFormat, dataType, timeZoneId);
             } else {
                 this.dateTimeParser = null;
             }

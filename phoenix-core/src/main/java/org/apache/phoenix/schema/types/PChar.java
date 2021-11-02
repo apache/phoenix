@@ -26,6 +26,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ExpressionContext;
 import org.apache.phoenix.util.StringUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
@@ -217,13 +218,13 @@ public class PChar extends PDataType<String> {
     }
 
     @Override
-    public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
-      return PVarchar.INSTANCE.toStringLiteral(b, offset, length, formatter);
+    public String toStringLiteral(byte[] b, int offset, int length, ExpressionContext ctx) {
+      return PVarchar.INSTANCE.toStringLiteral(b, offset, length, ctx);
     }
 
     @Override
-    public String toStringLiteral(Object o, Format formatter) {
-      return PVarchar.INSTANCE.toStringLiteral(o, formatter);
+    public String toStringLiteral(Object o, ExpressionContext ctx) {
+      return PVarchar.INSTANCE.toStringLiteral(o, ctx);
     }
 
     @Override

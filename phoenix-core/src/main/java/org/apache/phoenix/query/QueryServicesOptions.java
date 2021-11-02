@@ -149,7 +149,11 @@ public class QueryServicesOptions {
 	public static final long DEFAULT_MAX_SERVER_CACHE_SIZE = 1024*1024*100;  // 100 Mb
     public static final int DEFAULT_TARGET_QUERY_CONCURRENCY = 32;
     public static final int DEFAULT_MAX_QUERY_CONCURRENCY = 64;
-    public static final String DEFAULT_DATE_FORMAT = DateUtil.DEFAULT_DATE_FORMAT;
+    public static final boolean DEFAULT_JDBC_COMPLIANT_TZ_HANDLING = false;
+    public static final String DEFAULT_MS_DATE_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
+    public static final String DEFAULT_DATE_FORMAT = DEFAULT_MS_DATE_FORMAT;
+    public static final String DEFAULT_TIME_FORMAT = DEFAULT_MS_DATE_FORMAT;
+    public static final String DEFAULT_TIMESTAMP_FORMAT = DEFAULT_MS_DATE_FORMAT;
     public static final String DEFAULT_DATE_FORMAT_TIMEZONE = DateUtil.DEFAULT_TIME_ZONE_ID;
     public static final boolean DEFAULT_CALL_QUEUE_ROUND_ROBIN = true;
     public static final int DEFAULT_MAX_MUTATION_SIZE = 500000;
@@ -400,6 +404,7 @@ public class QueryServicesOptions {
 
     private final Configuration config;
 
+
     private QueryServicesOptions(Configuration config) {
         this.config = config;
     }
@@ -432,7 +437,6 @@ public class QueryServicesOptions {
             .setIfUnset(MAX_TENANT_MEMORY_PERC_ATTRIB, DEFAULT_MAX_TENANT_MEMORY_PERC)
             .setIfUnset(MAX_SERVER_CACHE_SIZE_ATTRIB, DEFAULT_MAX_SERVER_CACHE_SIZE)
             .setIfUnset(SCAN_CACHE_SIZE_ATTRIB, DEFAULT_SCAN_CACHE_SIZE)
-            .setIfUnset(DATE_FORMAT_ATTRIB, DEFAULT_DATE_FORMAT)
             .setIfUnset(DATE_FORMAT_TIMEZONE_ATTRIB, DEFAULT_DATE_FORMAT_TIMEZONE)
             .setIfUnset(STATS_UPDATE_FREQ_MS_ATTRIB, DEFAULT_STATS_UPDATE_FREQ_MS)
             .setIfUnset(MIN_STATS_UPDATE_FREQ_MS_ATTRIB, DEFAULT_MIN_STATS_UPDATE_FREQ_MS)

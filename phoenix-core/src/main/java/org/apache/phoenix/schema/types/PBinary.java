@@ -26,6 +26,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.ExpressionContext;
 
 public class PBinary extends PBinaryBase {
 
@@ -186,13 +187,13 @@ public class PBinary extends PBinaryBase {
     }
 
     @Override
-    public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
-        return PVarbinary.INSTANCE.toStringLiteral(b, offset, length, formatter);
+    public String toStringLiteral(byte[] b, int offset, int length, ExpressionContext ctx) {
+        return PVarbinary.INSTANCE.toStringLiteral(b, offset, length, ctx);
     }
 
     @Override
-    public String toStringLiteral(Object o, Format formatter) {
-        return toStringLiteral((byte[])o, 0, ((byte[]) o).length, formatter);
+    public String toStringLiteral(Object o, ExpressionContext ctx) {
+        return toStringLiteral((byte[])o, 0, ((byte[]) o).length, ctx);
     }
 
     @Override

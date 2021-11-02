@@ -65,6 +65,7 @@ import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ThreadExpressionCtx;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -166,10 +167,19 @@ public class TableResultIterator implements ResultIterator {
 
     @Override
     public Tuple next() throws SQLException {
+        boolean ctxWasSet = false;
         try {
             renewLeaseLock.lock();
             initScanner();
             try {
+                // We need to restore ThreadExpressionCtx from the Scan, in case we're
+                // running in a new thread.
+                //FIXME this is probably too expensive here
+                //FIXME replace with ExpressionContextWrapper (which does the same)
+                if (ThreadExpressionCtx.get() == null) {
+                    ThreadExpressionCtx.set(ScanUtil.getExpressionContext(scan));
+                    ctxWasSet = true;
+                }
                 lastTuple = scanIterator.next();
                 if (lastTuple != null) {
                     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -224,6 +234,9 @@ public class TableResultIterator implements ResultIterator {
             return lastTuple;
         } finally {
             renewLeaseLock.unlock();
+            if (ctxWasSet) {
+                ThreadExpressionCtx.remove();
+            }
         }
     }
 

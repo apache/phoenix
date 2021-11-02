@@ -160,11 +160,12 @@ public class IndexMaintenanceIT extends ParallelStatsDisabledIT {
 
             // verify that the query does a range scan on the index table
             ResultSet rs = stmt.executeQuery("EXPLAIN " + whereSql);
+            // NOTE: The timestamp decimals returned with thousand separator commas earlier
             assertEquals(
                     localIndex ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST."
                             + dataTableName
-                            + " [1,'VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]\nCLIENT MERGE SORT"
-                            : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST." + indexName + " ['VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]",
+                            + " [1,'VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,DATE '2015-01-02 00:00:00.000',1420156800000,1420156800000]\nCLIENT MERGE SORT"
+                            : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST." + indexName + " ['VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,DATE '2015-01-02 00:00:00.000',1420156800000,1420156800000]",
                     QueryUtil.getExplainPlan(rs));
 
             // verify that the correct results are returned

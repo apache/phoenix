@@ -270,6 +270,7 @@ public class ViewUtil {
         if (linkType==PTable.LinkType.PHYSICAL_TABLE)
             scan.addColumn(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
         List<TableInfo> tableInfoList = Lists.newArrayList();
+        //No ExpressionContext needed
         try (ResultScanner scanner = sysCatOrsysChildLink.getScanner(scan))  {
             for (Result result = scanner.next(); (result != null); result = scanner.next()) {
                 byte[][] rowKeyMetaData = new byte[5][];
@@ -357,6 +358,7 @@ public class ViewUtil {
         linkFilter.setFilterIfMissing(true);
         scan.setFilter(linkFilter);
         scan.addColumn(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
+        //No ExpressionContext needed
         try (ResultScanner scanner = sysCatOrsysChildLink.getScanner(scan)) {
             Result result = scanner.next();
             return result!=null; 

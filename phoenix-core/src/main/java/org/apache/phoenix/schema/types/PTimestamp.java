@@ -17,10 +17,12 @@
  */
 package org.apache.phoenix.schema.types;
 
+import static org.apache.phoenix.query.QueryConstants.MAX_ALLOWED_NANOS;
+import static org.apache.phoenix.query.QueryConstants.MILLIS_TO_NANOS_CONVERTOR;
+
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.sql.Types;
-import java.text.Format;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -28,10 +30,14 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.DateUtil;
-
+import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ExpressionContext;
+import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.ThreadExpressionCtx;
+
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 public class PTimestamp extends PDataType<Timestamp> {
     public static final int MAX_NANOS_VALUE_EXCLUSIVE = 1000000;
@@ -89,7 +95,7 @@ public class PTimestamp extends PDataType<Timestamp> {
         java.sql.Timestamp value = (java.sql.Timestamp) object;
         // For Timestamp, the getTime() method includes milliseconds that may
         // be stored in the nanos part as well.
-        DateUtil.getCodecFor(this).encodeLong(value.getTime(), bytes, offset);
+        PTimestamp.getCodecFor(this).encodeLong(value.getTime(), bytes, offset);
 
         /*
          * By not getting the stuff that got spilled over from the millis part,
@@ -123,9 +129,9 @@ public class PTimestamp extends PDataType<Timestamp> {
             int nanos =
                     (bd.remainder(BigDecimal.ONE).multiply(QueryConstants.BD_MILLIS_NANOS_CONVERSION))
                     .intValue();
-            return DateUtil.getTimestamp(ms, nanos);
+            return PTimestamp.getTimestamp(ms, nanos);
         } else if (actualType == PVarchar.INSTANCE) {
-            return DateUtil.parseTimestamp((String) object);
+            return ThreadExpressionCtx.get().parseTimestamp((String) object);
         }
         return throwConstraintViolationException(actualType, this);
     }
@@ -139,7 +145,7 @@ public class PTimestamp extends PDataType<Timestamp> {
         java.sql.Timestamp v;
         if (equalsAny(actualType, PTimestamp.INSTANCE, PUnsignedTimestamp.INSTANCE)) {
             long millisDeserialized =
-                    DateUtil.getCodecFor(actualType).decodeLong(b, o, sortOrder);
+                    PTimestamp.getCodecFor(actualType).decodeLong(b, o, sortOrder);
             v = new java.sql.Timestamp(millisDeserialized);
             int nanosDeserialized =
                     PUnsignedInt.INSTANCE.getCodec().decodeInt(b, o + Bytes.SIZEOF_LONG, sortOrder);
@@ -159,7 +165,7 @@ public class PTimestamp extends PDataType<Timestamp> {
             long ms = bd.longValue();
             int nanos = (bd.remainder(BigDecimal.ONE).multiply(QueryConstants.BD_MILLIS_NANOS_CONVERSION))
                     .intValue();
-            v = DateUtil.getTimestamp(ms, nanos);
+            v = PTimestamp.getTimestamp(ms, nanos);
             return v;
         }
         throwConstraintViolationException(actualType, this);
@@ -225,17 +231,17 @@ public class PTimestamp extends PDataType<Timestamp> {
         if (value == null || value.length() == 0) {
             return null;
         }
-        return DateUtil.parseTimestamp(value);
+        return ThreadExpressionCtx.get().parseTimestamp(value);
     }
 
     @Override
-    public String toStringLiteral(Object o, Format formatter) {
-        if (formatter == null) {
-            formatter = DateUtil.DEFAULT_TIMESTAMP_FORMATTER;
+    public String toStringLiteral(Object o, ExpressionContext ctx) {
+        if (ctx == null) {
+            ctx = ThreadExpressionCtx.get();
         }
-        return "'" + super.toStringLiteral(o, formatter) + "'";
+        return null == o ? String.valueOf(o) : getSqlTypeName() + " '"
+                + StringUtil.escapeStringConstant(ctx.getDateFormatter().format(o)) + "'";
     }
-
 
     @Override
     public int getNanos(ImmutableBytesWritable ptr, SortOrder sortOrder) {
@@ -246,7 +252,7 @@ public class PTimestamp extends PDataType<Timestamp> {
 
     @Override
     public long getMillis(ImmutableBytesWritable ptr, SortOrder sortOrder) {
-        long millis = DateUtil.getCodecFor(this).decodeLong(ptr.get(), ptr.getOffset(), sortOrder);
+        long millis = PTimestamp.getCodecFor(this).decodeLong(ptr.get(), ptr.getOffset(), sortOrder);
         return millis;
     }
 
@@ -302,6 +308,54 @@ public class PTimestamp extends PDataType<Timestamp> {
             }
         }
         return super.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
+    }
+
+    //Utility functions not directly used by the Type interface
+
+    /**
+     * Utility function to work around the weirdness of the {@link Timestamp} constructor.
+     * This method takes the milli-seconds that spills over to the nanos part as part of 
+     * constructing the {@link Timestamp} object.
+     * If we just set the nanos part of timestamp to the nanos passed in param, we 
+     * end up losing the sub-second part of timestamp. 
+     */
+    public static Timestamp getTimestamp(long millis, int nanos) {
+        if (nanos > MAX_ALLOWED_NANOS || nanos < 0) {
+            throw new IllegalArgumentException("nanos > " + MAX_ALLOWED_NANOS + " or < 0");
+        }
+        Timestamp ts = new Timestamp(millis);
+        if (ts.getNanos() + nanos > MAX_ALLOWED_NANOS) {
+            int millisToNanosConvertor = BigDecimal.valueOf(MILLIS_TO_NANOS_CONVERTOR).intValue();
+            int overFlowMs = (ts.getNanos() + nanos) / millisToNanosConvertor;
+            int overFlowNanos = (ts.getNanos() + nanos) - (overFlowMs * millisToNanosConvertor);
+            ts = new Timestamp(millis + overFlowMs);
+            ts.setNanos(ts.getNanos() + overFlowNanos);
+        } else {
+            ts.setNanos(ts.getNanos() + nanos);
+        }
+        return ts;
+    }
+
+    /**
+     * Utility function to convert a {@link BigDecimal} value to {@link Timestamp}.
+     */
+    public static Timestamp getTimestamp(BigDecimal bd) {
+        return PTimestamp.getTimestamp(bd.longValue(), ((bd.remainder(BigDecimal.ONE).multiply(BigDecimal.valueOf(MILLIS_TO_NANOS_CONVERTOR))).intValue()));
+    }
+
+    @NonNull
+    public static PDataCodec getCodecFor(PDataType type) {
+        PDataCodec codec = type.getCodec();
+        if (codec != null) {
+            return codec;
+        }
+        if (type == INSTANCE) {
+            return PDate.INSTANCE.getCodec();
+        } else if (type == PUnsignedTimestamp.INSTANCE) {
+            return PUnsignedDate.INSTANCE.getCodec();
+        } else {
+            throw new RuntimeException(TypeMismatchException.newException(INSTANCE, type));
+        }
     }
 
 }

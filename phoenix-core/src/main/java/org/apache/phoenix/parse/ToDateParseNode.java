@@ -35,14 +35,15 @@ public class ToDateParseNode extends FunctionParseNode {
 
     @Override
     public FunctionExpression create(List<Expression> children, StatementContext context) throws SQLException {
+        //TODO move initialization logic to ToDateFunction ?
         String dateFormat = (String) ((LiteralExpression) children.get(1)).getValue();
         String timeZoneId = (String) ((LiteralExpression) children.get(2)).getValue();
         if (dateFormat == null) {
-            dateFormat = context.getDateFormat();
+            dateFormat = context.getExpressionContext().getDateFormatPattern();
         }
         if (timeZoneId == null) {
-            timeZoneId = context.getDateFormatTimeZone().getID();
+            timeZoneId = context.getExpressionContext().getTimezoneId();
         }
-        return new ToDateFunction(children, dateFormat, timeZoneId);
+        return new ToDateFunction(children, dateFormat, timeZoneId, context.getExpressionContext());
     }
 }

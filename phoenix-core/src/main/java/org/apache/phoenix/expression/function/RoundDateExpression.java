@@ -45,9 +45,10 @@ import org.apache.phoenix.schema.types.PDataType.PDataCodec;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.GMTExpressionContext;
+import org.apache.phoenix.util.ThreadExpressionCtx;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * Function used to bucketize date/time values by rounding them to
@@ -67,20 +68,28 @@ import org.apache.phoenix.util.ByteUtil;
         },
         classType = FunctionClassType.DERIVED
 )
-public class RoundDateExpression extends ScalarFunction {
+public class RoundDateExpression extends TemporalScalarFunction {
+    
+    long multiplier;
     
     long divBy;
     
     public static final String NAME = "ROUND";
-    
-    private static final long[] TIME_UNIT_MS = new long[] {
+
+    protected static final long[] TIME_UNIT_MS = new long[] {
         24 * 60 * 60 * 1000,
         60 * 60 * 1000,
         60 * 1000,
         1000,
         1
     };
-    
+
+    public long getTimeUnitMultipier() {
+        // This only gets called from old clients in this class, and the multiplier is not 
+        // relevant there
+        return 1;
+    }
+
     public RoundDateExpression() {}
     
     /**
@@ -90,7 +99,7 @@ public class RoundDateExpression extends ScalarFunction {
     public static Expression create(Expression expr, TimeUnit timeUnit) throws SQLException {
         return create(expr, timeUnit, 1);
     }
-    
+
     /**
      * @param timeUnit - unit of time to round up to
      * @param multiplier - determines the roll up window size.
@@ -105,22 +114,29 @@ public class RoundDateExpression extends ScalarFunction {
     
     public static Expression create(List<Expression> children) throws SQLException {
         int numChildren = children.size();
-        if (numChildren < 2 || numChildren > 3) {
+        if(numChildren < 2 || numChildren > 3) {
             throw new IllegalArgumentException("Wrong number of arguments : " + numChildren);
         }
         Object timeUnitValue = ((LiteralExpression)children.get(1)).getValue();
         TimeUnit timeUnit = TimeUnit.getTimeUnit(timeUnitValue != null ? timeUnitValue.toString() : null);
         switch(timeUnit) {
+        case SECOND:
+            return new RoundSecondExpression(children);
+        case MINUTE:
+            return new RoundMinuteExpression(children);
+        case HOUR:
+            return new RoundHourExpression(children);
+        case DAY:
+            return new RoundDayExpression(children);
         case WEEK:
             return new RoundWeekExpression(children);
         case MONTH:
             return new RoundMonthExpression(children);
         case YEAR:
             return new RoundYearExpression(children);
-         default:
-             return new RoundDateExpression(children);
+        default:
+            throw new IllegalArgumentException("Unsupported time unit " + timeUnit);
         }
-        
     }
     
     static Expression getTimeUnitExpr(TimeUnit timeUnit) throws SQLException {
@@ -130,26 +146,36 @@ public class RoundDateExpression extends ScalarFunction {
     static Expression getMultiplierExpr(int multiplier) throws SQLException {
         return LiteralExpression.newConstant(multiplier, PInteger.INSTANCE, Determinism.ALWAYS);
     }
+
+    // FIXME We should be adding the ExpressionContext to this constructor, and to the corresponding
+    // However, we are creating synthetic nodes of these types in the compiler, where do not have
+    // direct access to the ExpressionContext.
+    // To minimize the changes for now, we rely on ThreadExpressionCtx being set when this
+    // constructor is called
+    // This is to be revisited.
     
+    // This constructor is only used via the create(...) methods, never directly, which guarantees
+    // that the right type is created. 
     public RoundDateExpression(List<Expression> children) {
-        super(children.subList(0, 1));
+        super(children.subList(0, 1), ThreadExpressionCtx.get());
         int numChildren = children.size();
         Object timeUnitValue = ((LiteralExpression)children.get(1)).getValue();
         Object multiplierValue = numChildren > 2 ? ((LiteralExpression)children.get(2)).getValue() : null;
-        int multiplier = multiplierValue == null ? 1 :((Number)multiplierValue).intValue();
+        multiplier = multiplierValue == null ? 1 :((Number)multiplierValue).intValue();
         TimeUnit timeUnit = TimeUnit.getTimeUnit(timeUnitValue != null ? timeUnitValue.toString() : null);
-        if (timeUnit.ordinal() < TIME_UNIT_MS.length) {
+        if(timeUnit.ordinal() < TIME_UNIT_MS.length) {
             divBy = multiplier * TIME_UNIT_MS[timeUnit.ordinal()];
         }
     }
-    
-    
+
     protected long getRoundUpAmount() {
         return divBy/2;
     }
-    
-    @VisibleForTesting
-    public long roundTime(long time) {
+
+    protected long applyFn(long time) {
+        // This is only here for backwards compatibility with old clients.
+        // This class should not be instantiated by the current client.
+        // Copied from GMTExpressionContext
         long value;
         long roundUpAmount = getRoundUpAmount();
         if (time <= Long.MAX_VALUE - roundUpAmount) { // If no overflow, add
@@ -160,19 +186,18 @@ public class RoundDateExpression extends ScalarFunction {
         return value * divBy;
     }
 
-    @VisibleForTesting
-    public long rangeLower(long time) {
-        // This is for the ms based intervals. This needs to be separately implemented for the
-        // joda based intervals
-        return roundTime(time) - getRoundUpAmount();
+    protected long rangeLower(long time) {
+        // This is only here for backwards compatibility with old clients.
+        // This class should not be instantiated by the current client.
+        return applyFn(time) - getRoundUpAmount();
     }
 
-    @VisibleForTesting
-    public long rangeUpper(long time) {
-        // This is for the ms based intervals. This needs to be separately implemented for the
-        // joda based intervals
-        return roundTime(time) + (divBy - getRoundUpAmount()) - 1;
+    protected long rangeUpper(long time) {
+        // This is only here for backwards compatibility with old clients.
+        // This class should not be instantiated by the current client.
+        return applyFn(time) + (divBy - getRoundUpAmount()) -1;
     }
+
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
@@ -182,7 +207,7 @@ public class RoundDateExpression extends ScalarFunction {
             }
             PDataType dataType = getDataType();
             long time = dataType.getCodec().decodeLong(ptr, children.get(0).getSortOrder());
-            long value = roundTime(time);
+            long value = applyFn(time);
             Date d = new Date(value);
             byte[] byteValue = dataType.toBytes(d);
             ptr.set(byteValue);
@@ -217,6 +242,11 @@ public class RoundDateExpression extends ScalarFunction {
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
         divBy = WritableUtils.readVLong(input);
+        // reconstructing the multiplier this ways avoids changing the wire format
+        // multiplier is only relevant for the cases when divBy is set
+        if (divBy > 0) {
+            multiplier = divBy / getTimeUnitMultipier();
+        }
     }
 
     @Override
@@ -244,10 +274,6 @@ public class RoundDateExpression extends ScalarFunction {
         return columnDataType.getCodec();
     }
     
-    /**
-     * Form the key range from the key to the key right before or at the
-     * next rounded value.
-     */
     @Override
     public KeyPart newKeyPart(final KeyPart childPart) {
         return new KeyPart() {
@@ -272,7 +298,6 @@ public class RoundDateExpression extends ScalarFunction {
                 // No need to take into account SortOrder, because ROUND
                 // always forces the value to be in ascending order
                 PDataCodec codec = getKeyRangeCodec(type);
-                int offset = ByteUtil.isInclusive(op) ? 1 : 0;
                 long value = codec.decodeLong(key, 0, SortOrder.getDefault());
                 byte[] lowerKey = new byte[type.getByteSize()];
                 byte[] upperKey = new byte[type.getByteSize()];
@@ -284,7 +309,7 @@ public class RoundDateExpression extends ScalarFunction {
                     // had ROUND(dateCol,'DAY') = TO_DATE('2013-01-01 23:00:00')
                     // it could never be equal, since date constant isn't at a day
                     // boundary.
-                    if (value != roundTime(value)) {
+                    if (value != applyFn(value)) {
                         return KeyRange.EMPTY_RANGE;
                     }
                     codec.encodeLong(rangeLower(value), lowerKey, 0);
@@ -298,16 +323,14 @@ public class RoundDateExpression extends ScalarFunction {
                     // round(x) <= 9.9 === round(x) <= 9 => [-inf, 9.5)
                     // round(x) < 10 ==> round(x) <= 9 ==> [-inf, 9.5)
                 case GREATER:
-                    if (value == roundTime(value)) {
+                    if (value == applyFn(value)) {
                         codec.encodeLong(rangeUpper(value), lowerKey, 0);
                         range = type.getKeyRange(lowerKey, false, KeyRange.UNBOUND, false);
                         break;
                     }
                     //fallthrough intended
                 case GREATER_OR_EQUAL:
-                    codec.encodeLong(rangeLower(value), lowerKey, 0);
-                    range = type.getKeyRange(lowerKey, true, KeyRange.UNBOUND, false);
-                    if (value <= roundTime(value)) {
+                    if (value <= applyFn(value)) {
                         //always true for ceil
                         codec.encodeLong(rangeLower(value), lowerKey, 0);
                         range = type.getKeyRange(lowerKey, true, KeyRange.UNBOUND, false);
@@ -318,16 +341,14 @@ public class RoundDateExpression extends ScalarFunction {
                     }
                     break;
                 case LESS:
-                    if (value == roundTime(value)) {
+                    if (value == applyFn(value)) {
                         codec.encodeLong(rangeLower(value), upperKey, 0);
                         range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, false);
                         break;
                     }
                     //fallthrough intended
                 case LESS_OR_EQUAL:
-                    codec.encodeLong(rangeUpper(value), upperKey, 0);
-                    range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, true);
-                    if (value >= roundTime(value)) {
+                    if (value >= applyFn(value)) {
                         //always true for floor
                         codec.encodeLong(rangeUpper(value), upperKey, 0);
                         range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, true);

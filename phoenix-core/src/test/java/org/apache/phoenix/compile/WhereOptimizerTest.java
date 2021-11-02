@@ -50,6 +50,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.trace.util.Tracing;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
@@ -57,6 +58,7 @@ import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.FilterList.Operator;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.WhereOptimizer.KeyExpressionVisitor.KeySlots;
 import org.apache.phoenix.compile.WhereOptimizer.KeyExpressionVisitor.SingleKeySlot;
 import org.apache.phoenix.compile.WhereOptimizer.KeyExpressionVisitor.SlotsIterator;
@@ -86,10 +88,11 @@ import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.ExpressionContextFactory;
+import org.apache.phoenix.util.ExpressionContextWrapper;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -414,19 +417,25 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date endDate = DateUtil.parseDate("2012-01-01 12:00:00"); //Hbase normalizes scans to left closed
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,roundDate);
-        Scan scan = compileStatement(query, binds).getScan();
-        assertNull(scan.getFilter());
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
+                assertNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(startDate));
-        assertArrayEquals(startRow, scan.getStartRow());
-        assertTrue(scan.includeStartRow());
-        byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(endDate));
-        assertArrayEquals(stopRow, scan.getStopRow());
-        assertFalse(scan.includeStopRow());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(startDate));
+                assertArrayEquals(startRow, scan.getStartRow());
+                assertTrue(scan.includeStartRow());
+                byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(endDate));
+                assertArrayEquals(stopRow, scan.getStopRow());
+                assertFalse(scan.includeStopRow());
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -436,8 +445,14 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDate = DateUtil.parseDate("2012-01-01 01:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
-        Scan scan = compileStatement(query, binds).getScan();
-        assertDegenerate(scan);
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
+                assertDegenerate(scan);
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -448,17 +463,24 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDate = DateUtil.parseDate("2012-01-01 12:00:00");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')>?";
         List<Object> binds = Arrays.<Object>asList(inst,host,roundDate);
-        Scan scan = compileStatement(query, binds).getScan();
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
 
-        assertNull(scan.getFilter());
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(startDate));
-        assertArrayEquals(startRow, scan.getStartRow());
-        assertTrue(scan.includeStartRow());
-        byte[] stopRow = ByteUtil.nextKey(ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY));
-        assertArrayEquals(stopRow, scan.getStopRow());
+                assertNull(scan.getFilter());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(startDate));
+                assertArrayEquals(startRow, scan.getStartRow());
+                assertTrue(scan.includeStartRow());
+                byte[] stopRow = ByteUtil.nextKey(ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY));
+                assertArrayEquals(stopRow, scan.getStopRow());
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
+        
     }
 
     @Test
@@ -469,16 +491,22 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDateHalfRange = DateUtil.parseDate("2011-12-31 12:00:00.000");
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')>=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,startDate);
-        Scan scan = compileStatement(query, binds).getScan();
-        assertNull(scan.getFilter());
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
+                assertNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(startDateHalfRange));
-        assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.nextKey(ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY));
-        assertArrayEquals(stopRow, scan.getStopRow());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(startDateHalfRange));
+                assertArrayEquals(startRow, scan.getStartRow());
+                byte[] stopRow = ByteUtil.nextKey(ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY));
+                assertArrayEquals(stopRow, scan.getStopRow());
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -489,18 +517,24 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDate = DateUtil.parseDate("2012-01-01 12:00:00"); //Hbase normalizes scans to left closed
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')>?";
         List<Object> binds = Arrays.<Object>asList(inst,host,roundDate);
+        
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
+                assertNull(scan.getFilter());
 
-        Scan scan = compileStatement(query, binds).getScan();
-        assertNull(scan.getFilter());
-
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(startDate));
-        assertArrayEquals(startRow, scan.getStartRow());
-        assertTrue(scan.includeStartRow());
-        byte[] stopRow = ByteUtil.nextKey(ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY));
-        assertArrayEquals(stopRow, scan.getStopRow());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(startDate));
+                assertArrayEquals(startRow, scan.getStartRow());
+                assertTrue(scan.includeStartRow());
+                byte[] stopRow = ByteUtil.nextKey(ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY));
+                assertArrayEquals(stopRow, scan.getStopRow());
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -511,17 +545,23 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date endDate = DateUtil.parseDate("2012-01-01 12:00:00"); //Hbase normalizes scans to left closed
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')<?";
         List<Object> binds = Arrays.<Object>asList(inst,host,roundDate);
-        Scan scan = compileStatement(query, binds).getScan();
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
 
-        assertNull(scan.getFilter());
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
-        assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(endDate));
-        assertArrayEquals(stopRow, scan.getStopRow());
-        assertTrue(scan.includeStartRow());
+                assertNull(scan.getFilter());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
+                assertArrayEquals(startRow, scan.getStartRow());
+                byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(endDate));
+                assertArrayEquals(stopRow, scan.getStopRow());
+                assertTrue(scan.includeStartRow());
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -533,17 +573,23 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')<?";
         List<Object> binds = Arrays.<Object>asList(inst,host,roundDate);
 
-        Scan scan = compileStatement(query, binds).getScan();
-        assertNull(scan.getFilter());
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
+                assertNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
-        assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(endDate));
-        assertArrayEquals(stopRow, scan.getStopRow());
-        assertFalse(scan.includeStopRow());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
+                assertArrayEquals(startRow, scan.getStartRow());
+                byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(endDate));
+                assertArrayEquals(stopRow, scan.getStopRow());
+                assertFalse(scan.includeStopRow());
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -554,17 +600,23 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date endDate = DateUtil.parseDate("2012-01-01 12:00:00"); //Hbase normalizes scans to left closed
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')<=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,roundDate);
-        Scan scan = compileStatement(query, binds).getScan();
-        assertNull(scan.getFilter());
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
+                assertNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
-        assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(endDate));
-        assertArrayEquals(stopRow, scan.getStopRow());
-        assertFalse(scan.includeStopRow());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
+                assertArrayEquals(startRow, scan.getStartRow());
+                byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(endDate));
+                assertArrayEquals(stopRow, scan.getStopRow());
+                assertFalse(scan.includeStopRow());
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -575,17 +627,23 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date endDate = DateUtil.parseDate("2011-12-31 12:00:00"); //Hbase normalizes scans to left closed
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')<=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,roundDate);
-        Scan scan = compileStatement(query, binds).getScan();
-        assertNull(scan.getFilter());
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
+                assertNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
-        assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(endDate));
-        assertArrayEquals(stopRow, scan.getStopRow());
-        assertFalse(scan.includeStopRow());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
+                assertArrayEquals(startRow, scan.getStartRow());
+                byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(endDate));
+                assertArrayEquals(stopRow, scan.getStopRow());
+                assertFalse(scan.includeStopRow());
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -596,18 +654,24 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date endDate = DateUtil.parseDate("2012-01-01 12:00:00"); //Hbase normalizes scans to left closed
         String query = "select * from ptsdb where inst=? and host=? and round(date,'DAY')<=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,roundDate);
-        Scan scan = compileStatement(query, binds).getScan();
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
 
-        assertNull(scan.getFilter());
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
-        assertArrayEquals(startRow, scan.getStartRow());
-        assertTrue(scan.includeStartRow());
-        byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(endDate));
-        assertArrayEquals(stopRow, scan.getStopRow());
-        assertFalse(scan.includeStopRow());
+                assertNull(scan.getFilter());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
+                assertArrayEquals(startRow, scan.getStartRow());
+                assertTrue(scan.includeStartRow());
+                byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(endDate));
+                assertArrayEquals(stopRow, scan.getStopRow());
+                assertFalse(scan.includeStopRow());
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -618,17 +682,23 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date endDate = DateUtil.parseDate("2012-01-02 00:00:00"); //Hbase normalizes scans to left closed
         String query = "select * from ptsdb where inst=? and host=? and floor(date,'DAY')<=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,floorDate);
-        Scan scan = compileStatement(query, binds).getScan();
-        assertNull(scan.getFilter());
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
+                assertNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
-        assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(endDate));
-        assertArrayEquals(stopRow, scan.getStopRow());
-        assertFalse(scan.includeStopRow());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
+                assertArrayEquals(startRow, scan.getStartRow());
+                byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(endDate));
+                assertArrayEquals(stopRow, scan.getStopRow());
+                assertFalse(scan.includeStopRow());
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -639,17 +709,23 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date endDate = DateUtil.parseDate("2012-01-02 00:00:00"); //Hbase normalizes scans to left closed
         String query = "select * from ptsdb where inst=? and host=? and floor(date,'DAY')<=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,floorDate);
-        Scan scan = compileStatement(query, binds).getScan();
-        assertNull(scan.getFilter());
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
+                assertNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
-        assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(endDate));
-        assertArrayEquals(stopRow, scan.getStopRow());
-        assertFalse(scan.includeStopRow());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
+                assertArrayEquals(startRow, scan.getStartRow());
+                byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(endDate));
+                assertArrayEquals(stopRow, scan.getStopRow());
+                assertFalse(scan.includeStopRow());
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -660,17 +736,23 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDate = DateUtil.parseDate("2012-01-02 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and floor(date,'DAY')>=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,floorDate);
-        Scan scan = compileStatement(query, binds).getScan();
-        assertNull(scan.getFilter());
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
+                assertNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(startDate));
-        assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.nextKey(ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY));
-        assertArrayEquals(stopRow, scan.getStopRow());
-        assertFalse(scan.includeStopRow());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(startDate));
+                assertArrayEquals(startRow, scan.getStartRow());
+                byte[] stopRow = ByteUtil.nextKey(ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY));
+                assertArrayEquals(stopRow, scan.getStopRow());
+                assertFalse(scan.includeStopRow());
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -681,17 +763,23 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDate = DateUtil.parseDate("2012-01-01 00:00:00");
         String query = "select * from ptsdb where inst=? and host=? and floor(date,'DAY')>=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,floorDate);
-        Scan scan = compileStatement(query, binds).getScan();
-        assertNull(scan.getFilter());
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
+                assertNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-            PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-            PDate.INSTANCE.toBytes(startDate));
-        assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.nextKey(ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY));
-        assertArrayEquals(stopRow, scan.getStopRow());
-        assertFalse(scan.includeStopRow());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                    PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                    PDate.INSTANCE.toBytes(startDate));
+            assertArrayEquals(startRow, scan.getStartRow());
+            byte[] stopRow = ByteUtil.nextKey(ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                    PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY));
+            assertArrayEquals(stopRow, scan.getStopRow());
+            assertFalse(scan.includeStopRow());
+            return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -702,17 +790,23 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date endDate = DateUtil.parseDate("2012-01-01 00:00:00.001"); //Hbase normalizes scans to left closed
         String query = "select * from ptsdb where inst=? and host=? and ceil(date,'DAY')<=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,ceilDate);
-        Scan scan = compileStatement(query, binds).getScan();
-        assertNull(scan.getFilter());
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
+                assertNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
-        assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(endDate));
-        assertArrayEquals(stopRow, scan.getStopRow());
-        assertFalse(scan.includeStopRow());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
+                assertArrayEquals(startRow, scan.getStartRow());
+                byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(endDate));
+                assertArrayEquals(stopRow, scan.getStopRow());
+                assertFalse(scan.includeStopRow());
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -723,17 +817,23 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date endDate = DateUtil.parseDate("2012-01-01 00:00:00.001"); //Hbase normalizes scans to left closed
         String query = "select * from ptsdb where inst=? and host=? and ceil(date,'DAY')<=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,ceilDate);
-        Scan scan = compileStatement(query, binds).getScan();
-        assertNull(scan.getFilter());
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
+                assertNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
-        assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(endDate));
-        assertArrayEquals(stopRow, scan.getStopRow());
-        assertFalse(scan.includeStopRow());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host)/*,QueryConstants.SEPARATOR_BYTE_ARRAY*/);
+                assertArrayEquals(startRow, scan.getStartRow());
+                byte[] stopRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(endDate));
+                assertArrayEquals(stopRow, scan.getStopRow());
+                assertFalse(scan.includeStopRow());
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -744,17 +844,23 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDate = DateUtil.parseDate("2012-01-01 00:00:00.001");
         String query = "select * from ptsdb where inst=? and host=? and ceil(date,'DAY')>=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,ceilDate);
-        Scan scan = compileStatement(query, binds).getScan();
-        assertNull(scan.getFilter());
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
+                assertNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PDate.INSTANCE.toBytes(startDate));
-        assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.nextKey(ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY));
-        assertArrayEquals(stopRow, scan.getStopRow());
-        assertFalse(scan.includeStopRow());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PDate.INSTANCE.toBytes(startDate));
+                assertArrayEquals(startRow, scan.getStartRow());
+                byte[] stopRow = ByteUtil.nextKey(ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY));
+                assertArrayEquals(stopRow, scan.getStopRow());
+                assertFalse(scan.includeStopRow());
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test
@@ -765,17 +871,23 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Date startDate = DateUtil.parseDate("2011-12-31 00:00:00.001");
         String query = "select * from ptsdb where inst=? and host=? and ceil(date,'DAY')>=?";
         List<Object> binds = Arrays.<Object>asList(inst,host,ceilDate);
-        Scan scan = compileStatement(query, binds).getScan();
-        assertNull(scan.getFilter());
+        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                Scan scan = compileStatement(query, binds).getScan();
+                assertNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-            PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
-            PDate.INSTANCE.toBytes(startDate));
-        assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.nextKey(ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
-                PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY));
-        assertArrayEquals(stopRow, scan.getStopRow());
-        assertFalse(scan.includeStopRow());
+                byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                    PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                    PDate.INSTANCE.toBytes(startDate));
+            assertArrayEquals(startRow, scan.getStartRow());
+            byte[] stopRow = ByteUtil.nextKey(ByteUtil.concat(PVarchar.INSTANCE.toBytes(inst),QueryConstants.SEPARATOR_BYTE_ARRAY,
+                    PVarchar.INSTANCE.toBytes(host),QueryConstants.SEPARATOR_BYTE_ARRAY));
+            assertArrayEquals(stopRow, scan.getStopRow());
+            assertFalse(scan.includeStopRow());
+            return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
 
     @Test

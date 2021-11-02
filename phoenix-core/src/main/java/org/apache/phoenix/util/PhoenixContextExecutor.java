@@ -49,7 +49,6 @@ public class PhoenixContextExecutor {
         @Override
         public void after() {
             Thread.currentThread().setContextClassLoader(saveCcl);
-
         };
     }
 

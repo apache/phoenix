@@ -38,6 +38,7 @@ import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.util.GMTExpressionContext;
 
 /**
  * 
@@ -77,6 +78,14 @@ public class FloorDateExpression extends RoundDateExpression {
         Object timeUnitValue = ((LiteralExpression)children.get(1)).getValue();
         TimeUnit timeUnit = TimeUnit.getTimeUnit(timeUnitValue != null ? timeUnitValue.toString() : null);
         switch(timeUnit) {
+        case SECOND:
+            return new FloorSecondExpression(children);
+        case MINUTE:
+            return new FloorMinuteExpression(children);
+        case HOUR:
+            return new FloorHourExpression(children);
+        case DAY:
+            return new FloorDayExpression(children);
         case WEEK:
              return new FloorWeekExpression(children);
         case MONTH:
@@ -84,7 +93,7 @@ public class FloorDateExpression extends RoundDateExpression {
         case YEAR:
              return new FloorYearExpression(children);
          default:
-             return new FloorDateExpression(children);
+             throw new IllegalArgumentException("Unsupported time unit " + timeUnit);
         }
         
     }
@@ -113,7 +122,21 @@ public class FloorDateExpression extends RoundDateExpression {
     protected long getRoundUpAmount() {
         return 0;
     }
-    
+
+    @Override
+    protected long rangeLower(long time) {
+        // This is only here for backwards compatibility with old clients.
+        // This class should not be instantiated by the current client.
+        return GMTExpressionContext.floor(time, divBy);
+    }
+
+    @Override
+    protected long rangeUpper(long time) {
+        // This is only here for backwards compatibility with old clients.
+        // This class should not be instantiated by the current client.
+        return GMTExpressionContext.ceil(time, divBy);
+    }
+
     @Override
     public String getName() {
         return FloorFunction.NAME;
@@ -127,7 +150,7 @@ public class FloorDateExpression extends RoundDateExpression {
             }
             PDataType dataType = getDataType();
             long time = dataType.getCodec().decodeLong(ptr, children.get(0).getSortOrder());
-            long value = roundTime(time);
+            long value = applyFn(time);
             Date d = new Date(value);
             byte[] byteValue = dataType.toBytes(d);
             ptr.set(byteValue);

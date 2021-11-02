@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.phoenix.schema.MaxPhoenixColumnSizeExceededException;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -1108,6 +1109,8 @@ public class UpsertCompiler {
                     connection.getMutationState().encodeTransaction() : ByteUtil.EMPTY_BYTE_ARRAY;
 
             ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
+            //FIXME Is this redundant ?
+            ScanUtil.setExpressionContext(statement.getConnection().getExpressionContext(), scan);
             if (aggPlan.getTableRef().getTable().isTransactional() 
                     || (table.getType() == PTableType.INDEX && table.isTransactional())) {
                 scan.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
@@ -1333,7 +1336,8 @@ public class UpsertCompiler {
         }
     }
 
-    private class ClientUpsertSelectMutationPlan implements MutationPlan {
+    @VisibleForTesting
+    public class ClientUpsertSelectMutationPlan implements MutationPlan {
         private final QueryPlan queryPlan;
         private final TableRef tableRef;
         private final QueryPlan originalQueryPlan;

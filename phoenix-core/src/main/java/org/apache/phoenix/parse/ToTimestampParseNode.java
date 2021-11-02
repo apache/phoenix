@@ -38,11 +38,11 @@ public class ToTimestampParseNode extends FunctionParseNode {
         String dateFormat = (String) ((LiteralExpression) children.get(1)).getValue();
         String timeZoneId = (String) ((LiteralExpression) children.get(2)).getValue();
         if (dateFormat == null) {
-            dateFormat = context.getTimestampFormat();
+            dateFormat = context.getExpressionContext().getTimestampFormatPattern();
         }
         if (timeZoneId == null) {
-            timeZoneId = context.getDateFormatTimeZone().getID();
+            timeZoneId = context.getExpressionContext().getTimezoneId();
         }
-        return new ToTimestampFunction(children, dateFormat, timeZoneId);
+        return new ToTimestampFunction(children, dateFormat, timeZoneId, context.getExpressionContext());
     }
 }

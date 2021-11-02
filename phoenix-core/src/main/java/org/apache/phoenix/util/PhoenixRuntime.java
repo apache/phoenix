@@ -54,13 +54,14 @@ import org.apache.phoenix.thirdparty.org.apache.commons.cli.HelpFormatter;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
-
+import org.apache.phoenix.trace.util.Tracing;
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
@@ -381,11 +382,15 @@ public class PhoenixRuntime {
      * @throws IOException
      * @throws SQLException
      */
-    public static int executeStatements(Connection conn, Reader reader, List<Object> binds) throws IOException,SQLException {
+    public static int executeStatements(Connection conn, Reader reader, List<Object> binds) throws Exception {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        // Turn auto commit to true when running scripts in case there's DML
-        pconn.setAutoCommit(true);
-        return pconn.executeStatements(reader, binds, System.out);
+        return CallRunner.run(new CallRunner.CallableThrowable<Integer, Exception>() {
+            @Override
+            public Integer call() throws Exception {
+                pconn.setAutoCommit(true);
+                return pconn.executeStatements(reader, binds, System.out);
+            }
+        }, ExpressionContextWrapper.wrap(pconn.getExpressionContext()));
     }
 
     /**
@@ -459,14 +464,19 @@ public class PhoenixRuntime {
         String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
         String tableName = SchemaUtil.getTableNameFromFullName(name);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        MetaDataMutationResult result = new MetaDataClient(pconn).updateCache(pconn.getTenantId(),
-                schemaName, tableName, true);
-        if(result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
-            throw new TableNotFoundException(schemaName, tableName);
-        }
+        return CallRunner.run(new CallRunner.CallableThrowable<PTable, SQLException>() {
+            @Override
+            public PTable call() throws SQLException {
+                MetaDataMutationResult result =
+                        new MetaDataClient(pconn).updateCache(pconn.getTenantId(), schemaName,
+                            tableName, true);
+                if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+                    throw new TableNotFoundException(schemaName, tableName);
+                }
 
-        return result.getTable();
-
+                return result.getTable();
+            }
+        }, ExpressionContextWrapper.wrap(pconn.getExpressionContext()));
     }
     
     /**
@@ -483,22 +493,25 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     public static PTable getTable(Connection conn, String name) throws SQLException {
-        PTable table;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        try {
-            table = pconn.getTable(new PTableKey(pconn.getTenantId(), name));
-        } catch (TableNotFoundException e) {
-            String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
-            String tableName = SchemaUtil.getTableNameFromFullName(name);
-            MetaDataMutationResult result =
-                    new MetaDataClient(pconn).updateCache(schemaName, tableName);
-            if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
-                TableMetricsManager.updateMetricsForSystemCatalogTableMethod(name, NUM_METADATA_LOOKUP_FAILURES, 1);
-                throw e;
+        return CallRunner.run(new CallRunner.CallableThrowable<PTable, SQLException>() {
+            @Override
+            public PTable call() throws SQLException {
+                try {
+                    return pconn.getTable(new PTableKey(pconn.getTenantId(), name));
+                } catch (TableNotFoundException e) {
+                    String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
+                    String tableName = SchemaUtil.getTableNameFromFullName(name);
+                    MetaDataMutationResult result =
+                            new MetaDataClient(pconn).updateCache(schemaName, tableName);
+                    if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+                        TableMetricsManager.updateMetricsForSystemCatalogTableMethod(name, NUM_METADATA_LOOKUP_FAILURES, 1);
+                        throw e;
+                    }
+                    return result.getTable();
+                }
             }
-            table = result.getTable();
-        }
-        return table;
+        }, ExpressionContextWrapper.wrap(pconn.getExpressionContext()));
     }
 
     /**
@@ -507,7 +520,12 @@ public class PhoenixRuntime {
      */
     public static PTable getTable(Connection conn, String tenantId, String fullTableName)
             throws SQLException {
-        return getTable(conn, tenantId, fullTableName, HConstants.LATEST_TIMESTAMP);
+        return CallRunner.run(new CallRunner.CallableThrowable<PTable, SQLException>() {
+            @Override
+            public PTable call() throws SQLException {
+                return getTable(conn, tenantId, fullTableName, HConstants.LATEST_TIMESTAMP);
+            }
+        }, ExpressionContextWrapper.wrap(((PhoenixConnection)conn).getExpressionContext()));
     }
 
     /**
@@ -935,8 +953,15 @@ public class PhoenixRuntime {
      */
     public static QueryPlan getOptimizedQueryPlan(PreparedStatement stmt) throws SQLException {
         checkNotNull(stmt);
-        QueryPlan plan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
-        return plan;
+        return CallRunner.run(new CallRunner.CallableThrowable<QueryPlan, SQLException>() {
+            @Override
+            public QueryPlan call() throws SQLException {
+                QueryPlan plan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+                return plan;
+            }
+        }, ExpressionContextWrapper.wrap(
+            ((PhoenixStatement)stmt).getConnection().getExpressionContext()));
+
     }
     
     /**

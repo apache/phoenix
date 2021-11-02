@@ -196,6 +196,7 @@ public class ScanUtil {
             Map<byte [], NavigableSet<byte []>> clonedMap = new TreeMap<byte [], NavigableSet<byte []>>(existingMap);
             newScan.setFamilyMap(clonedMap);
             // Carry over the reversed attribute
+            //FIXME This is redundant, new Scan(scan) already copies isReversed
             newScan.setReversed(scan.isReversed());
             if (scan.getReadType() == Scan.ReadType.PREAD) {
                 // HBASE-25644 : Only if Scan#setSmall(boolean) is called with
@@ -1429,4 +1430,52 @@ public class ScanUtil {
             }
         }
     }
+
+    public static void setExpressionContext(ExpressionContext ctx, Scan scan) {
+        if (ctx.isCompliant()) {
+            scan.setAttribute(BaseScannerRegionObserver.USE_COMPLIANT_TEMPORAL,
+                PDataType.TRUE_BYTES);
+            scan.setAttribute(BaseScannerRegionObserver.TIME_ZONE,
+                Bytes.toBytes(ctx.getTimezoneId()));
+            if (!ctx.getTimestampFormatPattern()
+                    .equals(QueryServicesOptions.DEFAULT_TIMESTAMP_FORMAT)) {
+                scan.setAttribute(BaseScannerRegionObserver.TIMESTAMP_PATTERN,
+                    Bytes.toBytes(ctx.getTimestampFormatPattern()));
+            }
+            if (!ctx.getDateFormatPattern().equals(QueryServicesOptions.DEFAULT_DATE_FORMAT)) {
+                scan.setAttribute(BaseScannerRegionObserver.DATE_PATTERN,
+                    Bytes.toBytes(ctx.getDateFormatPattern()));
+            }
+            if (!ctx.getTimeFormatPattern().equals(QueryServicesOptions.DEFAULT_TIME_FORMAT)) {
+                scan.setAttribute(BaseScannerRegionObserver.TIME_PATTERN,
+                    Bytes.toBytes(ctx.getTimeFormatPattern()));
+            }
+        } else {
+            int dummy = 0;
+        }
+    }
+
+    public static ExpressionContext getExpressionContext(Scan scan) {
+        if (Bytes.equals(TRUE_BYTES,
+            scan.getAttribute(BaseScannerRegionObserver.USE_COMPLIANT_TEMPORAL))) {
+            String timeZoneId = 
+                    Bytes.toString(scan.getAttribute(BaseScannerRegionObserver.TIME_ZONE));
+            if (timeZoneId == null) {
+                throw new RuntimeException("If " + BaseScannerRegionObserver.USE_COMPLIANT_TEMPORAL
+                    + "is set, then " + BaseScannerRegionObserver.TIME_ZONE + " must also be set");
+            }
+            //Null is OK for the formats, represents the default
+            String timestampPattern = 
+                    Bytes.toString(scan.getAttribute(BaseScannerRegionObserver.TIMESTAMP_PATTERN));
+            String datePattern = 
+                    Bytes.toString(scan.getAttribute(BaseScannerRegionObserver.DATE_PATTERN));
+            String timePattern = 
+                    Bytes.toString(scan.getAttribute(BaseScannerRegionObserver.TIME_PATTERN));
+            return ExpressionContextFactory.getCompliantServerSide(
+                datePattern, timePattern, timestampPattern, timeZoneId);
+        } else {
+            return ExpressionContextFactory.getGMTServerSide();
+        }
+    }
+
 }

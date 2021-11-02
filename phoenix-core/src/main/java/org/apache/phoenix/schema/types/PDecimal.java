@@ -28,7 +28,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.ExpressionContext;
 import org.apache.phoenix.util.NumberUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -138,7 +138,7 @@ public class PDecimal extends PRealNumber<BigDecimal> {
         } else if (equalsAny(actualType, PDouble.INSTANCE, PUnsignedDouble.INSTANCE)) {
             return BigDecimal.valueOf(actualType.getCodec().decodeDouble(b, o, sortOrder));
         } else if (equalsAny(actualType, PTimestamp.INSTANCE, PUnsignedTimestamp.INSTANCE)) {
-            long millisPart = DateUtil.getCodecFor(actualType).decodeLong(b, o, sortOrder);
+            long millisPart = PTimestamp.getCodecFor(actualType).decodeLong(b, o, sortOrder);
             int nanoPart = PUnsignedInt.INSTANCE.getCodec().decodeInt(b, o + Bytes.SIZEOF_LONG, sortOrder);
             BigDecimal nanosPart = BigDecimal.valueOf(
                     (nanoPart % QueryConstants.MILLIS_TO_NANOS_CONVERTOR)
@@ -399,23 +399,20 @@ public class PDecimal extends PRealNumber<BigDecimal> {
     }
 
     @Override
-    public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
-        if (formatter == null) {
-            BigDecimal o = (BigDecimal) toObject(b, offset, length);
-            return o.toPlainString();
-        }
-        return super.toStringLiteral(b, offset, length, formatter);
+    public String toStringLiteral(byte[] b, int offset, int length, ExpressionContext ctx) {
+        //FIXME We used to use NUMBERFORMAT here (in fact this was possibly the only place where
+        //it was used, we may want to restore it once we move Numberformat to the ExpressionContext
+        BigDecimal o = (BigDecimal) toObject(b, offset, length);
+        return toStringLiteral(o, ctx);
     }
 
     @Override
-    public String toStringLiteral(Object o, Format formatter) {
-        if (formatter == null) {
-            if(o == null) {
-                return String.valueOf(o);
-            }
-            return ((BigDecimal)o).toPlainString();
+    public String toStringLiteral(Object o, ExpressionContext ctx) {
+        //FIXME same as above
+        if(o == null) {
+            return String.valueOf(o);
         }
-        return super.toStringLiteral(o, formatter);
+        return ((BigDecimal)o).toPlainString();
     }
 
     @Override

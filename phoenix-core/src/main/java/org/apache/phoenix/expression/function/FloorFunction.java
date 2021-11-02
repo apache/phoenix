@@ -42,7 +42,7 @@ import org.apache.phoenix.schema.types.PVarchar;
                         @Argument(allowedTypes={PInteger.class}, defaultValue="1", isConstant=true)
                         },
                  classType = FunctionParseNode.FunctionClassType.ABSTRACT,
-                 derivedFunctions = {FloorDateExpression.class, FloorDecimalExpression.class}
+                 derivedFunctions = {FloorDateExpression.class, FloorTimestampExpression.class, FloorDecimalExpression.class}
                 )
 public abstract class FloorFunction extends ScalarFunction {
     

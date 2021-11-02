@@ -27,7 +27,10 @@ import org.antlr.runtime.ANTLRReaderStream;
 import org.antlr.runtime.CharStream;
 import org.antlr.runtime.CommonTokenStream;
 import org.antlr.runtime.RecognitionException;
+import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.exception.PhoenixParserException;
+import org.apache.phoenix.util.ExpressionContext;
+import org.apache.phoenix.util.ExpressionContextWrapper;
 
 /**
  * 
@@ -97,6 +100,16 @@ public class SQLParser {
             }
             throw PhoenixParserException.newException(e, parser.getTokenNames());
         }
+    }
+
+    // Only used by tests
+    public BindableStatement parseStatement(ExpressionContext context) throws SQLException {
+        return CallRunner.run(new CallRunner.CallableThrowable<BindableStatement, SQLException>() {
+            @Override
+            public BindableStatement call() throws SQLException {
+                return parseStatement();
+            }
+        }, ExpressionContextWrapper.wrap(context));
     }
 
     /**

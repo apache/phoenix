@@ -173,7 +173,9 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.hadoop.ipc.RemoteException;
+import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.MutationPlan;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.ChildLinkMetaDataEndpoint;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
@@ -292,6 +294,9 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ExpressionContext;
+import org.apache.phoenix.util.ExpressionContextFactory;
+import org.apache.phoenix.util.ExpressionContextWrapper;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -304,6 +309,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.ThreadExpressionCtx;
 import org.apache.phoenix.util.TimeKeeper;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
@@ -2535,6 +2541,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             byte[] tableBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
             byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
 
+            // We need to get this from the Phoenix thread, the metaDataCoprocessorExec runnable
+            // runs in the HBase table Threadpool 
+            ExpressionContext expressionCtx = ThreadExpressionCtx.get();
+            
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             final boolean addingColumns = columns != null && columns.size() > 0;
             result =  metaDataCoprocessorExec(
@@ -2559,6 +2569,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         builder.setTransformingNewTable(PTableImpl.toProto(transformingNewTable));
                     }
                     builder.setAddingColumns(addingColumns);
+                    for(Entry prop : expressionCtx.toProps().entrySet()) {
+                            builder.addContextParams(MetaDataProtos.Property.newBuilder()
+                                    .setKey((String) (prop.getKey()))
+                                    .setValue((String) (prop.getValue())));
+                    }
                     instance.addColumn(controller, builder.build(), rpcCallback);
                     checkForRemoteExceptions(controller);
                     return rpcCallback.get();
@@ -3254,6 +3269,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] schemaBytes = rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
         byte[] tableBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
+        // We need to get this from the Phoenix thread, the metaDataCoprocessorExec runnable
+        // runs in the HBase table Threadpool 
+        ExpressionContext expressionCtx = ThreadExpressionCtx.get();
+        
         MetaDataMutationResult result = metaDataCoprocessorExec(
                 SchemaUtil.getPhysicalHBaseTableName(schemaBytes, tableBytes,
                         SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, this.props)).toString(),
@@ -3272,6 +3291,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 builder.setClientVersion(VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
                 if (parentTable!=null)
                     builder.setParentTable(PTableImpl.toProto(parentTable));
+                for(Entry prop : expressionCtx.toProps().entrySet()) {
+                    builder.addContextParams(MetaDataProtos.Property.newBuilder()
+                            .setKey((String) (prop.getKey()))
+                            .setValue((String) (prop.getValue())));
+                }
                 instance.dropColumn(controller, builder.build(), rpcCallback);
                 checkForRemoteExceptions(controller);
                 return rpcCallback.get();
@@ -3449,7 +3473,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public void init(final String url, final Properties props) throws SQLException {
         try {
-            PhoenixContextExecutor.call(new Callable<Void>() {
+            ExpressionContext expressionContext = ExpressionContextFactory.get(props);
+            CallRunner.run(new CallRunner.CallableThrowable<Void, Exception>() {
                 @Override
                 public Void call() throws Exception {
                     if (isInitialized()) {
@@ -3594,7 +3619,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                     return null;
                 }
-            });
+            }, PhoenixContextExecutor.inContext(),
+                ExpressionContextWrapper.wrap(expressionContext));
         } catch (Exception e) {
             Throwables.propagateIfInstanceOf(e, SQLException.class);
             Throwables.propagate(e);

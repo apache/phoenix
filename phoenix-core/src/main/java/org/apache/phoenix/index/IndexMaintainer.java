@@ -55,6 +55,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexExpressionCompiler;
@@ -108,11 +109,14 @@ import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.util.BitSet;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.ExpressionContextWrapper;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ThreadExpressionCtx;
 import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
@@ -122,6 +126,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+import org.apache.phoenix.trace.util.Tracing;
 
 /**
  * 
@@ -245,27 +250,36 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         DataOutputStream output = new DataOutputStream(stream);
         try {
-            // Encode data table salting in sign of number of indexes
-            WritableUtils.writeVInt(output, nIndexes * (dataTable.getBucketNum() == null ? 1 : -1));
-            // Write out data row key schema once, since it's the same for all index maintainers
-            dataTable.getRowKeySchema().write(output);
-            for (PTable index : indexes) {
-                    org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer proto = IndexMaintainer.toProto(index.getIndexMaintainer(dataTable, connection));
-                    byte[] protoBytes = proto.toByteArray();
-                    WritableUtils.writeVInt(output, protoBytes.length);
-                    output.write(protoBytes);
-            }
-            if (dataTable.getTransformingNewTable() != null) {
-                // We're not serializing the TransformMaintainer if the new transformed table is disabled
-                boolean disabled = dataTable.getTransformingNewTable().isIndexStateDisabled();
-                if (!disabled) {
-                    ServerCachingProtos.TransformMaintainer proto = TransformMaintainer.toProto(
-                            dataTable.getTransformingNewTable().getTransformMaintainer(dataTable, connection));
-                    byte[] protoBytes = proto.toByteArray();
-                    WritableUtils.writeVInt(output, protoBytes.length);
-                    output.write(protoBytes);
+            // At least for ConcatResultIterator, this gets called from rs.next() and we need
+            // to set ThreadExpressionContext
+            final int finalnIndexes = nIndexes;
+            CallRunner.run(new CallRunner.CallableThrowable<Void, IOException>() {
+                @Override
+                public Void call() throws IOException {
+                 // Encode data table salting in sign of number of indexes
+                    WritableUtils.writeVInt(output, finalnIndexes * (dataTable.getBucketNum() == null ? 1 : -1));
+                    // Write out data row key schema once, since it's the same for all index maintainers
+                    dataTable.getRowKeySchema().write(output);
+                    for (PTable index : indexes) {
+                            org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer proto = IndexMaintainer.toProto(index.getIndexMaintainer(dataTable, connection));
+                            byte[] protoBytes = proto.toByteArray();
+                            WritableUtils.writeVInt(output, protoBytes.length);
+                            output.write(protoBytes);
+                    }
+                    if (dataTable.getTransformingNewTable() != null) {
+                        // We're not serializing the TransformMaintainer if the new transformed table is disabled
+                        boolean disabled = dataTable.getTransformingNewTable().isIndexStateDisabled();
+                        if (!disabled) {
+                            ServerCachingProtos.TransformMaintainer proto = TransformMaintainer.toProto(
+                                    dataTable.getTransformingNewTable().getTransformMaintainer(dataTable, connection));
+                            byte[] protoBytes = proto.toByteArray();
+                            WritableUtils.writeVInt(output, protoBytes.length);
+                            output.write(protoBytes);
+                        }
+                    }
+                    return null;
                 }
-            }
+            }, ExpressionContextWrapper.wrap(connection.getExpressionContext()));
         } catch (IOException e) {
             throw new RuntimeException(e); // Impossible
         }

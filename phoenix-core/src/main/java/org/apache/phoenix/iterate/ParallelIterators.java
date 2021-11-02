@@ -30,6 +30,7 @@ import java.util.concurrent.Future;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.job.JobManager.JobCallable;
@@ -38,8 +39,11 @@ import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ExpressionContextFactory;
+import org.apache.phoenix.util.ExpressionContextWrapper;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.ThreadExpressionCtx;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -118,36 +122,45 @@ public class ParallelIterators extends BaseResultIterators {
                         mutationState, tableRef, scan, scanMetricsHolder, renewLeaseThreshold, plan,
                         scanGrouper, caches);
             context.getConnection().addIteratorForLeaseRenewal(tableResultItr);
+
+            //FIXME simplify/consolidate the wrapper chaos here
             Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
-                
                 @Override
                 public PeekingResultIterator call() throws Exception {
-                    long startTime = EnvironmentEdgeManager.currentTimeMillis();
-                    PeekingResultIterator iterator = iteratorFactory.newIterator(
-                            context,
-                            tableResultItr,
-                            scan,
-                            physicalTableName,
-                            ParallelIterators.this.plan);
-                    if (initFirstScanOnly) {
-                        if ((!isReverse && scanLocation.isFirstScan()) || (isReverse && scanLocation.isLastScan())) {
-                            // Fill the scanner's cache. This helps reduce latency since we are parallelizing the I/O needed.
-                            iterator.peek();
-                        }
-                    } else {
-                        iterator.peek();
-                    }
+                    return CallRunner.run(
+                        new CallRunner.CallableThrowable<PeekingResultIterator, Exception>() {
+                            @Override
+                            public PeekingResultIterator call() throws Exception {
+                                long startTime = EnvironmentEdgeManager.currentTimeMillis();
+                                PeekingResultIterator iterator =
+                                        iteratorFactory.newIterator(context, tableResultItr, scan,
+                                            physicalTableName, ParallelIterators.this.plan);
+                                if (initFirstScanOnly) {
+                                    if ((!isReverse && scanLocation.isFirstScan())
+                                            || (isReverse && scanLocation.isLastScan())) {
+                                        // Fill the scanner's cache. This helps reduce latency since
+                                        // we are parallelizing the I/O needed.
+                                        iterator.peek();
+                                    }
+                                } else {
+                                    iterator.peek();
+                                }
 
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " +
-                            (EnvironmentEdgeManager.currentTimeMillis() - startTime) +
-                            "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
-                    }
+                                if (LOGGER.isDebugEnabled()) {
+                                    LOGGER.debug(LogUtil
+                                            .addCustomAnnotations(
+                                                "Id: " + scanId + ", Time: "
+                                                        + (EnvironmentEdgeManager
+                                                                .currentTimeMillis() - startTime)
+                                                        + "ms, Scan: " + scan,
+                                                ScanUtil.getCustomAnnotations(scan)));
+                                }
 
-                    allIterators.add(iterator);
-                    return iterator;
+                                allIterators.add(iterator);
+                                return iterator;
+                            }
+                        }, ExpressionContextWrapper.wrap(context.getExpressionContext()));
                 }
-
                 /**
                  * Defines the grouping for round robin behavior.  All threads spawned to process
                  * this scan will be grouped together and time sliced with other simultaneously

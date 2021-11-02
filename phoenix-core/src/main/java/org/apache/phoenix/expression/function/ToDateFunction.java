@@ -25,7 +25,6 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
@@ -35,8 +34,11 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDataType.PDataCodec;
 import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.ExpressionContext;
+import org.apache.phoenix.util.ThreadExpressionCtx;
 
 
 /**
@@ -50,53 +52,64 @@ import org.apache.phoenix.util.DateUtil;
  */
 @BuiltInFunction(name=ToDateFunction.NAME, nodeClass=ToDateParseNode.class,
         args={@Argument(allowedTypes={PVarchar.class}),
-                @Argument(allowedTypes={PVarchar.class},isConstant=true,defaultValue="null"),
+                @Argument(allowedTypes={PVarchar.class}, isConstant=true, defaultValue = "null"),
                 @Argument(allowedTypes={PVarchar.class}, isConstant=true, defaultValue = "null") } )
 public class ToDateFunction extends ScalarFunction {
     public static final String NAME = "TO_DATE";
     private DateUtil.DateTimeParser dateParser;
     private PDataCodec codec;
+    protected ExpressionContext context;
     protected String dateFormat;
     protected String timeZoneId;
 
     public ToDateFunction() {
     }
 
-    public ToDateFunction(List<Expression> children, StatementContext context) throws SQLException {
+    // Client side constructor
+    public ToDateFunction(List<Expression> children, String dateFormat, String timeZoneId, ExpressionContext context) throws SQLException {
         super(children);
-        String dateFormat = (String) ((LiteralExpression) children.get(1)).getValue();
-        String timeZoneId = (String) ((LiteralExpression) children.get(2)).getValue();
-        if (dateFormat == null) {
-            dateFormat = context.getDateFormat();
-        }
-        if (timeZoneId == null) {
-            timeZoneId = context.getDateFormatTimeZone().getID();
-        }
+        this.context = context;
+        timeZoneId = context.resolveTimezoneId(timeZoneId);
         init(dateFormat, timeZoneId);
     }
 
-    public ToDateFunction(List<Expression> children, String dateFormat, String timeZoneId) throws SQLException {
-        super(children);
-        init(dateFormat, timeZoneId);
-    }
-    
     @Override
     public ToDateFunction clone(List<Expression> children) {
-    	try {
-            return new ToDateFunction(children, dateFormat, timeZoneId);
+        try {
+            return new ToDateFunction(children, dateFormat, timeZoneId, context);
         } catch (Exception e) {
             throw new RuntimeException(e); // Impossible, since it was originally constructed this way
         }
     }
-    
+
     private void init(String dateFormat, String timeZoneId) {
+        // We cannot initialize here, as ThreadExpressionCtx is not yet set when this is called
         this.dateFormat = dateFormat;
-        this.dateParser = DateUtil.getDateTimeParser(dateFormat, getDataType(), timeZoneId);
-        // Store resolved timeZoneId, as if it's LOCAL, we don't want the
-        // server to evaluate using the local time zone. Instead, we want
-        // to use the client local time zone.
-        this.timeZoneId = this.dateParser.getTimeZone().getID();
-        this.codec = DateUtil.getCodecFor(getDataType());
+        this.timeZoneId = timeZoneId;
+        this.codec = PTimestamp.getCodecFor(getDataType());
+    }
+
+    private ExpressionContext getContext() {
+        if (context == null) {
+            context = ThreadExpressionCtx.get();
+        }
+        return context;
+    }
+    
+    protected DateUtil.DateTimeParser getDateParser() {
+        // Lazy initialization
+        // FIXME are these checks too slow - Don't think so ? 
+        if (dateParser == null) {
+            getContext();
+            if (timeZoneId == null) {
+                timeZoneId = context.getTimezoneId();
+            }
+            if (dateFormat == null) {
+                dateFormat = context.getDateFormatPattern();
+            }
+            this.dateParser = DateUtil.getTemporalParser(dateFormat, getDataType(), timeZoneId);
+        }
+        return dateParser;
     }
 
     @Override
@@ -135,7 +148,7 @@ public class ToDateFunction extends ScalarFunction {
         }
         PDataType type = expression.getDataType();
         String dateStr = (String)type.toObject(ptr, expression.getSortOrder());
-        long epochTime = dateParser.parseDateTime(dateStr);
+        long epochTime = getDateParser().parseDateTime(dateStr);
         PDataType returnType = getDataType();
         byte[] byteValue = new byte[returnType.getByteSize()];
         codec.encodeLong(epochTime, byteValue, 0);
@@ -160,23 +173,30 @@ public class ToDateFunction extends ScalarFunction {
     private String getDateFormatArg() {
         return children.size() < 2 ? null : (String) ((LiteralExpression) children.get(1)).getValue();
     }
-    
+
+    // Server side deserializer
     @Override
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
         String timeZoneId;
         String dateFormat = WritableUtils.readString(input);  
         if (dateFormat.length() != 0) { // pre 4.3
-            timeZoneId = DateUtil.DEFAULT_TIME_ZONE_ID;         
+            timeZoneId = null;
         } else {
-            int nChildren = children.size();
-            if (nChildren == 1) {
+            // FIXME FunctionParseNode.validate(List<Expression>, StatementContext) always fills
+            // unset children args with null, so the below logic can only trigger for TZ=LOCAL
+            // Leaving the logic in for now, as earlier versions might not have padded the children
+            int nChildren = children.size(); // This is constant 3
+            if (nChildren == 1) { 
+                //No args from parser
                 dateFormat = WritableUtils.readString(input); 
                 timeZoneId =  WritableUtils.readString(input);
-            } else if (nChildren == 2 || DateUtil.LOCAL_TIME_ZONE_ID.equalsIgnoreCase(getTimeZoneIdArg())) {
+            } else if (nChildren == 2 || DateUtil.isResolveTimezone(getTimeZoneIdArg())) {
+                //Only dateFormat arg from parser or TZ param is "LOCAL"
                 dateFormat = getDateFormatArg();
                 timeZoneId =  WritableUtils.readString(input);
             } else {
+                //both format and TZ args from parser
                 dateFormat = getDateFormatArg();
                 timeZoneId =  getTimeZoneIdArg();
             }
@@ -184,6 +204,7 @@ public class ToDateFunction extends ScalarFunction {
         init(dateFormat, timeZoneId);
     }
 
+    // Client side ? serializer
     @Override
     public void write(DataOutput output) throws IOException {
         super.write(output);
@@ -191,12 +212,17 @@ public class ToDateFunction extends ScalarFunction {
         int nChildren = children.size();
         // If dateFormat and/or timeZoneId are supplied as children, don't write them again,
         // except if using LOCAL, in which case we want to write the resolved/actual time zone.
+        // FIXME nChildren is ALWAYS 3 (see readFields() above)
         if (nChildren == 1) {
+            //No args from parser, we write both resolved format and TZ
+            //Dead code
             WritableUtils.writeString(output, dateFormat);
             WritableUtils.writeString(output, timeZoneId);
-        } else if (nChildren == 2 || DateUtil.LOCAL_TIME_ZONE_ID.equalsIgnoreCase(getTimeZoneIdArg())) {
+        } else if (nChildren == 2 || DateUtil.isResolveTimezone(getTimeZoneIdArg())) {
+            // Only if TZ arg is explicitly set to "LOCAL"
             WritableUtils.writeString(output, timeZoneId);
         }
+        // If both are set, and TS is not local, don't write ARGS as strings
     }
 
     private Expression getExpression() {

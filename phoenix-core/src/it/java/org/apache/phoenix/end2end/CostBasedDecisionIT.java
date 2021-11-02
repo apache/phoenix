@@ -193,7 +193,7 @@ public class CostBasedDecisionIT extends BaseTest {
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
             assertEquals(tableName, explainPlanAttributes.getTableName());
-            assertEquals(" [2,*] - [2,9,000]",
+            assertEquals(" [2,*] - [2,9000]",
                 explainPlanAttributes.getKeyRanges());
             assertEquals("SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)",
                 explainPlanAttributes.getServerWhereFilter());
@@ -251,7 +251,7 @@ public class CostBasedDecisionIT extends BaseTest {
             // Use the idx2 plan with a wider PK slot span when stats are not available.
             verifyQueryPlan(query,
                     "UPSERT SELECT\n" +
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [2,*] - [2,9,000]\n" +
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [2,*] - [2,9000]\n" +
                             "    SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)\n" +
                             "CLIENT MERGE SORT");
 
@@ -296,7 +296,7 @@ public class CostBasedDecisionIT extends BaseTest {
             // Use the idx2 plan with a wider PK slot span when stats are not available.
             verifyQueryPlan(query,
                     "DELETE ROWS CLIENT SELECT\n" +
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [2,*] - [2,9,000]\n" +
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [2,*] - [2,9000]\n" +
                             "    SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)\n" +
                             "CLIENT MERGE SORT");
 

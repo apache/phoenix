@@ -112,6 +112,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
+import org.apache.phoenix.util.ThreadExpressionCtx;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
@@ -1163,7 +1164,9 @@ public class PTableImpl implements PTable {
                             String url = PhoenixRuntime.JDBC_PROTOCOL
                                     + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
                                     + PhoenixRuntime.CONNECTIONLESS;
-                            PhoenixConnection conn = DriverManager.getConnection(url)
+                            PhoenixConnection conn = DriverManager.getConnection(url,
+                                ThreadExpressionCtx.get().toProps())
+                                    .unwrap(PhoenixConnection.class)
                                     .unwrap(PhoenixConnection.class);
                             StatementContext context =
                                     new StatementContext(new PhoenixStatement(conn));

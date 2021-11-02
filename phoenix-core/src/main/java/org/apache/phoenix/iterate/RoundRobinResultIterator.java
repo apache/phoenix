@@ -239,6 +239,7 @@ public class RoundRobinResultIterator implements ResultIterator {
                 LOGGER.debug("Performing parallel fetch for " + openIterators.size() + " iterators. ");
             }
             for (final RoundRobinIterator itr : openIterators) {
+                //FIXME We're not setting the ExpressionContext TL here. Is that a problem ?
                 Future<Tuple> future = executor.submit(new Callable<Tuple>() {
                     @Override
                     public Tuple call() throws Exception {

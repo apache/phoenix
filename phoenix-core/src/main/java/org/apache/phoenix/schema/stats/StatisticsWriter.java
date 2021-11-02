@@ -298,6 +298,7 @@ public class StatisticsWriter implements Closeable {
                     getAdjustedKey(stopKey, tableName, fam, true),
                     MetaDataProtocol.MIN_TABLE_TIMESTAMP, clientTimeStamp);
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES);
+        //No ExpressionContext needed
         try (ResultScanner scanner = statsWriterTable.getScanner(s)) {
             Result result = null;
             while ((result = scanner.next()) != null) {

@@ -42,8 +42,10 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.ExpressionContext;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -52,6 +54,8 @@ import org.junit.experimental.categories.Category;
 
 @Category(ParallelStatsDisabledTest.class)
 public class IndexUsageIT extends ParallelStatsDisabledIT {
+
+    private static final ExpressionContext PhoenixConnection = null;
 
     /**
      * Adds a row to the index data table
@@ -630,7 +634,8 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
 
             String query = "SELECT k1, k2, k3, s1, s2 FROM " + viewName + " WHERE k1+k2+k3 = 173.0";
             ExplainPlan plan = conn.prepareStatement(query)
-                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .unwrap(PhoenixPreparedStatement.class)
+                .optimizeQuery(((PhoenixConnection)conn).getExpressionContext())
                 .getExplainPlan();
             ExplainPlanAttributes explainPlanAttributes =
                 plan.getPlanStepsAsAttributes();
@@ -666,7 +671,8 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
 
             query = "SELECT k1, k2, s1||'_'||s2 FROM " + viewName + " WHERE (s1||'_'||s2)='foo2_bar2'";
             plan = conn.prepareStatement(query)
-                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .unwrap(PhoenixPreparedStatement.class)
+                .optimizeQuery(((PhoenixConnection)conn).getExpressionContext())
                 .getExplainPlan();
             explainPlanAttributes = plan.getPlanStepsAsAttributes();
             assertEquals("PARALLEL 1-WAY",
@@ -738,7 +744,8 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
 	        String query = "SELECT s2||'_'||s3 FROM " + viewName + " WHERE k2=1 AND (s2||'_'||s3)='abc_cab'";
 
             ExplainPlan plan = conn.prepareStatement(query)
-                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .unwrap(PhoenixPreparedStatement.class)
+                .optimizeQuery(((PhoenixConnection)conn).getExpressionContext())
                 .getExplainPlan();
             ExplainPlanAttributes explainPlanAttributes =
                 plan.getPlanStepsAsAttributes();

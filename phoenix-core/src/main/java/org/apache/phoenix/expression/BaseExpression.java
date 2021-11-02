@@ -31,6 +31,7 @@ import org.apache.phoenix.expression.function.CeilDecimalExpression;
 import org.apache.phoenix.expression.function.CeilTimestampExpression;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
+import org.apache.phoenix.expression.function.FloorTimestampExpression;
 import org.apache.phoenix.expression.function.TimeUnit;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.SortOrder;
@@ -75,7 +76,7 @@ public abstract class BaseExpression implements Expression {
                 if (rhsType == PDecimal.INSTANCE && lhsType != PDecimal.INSTANCE) {
                     e = FloorDecimalExpression.create(rhs);
                 } else if ((rhsType == PTimestamp.INSTANCE || rhsType == PUnsignedTimestamp.INSTANCE)  && (lhsType != PTimestamp.INSTANCE && lhsType != PUnsignedTimestamp.INSTANCE)) {
-                    e = FloorDateExpression.create(rhs, TimeUnit.MILLISECOND);
+                    e = FloorTimestampExpression.create(rhs, TimeUnit.MILLISECOND);
                 }
                 e = CoerceExpression.create(e, lhsType, lhs.getSortOrder(), lhs.getMaxLength(), rowKeyOrderOptimizable);
                 return e;

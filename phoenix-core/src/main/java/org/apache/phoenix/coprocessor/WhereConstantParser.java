@@ -43,7 +43,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.MetaDataUtil;
-
+import org.apache.phoenix.util.ThreadExpressionCtx;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
@@ -103,7 +103,8 @@ public class WhereConstantParser {
 
     private static PhoenixConnection getConnectionlessConnection() throws SQLException {
         return DriverManager
-            .getConnection(JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + CONNECTIONLESS)
+            .getConnection(JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + CONNECTIONLESS,
+                ThreadExpressionCtx.get().toProps())
             .unwrap(PhoenixConnection.class);
     }
 

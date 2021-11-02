@@ -800,6 +800,8 @@ public class DeleteCompiler {
             PTable table = dataPlan.getTableRef().getTable();
             table.getIndexMaintainers(ptr, context.getConnection());
             ScanUtil.setWALAnnotationAttributes(table, context.getScan());
+            //FIXME is this redundant ? - probably
+            ScanUtil.setExpressionContext(context.getExpressionContext(), context.getScan());
             byte[] txState = table.isTransactional() ? connection.getMutationState().encodeTransaction() : ByteUtil.EMPTY_BYTE_ARRAY;
             ServerCache cache = null;
             try {

@@ -89,7 +89,7 @@ public class PhoenixResultSetMetaData implements ResultSetMetaData {
             return QueryConstants.NULL_DISPLAY_TEXT.length();
         }
         if (type.isCoercibleTo(PDate.INSTANCE)) {
-            return connection.getDatePattern().length();
+            return connection.getExpressionContext().getDateFormatPattern().length();
         }
         if (projector.getExpression().getMaxLength() != null) {
             return projector.getExpression().getMaxLength();

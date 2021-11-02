@@ -29,6 +29,8 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.call.CallRunner;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
@@ -36,25 +38,42 @@ import org.apache.phoenix.schema.SortOrder;
 import org.junit.Test;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.util.ExpressionContext;
+import org.apache.phoenix.util.ExpressionContextFactory;
+import org.apache.phoenix.util.ExpressionContextWrapper;
 
 
 public class QueryParserTest {
+
+    private ExpressionContext testExpressionContext = ExpressionContextFactory.getGMTServerSide();
+
     private void parseQuery(String sql) throws IOException, SQLException {
-        SQLParser parser = new SQLParser(new StringReader(sql));
-        BindableStatement stmt = null;
-        stmt = parser.parseStatement();
-        if (stmt.getOperation() != Operation.QUERY) {
-            return;
-        }
-        String newSQL = stmt.toString();
-        SQLParser newParser = new SQLParser(new StringReader(newSQL));
-        BindableStatement newStmt = null;
-        try {
-            newStmt = newParser.parseStatement();
-        } catch (SQLException e) {
-            fail("Unable to parse new:\n" + newSQL);
-        }
-        assertEquals("Expected equality:\n" + sql + "\n" + newSQL, stmt, newStmt);
+        CallRunner.run(new CallRunner.CallableThrowable<Integer, SQLException>() {
+            @Override
+            public Integer call() throws SQLException {
+                try {
+                    SQLParser parser = new SQLParser(new StringReader(sql));
+                    BindableStatement stmt = null;
+                    stmt = parser.parseStatement();
+                    if (stmt.getOperation() != Operation.QUERY) {
+                        return null;
+                    }
+                    String newSQL = stmt.toString();
+                    SQLParser newParser = new SQLParser(new StringReader(newSQL));
+                    BindableStatement newStmt = null;
+                    try {
+                        newStmt = newParser.parseStatement();
+                    } catch (SQLException e) {
+                        fail("Unable to parse new:\n" + newSQL + e);
+                    }
+                    assertEquals("Expected equality:\n" + sql + "\n" + newSQL, stmt, newStmt);
+                } catch (IOException e) {
+                    throw new SQLException(e);
+                }
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(testExpressionContext));
+        
     }
 
     private void parseQueryThatShouldFail(String sql) throws Exception {
@@ -774,7 +793,7 @@ public class QueryParserTest {
             "select a from b\n" +
             "where date '2014-01-04' = date '2014-01-04'"
             ));
-        parser.parseStatement();
+        parser.parseStatement(testExpressionContext);
     }
 
     @Test
@@ -783,7 +802,7 @@ public class QueryParserTest {
             "select a from b\n" +
             "where date '2014-01-04' in (date '2014-01-04')"
             ));
-        parser.parseStatement();
+        parser.parseStatement(testExpressionContext);
     }
     
     @Test

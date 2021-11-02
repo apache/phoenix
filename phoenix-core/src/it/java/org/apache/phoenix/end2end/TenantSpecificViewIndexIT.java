@@ -354,7 +354,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
             ResultSet rs = viewConn.createStatement().executeQuery(query);
             String exptectedIndexName = SchemaUtil.getTableName(SCHEMA1, "IDX");
             String expectedPlanFormat = "CLIENT SERIAL 1-WAY RANGE SCAN OVER " + exptectedIndexName
-                    + " ['tenant1        ','001','%s 00:00:00.001'] - ['tenant1        ','001','%s 00:00:00.000']" + "\n" +
+                    + " ['tenant1        ','001',DATE '%s 00:00:00.001'] - ['tenant1        ','001',DATE '%s 00:00:00.000']" + "\n" +
                         "    SERVER FILTER BY FIRST KEY ONLY" + "\n" +
                         "    SERVER 501 ROW LIMIT" + "\n" +
                         "CLIENT 501 ROW LIMIT";

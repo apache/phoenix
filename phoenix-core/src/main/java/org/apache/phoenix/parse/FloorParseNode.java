@@ -22,12 +22,17 @@ import java.util.List;
 
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.function.CeilDateExpression;
+import org.apache.phoenix.expression.function.CeilTimestampExpression;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
+import org.apache.phoenix.expression.function.FloorTimestampExpression;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.TypeMismatchException;
 
 /**
@@ -56,8 +61,10 @@ public class FloorParseNode extends FunctionParseNode {
         
         //FLOOR on timestamp doesn't really care about the nanos part i.e. it just sets it to zero. 
         //Which is exactly what FloorDateExpression does too. 
-        if(firstChildDataType.isCoercibleTo(PTimestamp.INSTANCE)) {
+        if(firstChildDataType.isCoercibleTo(PDate.INSTANCE)) {
             return FloorDateExpression.create(children);
+        } else if (firstChildDataType == PTimestamp.INSTANCE || firstChildDataType == PUnsignedTimestamp.INSTANCE) {
+            return FloorTimestampExpression.create(children);
         } else if(firstChildDataType.isCoercibleTo(PDecimal.INSTANCE)) {
             return FloorDecimalExpression.create(children);
         } else {

@@ -23,7 +23,6 @@ import java.math.MathContext;
 import java.math.RoundingMode;
 import java.sql.Array;
 import java.sql.SQLException;
-import java.text.Format;
 import java.util.Random;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -37,13 +36,13 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.ScanUtil;
-
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.math.LongMath;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Longs;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ExpressionContext;
+import org.apache.phoenix.util.ScanUtil;
 
 /**
  * The data types of PColumns
@@ -826,7 +825,9 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         Preconditions.checkNotNull(expectedModifier);
         if (ptr.getLength() == 0) { return; }
         if (this.isBytesComparableWith(actualType)) { // No coerce necessary
-            if (actualModifier == expectedModifier) { return; }
+            if (actualModifier == expectedModifier) {
+                return;
+            }
             byte[] b = ptr.copyBytes();
             SortOrder.invert(b, 0, b, 0, b.length);
             ptr.set(b);
@@ -1082,25 +1083,23 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         return getKeyRange(point, true, point, true);
     }
 
-    public final String toStringLiteral(ImmutableBytesWritable ptr, Format formatter) {
-        return toStringLiteral(ptr.get(), ptr.getOffset(), ptr.getLength(), formatter);
+    public final String toStringLiteral(ImmutableBytesWritable ptr, ExpressionContext ctx) {
+        return toStringLiteral(ptr.get(), ptr.getOffset(), ptr.getLength(), ctx);
     }
 
-    public final String toStringLiteral(byte[] b, Format formatter) {
-        return toStringLiteral(b, 0, b.length, formatter);
+    public final String toStringLiteral(byte[] b, ExpressionContext ctx) {
+        return toStringLiteral(b, 0, b.length, ctx);
     }
 
-    public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
+    public String toStringLiteral(byte[] b, int offset, int length, ExpressionContext ctx) {
         Object o = toObject(b, offset, length);
-        return toStringLiteral(o, formatter);
+        return toStringLiteral(o, ctx);
     }
 
-    public String toStringLiteral(Object o, Format formatter) {
+    public String toStringLiteral(Object o, ExpressionContext ctx) {
+        //We use context in subclasses where it makes sense
         if (o == null) {
             return String.valueOf(o);
-        }
-        if (formatter != null) {
-            return formatter.format(o);
         }
         return o.toString();
     }

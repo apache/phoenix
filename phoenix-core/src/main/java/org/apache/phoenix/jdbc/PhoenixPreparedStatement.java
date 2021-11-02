@@ -46,16 +46,20 @@ import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.BindManager;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.jdbc.PhoenixStatement.CompilableStatement;
 import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.ExpressionContext;
+import org.apache.phoenix.util.ExpressionContextWrapper;
 import org.apache.phoenix.util.SQLCloseable;
 
 /**
@@ -201,6 +205,18 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
         return executeMutation(statement, createAuditQueryLogger(statement,query));
     }
 
+    //Only for testing
+    public QueryPlan optimizeQuery(ExpressionContext ctx) throws SQLException {
+        return CallRunner.run(new CallRunner.CallableThrowable<QueryPlan, SQLException>() {
+            @Override
+            public QueryPlan call() throws SQLException {
+                throwIfUnboundParameters();
+                return optimizeQuery(statement);
+            }
+        }, ExpressionContextWrapper.wrap(this.getConnection().getExpressionContext()));
+        
+    }
+    
     public QueryPlan optimizeQuery() throws SQLException {
         throwIfUnboundParameters();
         return optimizeQuery(statement);

@@ -102,6 +102,8 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ExpressionContext;
+import org.apache.phoenix.util.ExpressionContextFactory;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -1981,7 +1983,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String query;
         for (int i = 0; i < queries.length; i++) {
             query = queries[i];
-            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query, ExpressionContextFactory.getGMTServerSide());
             assertFalse("Expected group by not to be order preserving: " + query, plan.getGroupBy().isOrderPreserving());
         }
     }

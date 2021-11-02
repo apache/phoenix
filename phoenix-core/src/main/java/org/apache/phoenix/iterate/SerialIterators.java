@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
@@ -44,6 +45,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.util.ExpressionContextWrapper;
 import org.apache.phoenix.util.QueryUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -97,12 +99,22 @@ public class SerialIterators extends BaseResultIterators {
                 flattenedScans = Lists.reverse(flattenedScans);
             }
             final List<Scan> finalScans = flattenedScans;
-            Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
-                @Override
-                public PeekingResultIterator call() throws Exception {
-                    PeekingResultIterator itr = new SerialIterator(finalScans, tableName, renewLeaseThreshold, offset, caches);
-                    return itr;
-                }
+            //FIXME simplify/consolidate the wrapper chaos here
+            Future<PeekingResultIterator> future =
+                    executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
+                        @Override
+                        public PeekingResultIterator call() throws Exception {
+                            return CallRunner.run(
+                                new CallRunner.CallableThrowable<PeekingResultIterator, Exception>() {
+                                    @Override
+                                    public PeekingResultIterator call() throws Exception {
+                                        PeekingResultIterator itr =
+                                                new SerialIterator(finalScans, tableName,
+                                                        renewLeaseThreshold, offset, caches);
+                                        return itr;
+                                    }
+                                }, ExpressionContextWrapper.wrap(context.getExpressionContext()));
+                        }
 
                 /**
                  * Defines the grouping for round robin behavior.  All threads spawned to process

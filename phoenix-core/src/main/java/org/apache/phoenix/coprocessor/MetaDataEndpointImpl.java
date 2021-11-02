@@ -153,6 +153,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.GlobalCache.FunctionBytesPtr;
+import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
@@ -250,6 +251,8 @@ import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ExpressionContextFactory;
+import org.apache.phoenix.util.ExpressionContextWrapper;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -257,6 +260,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ThreadExpressionCtx;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.slf4j.Logger;
@@ -3495,11 +3499,20 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             PTable parentTable = request.hasParentTable() ? PTableImpl.createFromProto(request.getParentTable()) : null;
             PTable transformingNewTable = request.hasTransformingNewTable() ? PTableImpl.createFromProto(request.getTransformingNewTable()) : null;
             boolean addingColumns = request.getAddingColumns();
-            MetaDataMutationResult result = mutateColumn(tableMetaData, new AddColumnMutator(),
-                    request.getClientVersion(), parentTable, transformingNewTable, addingColumns);
-            if (result != null) {
-                done.run(MetaDataMutationResult.toProto(result));
-            }
+            List<MetaDataProtos.Property> protoProps = request.getContextParamsList();
+            CallRunner.run(new CallRunner.CallableThrowable<Void, Exception>() {
+                @Override
+                public Void call() throws Exception {
+                    MetaDataMutationResult result =
+                            mutateColumn(tableMetaData, new AddColumnMutator(),
+                                request.getClientVersion(), parentTable, transformingNewTable,
+                                addingColumns);
+                    if (result != null) {
+                        done.run(MetaDataMutationResult.toProto(result));
+                    }
+                    return null;
+                }
+            }, ExpressionContextWrapper.wrap(ExpressionContextFactory.fromProtobuf(protoProps)));
         } catch (Throwable e) {
             LOGGER.error("Add column failed: ", e);
             ProtobufUtil.setControllerException(controller,
@@ -3627,17 +3640,23 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     @Override
     public void dropColumn(RpcController controller, final DropColumnRequest request,
                            RpcCallback<MetaDataResponse> done) {
-        List<Mutation> tableMetaData = null;
-        final List<byte[]> tableNamesToDelete = Lists.newArrayList();
-        final List<SharedTableState> sharedTablesToDelete = Lists.newArrayList();
         try {
-            tableMetaData = ProtobufUtil.getMutations(request);
+            List<Mutation>  tableMetaData = ProtobufUtil.getMutations(request);
             PTable parentTable = request.hasParentTable() ? PTableImpl.createFromProto(request.getParentTable()) : null;
-            MetaDataMutationResult result = mutateColumn(tableMetaData, new DropColumnMutator(env.getConfiguration()),
-                    request.getClientVersion(), parentTable,null, true);
-            if (result != null) {
-                done.run(MetaDataMutationResult.toProto(result));
-            }
+            List<MetaDataProtos.Property> protoProps = request.getContextParamsList();
+            CallRunner.run(new CallRunner.CallableThrowable<Void, Exception>() {
+                @Override
+                public Void call() throws Exception {
+                    MetaDataMutationResult result =
+                            mutateColumn(tableMetaData,
+                                new DropColumnMutator(env.getConfiguration()),
+                                request.getClientVersion(), parentTable, null, true);
+                    if (result != null) {
+                        done.run(MetaDataMutationResult.toProto(result));
+                    }
+                    return null;
+                }
+            }, ExpressionContextWrapper.wrap(ExpressionContextFactory.fromProtobuf(protoProps)));
         } catch (Throwable e) {
             LOGGER.error("Drop column failed: ", e);
             ProtobufUtil.setControllerException(controller,

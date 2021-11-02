@@ -32,6 +32,7 @@ import java.util.Set;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -142,7 +143,8 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
         conn.commit();
         ExplainPlan plan = conn.prepareStatement("SELECT k1, k2, v2 FROM "
                 + viewName + " WHERE v2='" + valuePrefix + "v2-1'")
-            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .unwrap(PhoenixPreparedStatement.class)
+            .optimizeQuery(((PhoenixConnection)conn).getExpressionContext())
             .getExplainPlan();
         ExplainPlanAttributes explainPlanAttributes =
             plan.getPlanStepsAsAttributes();
@@ -195,7 +197,8 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
         conn.commit();
         ExplainPlan plan = conn.prepareStatement("SELECT k1, k2, v2 FROM "
                 + viewName + " WHERE v2='" + valuePrefix + "v2-1'")
-            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .unwrap(PhoenixPreparedStatement.class)
+            .optimizeQuery(((PhoenixConnection)conn).getExpressionContext())
             .getExplainPlan();
         ExplainPlanAttributes explainPlanAttributes =
             plan.getPlanStepsAsAttributes();

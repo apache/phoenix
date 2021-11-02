@@ -23,6 +23,9 @@ import java.text.Format;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.ExpressionContext;
+import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.ThreadExpressionCtx;
 
 public class PUnsignedTime extends PDataType<Time> {
 
@@ -98,13 +101,12 @@ public class PUnsignedTime extends PDataType<Time> {
   }
 
   @Override
-  public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
-    return PUnsignedDate.INSTANCE.toStringLiteral(b, offset, length, formatter);
-  }
-
-  @Override
-  public String toStringLiteral(Object o, Format formatter) {
-    return PUnsignedDate.INSTANCE.toStringLiteral(o, formatter);
+  public String toStringLiteral(Object o, ExpressionContext ctx) {
+      if (ctx == null) {
+          ctx = ThreadExpressionCtx.get();
+      }
+      return null == o ? String.valueOf(o) : getSqlTypeName() + " '"
+              + StringUtil.escapeStringConstant(ctx.getDateFormatter().format(o)) + "'";
   }
 
   @Override

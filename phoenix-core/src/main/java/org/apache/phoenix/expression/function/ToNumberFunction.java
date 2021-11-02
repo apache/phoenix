@@ -28,9 +28,9 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
-
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-
+import org.apache.phoenix.util.ExpressionContext;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -60,11 +60,13 @@ public class ToNumberFunction extends ScalarFunction {
     
     private String formatString = null;
     private Format format = null;
+    //We don't really use context, as it doesn't handle numberformat yet
+    private ExpressionContext context;
 	private FunctionArgumentType type;
     
     public ToNumberFunction() {}
 
-    public ToNumberFunction(List<Expression> children, StatementContext context) throws SQLException {
+    public ToNumberFunction(List<Expression> children, ExpressionContext context) throws SQLException {
         super(children.subList(0, 1));
         PDataType dataType = children.get(0).getDataType();
         String formatString = (String)((LiteralExpression)children.get(1)).getValue(); // either date or number format string
@@ -72,18 +74,14 @@ public class ToNumberFunction extends ScalarFunction {
         FunctionArgumentType type;
 
         if (dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
-            if (formatString == null) {
-                formatString = context.getDateFormat();
-                formatter = context.getDateFormatter();
-            } else {
-                formatter = FunctionArgumentType.TEMPORAL.getFormatter(formatString);
-            }
+            // Removed useless Temporal format code here
             type = FunctionArgumentType.TEMPORAL;
         }
         else if (dataType.isCoercibleTo(PChar.INSTANCE)) {
             if (formatString != null) {
-                formatter = FunctionArgumentType.CHAR.getFormatter(formatString);
+                formatter = FunctionArgumentType.CHAR.getFormatter(formatString, context);
             }
+            // FIXME Why don't we use the NUMBERFORMAT property here by default ???
             type = FunctionArgumentType.CHAR;
         }
         else {
@@ -93,20 +91,42 @@ public class ToNumberFunction extends ScalarFunction {
         this.type = type;
         this.formatString = formatString;
         this.format = formatter;
+        this.context = context;
     }
 
-    public ToNumberFunction(List<Expression> children, FunctionArgumentType type, String formatString, Format formatter) throws SQLException {
+    @VisibleForTesting
+    public ToNumberFunction(List<Expression> children, FunctionArgumentType type, String formatString, Format formatter, ExpressionContext context) throws SQLException {
         super(children.subList(0, 1));
         Preconditions.checkNotNull(type);
         this.type = type;
         this.formatString = formatString;
         this.format = formatter;
     }
-    
+
+    // This is only going to be necessary when we fix NUMBERFORMAT handling, and push it to
+    // the coprocessors
+    //    private ExpressionContext getContext() {
+    //        if (context == null) {
+    //            context = ThreadExpressionCtx.get();
+    //        }
+    //        return context;
+    //    }
+    //    
+    //    private Format getFormat() {
+    //        if (format == null) {
+    //            if(formatString == null) {
+    //                //Hack to preserve broken behaviour for now
+    //                return null;
+    //            }
+    //            format = type.getFormatter(formatString, getContext());
+    //        }
+    //        return format;
+    //    }
+
     @Override
     public ToNumberFunction clone(List<Expression> children) {
     	try {
-            return new ToNumberFunction(children, type, formatString, format);
+            return new ToNumberFunction(children, type, formatString, format, context);
         } catch (Exception e) {
             throw new RuntimeException(e); // Impossible, since it was originally constructed this way
         }
@@ -138,9 +158,12 @@ public class ToNumberFunction extends ScalarFunction {
         stringValue = stringValue.trim();
         BigDecimal decimalValue;
         if (format == null) {
+            // FIXME Only happens because we never use the NUMBER_FORMAT property, only the 
+            // function argument
             decimalValue = (BigDecimal) getDataType().toObject(stringValue);
         } else {
             ParsePosition parsePosition = new ParsePosition(0);
+            // We've already handled the Timestamp case above, so this is guaranteed to be DecimalFormat.
             Number number = ((DecimalFormat) format).parse(stringValue, parsePosition);
             if (parsePosition.getErrorIndex() > -1) {
                 ptr.set(EMPTY_BYTE_ARRAY);
@@ -185,8 +208,8 @@ public class ToNumberFunction extends ScalarFunction {
         super.readFields(input);
         formatString = WritableUtils.readString(input);
         type = WritableUtils.readEnum(input, FunctionArgumentType.class);
-        if (formatString != null) {
-        	format = type.getFormatter(formatString);
+        if (formatString != null && type != FunctionArgumentType.TEMPORAL) {
+        	format = type.getFormatter(formatString, null);
         }
     }
 

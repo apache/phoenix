@@ -137,23 +137,23 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
             this.dataType = dataType;
             PDataCodec codec = dataType.getCodec();
             if(dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
-                codec = DateUtil.getCodecFor(dataType);
+                codec = PTimestamp.getCodecFor(dataType);
                 // TODO: move to DateUtil
                 String dateFormat;
                 int dateSqlType = dataType.getResultSetSqlType();
                 if (dateSqlType == Types.DATE) {
                     dateFormat = props.get(QueryServices.DATE_FORMAT_ATTRIB,
-                            DateUtil.DEFAULT_DATE_FORMAT);
+                            QueryServicesOptions.DEFAULT_DATE_FORMAT);
                 } else if (dateSqlType == Types.TIME) {
                     dateFormat = props.get(QueryServices.TIME_FORMAT_ATTRIB,
-                            DateUtil.DEFAULT_TIME_FORMAT);
+                            QueryServicesOptions.DEFAULT_TIME_FORMAT);
                 } else {
                     dateFormat = props.get(QueryServices.TIMESTAMP_FORMAT_ATTRIB,
-                            DateUtil.DEFAULT_TIMESTAMP_FORMAT);                    
+                            QueryServicesOptions.DEFAULT_TIMESTAMP_FORMAT);                    
                 }
                 String timeZoneId = props.get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
                         QueryServicesOptions.DEFAULT_DATE_FORMAT_TIMEZONE);
-                this.dateTimeParser = DateUtil.getDateTimeParser(dateFormat, dataType, timeZoneId);
+                this.dateTimeParser = DateUtil.getTemporalParser(dateFormat, dataType, timeZoneId);
             } else {
                 this.dateTimeParser = null;
             }

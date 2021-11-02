@@ -78,16 +78,23 @@ public class CeilDateExpression extends RoundDateExpression {
         Object timeUnitValue = ((LiteralExpression)children.get(1)).getValue();
         TimeUnit timeUnit = TimeUnit.getTimeUnit(timeUnitValue != null ? timeUnitValue.toString() : null);
         switch(timeUnit) {
+        case SECOND:
+            return new CeilSecondExpression(children);
+        case MINUTE:
+            return new CeilMinuteExpression(children);
+        case HOUR:
+            return new CeilHourExpression(children);
+        case DAY:
+            return new CeilDayExpression(children);
         case WEEK:
             return new CeilWeekExpression(children);
         case MONTH:
             return new CeilMonthExpression(children);
         case YEAR:
             return new CeilYearExpression(children); 
-         default:
-             return new CeilDateExpression(children);
+        default:
+            throw new IllegalArgumentException("Unsupported time unit " + timeUnit);
         }
-        
     }
     
     public CeilDateExpression(List<Expression> children) {
@@ -112,7 +119,7 @@ public class CeilDateExpression extends RoundDateExpression {
             }
             PDataType dataType = getDataType();
             long time = dataType.getCodec().decodeLong(ptr, children.get(0).getSortOrder());
-            long value = roundTime(time);
+            long value = applyFn(time);
             Date d = new Date(value);
             byte[] byteValue = dataType.toBytes(d);
             ptr.set(byteValue);

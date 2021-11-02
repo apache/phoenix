@@ -31,7 +31,6 @@ import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
-import org.apache.phoenix.util.DateUtil;
 
 /**
  * 
@@ -75,7 +74,7 @@ public class TimestampAddExpression extends AddExpression {
             } 
             finalResult = finalResult.add(value);
         }
-        Timestamp ts = DateUtil.getTimestamp(finalResult);
+        Timestamp ts = PTimestamp.getTimestamp(finalResult);
         byte[] resultPtr = new byte[getDataType().getByteSize()];
         PTimestamp.INSTANCE.toBytes(ts, resultPtr, 0);
         ptr.set(resultPtr);

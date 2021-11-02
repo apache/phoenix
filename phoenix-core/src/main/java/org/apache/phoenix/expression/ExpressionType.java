@@ -192,7 +192,20 @@ public enum ExpressionType {
     CosFunction(CosFunction.class),
     TanFunction(TanFunction.class),
     RowKeyBytesStringFunction(RowKeyBytesStringFunction.class),
-    PhoenixRowTimestampFunction(PhoenixRowTimestampFunction.class)
+    PhoenixRowTimestampFunction(PhoenixRowTimestampFunction.class),
+    RoundSecondExpression(RoundSecondExpression.class),
+    RoundMinuteExpression(RoundMinuteExpression.class),
+    RoundHourExpression(RoundHourExpression.class),
+    RoundDayExpression(RoundDayExpression.class),
+    FloorTimestampExpression(FloorTimestampExpression.class),
+    FloorSecondExpression(FloorSecondExpression.class),
+    FloorMinuteExpression(FloorMinuteExpression.class),
+    FloorHourExpression(FloorHourExpression.class),
+    FloorDayExpression(FloorDayExpression.class),
+    CeilSecondExpression(CeilSecondExpression.class),
+    CeilMinuteExpression(CeilMinuteExpression.class),
+    CeilHourExpression(CeilHourExpression.class),
+    CeilDayExpression(CeilDayExpression.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

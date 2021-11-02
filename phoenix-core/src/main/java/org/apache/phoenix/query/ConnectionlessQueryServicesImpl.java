@@ -105,6 +105,8 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * Implementation of ConnectionQueryServices used in testing where no connection to
  * an hbase cluster is necessary.
  * 
+ * It is also used in the normal code path where need to access metadata, but haven't made
+ * the PhoenixConnection object available in the method.
  * 
  * @since 0.1
  */

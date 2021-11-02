@@ -19,11 +19,12 @@ package org.apache.phoenix.schema.types;
 
 import java.sql.Date;
 import java.sql.Types;
-import java.text.Format;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.ExpressionContext;
+import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.ThreadExpressionCtx;
 
 public class PUnsignedDate extends PDataType<Date> {
 
@@ -109,14 +110,12 @@ public class PUnsignedDate extends PDataType<Date> {
     }
 
     @Override
-    public String toStringLiteral(Object o, Format formatter) {
-        // Can't delegate, as the super.toStringLiteral calls this.toBytes
-        if (formatter == null || formatter == DateUtil.DEFAULT_DATE_FORMATTER) {
-            // If default formatter has not been overridden,
-            // use one that displays milliseconds.
-            formatter = DateUtil.DEFAULT_MS_DATE_FORMATTER;
+    public String toStringLiteral(Object o, ExpressionContext ctx) {
+        if (ctx == null) {
+            ctx = ThreadExpressionCtx.get();
         }
-        return "'" + super.toStringLiteral(o, formatter) + "'";
+        return null == o ? String.valueOf(o) : getSqlTypeName() + " '"
+                + StringUtil.escapeStringConstant(ctx.getDateFormatter().format(o)) + "'";
     }
 
     // TODO: derive PUnsignedDate from PDate to avoid copy/paste

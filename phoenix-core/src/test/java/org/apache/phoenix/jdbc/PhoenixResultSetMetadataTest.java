@@ -38,7 +38,7 @@ public class PhoenixResultSetMetadataTest extends BaseConnectionlessQueryTest {
         assertEquals(15, rs.getMetaData().getColumnDisplaySize(1));
         assertEquals(PhoenixResultSetMetaData.DEFAULT_DISPLAY_WIDTH, rs.getMetaData().getColumnDisplaySize(2));
         assertEquals(15, rs.getMetaData().getColumnDisplaySize(3));
-        assertEquals(conn.unwrap(PhoenixConnection.class).getDatePattern().length(), rs.getMetaData().getColumnDisplaySize(4));
+        assertEquals(conn.unwrap(PhoenixConnection.class).getExpressionContext().getDateFormatPattern().length(), rs.getMetaData().getColumnDisplaySize(4));
         assertEquals(40, rs.getMetaData().getColumnDisplaySize(5));
     }
 

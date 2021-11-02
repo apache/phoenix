@@ -21,13 +21,12 @@ import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
 import org.joda.time.DateTime;
-import org.joda.time.chrono.GJChronology;
 
 /**
  * 
  * Floor function that rounds up the {@link DateTime} to start of month. 
  */
-public class FloorMonthExpression extends RoundJodaDateExpression {
+public class FloorMonthExpression extends FloorDateExpression {
 
     public FloorMonthExpression() {
         super();
@@ -38,20 +37,17 @@ public class FloorMonthExpression extends RoundJodaDateExpression {
     }
 
     @Override
-    public long roundDateTime(DateTime datetime) {
-        return datetime.monthOfYear().roundFloorCopy().getMillis();
+    protected long applyFn(long time) {
+        return getContext().floorMonth(time, divBy, multiplier);
     }
 
     @Override
     public long rangeLower(long time) {
-        // floor
-        return roundDateTime(new DateTime(time, GJChronology.getInstanceUTC()));
+        return getContext().floorMonth(time, divBy, multiplier);
     }
 
     @Override
     public long rangeUpper(long time) {
-        // ceil(time + 1) -1
-        return (new DateTime(time + 1, GJChronology.getInstanceUTC())).monthOfYear()
-                .roundCeilingCopy().getMillis() - 1;
+        return getContext().ceilMonth(time + 1, divBy, multiplier) - 1;
     }
 }

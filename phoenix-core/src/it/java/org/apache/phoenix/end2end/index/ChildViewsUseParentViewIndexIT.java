@@ -33,6 +33,7 @@ import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -162,7 +163,8 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
     private void assertQueryUsesIndex(final String baseTableName, final String viewName, Connection conn, boolean isChildView) throws SQLException {
         String sql = "SELECT A0, A1, A2, A4 FROM " + viewName +" WHERE A4 IN ('1', '2', '3') ORDER BY A4, A2";
         ExplainPlan plan = conn.prepareStatement(sql)
-            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .unwrap(PhoenixPreparedStatement.class)
+            .optimizeQuery(((PhoenixConnection)conn).getExpressionContext())
             .getExplainPlan();
         ExplainPlanAttributes explainPlanAttributes =
             plan.getPlanStepsAsAttributes();
@@ -196,7 +198,8 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
     private void assertQueryUsesBaseTable(final String baseTableName, final String viewName, Connection conn) throws SQLException {
         String sql = "SELECT A0, A1, A2, A4 FROM " + viewName +" WHERE A4 IN ('1', '2', '3') ";
         ExplainPlan plan = conn.prepareStatement(sql)
-            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .unwrap(PhoenixPreparedStatement.class)
+            .optimizeQuery(((PhoenixConnection)conn).getExpressionContext())
             .getExplainPlan();
         ExplainPlanAttributes explainPlanAttributes =
             plan.getPlanStepsAsAttributes();
@@ -285,7 +288,8 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
                 " AND (A_DATE > TO_DATE('2016-01-01 06:00:00.0')) " +
                 " ORDER BY WO_ID, A_DATE DESC";
         ExplainPlan plan = conn.prepareStatement(sql)
-            .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .unwrap(PhoenixPreparedStatement.class).optimizeQuery(
+                ((PhoenixConnection)conn).getExpressionContext())
             .getExplainPlan();
         ExplainPlanAttributes explainPlanAttributes =
             plan.getPlanStepsAsAttributes();
@@ -299,7 +303,7 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
             explainPlanAttributes.getTableName());
         assertEquals(" [" + Short.MIN_VALUE
                 + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx1',*] - [" + Short.MIN_VALUE
-                + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx5',~'2016-01-01 06:00:00.000']",
+                + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx5',~DATE '2016-01-01 06:00:00.000']",
             explainPlanAttributes.getKeyRanges());
 
         ResultSet rs = conn.createStatement().executeQuery(sql);

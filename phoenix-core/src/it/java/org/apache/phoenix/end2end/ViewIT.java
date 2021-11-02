@@ -47,6 +47,7 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
@@ -76,6 +77,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.trace.util.Tracing;
 
 /**
  * Basic test suite for views
@@ -530,7 +532,8 @@ public class ViewIT extends SplitSystemCatalogIT {
             assertFalse(rs.next());
 
             ExplainPlan plan = conn.prepareStatement(query)
-                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .unwrap(PhoenixPreparedStatement.class)
+                .optimizeQuery(((PhoenixConnection)conn).getExpressionContext())
                 .getExplainPlan();
             ExplainPlanAttributes explainPlanAttributes =
                 plan.getPlanStepsAsAttributes();
@@ -1053,9 +1056,17 @@ public class ViewIT extends SplitSystemCatalogIT {
             assertEquals("bar", rs.getString(4));
             assertFalse(rs.next());
 
-            ExplainPlan plan = conn.prepareStatement(query)
-                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
-                .getExplainPlan();
+            final String q1 = query;
+            ExplainPlan plan = 
+                    CallRunner.run(new CallRunner.CallableThrowable<ExplainPlan, SQLException>() {
+                @Override
+                public ExplainPlan call() throws SQLException {
+                    return conn.prepareStatement(q1)
+                            .unwrap(PhoenixPreparedStatement.class)
+                            .optimizeQuery()
+                            .getExplainPlan();
+                }
+            }, ExpressionContextWrapper.wrap(((PhoenixConnection)conn).getExpressionContext()));
             ExplainPlanAttributes explainPlanAttributes =
                 plan.getPlanStepsAsAttributes();
             assertEquals("RANGE SCAN ",
@@ -1123,7 +1134,8 @@ public class ViewIT extends SplitSystemCatalogIT {
             String physicalTableName;
 
             plan = conn.prepareStatement(query)
-                .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                .unwrap(PhoenixPreparedStatement.class)
+                .optimizeQuery(((PhoenixConnection)conn).getExpressionContext())
                 .getExplainPlan();
             explainPlanAttributes = plan.getPlanStepsAsAttributes();
             assertEquals("RANGE SCAN ",

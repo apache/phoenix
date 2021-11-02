@@ -114,7 +114,7 @@ public class PColumnImpl implements PColumn {
         }
         this.name = name;
         this.familyName = familyName == null ? null : familyName;
-        this.maxLength = maxLength;
+        this.maxLength = maxLength; 
         this.scale = scale;
         this.nullable = nullable;
         this.position = position;

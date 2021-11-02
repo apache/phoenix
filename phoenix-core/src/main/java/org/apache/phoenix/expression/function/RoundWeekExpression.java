@@ -29,35 +29,27 @@ import org.joda.time.chrono.GJChronology;
  * 
  * Rounds off the given {@link DateTime} to the nearest Monday.
  */
-public class RoundWeekExpression extends RoundJodaDateExpression {
+public class RoundWeekExpression extends RoundDateExpression {
 
     public RoundWeekExpression(){}
     
     public RoundWeekExpression(List<Expression> children) {
-       super(children);
+        super(children);
     }
 
     @Override
-    public long roundDateTime(DateTime dateTime) {
-       return dateTime.weekOfWeekyear().roundHalfEvenCopy().getMillis();
+    public long applyFn(long time) {
+        return getContext().roundWeek(time, divBy, multiplier);
     }
 
     @Override
-    public long rangeLower(long epochMs) {
-        // We're doing unnecessary conversions here, but this is NOT perf sensitive
-        DateTime rounded =
-                new DateTime(roundDateTime(new DateTime(epochMs, GJChronology.getInstanceUTC())),
-                        GJChronology.getInstanceUTC());
-        DateTime prev = rounded.minusWeeks(1);
-        return DateUtil.rangeJodaHalfEven(rounded, prev, DateTimeFieldType.weekOfWeekyear());
+    public long rangeLower(long time) {
+        return getContext().roundWeekLower(time, divBy, multiplier);
     }
 
     @Override
-    public long rangeUpper(long epochMs) {
-        DateTime rounded =
-                new DateTime(roundDateTime(new DateTime(epochMs, GJChronology.getInstanceUTC())),
-                        GJChronology.getInstanceUTC());
-        DateTime next = rounded.plusWeeks(1);
-        return DateUtil.rangeJodaHalfEven(rounded, next, DateTimeFieldType.weekOfWeekyear());
+    public long rangeUpper(long time) {
+        return getContext().roundWeekUpper(time, divBy, multiplier);
     }
+
 }

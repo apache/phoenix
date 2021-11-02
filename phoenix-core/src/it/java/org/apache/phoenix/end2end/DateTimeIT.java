@@ -54,21 +54,21 @@ import java.sql.Types;
 import java.text.Format;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
+import java.util.List;
 import java.util.Properties;
 import java.util.TimeZone;
-import java.util.List;
-import java.util.Arrays;
 
 import org.apache.commons.lang3.time.FastDateFormat;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTime;
@@ -431,7 +431,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void selectBetweenDates() throws Exception {
-        Format formatter = DateUtil.getDateFormatter("yyyy-MM-dd");
+        Format formatter = DateUtil.getTemporalFormatter("yyyy-MM-dd");
         Calendar cal = Calendar.getInstance();
         cal.setTime(date);
         java.util.Date dateToday = cal.getTime();
@@ -463,7 +463,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSelectLiteralDate() throws Exception {
-        String s = DateUtil.DEFAULT_DATE_FORMATTER.format(date);
+        String s = DateUtil.DEFAULT_MS_DATE_FORMATTER.format(date);
         String query = "SELECT DATE '" + s + "' FROM " + this.tableName;
         Statement statement = conn.createStatement();
         ResultSet rs = statement.executeQuery(query);
@@ -530,7 +530,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDateBetweenLiterals() throws Exception {
-        Format formatter = DateUtil.getDateFormatter("yyyy-MM-dd");
+        Format formatter = DateUtil.getTemporalFormatter("yyyy-MM-dd");
         Calendar cal = Calendar.getInstance();
         cal.setTime(date);
         java.util.Date dateToday = cal.getTime();
@@ -901,6 +901,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         long actualTime = rs.getDate(1).getTime();
         assertTrue(Math.abs(actualTime - expectedTime) < MILLIS_IN_DAY);
     }
+
     @Test
     public void testSelectBetweenNanos() throws Exception {
         String tableName = generateUniqueName();
@@ -2151,6 +2152,52 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
     }
 
+
+    //FIXME DO NOT Commit, only for exploring code paths
+    
+//    @Test
+//    public void test2Coercion()throws Exception {
+//        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+//        Connection conn = DriverManager.getConnection(url, props);
+//        Statement stmt = conn.createStatement();
+//        String tableName = generateUniqueName();
+//
+//        stmt.execute("CREATE TABLE " + tableName + " ( id INTEGER not null PRIMARY KEY," +
+//                "timestamp TIMESTAMP, kar VARCHAR )");
+//        
+//        try (PreparedStatement 
+//                pstmt = conn.prepareStatement("UPSERT INTO " + tableName + " values (?, ?, ?)");
+//                PreparedStatement 
+//                pstmt2 = conn.prepareStatement("SELECT lpad(timestamp,30) FROM " + tableName + " ");
+//        ) {
+//            pstmt.setInt(1, 1);
+//            pstmt.setString(2, "2000-01-01 00:00:00");
+//            pstmt.setString(3, "a");
+//            pstmt.execute();
+//            
+//            pstmt2.execute();
+//        }
+//    }
+    
+    @Test
+    public void testCoercion()throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        Statement stmt = conn.createStatement();
+        String tableName = generateUniqueName();
+
+        stmt.execute("CREATE TABLE " + tableName + " ( id INTEGER not null PRIMARY KEY," +
+                "timestamp TIMESTAMP)");
+        
+        try (PreparedStatement 
+                pstmt = conn.prepareStatement("UPSERT INTO " + tableName + " values (?, ?)");) {
+            pstmt.setInt(1, 1);
+            pstmt.setString(2, "2000-01-01 00:00:00");
+
+            pstmt.execute();
+        }
+    }
+    
     public void testDateFormatTimeZone(String timeZoneId) throws Exception {
         Properties props = new Properties();
         props.setProperty("phoenix.query.dateFormatTimeZone", timeZoneId);
@@ -2172,7 +2219,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
             Calendar cal = Calendar.getInstance(TimeZone.getTimeZone(timeZoneId));
             cal.setTime(date);
-            String dateStr = DateUtil.getDateFormatter(DateUtil.DEFAULT_MS_DATE_FORMAT).format(date);
+            String dateStr = DateUtil.getTemporalFormatter(QueryServicesOptions.DEFAULT_MS_DATE_FORMAT).format(date);
 
             String dml = "UPSERT INTO " + tableName + " VALUES (" +
                     "1," +
@@ -2192,10 +2239,15 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
             assertEquals(rs.getTimestamp(3).getTime(), cal.getTimeInMillis());
             assertFalse(rs.next());
 
-            StatementContext stmtContext = stmt.getQueryPlan().getContext();
-            verifyTimeZoneIDWithFormatter(stmtContext.getDateFormatter(), timeZoneId);
-            verifyTimeZoneIDWithFormatter(stmtContext.getTimeFormatter(), timeZoneId);
-            verifyTimeZoneIDWithFormatter(stmtContext.getTimestampFormatter(), timeZoneId);
+            verifyTimeZoneIDWithFormatter(
+                conn1.unwrap(PhoenixConnection.class).getExpressionContext().getDateFormatter(),
+                timeZoneId);
+            verifyTimeZoneIDWithFormatter(
+                conn1.unwrap(PhoenixConnection.class).getExpressionContext().getTimeFormatter(),
+                timeZoneId);
+            verifyTimeZoneIDWithFormatter(
+                conn1.unwrap(PhoenixConnection.class).getExpressionContext().getTimestampFormatter(),
+                timeZoneId);
 
             stmt.close();
         } finally {

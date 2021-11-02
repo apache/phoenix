@@ -208,6 +208,8 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.CursorUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ExpressionContext;
+import org.apache.phoenix.util.ExpressionContextWrapper;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
@@ -216,6 +218,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ThreadExpressionCtx;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -464,7 +467,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             }
                             return rs;
                         }
-                    }, PhoenixContextExecutor.inContext());
+                    }, PhoenixContextExecutor.inContext(),
+                        //Need to push ExpressionContext again into the new ClassLoader
+                        ExpressionContextWrapper.wrap(getConnection().getExpressionContext()));
         } catch (Exception e) {
             if (queryLogger.isDebugEnabled()) {
                 queryLogger
@@ -530,6 +535,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             final long startExecuteMutationTime = EnvironmentEdgeManager.currentTimeMillis();
                             try {
                                 PhoenixConnection conn = getConnection();
+
                                 if (conn.getQueryServices().isUpgradeRequired() && !conn.isRunningUpgrade()
                                         && stmt.getOperation() != Operation.UPGRADE) {
                                     throw new UpgradeRequiredException();
@@ -644,6 +650,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             }
                         }
                     }, PhoenixContextExecutor.inContext(),
+                        //Need to push ExpressionContext again into the new ClassLoader
+                        ExpressionContextWrapper.wrap(getConnection().getExpressionContext()),
                         Tracing.withTracing(connection, this.toString()));
         } catch (Exception e) {
             if(queryLogger.isAuditLoggingEnabled()) {
@@ -2050,11 +2058,41 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         return connection.getQueryServices().getOptimizer().optimize(this, plan);
     }
 
-    public QueryPlan compileQuery(String sql) throws SQLException {
-        CompilableStatement stmt = parseStatement(sql);
-        return compileQuery(stmt, sql);
+    // This is only used by tests
+    public QueryPlan compileQuery(String sql, ExpressionContext context) throws SQLException {
+        return CallRunner.run(new CallRunner.CallableThrowable<QueryPlan, SQLException>() {
+            @Override
+            public QueryPlan call() throws SQLException {
+                return compileQuery(sql);
+            }
+        }, ExpressionContextWrapper.wrap(context));
     }
 
+    public QueryPlan compileQuery(String sql) throws SQLException {
+        //The callrunner is for tests
+        return CallRunner.run(new CallRunner.CallableThrowable<QueryPlan, SQLException>() {
+            @Override
+            public QueryPlan call() throws SQLException {
+                CompilableStatement stmt = parseStatement(sql);
+                return compileQuery(stmt, sql);
+            }
+        }, ExpressionContextWrapper.wrap(this.getConnection().getExpressionContext()));
+    }
+
+    // This is only used by tests
+    public QueryPlan compileQuery(CompilableStatement stmt, String query, ExpressionContext context) throws SQLException {
+        if (stmt.getOperation().isMutation()) {
+            throw new ExecuteQueryNotApplicableException(query);
+        }
+        return CallRunner.run(new CallRunner.CallableThrowable<QueryPlan, SQLException>() {
+            @Override
+            public QueryPlan call() throws SQLException {
+                return stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.VALIDATE_SEQUENCE);
+            }
+        }, ExpressionContextWrapper.wrap(context));
+    }
+
+    
     public QueryPlan compileQuery(CompilableStatement stmt, String query) throws SQLException {
         if (stmt.getOperation().isMutation()) {
             throw new ExecuteQueryNotApplicableException(query);
@@ -2073,7 +2111,16 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug(LogUtil.addCustomAnnotations("Execute update: " + sql, connection));
         }
-        CompilableStatement stmt = parseStatement(sql);
+        CompilableStatement stmt;
+        stmt =
+                CallRunner
+                        .run(new CallRunner.CallableThrowable<CompilableStatement, SQLException>() {
+                            @Override
+                            public CompilableStatement call() throws SQLException {
+                                return parseStatement(sql);
+                            }
+                        }, ExpressionContextWrapper
+                                .wrap(this.getConnection().getExpressionContext()));
         return compileMutation(stmt, sql);
     }
 
@@ -2129,27 +2176,38 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             LOGGER.debug(LogUtil.addCustomAnnotations(
                     "Execute query: " + sql, connection));
         }
-        
-        CompilableStatement stmt = parseStatement(sql);
-        if (stmt.getOperation().isMutation()) {
-            throw new ExecuteQueryNotApplicableException(sql);
-        }
-        return executeQuery(stmt, createQueryLogger(stmt, sql));
+
+        return CallRunner.run(new CallRunner.CallableThrowable<PhoenixResultSet, SQLException>() {
+            @Override
+            public PhoenixResultSet call() throws SQLException {
+                CompilableStatement stmt = parseStatement(sql);
+                if (stmt.getOperation().isMutation()) {
+                    throw new ExecuteQueryNotApplicableException(sql);
+                }
+                return executeQuery(stmt, createQueryLogger(stmt, sql));
+            }
+        }, ExpressionContextWrapper.wrap(this.getConnection().getExpressionContext()));
     }
 
     @Override
     public int executeUpdate(String sql) throws SQLException {
-        CompilableStatement stmt = parseStatement(sql);
-        if (!stmt.getOperation().isMutation) {
-            throw new ExecuteUpdateNotApplicableException(sql);
-        }
-        if (!batch.isEmpty()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
-            .build().buildException();
-        }
-        int updateCount = executeMutation(stmt, createAuditQueryLogger(stmt, sql));
-        flushIfNecessary();
-        return updateCount;
+        return CallRunner.run(new CallRunner.CallableThrowable<Integer, SQLException>() {
+            @Override
+            public Integer call() throws SQLException {
+                CompilableStatement stmt = parseStatement(sql);
+                if (!stmt.getOperation().isMutation) {
+                    throw new ExecuteUpdateNotApplicableException(sql);
+                }
+                if (!batch.isEmpty()) {
+                    throw new SQLExceptionInfo.Builder(
+                            SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH).build()
+                                    .buildException();
+                }
+                int updateCount = executeMutation(stmt, createAuditQueryLogger(stmt, sql));
+                flushIfNecessary();
+                return updateCount;
+            }
+        }, ExpressionContextWrapper.wrap(this.getConnection().getExpressionContext()));
     }
 
     private void flushIfNecessary() throws SQLException {
@@ -2160,19 +2218,25 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     
     @Override
     public boolean execute(String sql) throws SQLException {
-        CompilableStatement stmt = parseStatement(sql);
-        if (stmt.getOperation().isMutation()) {
-            if (!batch.isEmpty()) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
-                .build().buildException();
+        return CallRunner.run(new CallRunner.CallableThrowable<Boolean, SQLException>() {
+            @Override
+            public Boolean call() throws SQLException {
+                CompilableStatement stmt = parseStatement(sql);
+                if (stmt.getOperation().isMutation()) {
+                    if (!batch.isEmpty()) {
+                        throw new SQLExceptionInfo.Builder(
+                                SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH).build()
+                                        .buildException();
+                    }
+                    executeMutation(stmt, createAuditQueryLogger(stmt, sql));
+                    flushIfNecessary();
+                    return false;
+                }
+
+                executeQuery(stmt, createQueryLogger(stmt, sql));
+                return true;
             }
-            executeMutation(stmt, createAuditQueryLogger(stmt, sql));
-            flushIfNecessary();
-            return false;
-        }
-        
-        executeQuery(stmt, createQueryLogger(stmt, sql));
-        return true;
+        }, ExpressionContextWrapper.wrap(this.getConnection().getExpressionContext()));
     }
 
     @Override

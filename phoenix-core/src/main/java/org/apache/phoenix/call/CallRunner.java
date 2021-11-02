@@ -17,8 +17,12 @@
  */
 package org.apache.phoenix.call;
 
+import java.sql.SQLException;
 import java.util.concurrent.Callable;
 
+import org.apache.htrace.TraceScope;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.trace.util.Tracing;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,6 +48,7 @@ public class CallRunner {
         // no ctor for util class
     }
 
+    //Wraps and runs the Callable in the current thread
     public static <V, E extends Exception, T extends CallableThrowable<V, E>> V run(T call,
             CallWrapper... wrappers) throws E {
         try {
@@ -61,5 +66,29 @@ public class CallRunner {
                 }
             }
         }
+    }
+    
+    //Returns a wrapped callable for direct use in Executors
+    private static <T> Callable wrap(Callable<T> inner, CallWrapper... wrappers) {
+        return new Callable() {
+            @Override
+            public T call() throws Exception {
+                try {
+                    for (CallWrapper wrap : wrappers) {
+                        wrap.before();
+                    }
+                    return inner.call();
+                } finally {
+                    // have to go in reverse, to match the before logic
+                    for (int i = wrappers.length - 1; i >= 0; i--) {
+                        try {
+                            wrappers[i].after();
+                        } catch (Exception e) {
+                            LOGGER.error("Failed to complete wrapper " + wrappers[i], e);
+                        }
+                    }
+                }
+            }
+        };
     }
 }

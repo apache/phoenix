@@ -22,14 +22,14 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.parse.DateScalarParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
-import org.joda.time.DateTime;
-import org.joda.time.chrono.GJChronology;
+import org.apache.phoenix.util.ExpressionContext;
 
 /**
  * 
@@ -37,18 +37,27 @@ import org.joda.time.chrono.GJChronology;
  * Returns an integer from 0 to 59 representing the second component of time
  * 
  */
-@BuiltInFunction(name=SecondFunction.NAME, 
+@BuiltInFunction(name=SecondFunction.NAME, nodeClass=DateScalarParseNode.class,
 args={@Argument(allowedTypes={PTimestamp.class})})
-public class SecondFunction extends DateScalarFunction {
+public class SecondFunction extends TemporalScalarFunction {
     public static final String NAME = "SECOND";
 
     public SecondFunction() {
     }
 
-    public SecondFunction(List<Expression> children) throws SQLException {
-        super(children);
+    public SecondFunction(List<Expression> children, ExpressionContext context) throws SQLException {
+        super(children, context);
     }
-
+    
+    @Override
+    public SecondFunction clone(List<Expression> children) {
+        try {
+            return new SecondFunction(children, getContext());
+        } catch (Exception e) {
+            throw new RuntimeException(e); // Impossible, since it was originally constructed this way
+        }
+    }
+    
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         Expression expression = getChildExpression();
@@ -59,8 +68,7 @@ public class SecondFunction extends DateScalarFunction {
             return true; //means null
         }
         long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
-        DateTime dt = new DateTime(dateTime, GJChronology.getInstanceUTC());
-        int sec = dt.getSecondOfMinute();
+        int sec = getContext().secondImplementation(dateTime);
         PDataType returnType = getDataType();
         byte[] byteValue = new byte[returnType.getByteSize()];
         returnType.getCodec().encodeInt(sec, byteValue, 0);

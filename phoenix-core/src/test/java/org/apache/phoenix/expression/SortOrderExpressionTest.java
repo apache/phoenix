@@ -17,19 +17,24 @@
  */
 package org.apache.phoenix.expression;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.sql.Date;
+import java.sql.SQLException;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.TimeZone;
 
 import org.apache.hadoop.hbase.CompareOperator;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.expression.function.ByteBasedRegexpReplaceFunction;
 import org.apache.phoenix.expression.function.ByteBasedRegexpSubstrFunction;
 import org.apache.phoenix.expression.function.FunctionArgumentType;
@@ -48,6 +53,7 @@ import org.apache.phoenix.expression.function.ToDateFunction;
 import org.apache.phoenix.expression.function.ToNumberFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PChar;
@@ -63,7 +69,10 @@ import org.apache.phoenix.schema.types.PUnsignedFloat;
 import org.apache.phoenix.schema.types.PUnsignedInt;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.ExpressionContextFactory;
+import org.apache.phoenix.util.ExpressionContextWrapper;
 import org.junit.Test;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -134,7 +143,13 @@ public class SortOrderExpressionTest {
     @Test
     public void round() throws Exception {
         List<Expression> args = Lists.newArrayList(getInvertedLiteral(date(12, 11, 2001), PDate.INSTANCE), getLiteral("hour"), getLiteral(1));
-        evaluateAndAssertResult(RoundDateExpression.create(args), date(12, 11, 2001));
+            CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
+            @Override
+            public Void call() throws SQLException {
+                evaluateAndAssertResult(RoundDateExpression.create(args), date(12, 11, 2001));
+                return null;
+            }
+        }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
     }
     
     @Test
@@ -154,20 +169,20 @@ public class SortOrderExpressionTest {
                 return (other instanceof String) && "12/11/01 12:00 AM".equalsIgnoreCase((String) other);
             }
         };
-        evaluateAndAssertResult(new ToCharFunction(args, FunctionArgumentType.TEMPORAL, "", DateUtil.getDateFormatter("MM/dd/yy hh:mm a")),
+        evaluateAndAssertResult(new ToCharFunction(args, FunctionArgumentType.TEMPORAL, "", DateUtil.getTemporalFormatter("MM/dd/yy hh:mm a"), ExpressionContextFactory.getGMTServerSide()),
             caseInsensitiveExpected);
     }
     
     @Test
     public void toDate() throws Exception {
         List<Expression> args = Lists.newArrayList(getInvertedLiteral("2001-11-30 00:00:00:0", PVarchar.INSTANCE));
-        evaluateAndAssertResult(new ToDateFunction(args, "yyyy-MM-dd HH:mm:ss:S",DateUtil.DEFAULT_TIME_ZONE_ID), date(11, 30, 2001));
+        evaluateAndAssertResult(new ToDateFunction(args, "yyyy-MM-dd HH:mm:ss:S", DateUtil.DEFAULT_TIME_ZONE_ID, ExpressionContextFactory.getGMTServerSide()), date(11, 30, 2001));
     }
     
     @Test
     public void toNumber() throws Exception {
         List<Expression> args = Lists.newArrayList(getInvertedLiteral("10", PVarchar.INSTANCE));
-        evaluateAndAssertResult(new ToNumberFunction(args, FunctionArgumentType.CHAR, "", null), new BigDecimal(BigInteger.valueOf(1), -1));
+        evaluateAndAssertResult(new ToNumberFunction(args, FunctionArgumentType.CHAR, "", null, ExpressionContextFactory.getGMTServerSide()), new BigDecimal(BigInteger.valueOf(1), -1));
     }
     
     @Test

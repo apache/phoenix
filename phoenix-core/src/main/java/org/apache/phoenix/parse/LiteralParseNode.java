@@ -112,14 +112,7 @@ public class LiteralParseNode extends TerminalParseNode {
         if (value == null) {
             buf.append(" null ");
         } else {
-            // TODO: move into PDataType?
-            if (type.isCoercibleTo(PTimestamp.INSTANCE)) {
-                buf.append(type);
-                buf.append(' ');
-                buf.append(type.toStringLiteral(value, null));
-            } else {
-                buf.append(type.toStringLiteral(value, null));
-            }
+            buf.append(type.toStringLiteral(value, null));
         }
     }
 }

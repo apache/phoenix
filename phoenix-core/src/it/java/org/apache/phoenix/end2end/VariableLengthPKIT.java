@@ -556,7 +556,7 @@ public class VariableLengthPKIT extends ParallelStatsDisabledIT {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
-            assertEquals(DateUtil.DEFAULT_DATE_FORMATTER.format(D1), rs.getString(2));
+            assertEquals(DateUtil.DEFAULT_MS_DATE_FORMATTER.format(D1), rs.getString(2));
             assertFalse(rs.next());
         } finally {
             conn.close();
@@ -823,7 +823,7 @@ public class VariableLengthPKIT extends ParallelStatsDisabledIT {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
-            assertEquals(DateUtil.DEFAULT_DATE_FORMATTER.format(D1), rs.getString(2));
+            assertEquals(DateUtil.DEFAULT_MS_DATE_FORMATTER.format(D1), rs.getString(2));
         } finally {
             conn.close();
         }
@@ -835,7 +835,7 @@ public class VariableLengthPKIT extends ParallelStatsDisabledIT {
 
         initPTSDBTableValues1(pTSDBTableName);
         String format = "HH:mm:ss";
-        Format dateFormatter = DateUtil.getDateFormatter(format);
+        Format dateFormatter = DateUtil.getTemporalFormatter(format);
         String query = "SELECT HOST,TO_CHAR(\"DATE\",'" + format + "') FROM "+pTSDBTableName+" WHERE INST='x' AND HOST='y'";
         String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -857,7 +857,7 @@ public class VariableLengthPKIT extends ParallelStatsDisabledIT {
         initPTSDBTableValues1(pTSDBTableName);
 
         String format = "yyyy-MM-dd HH:mm:ss.S";
-        Format dateFormatter = DateUtil.getDateFormatter(format);
+        Format dateFormatter = DateUtil.getTemporalFormatter(format);
         String query = "SELECT HOST,TO_CHAR(\"DATE\",'" + format + "') FROM "+pTSDBTableName+" WHERE INST='x' AND HOST='y' and \"DATE\"=TO_DATE(?,'" + format + "')";
         String url = getUrl();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

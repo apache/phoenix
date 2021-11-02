@@ -12,6 +12,12 @@ package org.apache.phoenix.schema.types;
 
 import static org.junit.Assert.assertEquals;
 
+import java.sql.SQLException;
+
+import org.apache.phoenix.call.CallRunner;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.util.ExpressionContextFactory;
+import org.apache.phoenix.util.ExpressionContextWrapper;
 import org.junit.Test;
 
 public abstract class BasePhoenixArrayToStringTest {
@@ -70,11 +76,21 @@ public abstract class BasePhoenixArrayToStringTest {
     }
 
     protected void helpTestToString(PDataType type, Object[] array, String expected) {
-        PhoenixArray arr = PArrayDataType.instantiatePhoenixArray(type, array);
-        boolean isPrimitive = isPrimitive(arr);
-        assertEquals("Expected " + getBaseType() + " array to be " + (isPrimitive ? "" : "not ")
-                + "primitive.", isPrimitive, !arr.getClass().equals(PhoenixArray.class));
-        assertEquals(expected, arr.toString());
+        try {
+            CallRunner.run(new CallRunner.CallableThrowable<Integer, SQLException>() {
+                @Override
+                public Integer call() throws SQLException {
+                    PhoenixArray arr = PArrayDataType.instantiatePhoenixArray(type, array);
+                    boolean isPrimitive = isPrimitive(arr);
+                    assertEquals("Expected " + getBaseType() + " array to be " + (isPrimitive ? "" : "not ")
+                            + "primitive.", isPrimitive, !arr.getClass().equals(PhoenixArray.class));
+                    assertEquals(expected, arr.toString());
+                    return null;
+                }
+            }, ExpressionContextWrapper.wrap(ExpressionContextFactory.getGMTServerSide()));
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     protected boolean isPrimitive(PhoenixArray arr) {

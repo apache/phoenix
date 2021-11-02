@@ -17,14 +17,9 @@
  */
 package org.apache.phoenix.util;
 
-import static org.apache.phoenix.query.QueryConstants.MAX_ALLOWED_NANOS;
-import static org.apache.phoenix.query.QueryConstants.MILLIS_TO_NANOS_CONVERTOR;
-
-import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
-import java.sql.Types;
 import java.text.Format;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -32,15 +27,10 @@ import java.util.List;
 import java.util.TimeZone;
 
 import org.apache.commons.lang3.time.FastDateFormat;
+import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDataType.PDataCodec;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PTimestamp;
-import org.apache.phoenix.schema.types.PUnsignedDate;
-import org.apache.phoenix.schema.types.PUnsignedTimestamp;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeFieldType;
 import org.joda.time.DateTimeZone;
@@ -49,28 +39,17 @@ import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.DateTimeFormatterBuilder;
 import org.joda.time.format.ISODateTimeFormat;
 
-import edu.umd.cs.findbugs.annotations.NonNull;
 
-
-@SuppressWarnings({ "serial", "deprecation" })
+@SuppressWarnings({ "serial"})
 public class DateUtil {
     public static final String DEFAULT_TIME_ZONE_ID = "GMT";
     public static final String LOCAL_TIME_ZONE_ID = "LOCAL";
     private static final TimeZone DEFAULT_TIME_ZONE = TimeZone.getTimeZone(DEFAULT_TIME_ZONE_ID);
     
-    public static final String DEFAULT_MS_DATE_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
-    public static final Format DEFAULT_MS_DATE_FORMATTER = FastDateFormat.getInstance(
-            DEFAULT_MS_DATE_FORMAT, TimeZone.getTimeZone(DEFAULT_TIME_ZONE_ID));
+    public static final FastDateFormat DEFAULT_MS_DATE_FORMATTER = FastDateFormat.getInstance(
+            QueryServicesOptions.DEFAULT_MS_DATE_FORMAT, TimeZone.getTimeZone(DEFAULT_TIME_ZONE_ID));
 
-    public static final String DEFAULT_DATE_FORMAT = DEFAULT_MS_DATE_FORMAT;
-    public static final Format DEFAULT_DATE_FORMATTER = DEFAULT_MS_DATE_FORMATTER;
-
-    public static final String DEFAULT_TIME_FORMAT = DEFAULT_MS_DATE_FORMAT;
-    public static final Format DEFAULT_TIME_FORMATTER = DEFAULT_MS_DATE_FORMATTER;
-
-    public static final String DEFAULT_TIMESTAMP_FORMAT = DEFAULT_MS_DATE_FORMAT;
-    public static final Format DEFAULT_TIMESTAMP_FORMATTER = DEFAULT_MS_DATE_FORMATTER;
-
+    //TODO most methods here should be moved to either ExpressionContext implementation
     private static final DateTimeFormatter JULIAN_DATE_TIME_FORMATTER = new DateTimeFormatterBuilder()
         .append(ISODateTimeFormat.dateParser())
         .appendOptional(new DateTimeFormatterBuilder()
@@ -78,25 +57,14 @@ public class DateUtil {
         .appendOptional(new DateTimeFormatterBuilder()
                 .append(ISODateTimeFormat.timeParser()).toParser())
         .toFormatter().withChronology(GJChronology.getInstanceUTC());
-    
+
     private DateUtil() {
     }
 
-    @NonNull
-    public static PDataCodec getCodecFor(PDataType type) {
-        PDataCodec codec = type.getCodec();
-        if (codec != null) {
-            return codec;
-        }
-        if (type == PTimestamp.INSTANCE) {
-            return PDate.INSTANCE.getCodec();
-        } else if (type == PUnsignedTimestamp.INSTANCE) {
-            return PUnsignedDate.INSTANCE.getCodec();
-        } else {
-            throw new RuntimeException(TypeMismatchException.newException(PTimestamp.INSTANCE, type));
-        }
+    public static boolean isResolveTimezone(String timeZoneId) {
+        return DateUtil.LOCAL_TIME_ZONE_ID.equalsIgnoreCase(timeZoneId);
     }
-    
+
     public static TimeZone getTimeZone(String timeZoneId) {
         TimeZone parserTimeZone;
         if (timeZoneId == null || timeZoneId.equals(DateUtil.DEFAULT_TIME_ZONE_ID)) {
@@ -108,83 +76,46 @@ public class DateUtil {
         }
         return parserTimeZone;
     }
-    
-    private static String[] defaultPattern;
-    static {
-        int maxOrdinal = Integer.MIN_VALUE;
-        List<PDataType> timeDataTypes = Lists.newArrayListWithExpectedSize(6);
-        for (PDataType type : PDataType.values()) {
-            if (java.util.Date.class.isAssignableFrom(type.getJavaClass())) {
-                timeDataTypes.add(type);
-                if (type.ordinal() > maxOrdinal) {
-                    maxOrdinal = type.ordinal();
-                }
-            }
-        }
-        defaultPattern = new String[maxOrdinal+1];
-        for (PDataType type : timeDataTypes) {
-            switch (type.getResultSetSqlType()) {
-            case Types.TIMESTAMP:
-                defaultPattern[type.ordinal()] = DateUtil.DEFAULT_TIMESTAMP_FORMAT;
-                break;
-            case Types.TIME:
-                defaultPattern[type.ordinal()] = DateUtil.DEFAULT_TIME_FORMAT;
-                break;
-            case Types.DATE:
-                defaultPattern[type.ordinal()] = DateUtil.DEFAULT_DATE_FORMAT;
-                break;
-            }
-        }
-    }
-    
+
     private static String getDefaultFormat(PDataType type) {
-        int ordinal = type.ordinal();
-        if (ordinal >= 0 || ordinal < defaultPattern.length) {
-            String format = defaultPattern[ordinal];
-            if (format != null) {
-                return format;
-            }
-        }
-        throw new IllegalArgumentException("Expected a date/time type, but got " + type);
+        return QueryServicesOptions.DEFAULT_MS_DATE_FORMAT;
     }
 
-    public static DateTimeParser getDateTimeParser(String pattern, PDataType pDataType, String timeZoneId) {
+    @Deprecated
+    public static DateTimeParser getTemporalParser(String pattern, PDataType pDataType, String timeZoneId) {
         TimeZone timeZone = getTimeZone(timeZoneId);
         String defaultPattern = getDefaultFormat(pDataType);
         if (pattern == null || pattern.length() == 0) {
             pattern = defaultPattern;
         }
-        if (defaultPattern.equals(pattern)) {
+        if(defaultPattern.equals(pattern)) {
             return JulianDateFormatParserFactory.getParser(timeZone);
         } else {
             return new SimpleDateFormatParser(pattern, timeZone);
         }
     }
 
-    public static DateTimeParser getDateTimeParser(String pattern, PDataType pDataType) {
-        return getDateTimeParser(pattern, pDataType, null);
+    public static Format getTemporalFormatter(String pattern) {
+        return getTemporalFormatter(pattern, DateUtil.DEFAULT_TIME_ZONE_ID);
     }
 
-    public static Format getDateFormatter(String pattern) {
-        return getDateFormatter(pattern, DateUtil.DEFAULT_TIME_ZONE_ID);
-    }
-
-    public static Format getDateFormatter(String pattern, String timeZoneID) {
-        return DateUtil.DEFAULT_DATE_FORMAT.equals(pattern) && DateUtil.DEFAULT_TIME_ZONE_ID.equals(timeZoneID)
-                ? DateUtil.DEFAULT_DATE_FORMATTER
+    public static FastDateFormat getTemporalFormatter(String pattern, String timeZoneID) {
+        return QueryServicesOptions.DEFAULT_MS_DATE_FORMAT.equals(pattern) && DateUtil.DEFAULT_TIME_ZONE_ID.equals(timeZoneID)
+                ? DateUtil.DEFAULT_MS_DATE_FORMATTER
                 : FastDateFormat.getInstance(pattern, getTimeZone(timeZoneID));
     }
 
-    public static Format getTimeFormatter(String pattern, String timeZoneID) {
-        return DateUtil.DEFAULT_TIME_FORMAT.equals(pattern) && DateUtil.DEFAULT_TIME_ZONE_ID.equals(timeZoneID)
-                ? DateUtil.DEFAULT_TIME_FORMATTER
-                : FastDateFormat.getInstance(pattern, getTimeZone(timeZoneID));
+    //FIXME any reason to keep this three ?
+    public static FastDateFormat getDateFormatter(String pattern, String timeZoneID) {
+        return getTemporalFormatter(pattern, timeZoneID);
     }
 
-    public static Format getTimestampFormatter(String pattern, String timeZoneID) {
-        return DateUtil.DEFAULT_TIMESTAMP_FORMAT.equals(pattern) && DateUtil.DEFAULT_TIME_ZONE_ID.equals(timeZoneID)
-                ? DateUtil.DEFAULT_TIMESTAMP_FORMATTER
-                : FastDateFormat.getInstance(pattern, getTimeZone(timeZoneID));
+    public static FastDateFormat getTimeFormatter(String pattern, String timeZoneID) {
+        return getTemporalFormatter(pattern, timeZoneID);
+    }
+
+    public static FastDateFormat getTimestampFormatter(String pattern, String timeZoneID) {
+        return getTemporalFormatter(pattern, timeZoneID);
     }
 
     private static long parseDateTime(String dateTimeValue) {
@@ -199,55 +130,54 @@ public class DateUtil {
         return new Time(parseDateTime(timeValue));
     }
 
-    public static Timestamp parseTimestamp(String timestampValue) {
-        Timestamp timestamp = new Timestamp(parseDateTime(timestampValue));
-        int period = timestampValue.indexOf('.');
-        if (period > 0) {
-            String nanosStr = timestampValue.substring(period + 1);
-            if (nanosStr.length() > 9)
-                throw new IllegalDataException("nanos > 999999999 or < 0");
-            if (nanosStr.length() > 3) {
-                int nanos = Integer.parseInt(nanosStr);
-                for (int i = 0; i < 9 - nanosStr.length(); i++) {
-                    nanos *= 10;
-                }
-                timestamp.setNanos(nanos);
+    // Heuristics to parse and remove nanoseconds from Date string.
+    // FIXME the java.time refactor should make this unnecessary
+    public static Pair<String, Integer> fixNanos(String temporalString) {
+        int periodPos = temporalString.lastIndexOf('.');
+        if (periodPos == -1) {
+            return new Pair<String, Integer>(temporalString, null);
+        }
+        int checkPos = periodPos + 1;
+        StringBuilder fractionalStr = new StringBuilder();
+        int totalLength = temporalString.length();
+        while (checkPos < totalLength) {
+           char c =  temporalString.charAt(checkPos++);
+           if(c >= '0' && c <= '9') {
+               fractionalStr.append(c);
+           } else {
+               break;
+           }
+        }
+        if (fractionalStr.length() <= 3) {
+            //3 or less fractional digits found
+            return new Pair<String, Integer>(temporalString, null);
+        } else if (fractionalStr.length() > 9) {
+            throw new IllegalDataException("nanos > 999999999 or < 0");
+        } else {
+            StringBuilder ret = new StringBuilder(temporalString.substring(0, periodPos + 4));
+            ret.append(temporalString.substring(checkPos));
+            int nanos = Integer.valueOf(fractionalStr.toString());
+            for (int c=0; c < 9-fractionalStr.length(); c++) {
+                nanos = nanos * 10;
             }
+            return new Pair<String, Integer>(ret.toString(), nanos); 
+        }
+    }
+
+    // FIXME Use a sane parsing library
+    public static Timestamp parseTimestamp(String timestampValue) {
+        Pair<String, Integer> fixed = DateUtil.fixNanos(timestampValue);
+        Timestamp timestamp = new Timestamp(parseDateTime(fixed.getFirst()));
+        Integer nanos = fixed.getSecond();
+        if (nanos != null) {
+            timestamp.setNanos(fixed.getSecond());
         }
         return timestamp;
     }
 
-    /**
-     * Utility function to work around the weirdness of the {@link Timestamp} constructor.
-     * This method takes the milli-seconds that spills over to the nanos part as part of 
-     * constructing the {@link Timestamp} object.
-     * If we just set the nanos part of timestamp to the nanos passed in param, we 
-     * end up losing the sub-second part of timestamp. 
-     */
-    public static Timestamp getTimestamp(long millis, int nanos) {
-        if (nanos > MAX_ALLOWED_NANOS || nanos < 0) {
-            throw new IllegalArgumentException("nanos > " + MAX_ALLOWED_NANOS + " or < 0");
-        }
-        Timestamp ts = new Timestamp(millis);
-        if (ts.getNanos() + nanos > MAX_ALLOWED_NANOS) {
-            int millisToNanosConvertor = BigDecimal.valueOf(MILLIS_TO_NANOS_CONVERTOR).intValue();
-            int overFlowMs = (ts.getNanos() + nanos) / millisToNanosConvertor;
-            int overFlowNanos = (ts.getNanos() + nanos) - (overFlowMs * millisToNanosConvertor);
-            ts = new Timestamp(millis + overFlowMs);
-            ts.setNanos(ts.getNanos() + overFlowNanos);
-        } else {
-            ts.setNanos(ts.getNanos() + nanos);
-        }
-        return ts;
-    }
-
-    /**
-     * Utility function to convert a {@link BigDecimal} value to {@link Timestamp}.
-     */
-    public static Timestamp getTimestamp(BigDecimal bd) {
-        return DateUtil.getTimestamp(bd.longValue(), ((bd.remainder(BigDecimal.ONE).multiply(BigDecimal.valueOf(MILLIS_TO_NANOS_CONVERTOR))).intValue()));
-    }
-
+    //FIXME kill it with fire
+    //Move the functionality to ExpressionContext
+    //This interface inherently loses nanos, which breaks most TIMESTAMP ops
     public static interface DateTimeParser {
         public long parseDateTime(String dateTimeString) throws IllegalDataException;
         public TimeZone getTimeZone();
@@ -272,11 +202,12 @@ public class DateUtil {
             parser.setTimeZone(timeZone);
         }
 
+        
         @Override
         public long parseDateTime(String dateTimeString) throws IllegalDataException {
             try {
-                java.util.Date date =parser.parse(dateTimeString);
-                return date.getTime();
+                Pair<String, Integer> fixed = fixNanos(dateTimeString);
+                return parser.parse(fixed.getFirst()).getTime();
             } catch (ParseException e) {
                 throw new IllegalDataException("Unable to parse date/time '" + dateTimeString + "' using format string of '" + datePattern + "'.");
             }
@@ -347,8 +278,7 @@ public class DateUtil {
         }
     }
 
-    public static long rangeJodaHalfEven(DateTime roundedDT, DateTime otherDT,
-            DateTimeFieldType type) {
+    public static long rangeJodaHalfEven(DateTime roundedDT, DateTime otherDT, DateTimeFieldType type) {
         // It's OK if this is slow, as it's only called O(1) times per query
         //
         // We need to reverse engineer what roundHalfEvenCopy() does
@@ -363,13 +293,13 @@ public class DateUtil {
         if (remainder == 0) {
             int roundedUnits = roundedDT.get(type);
             if (otherMs > roundedMs) {
-                // Upper range, other is bigger.
+             // Upper range, other is bigger.
                 if ((roundedUnits & 1) == 0) {
                     // This unit is even, the next second is odd, so we get the mid point
                     return midMs;
                 } else {
                     // This unit is odd, the next second is even and takes the midpoint.
-                    return midMs - 1;
+                    return midMs -1;
                 }
             } else {
                 // Lower range, other is smaller.
@@ -384,12 +314,44 @@ public class DateUtil {
         } else {
             // probably never happens
             if (otherMs > roundedMs) {
-                // Upper range, return the rounded down value
-                return midMs;
+                   // Upper range, return the rounded down value
+                   return midMs;
+               } else {
+                   // Lower range, the mid value belongs to the previous unit.
+                   return midMs + 1;
+               }
+        }
+    }
+
+    public static long rangeJodaHalfCeiling(DateTime roundedDT, DateTime otherDT, DateTimeFieldType type) {
+        // It's OK if this is slow, as it's only called O(1) times per query
+        //
+        // We need to reverse engineer what roundHalfCeilingCopy() does
+        // and return the lower/upper (inclusive) range here
+        // Joda simply works on milliseconds between the floor and ceil values.
+        // We could avoid the period call for units less than a day, but this is not a perf
+        // critical function.
+        long roundedMs = roundedDT.getMillis();
+        long otherMs = otherDT.getMillis();
+        long midMs = (roundedMs + otherMs) / 2;
+        long remainder = (roundedMs + otherMs) % 2;
+        if (remainder == 0) {
+            if (otherMs > roundedMs) {
+                    // The mid point to the bigger (other range)
+                    return midMs -1;
             } else {
-                // Lower range, the mid value belongs to the previous unit.
-                return midMs + 1;
+                    // The mid point goes to the bigger (our rounded range)
+                    return midMs;
             }
+        } else {
+            // probably never happens
+            if (otherMs > roundedMs) {
+                   // Upper range, return the rounded down value
+                   return midMs;
+               } else {
+                   // Lower range, the smaller value belongs to the previous unit.
+                   return midMs + 1;
+               }
         }
     }
 }

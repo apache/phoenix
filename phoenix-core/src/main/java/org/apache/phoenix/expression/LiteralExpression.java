@@ -34,8 +34,6 @@ import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PhoenixArray;
@@ -254,10 +252,6 @@ public class LiteralExpression extends BaseTerminalExpression {
         }
         else if (value == null) {
             return "null";
-        }
-        // TODO: move into PDataType?
-        if (type.isCoercibleTo(PTimestamp.INSTANCE)) {
-            return type + " " + type.toStringLiteral(value, null);
         }
         return type.toStringLiteral(value, null);
     }

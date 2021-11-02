@@ -39,6 +39,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.function.AggregateFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.function.HourFunction;
 import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.schema.ArgumentTypeMismatchException;
@@ -47,6 +48,7 @@ import org.apache.phoenix.schema.ValueRangeExcpetion;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDataTypeFactory;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.ExpressionContext;
 import org.apache.phoenix.util.SchemaUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
@@ -62,7 +64,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
  */
 public class FunctionParseNode extends CompoundParseNode {
     private final String name;
-    private BuiltInFunctionInfo info;
+    protected BuiltInFunctionInfo info;
 
     FunctionParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
         super(children);
@@ -123,8 +125,12 @@ public class FunctionParseNode extends CompoundParseNode {
             if(function == null) {
                 ctor = clazz.getDeclaredConstructor(List.class);
             } else {
-                ctor = clazz.getDeclaredConstructor(List.class, PFunction.class);
-            }
+                try {
+                    ctor = clazz.getDeclaredConstructor(List.class, PFunction.class);
+                } catch (NoSuchMethodException  e ) {
+                    ctor = clazz.getDeclaredConstructor(List.class, PFunction.class, ExpressionContext.class);
+                }
+             }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -191,13 +197,13 @@ public class FunctionParseNode extends CompoundParseNode {
                             allowedTypes[0]), Determinism.ALWAYS));
                 }
             } else {
-                validateFunctionArguement(info, i, child);
+                validateFunctionArgument(info, i, child);
             }
         }
         return children;
     }
 
-    public static void validateFunctionArguement(BuiltInFunctionInfo info,
+    public static void validateFunctionArgument(BuiltInFunctionInfo info,
             int childIndex, Expression child)
             throws ArgumentTypeMismatchException, ValueRangeExcpetion {
         BuiltInFunctionArgInfo arg = info.getArgs()[childIndex];

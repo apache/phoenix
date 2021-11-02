@@ -67,6 +67,11 @@ message SharedTableState {
   optional int32 viewIndexIdType = 7 [default = 5];
 }
 
+message Property {
+  required string key = 1;
+  required string value = 2;
+}
+
 message MetaDataResponse {
   optional MutationCode returnCode = 1;
   optional int64 mutationTime = 2;
@@ -147,12 +152,14 @@ message AddColumnRequest {
   optional PTable parentTable = 3;
   optional bool addingColumns = 4;
   optional PTable transformingNewTable = 5;
+  repeated Property contextParams = 6;
 }
 
 message DropColumnRequest {
   repeated bytes tableMetadataMutations = 1;
   optional int32 clientVersion = 2;
   optional PTable parentTable = 3;
+  repeated Property contextParams = 4;
 }
 
 message DropFunctionRequest {

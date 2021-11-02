@@ -21,29 +21,30 @@ package org.apache.phoenix.expression.function;
 import java.text.DecimalFormat;
 import java.text.Format;
 
-import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.ExpressionContext;
+import org.apache.phoenix.util.ThreadExpressionCtx;
 
 public enum FunctionArgumentType {
     TEMPORAL {
         @Override
-        public Format getFormatter(String format) {
-            return DateUtil.getDateFormatter(format);
+        public Format getFormatter(String format, ExpressionContext context) {
+            return context.getTemporalFormatter(format);
         }
     }, 
     NUMERIC {
         @Override
-        public Format getFormatter(String format) {
+        public Format getFormatter(String format, ExpressionContext context) {
             return new DecimalFormat(format);
         }
     },
     CHAR {
         @Override
-        public Format getFormatter(String format) {
+        public Format getFormatter(String format, ExpressionContext context) {
             return getDecimalFormat(format);
         }
-    };        
+    };
 
-    public abstract Format getFormatter(String format);
+    public abstract Format getFormatter(String format, ExpressionContext context);
     
     private static DecimalFormat getDecimalFormat(String formatString) {
         DecimalFormat result = new DecimalFormat(formatString);

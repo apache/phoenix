@@ -40,6 +40,7 @@ import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ThreadExpressionCtx;
 
 
 /**
@@ -135,8 +136,10 @@ public class ColumnRef {
             String url = PhoenixRuntime.JDBC_PROTOCOL
                     + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
                     + PhoenixRuntime.CONNECTIONLESS;
+            //FIXME HEre we need to compensate for 
             PhoenixConnection conn =
-                    DriverManager.getConnection(url).unwrap(PhoenixConnection.class);
+                    DriverManager.getConnection(url, ThreadExpressionCtx.get().toProps())
+                    .unwrap(PhoenixConnection.class);
             StatementContext context = new StatementContext(new PhoenixStatement(conn));
 
             ExpressionCompiler compiler = new ExpressionCompiler(context);
