@@ -108,7 +108,7 @@ public class WriteWorkload implements Workload {
         } else {
             this.properties = PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, true);
         }
-        int size = Integer.parseInt(properties.getProperty("pherf.default.dataloader.threadpool"));
+        int size = Integer.parseInt(this.properties.getProperty("pherf.default.dataloader.threadpool"));
         
         // Overwrite defaults properties with those given in the configuration. This indicates the
         // scenario is a R/W mixed workload.
@@ -140,7 +140,7 @@ public class WriteWorkload implements Workload {
         String
                 bSize =
                 (writeParams == null) || (writeParams.getBatchSize() == Long.MIN_VALUE) ?
-                        properties.getProperty("pherf.default.dataloader.batchsize") :
+                        this.properties.getProperty("pherf.default.dataloader.batchsize") :
                         String.valueOf(writeParams.getBatchSize());
         this.batchSize =
                 (bSize == null) ? PherfConstants.DEFAULT_BATCH_SIZE : Integer.parseInt(bSize);
