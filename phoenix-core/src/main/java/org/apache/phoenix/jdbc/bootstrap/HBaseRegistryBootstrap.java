@@ -4,11 +4,25 @@ import java.util.Map;
 
 public abstract class HBaseRegistryBootstrap {
 
+    private final EmbeddedDriverContext embeddedDriverContext;
+
+    public HBaseRegistryBootstrap(EmbeddedDriverContext edc) {
+        this.embeddedDriverContext = edc;
+    }
+
+    public EmbeddedDriverContext getEmbeddedDriverContext() {
+        return this.embeddedDriverContext;
+    }
+
     public abstract HBaseRegistryBootstrap normalize();
 
     public abstract HBaseRegistryBootstrapType getBootstrapType();
 
-    public abstract Map<String, String> generateConnectionProps(String quorum, Integer port, String rootNode);
+    public abstract Map<String, String> generateConnectionProps(EmbeddedDriverContext edc);
+
+    public String getStringForConnectionString() {
+        return "+" + this.toString().toLowerCase();
+    }
 
     @Override
     public String toString() {

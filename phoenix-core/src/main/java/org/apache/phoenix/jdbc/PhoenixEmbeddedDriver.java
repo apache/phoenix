@@ -68,8 +68,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
      */ 
     private final static String DNC_JDBC_PROTOCOL_SUFFIX = "//";
     private final static String DRIVER_NAME = "PhoenixEmbeddedDriver";
-    private static final String TERMINATOR = "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
-    private static final String DELIMITERS = TERMINATOR + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+
     private static final String TEST_URL_AT_END =  "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
     private static final String TEST_URL_IN_MIDDLE = TEST_URL_AT_END + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 
@@ -196,7 +195,6 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         private static final org.slf4j.Logger LOGGER =
                 LoggerFactory.getLogger(ConnectionInfo.class);
         private static final Object KERBEROS_LOGIN_LOCK = new Object();
-        private static final char WINDOWS_SEPARATOR_CHAR = '\\';
         private static final String REALM_EQUIVALENCY_WARNING_MSG = "Provided principal does not contan a realm and the default realm cannot be determined. Ignoring realm equivalency check.";
 
 
@@ -207,23 +205,6 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             return getQuorum() + ":" + getPort();
         }
 
-        /**
-         * Detect url with quorum:1,quorum:2 as HBase does not handle different port numbers
-         * for different quorum hostnames.
-         * @param portStr
-         * @return
-         */
-        private static boolean isMultiPortUrl(String portStr) {
-            int commaIndex = portStr.indexOf(',');
-            if (commaIndex > 0) {
-                try {
-                    Integer.parseInt(portStr.substring(0, commaIndex));
-                    return true;
-                } catch (NumberFormatException otherE) {
-                }
-            }
-            return false;
-        }
 
         public static ConnectionInfo create(String url) throws SQLException {
             url = url == null ? "" : url;
@@ -232,80 +213,20 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 return defaultConnectionInfo(url);
             }
 
-            final ParsedHBaseRegistryBootstrapTuple bpr = HBaseRegistryBootstrapFactory.fromURL(url);
-            url = bpr.getRemainingURL();
-            HBaseRegistryBootstrap bootstrap = bpr.getBootstrap();
+            final HBaseRegistryBootstrap registryBootstrap = HBaseRegistryBootstrapFactory.fromURL(url);
 
-            StringTokenizer tokenizer = new StringTokenizer(url, DELIMITERS, true);
-            int nTokens = 0;
-            String[] tokens = new String[5];
-            String token = null;
-            while (tokenizer.hasMoreTokens() &&
-                    !(token=tokenizer.nextToken()).equals(TERMINATOR) &&
-                    tokenizer.hasMoreTokens() && nTokens < tokens.length) {
-                token = tokenizer.nextToken();
-                // This would mean we have an empty string for a token which is illegal
-                if (DELIMITERS.contains(token)) {
-                    throw MalformedUrlException.getMalFormedUrlException(url);
-                }
-                tokens[nTokens++] = token;
+            if (registryBootstrap != null) {
+                return new ConnectionInfo(
+                        registryBootstrap.getEmbeddedDriverContext().getQuorum(),
+                        registryBootstrap.getEmbeddedDriverContext().getPort(),
+                        registryBootstrap.getEmbeddedDriverContext().getRootNode(),
+                        registryBootstrap.getEmbeddedDriverContext().getPrincipal(),
+                        registryBootstrap.getEmbeddedDriverContext().getKeytabFile(),
+                        registryBootstrap
+                );
             }
-            // Look-forward to see if the last token is actually the C:\\ path
-            if (tokenizer.hasMoreTokens() && !TERMINATOR.equals(token)) {
-                String extraToken = tokenizer.nextToken();
-                if (WINDOWS_SEPARATOR_CHAR == extraToken.charAt(0)) {
-                  String prevToken = tokens[nTokens - 1];
-                  tokens[nTokens - 1] = prevToken + ":" + extraToken;
-                  if (tokenizer.hasMoreTokens() && !(token=tokenizer.nextToken()).equals(TERMINATOR)) {
-                      throw MalformedUrlException.getMalFormedUrlException(url);
-                  }
-                } else {
-                    throw MalformedUrlException.getMalFormedUrlException(url);
-                }
-            }
-            String quorum = null;
-            Integer port = null;
-            String rootNode = null;
-            String principal = null;
-            String keytabFile = null;
-            int tokenIndex = 0;
-            if (nTokens > tokenIndex) {
-                quorum = tokens[tokenIndex++]; // Found quorum
-                if (nTokens > tokenIndex) {
-                    try {
-                        port = Integer.parseInt(tokens[tokenIndex]);
-                        if (port < 0) {
-                            throw MalformedUrlException.getMalFormedUrlException(url);
-                        }
-                        tokenIndex++; // Found port
-                    } catch (NumberFormatException e) { // No port information
-                        if (isMultiPortUrl(tokens[tokenIndex])) {
-                            throw MalformedUrlException.getMalFormedUrlException(url);
-                        }
-                    }
-                    if (nTokens > tokenIndex) {
-                        if (tokens[tokenIndex].startsWith("/")) {
-                            rootNode = tokens[tokenIndex++]; // Found rootNode
-                        }
-                        if (nTokens > tokenIndex) {
-                            principal = tokens[tokenIndex++]; // Found principal
-                            if (nTokens > tokenIndex) {
-                                keytabFile = tokens[tokenIndex++]; // Found keytabFile
-                                // There's still more after, try to see if it's a windows file path
-                                if (tokenIndex < tokens.length) {
-                                    String nextToken = tokens[tokenIndex++];
-                                    // The next token starts with the directory separator, assume
-                                    // it's still the keytab path.
-                                    if (null != nextToken && WINDOWS_SEPARATOR_CHAR == nextToken.charAt(0)) {
-                                        keytabFile = keytabFile + ":" + nextToken;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            return new ConnectionInfo(quorum,port,rootNode, principal, keytabFile, bootstrap);
+
+            return new ConnectionInfo(null, null, null);
         }
 
         private final HBaseRegistryBootstrap bootstrap;
@@ -496,7 +417,12 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         private final User user;
 
         public ConnectionInfo(String quorum, Integer port, String rootNode, String principal, String keytab) {
-            this(quorum, port, rootNode, principal, keytab, null);
+            this(quorum, port, rootNode, principal, keytab, new ZookeeperHBaseRegistryBootstrap(
+                    // 🥴
+                    new EmbeddedDriverContextBuilder()
+                            .setQuorum(quorum).setPort(port).setRootNode(rootNode).setPrincipal(principal)
+                            .setKeytabFile(keytab).build()
+            ));
         }
 
         public ConnectionInfo(String quorum, Integer port, String rootNode, String principal, String keytab,
@@ -513,7 +439,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 throw new RuntimeException("Couldn't get the current user!!", e);
             }
 
-            this.bootstrap = bootstrap != null ? bootstrap : HBaseRegistryBootstrapFactory.resolve(null);
+            this.bootstrap = bootstrap;
 
             if (null == this.user) {
                 throw new RuntimeException("Acquired null user which should never happen");
@@ -535,8 +461,10 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         }
 
         public ReadOnlyProps asProps() {
-            Map<String, String> connectionProps =
-                    this.bootstrap.generateConnectionProps(getQuorum(), getPort(), getRootNode());
+            final Map<String, String> connectionProps = this.bootstrap.generateConnectionProps(
+                    new EmbeddedDriverContextBuilder()
+                            .setPort(this.getPort()).setQuorum(this.getQuorum()).setRootNode(this.getRootNode())
+                            .build());
 
             if (getPrincipal() != null && getKeytab() != null) {
                 connectionProps.put(QueryServices.HBASE_CLIENT_PRINCIPAL, getPrincipal());
@@ -620,11 +548,11 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         
         @Override
 		public String toString() {
-			return quorum + (port == null ? "" : ":" + port)
+			return (bootstrap == null ? "" : bootstrap.getStringForConnectionString())
+                    + ":" + quorum + (port == null ? "" : ":" + port)
 					+ (rootNode == null ? "" : ":" + rootNode)
 					+ (principal == null ? "" : ":" + principal)
-					+ (keytab == null ? "" : ":" + keytab)
-					+ (bootstrap == null ? "" : ":" + bootstrap);
+					+ (keytab == null ? "" : ":" + keytab);
 		}
 
         public String toUrl() {

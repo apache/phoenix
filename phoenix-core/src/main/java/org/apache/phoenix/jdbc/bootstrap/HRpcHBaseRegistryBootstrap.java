@@ -11,9 +11,13 @@ import java.util.Map;
 
 public class HRpcHBaseRegistryBootstrap extends HBaseRegistryBootstrap {
 
+    public HRpcHBaseRegistryBootstrap(EmbeddedDriverContext edc) {
+        super(edc);
+    }
+
     @Override
     public HBaseRegistryBootstrap normalize() {
-        return new HRpcHBaseRegistryBootstrap();
+        return new HRpcHBaseRegistryBootstrap(this.getEmbeddedDriverContext());
     }
 
     @Override
@@ -22,16 +26,16 @@ public class HRpcHBaseRegistryBootstrap extends HBaseRegistryBootstrap {
     }
 
     @Override
-    public Map<String, String> generateConnectionProps(String quorum, Integer port, String rootNode) {
+    public Map<String, String> generateConnectionProps(EmbeddedDriverContext edc) {
         Map<String, String> connectionProps = Maps.newHashMapWithExpectedSize(3);
 
-        if (quorum != null) {
-            final String[] masters = quorum.split(",");
+        if (edc.getQuorum() != null) {
+            final String[] masters = edc.getQuorum().split(",");
 
             String masterPort;
 
-            if (port != null) {
-                masterPort = port.toString();
+            if (edc.getPort() != null) {
+                masterPort = edc.getPort().toString();
             } else {
                 masterPort = HBaseFactoryProvider.getConfigurationFactory()
                         .getConfiguration().get(HConstants.MASTER_PORT);
