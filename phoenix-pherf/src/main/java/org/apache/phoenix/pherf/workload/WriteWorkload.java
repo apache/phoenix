@@ -68,7 +68,8 @@ public class WriteWorkload implements Workload {
     private final Properties properties;
 
     public WriteWorkload(XMLConfigParser parser) throws Exception {
-        this(PhoenixUtil.create(),  parser, new Properties(), GeneratePhoenixStats.NO);
+        this(PhoenixUtil.create(),  parser, PherfConstants.create().
+                getProperties(PherfConstants.PHERF_PROPERTIES, true), GeneratePhoenixStats.NO);
     }
     public WriteWorkload(XMLConfigParser parser, Properties properties,
                          GeneratePhoenixStats generateStatistics) throws Exception {
@@ -102,7 +103,11 @@ public class WriteWorkload implements Workload {
         this.rulesApplier = new RulesApplier(parser);
         this.resultUtil = new ResultUtil();
         this.generateStatistics = generateStatistics;
-        this.properties = properties;
+        if (properties != null) {
+            this.properties = properties;
+        } else {
+            this.properties = PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, true);
+        }
         int size = Integer.parseInt(properties.getProperty("pherf.default.dataloader.threadpool"));
         
         // Overwrite defaults properties with those given in the configuration. This indicates the
