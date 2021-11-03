@@ -49,7 +49,7 @@ public class PherfTest {
     public void testDefaultLogPerNRowsArgument() throws Exception {
         String[] args = {"-listFiles"};
         assertEquals(Long.valueOf(PherfConstants.LOG_PER_NROWS),
-                getLogPerNRowsValue(new Pherf(args).getGlobalProperties()));
+                getLogPerNRowsValue(new Pherf(args).getProperties()));
     }
 
     @Test
@@ -57,7 +57,7 @@ public class PherfTest {
         Long customizedPerNRows = 15l;
         String[] args = {"-listFiles", "-log_per_nrows", customizedPerNRows.toString()};
         assertEquals(customizedPerNRows,
-                getLogPerNRowsValue(new Pherf(args).getGlobalProperties()));
+                getLogPerNRowsValue(new Pherf(args).getProperties()));
     }
 
     @Test
@@ -68,15 +68,15 @@ public class PherfTest {
 
         String[] args = {"-listFiles", "-log_per_nrows", zero.toString()};
         assertEquals(Long.valueOf(PherfConstants.LOG_PER_NROWS),
-                getLogPerNRowsValue(new Pherf(args).getGlobalProperties()));
+                getLogPerNRowsValue(new Pherf(args).getProperties()));
 
         String[] args2 = {"-listFiles", "-log_per_nrows", negativeOne.toString()};
         assertEquals(Long.valueOf(PherfConstants.LOG_PER_NROWS),
-                getLogPerNRowsValue(new Pherf(args2).getGlobalProperties()));
+                getLogPerNRowsValue(new Pherf(args2).getProperties()));
 
         String[] args3 = {"-listFiles", "-log_per_nrows", invaildNum};
         assertEquals(Long.valueOf(PherfConstants.LOG_PER_NROWS),
-                getLogPerNRowsValue(new Pherf(args3).getGlobalProperties()));
+                getLogPerNRowsValue(new Pherf(args3).getProperties()));
     }
 
     private Long getLogPerNRowsValue(Properties prop) {

@@ -135,7 +135,6 @@ public class Pherf {
     public Pherf(String[] args, Properties connProperties) throws Exception {
         this(args);
         //merging global and connection properties into properties.
-        this.properties.putAll(globalProperties);
         this.properties.putAll(connProperties);
     }
 
@@ -216,6 +215,7 @@ public class Pherf {
             PhoenixUtil.useThinDriver(queryServerUrl);
         }
         ResultUtil.setFileSuffix(label);
+        this.properties.putAll(globalProperties);
     }
 
     private String getLogPerNRow(CommandLine command) {
@@ -236,8 +236,8 @@ public class Pherf {
         return String.valueOf(PherfConstants.LOG_PER_NROWS);
     }
 
-    public Properties getGlobalProperties() {
-        return this.globalProperties;
+    public Properties getProperties() {
+        return this.properties;
     }
 
     public static void main(String[] args) {
