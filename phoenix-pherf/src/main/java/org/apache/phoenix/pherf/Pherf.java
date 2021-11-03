@@ -236,8 +236,8 @@ public class Pherf {
         return String.valueOf(PherfConstants.LOG_PER_NROWS);
     }
 
-    public Properties getProperties() {
-        return this.properties;
+    public Properties getGlobalProperties() {
+        return this.globalProperties;
     }
 
     public static void main(String[] args) {
