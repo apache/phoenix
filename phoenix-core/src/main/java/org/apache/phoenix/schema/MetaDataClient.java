@@ -1768,6 +1768,12 @@ public class MetaDataClient {
             if (dataTable.getDefaultFamilyName() != null && dataTable.getType() != PTableType.VIEW && !allocateIndexId) {
                 statement.getProps().put("", new Pair<String,Object>(DEFAULT_COLUMN_FAMILY_NAME,dataTable.getDefaultFamilyName().getString()));
             }
+            // While SALT_BUCKETS would get copied in SYSCAT automatically, we need to add this
+            // explicitly so that the normalizer disabler logic can trigger later
+            if (dataTable.getBucketNum() > 0 
+                    && TableProperty.SALT_BUCKETS.getValue(tableProps) == null) {
+                tableProps.put(SALT_BUCKETS, dataTable.getBucketNum());
+            }
             PrimaryKeyConstraint pk = FACTORY.primaryKey(null, allPkColumns);
 
             tableProps.put(MetaDataUtil.DATA_TABLE_NAME_PROP_NAME, dataTable.getPhysicalName().getString());
