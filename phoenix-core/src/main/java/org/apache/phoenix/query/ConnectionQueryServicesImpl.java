@@ -1438,6 +1438,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         PBoolean.INSTANCE.toObject(newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
                     newDesc.setRegionSplitPolicyClassName(IndexRegionSplitPolicy.class.getName());
                 }
+                if (props.get(PhoenixDatabaseMetaData.SALT_BUCKETS) != null
+                        && (Integer) (props.get(PhoenixDatabaseMetaData.SALT_BUCKETS)) > 0) {
+                    if (props.get(TableDescriptorBuilder.NORMALIZATION_ENABLED) != null
+                            && (Boolean)(props.get(TableDescriptorBuilder.NORMALIZATION_ENABLED))) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_NORMALIZER_ON_SALTED_TABLE)
+                        .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
+                        .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
+                    }
+                    newDesc.setNormalizationEnabled(false);
+                }
                 try {
                     if (splits == null) {
                         admin.createTable(newDesc.build());
