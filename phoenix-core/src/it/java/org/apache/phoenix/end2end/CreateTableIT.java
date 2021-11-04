@@ -1186,6 +1186,63 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testNormalizerIsDisbledForSalted() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+
+        String mtTableName = generateUniqueName();
+        String mtViewName = generateUniqueName();
+        String mtIndexName = generateUniqueName();
+
+        String conflictTableName = generateUniqueName();
+
+        String ddl =
+                "create table  " + tableName + " ( id integer PRIMARY KEY," + " col1 integer,"
+                        + " col2 bigint" + " ) SALT_BUCKETS=4";
+        String indexDdl =
+                "create index IF NOT EXISTS " + indexName + " on " + tableName + " (col2)";
+        String mtDdl =
+                "CREATE TABLE " + mtTableName + " (TenantId UNSIGNED_INT NOT NULL ,"
+                        + " Id UNSIGNED_INT NOT NULL ," + " val VARCHAR, "
+                        + " CONSTRAINT pk PRIMARY KEY(TenantId, Id) "
+                        + " ) MULTI_TENANT=true, SALT_BUCKETS=4";
+        String mtViewDdl =
+                "CREATE VIEW " + mtViewName + "(view_column CHAR(15)) AS " + " SELECT * FROM "
+                        + mtTableName + " WHERE val='L' ";
+        String mtIndexDdl = "CREATE INDEX " + mtIndexName + " on " + mtViewName + " (view_column) ";
+
+        String confictDdl =
+                "create table  " + conflictTableName + " ( id integer PRIMARY KEY,"
+                        + " col1 integer," + " col2 bigint" + " ) SALT_BUCKETS=4, "
+                        + HTableDescriptor.NORMALIZATION_ENABLED + "=true";
+
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute(indexDdl);
+        conn.createStatement().execute(mtDdl);
+        conn.createStatement().execute(mtViewDdl);
+        conn.createStatement().execute(mtIndexDdl);
+
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        assertEquals("false", admin.getTableDescriptor(Bytes.toBytes(tableName))
+                .getValue(HTableDescriptor.NORMALIZATION_ENABLED));
+        assertEquals("false", admin.getTableDescriptor(Bytes.toBytes(indexName))
+                .getValue(HTableDescriptor.NORMALIZATION_ENABLED));
+        assertEquals("false", admin.getTableDescriptor(Bytes.toBytes(mtTableName))
+                .getValue(HTableDescriptor.NORMALIZATION_ENABLED));
+        assertEquals("false", admin.getTableDescriptor(Bytes.toBytes("_IDX_" + mtTableName))
+                .getValue(HTableDescriptor.NORMALIZATION_ENABLED));
+
+        try {
+            conn.createStatement().execute(confictDdl);
+            fail("Should have thrown an exception");
+        } catch (Exception e) {
+            assertTrue(e instanceof SQLException);
+        }
+    }
+
     public static long verifyLastDDLTimestamp(String dataTableFullName, long startTS, Connection conn) throws SQLException {
         long endTS = EnvironmentEdgeManager.currentTimeMillis();
         //Now try the PTable API
