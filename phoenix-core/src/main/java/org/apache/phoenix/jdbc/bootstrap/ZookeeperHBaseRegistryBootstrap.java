@@ -1,7 +1,7 @@
 package org.apache.phoenix.jdbc.bootstrap;
 
-import com.google.common.base.Strings;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 import java.util.Map;
