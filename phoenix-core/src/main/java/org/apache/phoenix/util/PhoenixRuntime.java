@@ -718,7 +718,10 @@ public class PhoenixRuntime {
             options.addOption(localIndexUpgradeOption);
             options.addOption(binaryEncodingOption);
 
-            CommandLineParser parser = new DefaultParser(false, false);
+            CommandLineParser parser = DefaultParser.builder().
+                    setAllowPartialMatching(false).
+                    setStripLeadingAndTrailingQuotes(false).
+                    build();
             CommandLine cmdLine = null;
             try {
                 cmdLine = parser.parse(options, args);

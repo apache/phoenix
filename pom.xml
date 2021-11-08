@@ -78,7 +78,7 @@
     <hadoop.version>3.1.4</hadoop.version>
     <hbase.thirdparty.version>2.2.1</hbase.thirdparty.version>
 
-    <phoenix.thirdparty.version>1.1.0</phoenix.thirdparty.version>
+    <phoenix.thirdparty.version>2.0.0</phoenix.thirdparty.version>
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
 
     <!-- This is used by the release script only -->
