@@ -125,7 +125,10 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
 
         Options options = getOptions();
 
-        CommandLineParser parser = new DefaultParser(false, false);
+        CommandLineParser parser = DefaultParser.builder().
+                setAllowPartialMatching(false).
+                setStripLeadingAndTrailingQuotes(false).
+                build();
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);

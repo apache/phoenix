@@ -140,7 +140,10 @@ public class Pherf {
     }
 
     public Pherf(String[] args) throws Exception {
-        CommandLineParser parser = new DefaultParser(false, false);
+        CommandLineParser parser = DefaultParser.builder().
+                setAllowPartialMatching(false).
+                setStripLeadingAndTrailingQuotes(false).
+                build();
         CommandLine command = null;
         HelpFormatter hf = new HelpFormatter();
 
