@@ -1439,7 +1439,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     newDesc.setRegionSplitPolicyClassName(IndexRegionSplitPolicy.class.getName());
                 }
                 if (props.get(PhoenixDatabaseMetaData.SALT_BUCKETS) != null
-                        && (Integer)(props.get(PhoenixDatabaseMetaData.SALT_BUCKETS)) > 0) {
+                        && (Integer) (props.get(PhoenixDatabaseMetaData.SALT_BUCKETS)) > 0) {
                     //Silently overwrites property if it was specified explicitly
                     newDesc.setNormalizationEnabled(false);
                 }

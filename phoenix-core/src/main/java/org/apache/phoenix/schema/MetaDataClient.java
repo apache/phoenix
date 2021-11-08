@@ -1770,7 +1770,7 @@ public class MetaDataClient {
             }
             // While SALT_BUCKETS would get copied in SYSCAT automatically, we need to add this
             // explicitly so that the normalizer disabler logic can trigger later
-            if (dataTable.getBucketNum() > 0 
+            if (dataTable.getBucketNum() != null && dataTable.getBucketNum() > 0
                     && TableProperty.SALT_BUCKETS.getValue(tableProps) == null) {
                 tableProps.put(SALT_BUCKETS, dataTable.getBucketNum());
             }
