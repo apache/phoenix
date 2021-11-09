@@ -816,27 +816,6 @@ public class ViewUtil {
                 .build();
         pTable = WhereConstantParser.addViewInfoToPColumnsIfNeeded(pTable);
 
-        // For views :
-        if (!hasIndexId) {
-            // 1. need to resolve the views's own indexes so that any columns added by ancestors are included
-            List<PTable> allIndexes = Lists.newArrayList();
-            if (pTable !=null && pTable.getIndexes() !=null && !pTable.getIndexes().isEmpty()) {
-                for (PTable viewIndex : pTable.getIndexes()) {
-                    PTable resolvedViewIndex =
-                            ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, viewIndex, pTable);
-                    if (resolvedViewIndex!=null)
-                        allIndexes.add(resolvedViewIndex);
-                }
-            }
-            // 2. include any indexes from ancestors that can be used by this view
-            List<PTable> inheritedIndexes = Lists.newArrayList();
-            addIndexesFromParent(connection, pTable, parentTable, inheritedIndexes);
-            allIndexes.addAll(inheritedIndexes);
-            if (!allIndexes.isEmpty()) {
-                pTable = PTableImpl.builderWithColumns(pTable, getColumnsToClone(pTable))
-                        .setIndexes(allIndexes).build();
-            }
-        }
         return pTable;
     }
 

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -51,12 +51,7 @@ public class WALAnnotationUtil {
      * an annotation into the HBase write ahead log (WAL) when the mutation is processed
      * server-side, usually in IndexRegionObserver
      * @param m Mutation
-     * @param tenantId Tenant (if for a tenant-owned view) otherwise null
-     * @param schemaName Schema name
-     * @param logicalTableName Logical name of the table or view
-     * @param tableType Table type (e.g table, view)
-     * @param ddlTimestamp Server-side timestamp when the table/view was created or last had a
-     *                     column added or dropped from it, whichever is greater
+     * @param externalSchemaId Byte array of a lookup id to an external schema registry
      */
     public static void annotateMutation(Mutation m, byte[] externalSchemaId) {
         if (!m.getDurability().equals(Durability.SKIP_WAL)) {
