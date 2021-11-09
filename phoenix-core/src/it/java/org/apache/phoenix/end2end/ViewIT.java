@@ -52,6 +52,7 @@ import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
@@ -65,12 +66,7 @@ import org.apache.phoenix.schema.export.SchemaRegistryRepository;
 import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.*;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -363,7 +359,7 @@ public class ViewIT extends SplitSystemCatalogIT {
         String fullTenantViewName = SchemaUtil.getTableName(schemaName, tenantViewName);
 
         PTable globalView = null;
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
             String ddl = "CREATE TABLE " + fullTableName +
                 " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
                 " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
@@ -380,7 +376,7 @@ public class ViewIT extends SplitSystemCatalogIT {
             conn.createStatement().execute(globalViewDdl);
             globalView = PhoenixRuntime.getTableNoCache(conn, fullGlobalViewName);
             assertTrue(globalView.isChangeDetectionEnabled());
-            PTable globalViewWithParents = ViewUtil.addDerivedColumnsFromParent(globalView, table);
+            PTable globalViewWithParents = ViewUtil.addDerivedColumnsFromParent(conn, globalView, table);
             //   base column count doesn't get set properly
             PTableImpl.Builder builder = PTableImpl.builderFromExisting(globalViewWithParents);
             builder.setBaseColumnCount(table.getColumns().size());
@@ -389,14 +385,14 @@ public class ViewIT extends SplitSystemCatalogIT {
         }
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-        try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
+        try (PhoenixConnection tenantConn = (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
             String tenantViewDdl = "CREATE VIEW " + fullTenantViewName +
                 " (id3 VARCHAR PRIMARY KEY, col4 VARCHAR NULL) " +
                 " AS SELECT * FROM " + fullGlobalViewName + " CHANGE_DETECTION_ENABLED=true";
             tenantConn.createStatement().execute(tenantViewDdl);
             PTable tenantView = PhoenixRuntime.getTableNoCache(tenantConn, fullTenantViewName);
             assertTrue(tenantView.isChangeDetectionEnabled());
-            PTable tenantViewWithParents = ViewUtil.addDerivedColumnsFromParent(tenantView, globalView);
+            PTable tenantViewWithParents = ViewUtil.addDerivedColumnsFromParent(tenantConn, tenantView, globalView);
             AlterTableIT.verifySchemaExport(tenantViewWithParents, getUtility().getConfiguration());
         }
     }

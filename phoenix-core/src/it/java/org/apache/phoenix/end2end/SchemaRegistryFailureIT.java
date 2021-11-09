@@ -19,8 +19,6 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
-import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -41,13 +39,15 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Map;
 
+import static org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
+
 @Category(NeedsOwnMiniClusterTest.class)
 public class SchemaRegistryFailureIT extends ParallelStatsDisabledIT{
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(ScanInfoUtil.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
+        props.put(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(SchemaRegistryRepository.SCHEMA_REGISTRY_IMPL_KEY,
             ExplodingSchemaRegistryRepository.class.getName());
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

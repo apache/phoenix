@@ -605,7 +605,7 @@ public class ViewUtil {
      */
     public static PTable addDerivedColumnsAndIndexesFromParent(PhoenixConnection connection,
             PTable table, PTable parentTable) throws SQLException {
-        PTable pTable = addDerivedColumnsFromParent(table, parentTable);
+        PTable pTable = addDerivedColumnsFromParent(connection, table, parentTable);
         boolean hasIndexId = table.getViewIndexId() != null;
         // For views :
         if (!hasIndexId) {
@@ -639,9 +639,10 @@ public class ViewUtil {
      * PHOENIX-3534) we choose the child column over the parent column
      * @return table with inherited columns
      */
-    public static PTable addDerivedColumnsFromParent(PTable view, PTable parentTable)
+    public static PTable addDerivedColumnsFromParent(PhoenixConnection connection,
+        PTable view, PTable parentTable)
         throws SQLException {
-        return addDerivedColumnsFromParent(view, parentTable, true);
+        return addDerivedColumnsFromParent(connection, view, parentTable, true);
     }
     /**
      * Inherit all columns from the parent unless it's an excluded column.
@@ -649,7 +650,8 @@ public class ViewUtil {
      * PHOENIX-3534) we choose the child column over the parent column
      * @return table with inherited columns
      */
-    public static PTable addDerivedColumnsFromParent(PTable view, PTable parentTable,
+    public static PTable addDerivedColumnsFromParent(PhoenixConnection connection,
+        PTable view, PTable parentTable,
         boolean recalculateBaseColumnCount)
             throws SQLException {
         // combine columns for view and view indexes

@@ -133,14 +133,15 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
 
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-        try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
+        try (PhoenixConnection tenantConn = (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
             String tenantViewDdl = "CREATE VIEW " + fullTenantViewName +
                 " (col5 VARCHAR NULL) " +
                 " AS SELECT * FROM " + fullGlobalViewName + " CHANGE_DETECTION_ENABLED=true";
             tenantConn.createStatement().execute(tenantViewDdl);
             PTable tenantView = PhoenixRuntime.getTableNoCache(tenantConn, fullTenantViewName);
             assertTrue(tenantView.isChangeDetectionEnabled());
-            PTable tenantViewWithParents = ViewUtil.addDerivedColumnsFromParent(tenantView, alteredGlobalView);
+            PTable tenantViewWithParents = ViewUtil.addDerivedColumnsFromParent(tenantConn,
+                tenantView, alteredGlobalView);
             AlterTableIT.verifySchemaExport(tenantViewWithParents, getUtility().getConfiguration());
         }
     }
