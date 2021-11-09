@@ -1222,6 +1222,8 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String mtViewName = generateUniqueName();
         String mtIndexName = generateUniqueName();
 
+        String conflictTableName = generateUniqueName();
+
         String ddl =
                 "create table  " + tableName + " ( id integer PRIMARY KEY," + " col1 integer,"
                         + " col2 bigint" + " ) SALT_BUCKETS=4";
@@ -1233,10 +1235,15 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                         + " CONSTRAINT pk PRIMARY KEY(TenantId, Id) "
                         + " ) MULTI_TENANT=true, SALT_BUCKETS=4";
         String mtViewDdl =
-                " CREATE VIEW " + mtViewName + "(view_column CHAR(15)) AS " + " SELECT * FROM "
+                "CREATE VIEW " + mtViewName + "(view_column CHAR(15)) AS " + " SELECT * FROM "
                         + mtTableName + " WHERE val='L' ";
-        String mtIndexDdl =
-                " CREATE INDEX " + mtIndexName + " on " + mtViewName + " (view_column) ";
+        String mtIndexDdl = "CREATE INDEX " + mtIndexName + " on " + mtViewName + " (view_column) ";
+
+        String confictDdl =
+                "create table  " + conflictTableName + " ( id integer PRIMARY KEY,"
+                        + " col1 integer," + " col2 bigint" + " ) SALT_BUCKETS=4, "
+                        + TableDescriptorBuilder.NORMALIZATION_ENABLED + "=true";
+
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
@@ -1254,6 +1261,13 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 .getValue(TableDescriptorBuilder.NORMALIZATION_ENABLED));
         assertEquals("false", admin.getDescriptor(TableName.valueOf("_IDX_" + mtTableName))
                 .getValue(TableDescriptorBuilder.NORMALIZATION_ENABLED));
+
+        try {
+            conn.createStatement().execute(confictDdl);
+            fail("Should have thrown an exception");
+        } catch (Exception e) {
+            assertTrue(e instanceof SQLException);
+        }
     }
 
     public static long verifyLastDDLTimestamp(String dataTableFullName, long startTS, Connection conn) throws SQLException {

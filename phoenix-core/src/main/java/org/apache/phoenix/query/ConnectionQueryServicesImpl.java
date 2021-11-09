@@ -1440,7 +1440,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
                 if (props.get(PhoenixDatabaseMetaData.SALT_BUCKETS) != null
                         && (Integer) (props.get(PhoenixDatabaseMetaData.SALT_BUCKETS)) > 0) {
-                    //Silently overwrites property if it was specified explicitly
+                    if (props.get(TableDescriptorBuilder.NORMALIZATION_ENABLED) != null
+                            && (Boolean)(props.get(TableDescriptorBuilder.NORMALIZATION_ENABLED))) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_NORMALIZER_ON_SALTED_TABLE)
+                        .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
+                        .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
+                    }
                     newDesc.setNormalizationEnabled(false);
                 }
                 try {
