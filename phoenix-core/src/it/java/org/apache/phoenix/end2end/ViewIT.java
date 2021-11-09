@@ -44,7 +44,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.curator.shaded.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -64,6 +63,7 @@ import org.apache.phoenix.schema.export.DefaultSchemaRegistryRepository;
 import org.apache.phoenix.schema.export.DefaultSchemaWriter;
 import org.apache.phoenix.schema.export.SchemaRegistryRepository;
 import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.*;
