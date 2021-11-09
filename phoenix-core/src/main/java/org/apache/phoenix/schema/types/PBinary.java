@@ -41,8 +41,7 @@ public class PBinary extends PBinaryBase {
             Integer desiredMaxLength, Integer desiredScale, SortOrder expectedModifier) {
         PVarbinary.INSTANCE.coerceBytes(ptr, o, actualType, actualMaxLength, actualScale,
                 actualModifier, desiredMaxLength, desiredScale, expectedModifier);
-        if ((o != null || ptr.getLength() > 0)
-                && null != desiredMaxLength && null != expectedModifier) {
+        if (ptr.getLength() > 0 && null != desiredMaxLength && null != expectedModifier) {
             pad(ptr, desiredMaxLength, expectedModifier);
         }
     }
