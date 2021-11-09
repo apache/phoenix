@@ -167,9 +167,6 @@ public class PhoenixUtil {
     }
 
     private Map<String, String> getPropertyHashMap(Properties props) {
-        if (props == null) {
-            return null;
-        }
         Map<String, String> propsMaps = new HashMap<>();
         for (String prop : props.stringPropertyNames()) {
             propsMaps.put(prop, props.getProperty(prop));

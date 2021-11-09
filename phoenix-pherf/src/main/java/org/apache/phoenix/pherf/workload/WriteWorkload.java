@@ -103,11 +103,7 @@ public class WriteWorkload implements Workload {
         this.rulesApplier = new RulesApplier(parser);
         this.resultUtil = new ResultUtil();
         this.generateStatistics = generateStatistics;
-        if (properties != null) {
-            this.properties = properties;
-        } else {
-            this.properties = PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, true);
-        }
+        this.properties = properties;
         int size = Integer.parseInt(this.properties.getProperty("pherf.default.dataloader.threadpool"));
         
         // Overwrite defaults properties with those given in the configuration. This indicates the

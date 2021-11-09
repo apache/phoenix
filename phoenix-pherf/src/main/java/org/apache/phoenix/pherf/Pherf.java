@@ -135,7 +135,8 @@ public class Pherf {
     public Pherf(String[] args, Properties connProperties) throws Exception {
         this(args);
         //merging global and connection properties into properties.
-        this.properties.putAll(connProperties);
+        if (connProperties != null)
+            this.properties.putAll(connProperties);
     }
 
     public Pherf(String[] args) throws Exception {

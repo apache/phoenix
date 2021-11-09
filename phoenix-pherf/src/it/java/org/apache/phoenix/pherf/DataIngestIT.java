@@ -30,6 +30,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.pherf.PherfConstants.GeneratePhoenixStats;
@@ -54,6 +55,8 @@ import com.jcabi.jdbc.Outcome;
 @Category(NeedsOwnMiniClusterTest.class)
 public class DataIngestIT extends ResultBaseTestIT {
 
+    private Properties properties;
+
     @Before
     public void applySchema() throws Exception {
         reader.applySchema();
@@ -61,6 +64,8 @@ public class DataIngestIT extends ResultBaseTestIT {
 
         assertTrue("Could not pull list of schema files.", resources.size() > 0);
         assertNotNull("Could not read schema file.", reader.resourceToString(resources.get(0)));
+        properties = PherfConstants.create().
+                getProperties(PherfConstants.PHERF_PROPERTIES, true);
     }
 
     @Test
@@ -75,7 +80,7 @@ public class DataIngestIT extends ResultBaseTestIT {
                             scenario.getTableNameWithoutSchemaName(), util.getConnection());
             assertTrue("Could not get phoenix columns.", columnListFromPhoenix.size() > 0);
 
-            WriteWorkload loader = new WriteWorkload(util, parser, null, scenario, GeneratePhoenixStats.NO);
+            WriteWorkload loader = new WriteWorkload(util, parser, properties, scenario, GeneratePhoenixStats.NO);
             WorkloadExecutor executor = new WorkloadExecutor();
             executor.add(loader);
             executor.get();
@@ -122,7 +127,7 @@ public class DataIngestIT extends ResultBaseTestIT {
     public void testPreAndPostDataLoadDdls() throws Exception {
         Scenario scenario = parser.getScenarioByName("testPreAndPostDdls");
         WorkloadExecutor executor = new WorkloadExecutor();
-        executor.add(new WriteWorkload(util, parser, null, scenario, GeneratePhoenixStats.NO));
+        executor.add(new WriteWorkload(util, parser, properties, scenario, GeneratePhoenixStats.NO));
         
         try {
             executor.get();
@@ -185,7 +190,7 @@ public class DataIngestIT extends ResultBaseTestIT {
         // Arrange
         Scenario scenario = parser.getScenarioByName("testMTWriteScenario");
         WorkloadExecutor executor = new WorkloadExecutor();
-        executor.add(new WriteWorkload(util, parser, null, scenario, GeneratePhoenixStats.NO));
+        executor.add(new WriteWorkload(util, parser, properties, scenario, GeneratePhoenixStats.NO));
         
         // Act
         try {
@@ -205,7 +210,7 @@ public class DataIngestIT extends ResultBaseTestIT {
         // Arrange
         Scenario scenario = parser.getScenarioByName("testMTDdlWriteScenario");
         WorkloadExecutor executor = new WorkloadExecutor();
-        executor.add(new WriteWorkload(util, parser, null, scenario, GeneratePhoenixStats.NO));
+        executor.add(new WriteWorkload(util, parser, properties, scenario, GeneratePhoenixStats.NO));
         
         // Act
         try {
