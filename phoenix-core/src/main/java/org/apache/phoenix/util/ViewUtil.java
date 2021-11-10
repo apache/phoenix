@@ -65,18 +65,8 @@ import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnImpl;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.PTable.LinkType;
-import org.apache.phoenix.schema.PTableImpl;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.SaltingUtil;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PLong;
 import org.slf4j.Logger;
@@ -567,7 +557,38 @@ public class ViewUtil {
             }
         }
     }
-    
+
+    public static PTable addDerivedColumnsAndIndexesFromAncestors(PhoenixConnection connection,
+        PTable table) throws SQLException {
+        List<PTable> ancestorList = Lists.newArrayList(table);
+        //First generate a list of tables from child to base table. First element will be the
+        //ultimate descendant, last element will be the base table.
+        PName parentName = table.getParentName();
+        while (parentName != null && parentName.getString().length() > 0) {
+            PTable currentTable = ancestorList.get(ancestorList.size() -1);
+            String parentTableName = SchemaUtil.getTableName(currentTable.getParentSchemaName(),
+                currentTable.getParentTableName()).getString();
+            PTable parentTable;
+            try {
+                parentTable = PhoenixRuntime.getTable(connection, parentTableName);
+            } catch (TableNotFoundException tnfe) {
+                //check to see if there's a tenant-owned parent
+                parentTable = PhoenixRuntime.getTable(connection, table.getTenantId().getString(), parentTableName);
+            }
+            ancestorList.add(parentTable);
+            parentName = parentTable.getParentName();
+        }
+        //now add the columns from all ancestors up from the base table to the top-most view
+        if (ancestorList.size() > 1) {
+            for (int k = ancestorList.size() -2; k >= 0; k--) {
+                ancestorList.set(k, addDerivedColumnsAndIndexesFromParent(connection,
+                    ancestorList.get(k), ancestorList.get(k +1)));
+            }
+            return ancestorList.get(0);
+        } else {
+            return table;
+        }
+    }
     /**
      * Inherit all indexes and columns from the parent 
      * @return table with inherited columns and indexes
@@ -609,6 +630,17 @@ public class ViewUtil {
      * @return table with inherited columns
      */
     public static PTable addDerivedColumnsFromParent(PTable view, PTable parentTable)
+        throws SQLException {
+        return addDerivedColumnsFromParent(view, parentTable, true);
+    }
+    /**
+     * Inherit all columns from the parent unless it's an excluded column.
+     * If the same column is present in the parent and child (for table metadata created before
+     * PHOENIX-3534) we choose the child column over the parent column
+     * @return table with inherited columns
+     */
+    public static PTable addDerivedColumnsFromParent(PTable view, PTable parentTable,
+        boolean recalculateBaseColumnCount)
             throws SQLException {
         // combine columns for view and view indexes
         boolean hasIndexId = view.getViewIndexId() != null;
@@ -730,9 +762,12 @@ public class ViewUtil {
         }
         // we need to include the salt column when setting the base table column count in order to
         // maintain b/w compatibility
-        int baseTableColumnCount =
-                isDiverged ? QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT
-                        : columnsToAdd.size() - myColumns.size() + (isSalted ? 1 : 0);
+        int baseTableColumnCount = view.getBaseColumnCount();
+        if (recalculateBaseColumnCount) {
+            baseTableColumnCount = isDiverged ?
+                QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT :
+                columnsToAdd.size() - myColumns.size() + (isSalted ? 1 : 0);
+        }
         // Inherit view-modifiable properties from the parent table/view if the current view has
         // not previously modified this property
         long updateCacheFreq = (view.getType() != PTableType.VIEW ||

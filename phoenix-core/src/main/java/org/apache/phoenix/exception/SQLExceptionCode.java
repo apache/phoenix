@@ -561,7 +561,9 @@ public enum SQLExceptionCode {
         "CASCADE INDEX feature is not supported for local index"),
 
     INVALID_REGION_SPLIT_POLICY(908, "43M19",
-        "REGION SPLIT POLICY is incorrect.");
+        "REGION SPLIT POLICY is incorrect."),
+    ERROR_WRITING_TO_SCHEMA_REGISTRY(909, "4320",
+            "Error writing DDL change to external schema registry");
 
     private final int errorCode;
     private final String sqlState;

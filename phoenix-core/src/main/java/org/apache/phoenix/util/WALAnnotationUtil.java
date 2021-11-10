@@ -58,17 +58,12 @@ public class WALAnnotationUtil {
      * @param ddlTimestamp Server-side timestamp when the table/view was created or last had a
      *                     column added or dropped from it, whichever is greater
      */
-    public static void annotateMutation(Mutation m, byte[] tenantId, byte[] schemaName,
-                                        byte[] logicalTableName, byte[] tableType, byte[] ddlTimestamp) {
+    public static void annotateMutation(Mutation m, byte[] externalSchemaId) {
         if (!m.getDurability().equals(Durability.SKIP_WAL)) {
-            if (tenantId != null) {
-                m.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(), tenantId);
+            if (externalSchemaId != null) {
+                m.setAttribute(MutationState.MutationMetadataType.EXTERNAL_SCHEMA_ID.toString(),
+                    externalSchemaId);
             }
-            m.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(), schemaName);
-            m.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
-                logicalTableName);
-            m.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(), tableType);
-            m.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(), ddlTimestamp);
         }
     }
 }

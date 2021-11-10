@@ -854,6 +854,12 @@ public interface PTable extends PMetaDataEntity {
     String getSchemaVersion();
 
     /**
+     * @return String provided by an external schema registry to be used to lookup the schema for
+     * a Phoenix table or view in the registry.
+     */
+    String getExternalSchemaId();
+
+    /**
      * Class to help track encoded column qualifier counters per column family.
      */
     public class EncodedCQCounter {

@@ -780,12 +780,13 @@ public class MutationState implements SQLCloseable {
         byte[] schemaName = table.getSchemaName() != null ? table.getSchemaName().getBytes() : null;
         byte[] tableName = table.getTableName() != null ? table.getTableName().getBytes() : null;
         byte[] tableType = table.getType().getValue().getBytes();
+        byte[] externalSchemaRegistryId = table.getExternalSchemaId() != null ?
+            Bytes.toBytes(table.getExternalSchemaId()) : null;
         //Note that we use the _HBase_ byte encoding for a Long, not the Phoenix one, so that
         //downstream consumers don't need to have the Phoenix codecs.
         byte[] lastDDLTimestamp =
             table.getLastDDLTimestamp() != null ? Bytes.toBytes(table.getLastDDLTimestamp()) : null;
-        WALAnnotationUtil.annotateMutation(mutation, tenantId, schemaName,
-            tableName, tableType, lastDDLTimestamp);
+        WALAnnotationUtil.annotateMutation(mutation, externalSchemaRegistryId);
     }
 
     /**
@@ -1047,11 +1048,17 @@ public class MutationState implements SQLCloseable {
     }
 
     public enum MutationMetadataType {
+        @Deprecated
         TENANT_ID,
+        @Deprecated
         SCHEMA_NAME,
+        @Deprecated
         LOGICAL_TABLE_NAME,
+        @Deprecated
         TIMESTAMP,
-        TABLE_TYPE
+        @Deprecated
+        TABLE_TYPE,
+        EXTERNAL_SCHEMA_ID
     }
 
     private static class TableInfo {

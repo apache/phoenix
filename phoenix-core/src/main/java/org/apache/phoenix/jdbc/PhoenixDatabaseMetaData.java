@@ -379,6 +379,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String SCHEMA_VERSION = "SCHEMA_VERSION";
     public static final byte[] SCHEMA_VERSION_BYTES = Bytes.toBytes(SCHEMA_VERSION);
 
+    public static final String EXTERNAL_SCHEMA_ID = "EXTERNAL_SCHEMA_ID";
+    public static final byte[] EXTERNAL_SCHEMA_ID_BYTES = Bytes.toBytes(EXTERNAL_SCHEMA_ID);
+
     public static final String SYSTEM_CHILD_LINK_TABLE = "CHILD_LINK";
     public static final String SYSTEM_CHILD_LINK_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CHILD_LINK_TABLE);
     public static final byte[] SYSTEM_CHILD_LINK_NAME_BYTES = Bytes.toBytes(SYSTEM_CHILD_LINK_NAME);

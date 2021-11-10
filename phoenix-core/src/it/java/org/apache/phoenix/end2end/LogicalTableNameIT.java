@@ -26,6 +26,8 @@ import org.apache.phoenix.end2end.join.HashJoinGlobalIndexIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -51,9 +53,7 @@ import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.INVA
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.VALID_ROW_COUNT;
 import static org.apache.phoenix.util.MetaDataUtil.VIEW_INDEX_TABLE_PREFIX;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
+import static org.junit.Assert.*;
 
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
@@ -426,6 +426,32 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
                 rs = conn2.createStatement().executeQuery(indexSelect);
                 assertEquals(false, rs.next());
             }
+        }
+    }
+
+    @Test
+    public void testChangeDetectionAfterTableNameChange() throws Exception {
+        try(Connection conn = getConnection(props)) {
+            String schemaName = "S_" + generateUniqueName();
+            String tableName = "T_" + generateUniqueName();
+            String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+            createTable(conn, fullTableName);
+            String alterDdl = "ALTER TABLE " + fullTableName + " SET CHANGE_DETECTION_ENABLED=true";
+            conn.createStatement().execute(alterDdl);
+
+            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            assertTrue(table.isChangeDetectionEnabled());
+            assertNotNull(table.getExternalSchemaId());
+            AlterTableIT.verifySchemaExport(table, getUtility().getConfiguration());
+
+            String newTableName = "T_" + generateUniqueName();
+            String fullNewTableName = SchemaUtil.getTableName(schemaName, newTableName);
+            LogicalTableNameIT.createAndPointToNewPhysicalTable(conn, fullTableName, fullNewTableName, false);
+
+            //logical table name should still be the same for PTable lookup
+            PTable newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            //but the schema in the registry should match the new PTable
+            AlterTableIT.verifySchemaExport(newTable, getUtility().getConfiguration());
         }
     }
 

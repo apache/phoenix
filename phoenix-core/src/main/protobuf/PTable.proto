@@ -114,6 +114,7 @@ message PTable {
   optional bytes physicalTableNameBytes = 47;
   optional bytes baseTableLogicalNameBytes = 48;
   optional bytes schemaVersion = 49;
+  optional bytes externalSchemaId=50;
 }
 
 message EncodedCQCounter {
