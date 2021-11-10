@@ -169,7 +169,6 @@ public class NullIT extends BaseQueryIT {
 
             String queryIsNull = "select id, text , testbin from "+binTestTable+" where testbin is null";
 
-
             // Let's see if without providing it, it is stored as null
             stmt.execute("upsert into "+binTestTable+"  (id,text) values (1,'anytext')");
             conn.commit();
