@@ -62,6 +62,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.export.DefaultSchemaRegistryRepository;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -755,6 +756,26 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
                 oneByteQualifierSingleCellArrayWithOffsetsMultitenantTable, conn);
 
+        }
+    }
+
+    @Test
+    public void testCreateChangeDetectionEnabledTable() throws Exception {
+        //create a table with CHANGE_DETECTION_ENABLED and verify both that it's set properly
+        //on the PTable, and that it gets persisted to the external schema registry
+
+        String schemaName = generateUniqueName();
+        String tableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE " + fullTableName +
+                " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
+                " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
+                "CHANGE_DETECTION_ENABLED=true";
+            conn.createStatement().execute(ddl);
+            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            assertTrue(table.isChangeDetectionEnabled());
+            AlterTableIT.verifySchemaExport(table, getUtility().getConfiguration());
         }
     }
 

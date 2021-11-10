@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
+import static org.apache.phoenix.exception.SQLExceptionCode.*;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
@@ -24,8 +25,6 @@ import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLi
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
 import static org.apache.phoenix.coprocessor.tasks.IndexRebuildTask.INDEX_NAME;
 import static org.apache.phoenix.coprocessor.tasks.IndexRebuildTask.REBUILD_ALL;
-import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
-import static org.apache.phoenix.exception.SQLExceptionCode.PARENT_TABLE_NOT_FOUND;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
@@ -3229,6 +3228,8 @@ public class MetaDataClient {
                                 result.getTable().getLastDDLTimestamp() : null)
                         .setIsChangeDetectionEnabled(isChangeDetectionEnabledProp)
                         .setSchemaVersion(schemaVersion)
+                        .setExternalSchemaId(result.getTable() != null ?
+                        result.getTable().getExternalSchemaId() : null)
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
@@ -3349,6 +3350,9 @@ public class MetaDataClient {
                 throwsSQLExceptionUtil(String.valueOf(code), SchemaUtil.getSchemaNameFromFullName(
                 parent.getPhysicalName().getString()),SchemaUtil.getTableNameFromFullName(
                 parent.getPhysicalName().getString()));
+            case ERROR_WRITING_TO_SCHEMA_REGISTRY:
+                throw new SQLExceptionInfo.Builder(ERROR_WRITING_TO_SCHEMA_REGISTRY)
+                    .setSchemaName(schemaName).setTableName(tableName).build().buildException();
             default:
                 // Cannot use SQLExecptionInfo here since not all mutation codes have their
                 // corresponding codes in the enum SQLExceptionCode
@@ -3649,6 +3653,9 @@ public class MetaDataClient {
             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
         case TABLE_ALREADY_EXISTS:
             break;
+        case ERROR_WRITING_TO_SCHEMA_REGISTRY:
+            throw new SQLExceptionInfo.Builder(ERROR_WRITING_TO_SCHEMA_REGISTRY).
+                    setSchemaName(schemaName).setTableName(tableName).build().buildException();
         default:
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNEXPECTED_MUTATION_CODE).setSchemaName(schemaName)
             .setTableName(tableName).setMessage("mutation code: " + mutationCode).build().buildException();

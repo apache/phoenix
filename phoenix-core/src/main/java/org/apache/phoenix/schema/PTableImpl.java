@@ -71,7 +71,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
-import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -204,6 +203,7 @@ public class PTableImpl implements PTable {
     private final boolean isChangeDetectionEnabled;
     private Map<String, String> propertyValues;
     private String schemaVersion;
+    private String externalSchemaId;
 
     public static class Builder {
         private PTableKey key;
@@ -266,6 +266,7 @@ public class PTableImpl implements PTable {
         private boolean isChangeDetectionEnabled = false;
         private Map<String, String> propertyValues = new HashMap<>();
         private String schemaVersion;
+        private String externalSchemaId;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -524,6 +525,10 @@ public class PTableImpl implements PTable {
             if (physicalTableName != null) {
                 propertyValues.put(PHYSICAL_TABLE_NAME, String.valueOf(physicalTableName));
             }
+            if (this.physicalTableName.equals(PName.EMPTY_NAME) && physicalTableName == null) {
+                //don't override a "blank" PName with null.
+                return this;
+            }
             this.physicalTableName = physicalTableName;
             return this;
         }
@@ -615,6 +620,32 @@ public class PTableImpl implements PTable {
             return this;
         }
 
+        public Builder addOrSetColumns(Collection<PColumn> changedColumns) {
+            if (this.columns == null || this.columns.size() == 0) {
+                //no need to merge, just take the changes as the complete set of PColumns
+                this.columns = changedColumns;
+            } else {
+                //We have to merge the old and new columns, keeping the columns in the original order
+                List<PColumn> existingColumnList = Lists.newArrayList(this.columns);
+                List<PColumn> columnsToAdd = Lists.newArrayList();
+                //create a new list that's almost a copy of this.columns, but everywhere there's
+                //a "newer" PColumn of an existing column in the parameter, replace it with the
+                //newer version
+                for (PColumn newColumn : changedColumns) {
+                    int indexOf = existingColumnList.indexOf(newColumn);
+                    if (indexOf != -1) {
+                        existingColumnList.set(indexOf, newColumn);
+                    } else {
+                        columnsToAdd.add(newColumn);
+                    }
+                }
+                //now tack on any completely new columns at the end
+                existingColumnList.addAll(columnsToAdd);
+                this.columns = existingColumnList;
+            }
+            return this;
+        }
+
         public Builder setLastDDLTimestamp(Long lastDDLTimestamp) {
             this.lastDDLTimestamp = lastDDLTimestamp;
             return this;
@@ -633,6 +664,13 @@ public class PTableImpl implements PTable {
             }
             return this;
         }
+
+        public Builder setExternalSchemaId(String externalSchemaId) {
+            if (externalSchemaId != null) {
+                this.externalSchemaId = externalSchemaId;
+            }
+            return this;
+         }
 
         /**
          * Populate derivable attributes of the PTable
@@ -902,6 +940,7 @@ public class PTableImpl implements PTable {
         this.lastDDLTimestamp = builder.lastDDLTimestamp;
         this.isChangeDetectionEnabled = builder.isChangeDetectionEnabled;
         this.schemaVersion = builder.schemaVersion;
+        this.externalSchemaId = builder.externalSchemaId;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -925,7 +964,7 @@ public class PTableImpl implements PTable {
      * Get a PTableImpl.Builder from an existing PTable
      * @param table Original PTable
      */
-    private static PTableImpl.Builder builderFromExisting(PTable table) {
+    public static PTableImpl.Builder builderFromExisting(PTable table) {
         return new PTableImpl.Builder()
                 .setType(table.getType())
                 .setState(table.getIndexState())
@@ -978,7 +1017,8 @@ public class PTableImpl implements PTable {
                 .setPhoenixTTLHighWaterMark(table.getPhoenixTTLHighWaterMark())
                 .setLastDDLTimestamp(table.getLastDDLTimestamp())
                 .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled())
-                .setSchemaVersion(table.getSchemaVersion());
+                .setSchemaVersion(table.getSchemaVersion())
+                .setExternalSchemaId(table.getExternalSchemaId());
     }
 
     @Override
@@ -1873,6 +1913,11 @@ public class PTableImpl implements PTable {
         if (table.hasSchemaVersion()) {
             schemaVersion = (String) PVarchar.INSTANCE.toObject(table.getSchemaVersion().toByteArray());
         }
+        String externalSchemaId = null;
+        if (table.hasExternalSchemaId()) {
+            externalSchemaId =
+                (String) PVarchar.INSTANCE.toObject(table.getExternalSchemaId().toByteArray());
+        }
         try {
             return new PTableImpl.Builder()
                     .setType(tableType)
@@ -1927,6 +1972,7 @@ public class PTableImpl implements PTable {
                     .setLastDDLTimestamp(lastDDLTimestamp)
                     .setIsChangeDetectionEnabled(isChangeDetectionEnabled)
                     .setSchemaVersion(schemaVersion)
+                    .setExternalSchemaId(externalSchemaId)
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -2054,6 +2100,7 @@ public class PTableImpl implements PTable {
         }
         builder.setChangeDetectionEnabled(table.isChangeDetectionEnabled());
         builder.setSchemaVersion(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getSchemaVersion())));
+        builder.setExternalSchemaId(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getExternalSchemaId())));
         return builder.build();
     }
 
@@ -2184,6 +2231,11 @@ public class PTableImpl implements PTable {
     @Override
     public String getSchemaVersion() {
         return schemaVersion;
+    }
+
+    @Override
+    public String getExternalSchemaId() {
+        return externalSchemaId;
     }
 
     private static final class KVColumnFamilyQualifier {

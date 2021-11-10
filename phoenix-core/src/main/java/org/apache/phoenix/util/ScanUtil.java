@@ -1363,18 +1363,10 @@ public class ScanUtil {
      */
     public static void setWALAnnotationAttributes(PTable table, Scan scan) {
         if (table.isChangeDetectionEnabled()) {
-            if (table.getTenantId() != null) {
-                scan.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(),
-                    table.getTenantId().getBytes());
+            if (table.getExternalSchemaId() != null) {
+                scan.setAttribute(MutationState.MutationMetadataType.EXTERNAL_SCHEMA_ID.toString(),
+                    Bytes.toBytes(table.getExternalSchemaId()));
             }
-            scan.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
-                table.getSchemaName().getBytes());
-            scan.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
-                table.getTableName().getBytes());
-            scan.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(),
-                table.getType().getValue().getBytes());
-            scan.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(),
-                Bytes.toBytes(table.getLastDDLTimestamp()));
         }
     }
 }

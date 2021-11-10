@@ -99,8 +99,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_0_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0 = MIN_TABLE_TIMESTAMP + 29;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 = MIN_TABLE_TIMESTAMP + 33;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_17_0 = MIN_TABLE_TIMESTAMP + 36;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0;
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_17_0 = MIN_TABLE_TIMESTAMP + 35;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_17_0;
     // MIN_SYSTEM_TABLE_TIMESTAMP needs to be set to the max of all the MIN_SYSTEM_TABLE_TIMESTAMP_* constants
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0;
@@ -188,7 +188,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
         UNABLE_TO_UPDATE_PARENT_TABLE,
         UNABLE_TO_DELETE_CHILD_LINK,
         UNABLE_TO_UPSERT_TASK,
-        NO_OP
+        ERROR_WRITING_TO_SCHEMA_REGISTRY,
+        NO_OP,
     }
 
   public static class SharedTableState {
@@ -389,7 +390,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
 
         public static MetaDataMutationResult constructFromProto(MetaDataResponse proto) {
           MetaDataMutationResult result = new MetaDataMutationResult();
-          result.returnCode = MutationCode.values()[proto.getReturnCode().ordinal()];
+          result.returnCode = MutationCode.values()[proto.getReturnCode().getNumber()];
           result.mutationTime = proto.getMutationTime();
           if (proto.hasTable()) {
             result.wasUpdated = true;
