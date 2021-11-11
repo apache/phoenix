@@ -25,6 +25,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.concurrent.Callable;
 
+import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.pherf.result.DataModelResult;
@@ -164,7 +165,9 @@ class MultiThreadedRunner implements Callable<Void> {
             LOGGER.debug("Executing iteration: " + queryIteration + ": " + statementString);
             
             if (scenario.getWriteParams() != null) {
-            	Workload writes = new WriteWorkload(PhoenixUtil.create(), parser, scenario, GeneratePhoenixStats.NO);
+            	Workload writes = new WriteWorkload(PhoenixUtil.create(), parser, PherfConstants.create().
+                                getProperties(PherfConstants.PHERF_PROPERTIES, true),
+                        scenario, GeneratePhoenixStats.NO);
             	workloadExecutor.add(writes);
             }
             

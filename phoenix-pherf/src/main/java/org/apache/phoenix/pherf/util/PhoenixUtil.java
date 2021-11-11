@@ -114,12 +114,18 @@ public class PhoenixUtil {
     public Connection getConnection(String tenantId) throws Exception {
         return getConnection(tenantId, testEnabled, null);
     }
+
+    public Connection getConnection(String tenantId,
+                                    Properties properties) throws  Exception {
+        Map<String, String> propertyHashMap = getPropertyHashMap(properties);
+        return getConnection(tenantId, testEnabled, propertyHashMap);
+    }
     
-    public Connection getConnection(String tenantId, Map<String, String> phoenixProperty) throws Exception {
-        return getConnection(tenantId, testEnabled, phoenixProperty);
+    public Connection getConnection(String tenantId, Map<String, String> propertyHashMap) throws Exception {
+        return getConnection(tenantId, testEnabled, propertyHashMap);
     }
 
-    public Connection getConnection(String tenantId, boolean testEnabled, Map<String, String> phoenixProperty) throws Exception {
+    public Connection getConnection(String tenantId, boolean testEnabled, Map<String, String> propertyHashMap) throws Exception {
         if (useThinDriver) {
             if (null == queryServerUrl) {
                 throw new IllegalArgumentException("QueryServer URL must be set before" +
@@ -143,10 +149,10 @@ public class PhoenixUtil {
                 LOGGER.debug("\nSetting tenantId to " + tenantId);
             }
             
-            if (phoenixProperty != null) {
-            	for (Map.Entry<String, String> phxProperty: phoenixProperty.entrySet()) {
+            if (propertyHashMap != null) {
+            	for (Map.Entry<String, String> phxProperty: propertyHashMap.entrySet()) {
             		props.setProperty(phxProperty.getKey(), phxProperty.getValue());
-					System.out.println("Setting connection property "
+					LOGGER.debug("Setting connection property "
 							+ phxProperty.getKey() + " to "
 							+ phxProperty.getValue());
             	}
@@ -155,6 +161,14 @@ public class PhoenixUtil {
             String url = "jdbc:phoenix:" + zookeeper + (testEnabled ? ";test=true" : "");
             return DriverManager.getConnection(url, props);
         }
+    }
+
+    private Map<String, String> getPropertyHashMap(Properties props) {
+        Map<String, String> propsMaps = new HashMap<>();
+        for (String prop : props.stringPropertyNames()) {
+            propsMaps.put(prop, props.getProperty(prop));
+        }
+        return propsMaps;
     }
 
     public boolean executeStatement(String sql, Scenario scenario) throws Exception {
