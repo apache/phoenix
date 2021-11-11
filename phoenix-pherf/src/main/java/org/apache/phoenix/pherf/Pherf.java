@@ -110,7 +110,7 @@ public class Pherf {
     private final String scenarioName;
     private final String schemaFile;
     private final String queryHint;
-    private final Properties properties;
+    private final Properties globalProperties;
     private final boolean preLoadData;
     private final boolean multiTenantWorkload;
     private final String dropPherfTablesRegEx;
@@ -127,9 +127,17 @@ public class Pherf {
     private final CompareType compareType;
     private final boolean thinDriver;
     private final String queryServerUrl;
+    private Properties properties = new Properties();
 
     @VisibleForTesting
     WorkloadExecutor workloadExecutor;
+
+    public Pherf(String[] args, Properties connProperties) throws Exception {
+        this(args);
+        //merging global and connection properties into properties.
+        if (connProperties != null)
+            this.properties.putAll(connProperties);
+    }
 
     public Pherf(String[] args) throws Exception {
         CommandLineParser parser = new DefaultParser(false, false);
@@ -144,18 +152,18 @@ public class Pherf {
             System.exit(1);
         }
 
-        properties = PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, false);
+        globalProperties = PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, false);
         dropPherfTablesRegEx = command.getOptionValue("drop", null);
         monitor = command.hasOption("m");
         String
                 monitorFrequency =
                 (command.hasOption("m") && command.hasOption("monitorFrequency")) ?
                         command.getOptionValue("monitorFrequency") :
-                        properties.getProperty("pherf.default.monitorFrequency");
-        properties.setProperty("pherf.default.monitorFrequency", monitorFrequency);
+                        globalProperties.getProperty("pherf.default.monitorFrequency");
+        globalProperties.setProperty("pherf.default.monitorFrequency", monitorFrequency);
         LOGGER.debug("Using Monitor: " + monitor);
         LOGGER.debug("Monitor Frequency Ms:" + monitorFrequency);
-        properties.setProperty(PherfConstants.LOG_PER_NROWS_NAME, getLogPerNRow(command));
+        globalProperties.setProperty(PherfConstants.LOG_PER_NROWS_NAME, getLogPerNRow(command));
 
         preLoadData = command.hasOption("l");
         multiTenantWorkload = command.hasOption("mt");
@@ -176,8 +184,8 @@ public class Pherf {
         String
                 writerThreadPoolSize =
                 command.getOptionValue("writerThreadSize",
-                        properties.getProperty("pherf.default.dataloader.threadpool"));
-        properties.setProperty("pherf.default.dataloader.threadpool", writerThreadPoolSize);
+                        globalProperties.getProperty("pherf.default.dataloader.threadpool"));
+        globalProperties.setProperty("pherf.default.dataloader.threadpool", writerThreadPoolSize);
         label = command.getOptionValue("label", null);
         compareResults = command.getOptionValue("compare", null);
         compareType = command.hasOption("useAverageCompareType") ? CompareType.AVERAGE : CompareType.MINIMUM;
@@ -208,13 +216,14 @@ public class Pherf {
             PhoenixUtil.useThinDriver(queryServerUrl);
         }
         ResultUtil.setFileSuffix(label);
+        this.properties.putAll(globalProperties);
     }
 
     private String getLogPerNRow(CommandLine command) {
         try {
             String logPerNRows = (command.hasOption("log_per_nrows")) ?
                     command.getOptionValue("log_per_nrows") :
-                        properties.getProperty(
+                        globalProperties.getProperty(
                                 PherfConstants.LOG_PER_NROWS_NAME,
                                 String.valueOf(PherfConstants.LOG_PER_NROWS)
                         );
@@ -302,7 +311,7 @@ public class Pherf {
             if (monitor) {
                 monitorManager =
                         new MonitorManager(Integer.parseInt(
-                                properties.getProperty("pherf.default.monitorFrequency")));
+                                globalProperties.getProperty("pherf.default.monitorFrequency")));
                 workloadExecutor.add(monitorManager);
             }
 
@@ -323,7 +332,8 @@ public class Pherf {
                             }
                         }
                     } else {
-                        newWorkloads.add(new WriteWorkload(parser, generateStatistics));
+                        newWorkloads.add(new WriteWorkload(parser, properties,
+                                generateStatistics));
                     }
 
                     if (newWorkloads.isEmpty()) {
