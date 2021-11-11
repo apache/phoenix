@@ -36,7 +36,8 @@ public class RegistryIT extends ParallelStatsDisabledIT {
     public void testConnectionReadOnly() throws Exception {
         
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        final String tmpUrl = getUrl();
+        Connection conn = DriverManager.getConnection(tmpUrl, props);
       String testTable = generateUniqueName();
       String ddl = "CREATE TABLE " + testTable + " " +
                         "  (r varchar not null, col1 integer" +

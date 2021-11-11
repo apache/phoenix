@@ -45,6 +45,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -548,8 +549,15 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         
         @Override
 		public String toString() {
-			return (bootstrap == null ? "" : bootstrap.getStringForConnectionString())
-                    + ":" + quorum + (port == null ? "" : ":" + port)
+            String bootstrapString;
+            if (bootstrap != null){
+                bootstrapString = getZookeeperConnectionString();
+            } else {
+                bootstrapString = "";
+            }
+
+			return (Strings.isNullOrEmpty(bootstrapString) ? "" : (bootstrapString + ":"))
+                    + quorum + (port == null ? "" : ":" + port)
 					+ (rootNode == null ? "" : ":" + rootNode)
 					+ (principal == null ? "" : ":" + principal)
 					+ (keytab == null ? "" : ":" + keytab);

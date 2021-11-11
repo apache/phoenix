@@ -1,5 +1,7 @@
 package org.apache.phoenix.jdbc.bootstrap;
 
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+
 import java.util.Map;
 
 public abstract class HBaseRegistryBootstrap {
@@ -21,7 +23,12 @@ public abstract class HBaseRegistryBootstrap {
     public abstract Map<String, String> generateConnectionProps(EmbeddedDriverContext edc);
 
     public String getStringForConnectionString() {
-        return "+" + this.toString().toLowerCase();
+        final String rtn = this.toString();
+        if (!Strings.isNullOrEmpty(rtn)) {
+            return "+" + rtn.toLowerCase();
+        }
+
+        return "";
     }
 
     @Override
