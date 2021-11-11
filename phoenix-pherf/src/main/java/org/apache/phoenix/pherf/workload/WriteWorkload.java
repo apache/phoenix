@@ -18,13 +18,9 @@
 
 package org.apache.phoenix.pherf.workload;
 
-import java.math.BigDecimal;
-import java.sql.Array;
 import java.sql.Connection;
-import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,7 +40,6 @@ import org.apache.phoenix.pherf.exception.PherfException;
 import org.apache.phoenix.pherf.result.DataLoadThreadTime;
 import org.apache.phoenix.pherf.result.DataLoadTimeSummary;
 import org.apache.phoenix.pherf.result.ResultUtil;
-import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.apache.phoenix.pherf.util.RowCalculator;
@@ -70,25 +65,22 @@ public class WriteWorkload implements Workload {
     private final int batchSize;
     private final GeneratePhoenixStats generateStatistics;
     private final boolean useBatchApi;
+    private final Properties properties;
 
     public WriteWorkload(XMLConfigParser parser) throws Exception {
-        this(PhoenixUtil.create(), parser, GeneratePhoenixStats.NO);
+        this(PhoenixUtil.create(),  parser, PherfConstants.create().
+                getProperties(PherfConstants.PHERF_PROPERTIES, true), GeneratePhoenixStats.NO);
     }
-    
-    public WriteWorkload(XMLConfigParser parser, GeneratePhoenixStats generateStatistics) throws Exception {
-        this(PhoenixUtil.create(), parser, generateStatistics);
-    }
-
-    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser, GeneratePhoenixStats generateStatistics) throws Exception {
-        this(util, parser, null, generateStatistics);
+    public WriteWorkload(XMLConfigParser parser, Properties properties,
+                         GeneratePhoenixStats generateStatistics) throws Exception {
+        this(PhoenixUtil.create(), parser, properties, generateStatistics);
     }
 
-    public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser, Scenario scenario, GeneratePhoenixStats generateStatistics)
-            throws Exception {
-        this(phoenixUtil,
-                PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, true),
-                parser, scenario, generateStatistics);
+    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser, Properties properties,
+                         GeneratePhoenixStats generateStatistics) throws Exception {
+        this(util,  parser, properties, null, generateStatistics);
     }
+
 
     /**
      * Default the writers to use up all available cores for threads. If writeParams are used in
@@ -97,20 +89,22 @@ public class WriteWorkload implements Workload {
      * TODO extract notion of the scenario list and have 1 write workload per scenario
      *
      * @param phoenixUtil {@link org.apache.phoenix.pherf.util.PhoenixUtil} Query helper
-     * @param properties  {@link java.util.Properties} default properties to use
      * @param parser      {@link org.apache.phoenix.pherf.configuration.XMLConfigParser}
+     * @param properties  {@link java.util.Properties} default properties to use
      * @param scenario    {@link org.apache.phoenix.pherf.configuration.Scenario} If null is passed
      *                    it will run against all scenarios in the parsers list.
      * @throws Exception
      */
-    public WriteWorkload(PhoenixUtil phoenixUtil, Properties properties, XMLConfigParser parser,
-            Scenario scenario, GeneratePhoenixStats generateStatistics) throws Exception {
+    public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser,
+                         Properties properties, Scenario scenario,
+                         GeneratePhoenixStats generateStatistics) throws Exception {
         this.pUtil = phoenixUtil;
         this.parser = parser;
         this.rulesApplier = new RulesApplier(parser);
         this.resultUtil = new ResultUtil();
         this.generateStatistics = generateStatistics;
-        int size = Integer.parseInt(properties.getProperty("pherf.default.dataloader.threadpool"));
+        this.properties = properties;
+        int size = Integer.parseInt(this.properties.getProperty("pherf.default.dataloader.threadpool"));
         
         // Overwrite defaults properties with those given in the configuration. This indicates the
         // scenario is a R/W mixed workload.
@@ -142,7 +136,7 @@ public class WriteWorkload implements Workload {
         String
                 bSize =
                 (writeParams == null) || (writeParams.getBatchSize() == Long.MIN_VALUE) ?
-                        properties.getProperty("pherf.default.dataloader.batchsize") :
+                        this.properties.getProperty("pherf.default.dataloader.batchsize") :
                         String.valueOf(writeParams.getBatchSize());
         this.batchSize =
                 (bSize == null) ? PherfConstants.DEFAULT_BATCH_SIZE : Integer.parseInt(bSize);
@@ -262,7 +256,7 @@ public class WriteWorkload implements Workload {
                 Connection connection = null;
                 PreparedStatement stmt = null;
                 try {
-                    connection = pUtil.getConnection(scenario.getTenantId());
+                    connection = pUtil.getConnection(scenario.getTenantId(), properties);
                     long logStartTime = EnvironmentEdgeManager.currentTimeMillis();
                     long maxDuration = (WriteWorkload.this.writeParams == null) ? Long.MAX_VALUE :
                         WriteWorkload.this.writeParams.getExecutionDurationInMs();
