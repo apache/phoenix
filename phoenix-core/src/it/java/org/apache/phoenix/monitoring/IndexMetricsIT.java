@@ -191,17 +191,17 @@ public class IndexMetricsIT extends ParallelStatsDisabledIT {
             registry, ageOfUnverifiedRow);
     }
 
-    private void verifyHistogram(String counterName, DynamicMetricsRegistry registry) {
+    public static void verifyHistogram(String counterName, DynamicMetricsRegistry registry) {
         verifyHistogram(counterName, registry, TIME_VAL);
     }
 
-    private void verifyHistogram(String counterName,
+    public static void verifyHistogram(String counterName,
             DynamicMetricsRegistry registry, long max) {
         MutableHistogram histogram = registry.getHistogram(counterName);
         assertEquals(max, histogram.getMax());
     }
 
-    private void verifyCounter(String counterName, DynamicMetricsRegistry registry) {
+    public static void verifyCounter(String counterName, DynamicMetricsRegistry registry) {
         MutableFastCounter counter = registry.getCounter(counterName, 0);
         assertEquals(1, counter.value());
     }
