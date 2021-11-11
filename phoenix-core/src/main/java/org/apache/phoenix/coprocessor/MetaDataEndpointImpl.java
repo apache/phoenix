@@ -232,6 +232,8 @@ import org.apache.phoenix.schema.export.SchemaRegistryRepository;
 import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
 import org.apache.phoenix.schema.export.SchemaWriter;
 import org.apache.phoenix.schema.export.SchemaWriterFactory;
+import org.apache.phoenix.schema.metrics.MetricsMetadataSource;
+import org.apache.phoenix.schema.metrics.MetricsMetadataSourceFactory;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.schema.types.PBinary;
@@ -579,6 +581,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     // before 4.15, so that we can rollback the upgrade to 4.15 if required
     private boolean allowSplittableSystemCatalogRollback;
 
+    private MetricsMetadataSource metricsSource;
+
     /**
      * Stores a reference to the coprocessor environment provided by the
      * {@link org.apache.hadoop.hbase.regionserver.RegionCoprocessorHost} from the region where this
@@ -615,6 +619,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
         Metrics.ensureConfigured();
+        metricsSource = MetricsMetadataSourceFactory.getMetadataMetricsSource();
     }
 
     @Override
@@ -2359,9 +2364,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     //and if we're doing change detection on this table or view, notify the
                     //external schema registry and get its schema id
                     if (isChangeDetectionEnabled) {
+                        long startTime = EnvironmentEdgeManager.currentTimeMillis();
                         try {
                             exportSchema(tableMetadata, tableKey, clientTimeStamp, clientVersion, null);
+                            metricsSource.incrementCreateExportCount();
+                            metricsSource.updateCreateExportTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
                         } catch (IOException ie){
+                            metricsSource.incrementCreateExportFailureCount();
+                            metricsSource.updateCreateExportFailureTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
                             //If we fail to write to the schema registry, fail the entire
                             //CREATE TABLE or VIEW operation so we stay consistent
                             LOGGER.error("Error writing schema to external schema registry", ie);
@@ -3226,10 +3236,15 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 }
 
                 if (table.isChangeDetectionEnabled() || MetaDataUtil.getChangeDetectionEnabled(tableMetadata)) {
+                    long startTime = EnvironmentEdgeManager.currentTimeMillis();
                     try {
                         exportSchema(tableMetadata, key, clientTimeStamp, clientVersion, table);
+                        metricsSource.incrementAlterExportCount();
+                        metricsSource.updateAlterExportTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
                     } catch (Exception e) {
                         LOGGER.error("Error writing to schema registry", e);
+                        metricsSource.incrementAlterExportFailureCount();
+                        metricsSource.updateAlterExportFailureTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
                         result = new MetaDataMutationResult(MutationCode.ERROR_WRITING_TO_SCHEMA_REGISTRY,
                             EnvironmentEdgeManager.currentTimeMillis(), table);
                         return result;
