@@ -65,6 +65,7 @@ public class WriteWorkload implements Workload {
     private final WriteParams writeParams;
     private final Scenario scenario;
     private final long threadSleepDuration;
+    private final Properties properties;
 
     private final int threadPoolSize;
     private final int batchSize;
@@ -72,22 +73,18 @@ public class WriteWorkload implements Workload {
     private final boolean useBatchApi;
 
     public WriteWorkload(XMLConfigParser parser) throws Exception {
-        this(PhoenixUtil.create(), parser, GeneratePhoenixStats.NO);
+        this(PhoenixUtil.create(), parser, PherfConstants.create().
+                getProperties(PherfConstants.PHERF_PROPERTIES, true), GeneratePhoenixStats.NO);
     }
     
-    public WriteWorkload(XMLConfigParser parser, GeneratePhoenixStats generateStatistics) throws Exception {
-        this(PhoenixUtil.create(), parser, generateStatistics);
+    public WriteWorkload(XMLConfigParser parser, Properties properties,
+                         GeneratePhoenixStats generateStatistics) throws Exception {
+        this(PhoenixUtil.create(), parser, properties, generateStatistics);
     }
 
-    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser, GeneratePhoenixStats generateStatistics) throws Exception {
-        this(util, parser, null, generateStatistics);
-    }
-
-    public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser, Scenario scenario, GeneratePhoenixStats generateStatistics)
-            throws Exception {
-        this(phoenixUtil,
-                PherfConstants.create().getProperties(PherfConstants.PHERF_PROPERTIES, true),
-                parser, scenario, generateStatistics);
+    public WriteWorkload(PhoenixUtil util, XMLConfigParser parser, Properties properties,
+                         GeneratePhoenixStats generateStatistics) throws Exception {
+        this(util, parser, properties, null, generateStatistics);
     }
 
     /**
@@ -97,19 +94,21 @@ public class WriteWorkload implements Workload {
      * TODO extract notion of the scenario list and have 1 write workload per scenario
      *
      * @param phoenixUtil {@link org.apache.phoenix.pherf.util.PhoenixUtil} Query helper
-     * @param properties  {@link java.util.Properties} default properties to use
      * @param parser      {@link org.apache.phoenix.pherf.configuration.XMLConfigParser}
+     * @param properties  {@link java.util.Properties} default properties to use
      * @param scenario    {@link org.apache.phoenix.pherf.configuration.Scenario} If null is passed
      *                    it will run against all scenarios in the parsers list.
      * @throws Exception
      */
-    public WriteWorkload(PhoenixUtil phoenixUtil, Properties properties, XMLConfigParser parser,
-            Scenario scenario, GeneratePhoenixStats generateStatistics) throws Exception {
+    public WriteWorkload(PhoenixUtil phoenixUtil, XMLConfigParser parser,
+                         Properties properties, Scenario scenario,
+                         GeneratePhoenixStats generateStatistics) throws Exception {
         this.pUtil = phoenixUtil;
         this.parser = parser;
         this.rulesApplier = new RulesApplier(parser);
         this.resultUtil = new ResultUtil();
         this.generateStatistics = generateStatistics;
+        this.properties = properties;
         int size = Integer.parseInt(properties.getProperty("pherf.default.dataloader.threadpool"));
         
         // Overwrite defaults properties with those given in the configuration. This indicates the
@@ -262,7 +261,7 @@ public class WriteWorkload implements Workload {
                 Connection connection = null;
                 PreparedStatement stmt = null;
                 try {
-                    connection = pUtil.getConnection(scenario.getTenantId());
+                    connection = pUtil.getConnection(scenario.getTenantId(), properties);
                     long logStartTime = EnvironmentEdgeManager.currentTimeMillis();
                     long maxDuration = (WriteWorkload.this.writeParams == null) ? Long.MAX_VALUE :
                         WriteWorkload.this.writeParams.getExecutionDurationInMs();
