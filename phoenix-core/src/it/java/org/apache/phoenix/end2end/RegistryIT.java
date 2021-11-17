@@ -17,28 +17,66 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.MasterRegistry;
+import org.apache.hadoop.hbase.regionserver.RSRpcServices;
+import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.rpc.TestPhoenixIndexRpcSchedulerFactory;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.Collections;
+import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
 
 
+
+@Category(NeedsOwnMiniClusterTest.class)
 public class RegistryIT extends ParallelStatsDisabledIT {
 
     @Test
-    public void testConnectionReadOnly() throws Exception {
-        
+    public void testReadOnlyUsingHRpc() throws Exception {
+        String oldUrl = getUrl();
+
+        /**
+        Map<String, String> serverProps = Collections.singletonMap(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
+                MasterRegistry.class.getName());
+        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(serverProps.entrySet().iterator()));
+        **/
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        final String tmpUrl = getUrl();
+        String tmpUrl = getUrl();
+       // QueryUtil.getConnectionUrl(new Properties(),utility.getConfiguration());
+       //  initAndRegisterTestDriver(tmpUrl, new ReadOnlyProps(Maps.newHashMap()));
+       //  Connection connZk = DriverManager.getConnection(tmpUrl, props);
+
+        /**
+        String port = config.get(HConstants.MASTER_PORT);
+        String masters = config.get(HConstants.MASTER_ADDRS_KEY);
+        String[] splitz = masters.split(":");
+        tmpUrl = QueryUtil.getHRpcUrl(splitz[0],Integer.parseInt(splitz[1]), null);
+
+        tmpUrl = tmpUrl.replace(":+hrpc", "+hrpc");
+
+        Map<String, String> prop = Maps.newHashMap();
+        initAndRegisterTestDriver(tmpUrl, new ReadOnlyProps(prop));
         Connection conn = DriverManager.getConnection(tmpUrl, props);
-      String testTable = generateUniqueName();
+        **/
+        tmpUrl = tmpUrl.replace("phoenix", "phoenix+hrpc");
+
+    Connection conn = DriverManager.getConnection(tmpUrl, props);
+        String testTable = generateUniqueName();
       String ddl = "CREATE TABLE " + testTable + " " +
                         "  (r varchar not null, col1 integer" +
                         "  CONSTRAINT pk PRIMARY KEY (r))\n"; 

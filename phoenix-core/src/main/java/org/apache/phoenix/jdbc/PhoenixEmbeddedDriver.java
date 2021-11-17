@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
-
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Driver;
@@ -32,6 +30,7 @@ import java.util.Map.Entry;
 import java.util.logging.Logger;
 
 import javax.annotation.concurrent.Immutable;
+import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 
 import org.apache.phoenix.jdbc.bootstrap.*;
 import org.apache.hadoop.conf.Configuration;
@@ -53,6 +52,7 @@ import org.apache.phoenix.util.SQLCloseable;
 import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+
 
 
 /**
@@ -104,6 +104,10 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             }
             // Same as above, except for "jdbc:phoenix;prop=<value>..."
             if (PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR == url.charAt(PhoenixRuntime.JDBC_PROTOCOL.length())) {
+                return true;
+            }
+
+            if (PhoenixRuntime.JDBC_PROTOCOL_CONNECTOR_PREFIX == url.charAt(PhoenixRuntime.JDBC_PROTOCOL.length())){
                 return true;
             }
             if (PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR == url.charAt(PhoenixRuntime.JDBC_PROTOCOL.length())) {
@@ -426,6 +430,14 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             ));
         }
 
+        public ConnectionInfo(String hmasters, Integer port, String principal, String keytab) {
+            this(hmasters, port, null, principal, keytab, new HRpcHBaseRegistryBootstrap(
+                    new EmbeddedDriverContextBuilder()
+                            .setQuorum(hmasters).setPort(port).setPrincipal(principal)
+                            .setKeytabFile(keytab).build()
+            ));
+        }
+
         public ConnectionInfo(String quorum, Integer port, String rootNode, String principal, String keytab,
                               HBaseRegistryBootstrap bootstrap) {
             this.quorum = quorum;
@@ -549,23 +561,21 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         
         @Override
 		public String toString() {
+			return quorum + (port == null ? "" :  PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + port.toString() + "")
+					+ (rootNode == null ? "" :  PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + rootNode)
+					+ (principal == null ? "" :  PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + principal)
+					+ (keytab == null ? "" :  PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + keytab);
+		}
+
+        public String toUrl() {
             String bootstrapString;
             if (bootstrap != null){
-                bootstrapString = getZookeeperConnectionString();
+                bootstrapString = bootstrap.getStringForConnectionString();
             } else {
                 bootstrapString = "";
             }
 
-			return (Strings.isNullOrEmpty(bootstrapString) ? "" : (bootstrapString + ":"))
-                    + quorum + (port == null ? "" : ":" + port)
-					+ (rootNode == null ? "" : ":" + rootNode)
-					+ (principal == null ? "" : ":" + principal)
-					+ (keytab == null ? "" : ":" + keytab);
-		}
-
-        public String toUrl() {
-            return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
-                    + toString();
+            return PhoenixRuntime.JDBC_PROTOCOL + (Strings.isNullOrEmpty(bootstrapString) ? "" : (bootstrapString)) + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR +  toString();
         }
 
         private static ConnectionInfo defaultConnectionInfo(String url) throws SQLException {
