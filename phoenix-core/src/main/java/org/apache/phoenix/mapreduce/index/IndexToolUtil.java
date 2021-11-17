@@ -74,7 +74,7 @@ public class IndexToolUtil {
         Preconditions.checkNotNull(connection);
         final String alterQuery = String.format(ALTER_INDEX_QUERY_TEMPLATE,indexTable,masterTable,state.name());
         connection.createStatement().execute(alterQuery);
-        LOGGER.info(" Updated the status of the index {} on {} to {} " , new String[] {indexTable , masterTable, state.name()});
+        LOGGER.info(" Updated the status of the index {} on {} to {} ", indexTable, masterTable, state.name());
     }
 	
 }

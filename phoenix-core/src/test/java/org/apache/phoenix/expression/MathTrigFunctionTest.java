@@ -69,7 +69,7 @@ public class MathTrigFunctionTest {
 
     @Parameters(name = "{0} {1}")
     public static synchronized Collection<Object> data() {
-        return Arrays.asList(new Object[][]{
+        return Arrays.asList((Object[]) new Object[][]{
             {
                 new BigDecimal[]{BigDecimal.valueOf(1.0), BigDecimal.valueOf(0.0),
                     BigDecimal.valueOf(-1.0), BigDecimal.valueOf(123.1234),
