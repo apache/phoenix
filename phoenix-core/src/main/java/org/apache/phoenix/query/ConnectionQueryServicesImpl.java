@@ -144,6 +144,7 @@ import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -1500,6 +1501,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                 }
 
+                //Verify splits when creating salted table on an existing Hbase table.
+                if (props.get(PhoenixDatabaseMetaData.SALT_BUCKETS) != null
+                        && (Integer) (props.get(PhoenixDatabaseMetaData.SALT_BUCKETS)) > 0) {
+                    SaltingUtil.checkTableIsSalted(admin, TableName.valueOf(physicalTableName),
+                        (Integer) (props.get(PhoenixDatabaseMetaData.SALT_BUCKETS)));
+                }
+
                 if (!modifyExistingMetaData) {
                     return existingDesc; // Caller already knows that no metadata was changed
                 }
@@ -2310,7 +2318,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
         byte[][] splits = null;
         if (table.getBucketNum() != null) {
-            splits = SaltingUtil.getSalteByteSplitPoints(table.getBucketNum());
+            splits = SaltingUtil.getSaltedByteSplitPoints(table.getBucketNum());
         }
 
         // Transfer over table values into tableProps
@@ -4902,8 +4910,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private static int getSaltBuckets(TableAlreadyExistsException e) {
         PTable table = e.getTable();
-        Integer sequenceSaltBuckets = table == null ? null : table.getBucketNum();
-        return sequenceSaltBuckets == null ? 0 : sequenceSaltBuckets;
+        Integer saltBuckets = table == null ? null : table.getBucketNum();
+        return saltBuckets == null ? 0 : saltBuckets;
     }
 
     @Override

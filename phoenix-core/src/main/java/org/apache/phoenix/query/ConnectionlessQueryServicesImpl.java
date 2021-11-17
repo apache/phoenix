@@ -289,8 +289,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
     
     private static List<HRegionLocation> generateRegionLocations(byte[] physicalName, byte[][] splits) {
-        byte[] startKey = HConstants.EMPTY_START_ROW;
         List<HRegionLocation> regions = Lists.newArrayListWithExpectedSize(splits.length);
+        if (splits.length == 0) {
+            return regions;
+        }
+        byte[] startKey = HConstants.EMPTY_START_ROW;
         for (byte[] split : splits) {
             regions.add(new HRegionLocation(RegionInfoBuilder
                     .newBuilder(TableName.valueOf(physicalName)).setStartKey(startKey)
@@ -388,7 +391,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 try {
                     int nSaltBuckets = getSequenceSaltBuckets();
                     String createTableStatement = getSystemSequenceTableDDL(nSaltBuckets);
-                   metaConnection.createStatement().executeUpdate(createTableStatement);
+                    metaConnection.createStatement().executeUpdate(createTableStatement);
                 } catch (NewerTableAlreadyExistsException ignore) {
                     // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
                     // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.

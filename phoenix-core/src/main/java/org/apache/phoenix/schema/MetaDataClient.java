@@ -3028,13 +3028,12 @@ public class MetaDataClient {
              * 3) parent table header row
              */
             Collections.reverse(tableMetaData);
-            
-			if (indexType != IndexType.LOCAL) {
-                splits = SchemaUtil.processSplits(splits, pkColumns, saltBucketNum, connection.getQueryServices().getProps().getBoolean(
-                        QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, QueryServicesOptions.DEFAULT_FORCE_ROW_KEY_ORDER));
+
+            if (indexType != IndexType.LOCAL) {
+                splits = SchemaUtil.processSplits(splits, pkColumns, saltBucketNum);
             }
 
-			// Modularized this code for unit testing
+            // Modularized this code for unit testing
             PName parentName = physicalNames !=null && physicalNames.size() > 0 ? physicalNames.get(0) : null;
             if (LOGGER.isTraceEnabled()) {
                 LOGGER.trace("createTable tableName=" + tableName + " parent=" + (parent == null ? "" : parent.getTableName() + "-" + parent.getPhysicalName()) + " parent physical=" + parentName + "-" + (physicalNames.size() > 0 ? physicalNames.get(0) : "null") + " viewType " + viewType + allocateIndexId);

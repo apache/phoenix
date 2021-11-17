@@ -67,7 +67,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.LiteralParseNode;
-import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -246,7 +245,7 @@ public class SchemaUtil {
         String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
         String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
         String normalizedTableName = StringUtil.EMPTY_STRING;
-        if(!schemaName.isEmpty()) {
+        if (!schemaName.isEmpty()) {
             normalizedTableName =  normalizeIdentifier(schemaName) + QueryConstants.NAME_SEPARATOR;
         }
         return normalizedTableName + normalizeIdentifier(tableName);
@@ -595,25 +594,44 @@ public class SchemaUtil {
         if (QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) return true;
         return false;
     }
-    
-    // Given the splits and the rowKeySchema, find out the keys that 
-    public static byte[][] processSplits(byte[][] splits, LinkedHashSet<PColumn> pkColumns, Integer saltBucketNum, boolean defaultRowKeyOrder) throws SQLException {
-        // FIXME: shouldn't this return if splits.length == 0?
-        if (splits == null) return null;
-        // We do not accept user specified splits if the table is salted and we specify defaultRowKeyOrder. In this case,
-        // throw an exception.
-        if (splits.length > 0 && saltBucketNum != null && defaultRowKeyOrder) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_SPLITS_ON_SALTED_TABLE).build().buildException();
+
+    // Given the splits and the rowKeySchema, add the split points based on saltBucketNum, as well
+    // as the ones passed in the parameter, call processSplit on both, and return the union.
+    public static byte[][] processSplits(byte[][] splits, LinkedHashSet<PColumn> pkColumns, Integer saltBucketNum) throws SQLException {
+        if (splits == null) {
+            splits = new byte[0][];
         }
-        // If the splits are not specified and table is salted, pre-split the table. 
-        if (splits.length == 0 && saltBucketNum != null) {
-            splits = SaltingUtil.getSalteByteSplitPoints(saltBucketNum);
+
+        TreeSet<byte[]> allSplits = new TreeSet<>(new Bytes.ByteArrayComparator());
+
+        // Add the salted split points, if any
+        if (saltBucketNum != null && saltBucketNum > 1) {
+            //check the the custom split points are within the correct range.
+            for (int i=0; i<splits.length; i++) {
+                if (Byte.toUnsignedInt(splits[i][0]) > saltBucketNum - 1) {
+                    throw new SQLExceptionInfo.Builder(
+                        SQLExceptionCode.ILLEGAL_SPLIT_ON_SALTED_TABLE)
+                        .build().buildException();
+                }
+            }
+
+            byte[][] saltSplits = SaltingUtil.getSaltedByteSplitPoints(saltBucketNum);
+            for (int i=0; i<saltSplits.length; i++) {
+                allSplits.add(processSplit(saltSplits[i], pkColumns));
+            }
         }
-        byte[][] newSplits = new byte[splits.length][];
+
+        //Add the specified split points
         for (int i=0; i<splits.length; i++) {
-            newSplits[i] = processSplit(splits[i], pkColumns); 
+            allSplits.add(processSplit(splits[i], pkColumns));
         }
-        return newSplits;
+
+        if (allSplits.size() > 0) {
+            byte[][] returnArray = new byte[allSplits.size()][];
+            return allSplits.toArray(returnArray);
+        } else {
+            return null;
+        }
     }
 
     // Go through each slot in the schema and try match it with the split byte array. If the split
@@ -688,12 +706,12 @@ public class SchemaUtil {
                 stmt.executeUpdate("ALTER TABLE SYSTEM.\"TABLE\" ADD IF NOT EXISTS " + columnDef);
                 return metaConnection;
             } finally {
-                if(stmt != null) {
+                if (stmt != null) {
                     stmt.close();
                 }
             }
         } finally {
-            if(metaConnection != null) {
+            if (metaConnection != null) {
                 metaConnection.close();
             }
         }
@@ -841,7 +859,7 @@ public class SchemaUtil {
     }
     
     public static String getEscapedFullColumnName(String fullColumnName) {
-        if(fullColumnName.startsWith(ESCAPE_CHARACTER)) {
+        if (fullColumnName.startsWith(ESCAPE_CHARACTER)) {
             return fullColumnName;
         }
         int index = fullColumnName.indexOf(QueryConstants.NAME_SEPARATOR);
@@ -1261,7 +1279,7 @@ public class SchemaUtil {
             fullTableName = tableName;
         }
 
-        if(schemaName != null && schemaName.length() != 0) {
+        if (schemaName != null && schemaName.length() != 0) {
             if (schemaNameCaseSensitive) {
                 fullTableName = "\"" + schemaName + "\"" + QueryConstants.NAME_SEPARATOR + fullTableName;
             } else {
@@ -1313,7 +1331,7 @@ public class SchemaUtil {
 
     public static String formatIndexColumnName(String name) {
         String[] splitName = name.split("\\.");
-        if(splitName.length < 2) {
+        if (splitName.length < 2) {
             if (!name.contains("\"")) {
                 if (quotesNeededForColumn(name)) {
                     name = "\"" + name + "\"";
@@ -1360,13 +1378,13 @@ public class SchemaUtil {
         boolean tableNameNeedsQuotes = isQuotesNeeded(pTableName);
         boolean schemaNameNeedsQuotes = isQuotesNeeded(pSchemaName);
 
-        if(schemaNameNeedsQuotes) {
+        if (schemaNameNeedsQuotes) {
             pSchemaName= "\""+pSchemaName+"\"";
         }
-        if(tableNameNeedsQuotes) {
+        if (tableNameNeedsQuotes) {
             pTableName = "\""+pTableName+"\"";
         }
-        if(tableNameNeedsQuotes || schemaNameNeedsQuotes) {
+        if (tableNameNeedsQuotes || schemaNameNeedsQuotes) {
             if (!Strings.isNullOrEmpty(pSchemaName)) {
                 return String.format("%s.%s", pSchemaName, pTableName);
             } else {

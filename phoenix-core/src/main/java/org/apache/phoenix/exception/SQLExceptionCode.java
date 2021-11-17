@@ -260,6 +260,7 @@ public enum SQLExceptionCode {
     NO_SPLITS_ON_SALTED_TABLE(1022, "42Y81", "Should not specify split points on salted table with default row key order."),
     SALT_ONLY_ON_CREATE_TABLE(1024, "42Y82", "Salt bucket number may only be specified when creating a table."),
     NO_NORMALIZER_ON_SALTED_TABLE(1147, "42Y86", "Should not enable normalizer on salted table."),
+    EXISTING_TABLE_DOES_NOT_MATCH_SPLIT_BUCKETS(1148, "42Y91", "The existing HBase table is not a Phoenix salted table with the specified number of buckets."),
     SET_UNSUPPORTED_PROP_ON_ALTER_TABLE(1025, "42Y83", "Unsupported property set in ALTER TABLE command."),
     CANNOT_ADD_NOT_NULLABLE_COLUMN(1038, "42Y84", "Only nullable columns may be added for a pre-existing table."),
     NO_MUTABLE_INDEXES(1026, "42Y85", "Mutable secondary indexes are only supported for HBase version " + MetaDataUtil.decodeHBaseVersionAsString(MetaDataProtocol.MUTABLE_SI_VERSION_THRESHOLD) + " and above."),
@@ -323,6 +324,7 @@ public enum SQLExceptionCode {
     UNSUPPORTED_COLUMN_ENCODING_FOR_TXN_PROVIDER(1094, "44A25", "Column encoding is not supported for"),
     UNSUPPORTED_STORAGE_FORMAT_FOR_TXN_PROVIDER(1095, "44A26", "Only ONE_CELL_PER_COLUMN storage scheme is supported for"),
     CANNOT_SWITCH_TXN_PROVIDERS(1096, "44A27", "Cannot switch transaction providers."),
+    ILLEGAL_SPLIT_ON_SALTED_TABLE(1097, "42Y92", "Explicit split on salted table is outside salt bucket range."),
     TTL_UNSUPPORTED_FOR_TXN_TABLE(10947, "44A28", "TTL is not supported for"),
     CANNOT_CREATE_LOCAL_INDEX_FOR_TXN_TABLE(10948, "44A29", "Local indexes cannot be created for"),
     CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX(10949, "44A30", "Cannot set or alter the following properties on an index: "

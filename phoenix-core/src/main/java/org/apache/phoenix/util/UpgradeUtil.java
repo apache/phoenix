@@ -344,7 +344,7 @@ public class UpgradeUtil {
             snapshotCreated = true;
             admin.disableTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME));
             admin.deleteTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME));
-            byte[][] splitPoints = SaltingUtil.getSalteByteSplitPoints(nSaltBuckets);
+            byte[][] splitPoints = SaltingUtil.getSaltedByteSplitPoints(nSaltBuckets);
             admin.createTable(desc, splitPoints);
             restoreSequenceSnapshot(admin, conn);
             success = true;

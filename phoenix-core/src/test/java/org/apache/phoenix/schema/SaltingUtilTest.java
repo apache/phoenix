@@ -43,7 +43,7 @@ public class SaltingUtilTest {
      * Check an edge case where a row key's hash code is equal to Integer.MIN_VALUE.
      */
     @Test
-    public void testGetSaltingByte_EdgeCaseHashCode() {
+    public void testGetSaltingByteEdgeCaseHashCode() {
         // This array has a hashCode of Integer.MIN_VALUE based on the hashing in SaltingUtil
         byte[] rowKey = new byte[] { -106, 0, -10, 0, 19, -2 };
         byte saltingByte = SaltingUtil.getSaltingByte(rowKey, 0, rowKey.length, 3);

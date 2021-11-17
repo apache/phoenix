@@ -17,17 +17,24 @@
  */
 package org.apache.phoenix.schema;
 
+import java.io.IOException;
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.types.PBinary;
-import org.apache.phoenix.util.SchemaUtil;
-
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.util.SchemaUtil;
 
 
 /**
@@ -55,7 +62,7 @@ public class SaltingUtil {
         return allRanges;
     }
 
-    public static byte[][] getSalteByteSplitPoints(int saltBucketNum) {
+    public static byte[][] getSaltedByteSplitPoints(int saltBucketNum) {
         byte[][] splits = new byte[saltBucketNum-1][];
         for (int i = 1; i < saltBucketNum; i++) {
             splits[i-1] = new byte[] {(byte) i};
@@ -122,5 +129,30 @@ public class SaltingUtil {
             System.arraycopy(scan.getStopRow(), 0, newStopRow, prefixBytes.length, scan.getStopRow().length);
             scan.setStopRow(newStopRow);
         }
+    }
+
+    public static void checkTableIsSalted(Admin admin, TableName tableName, int buckets) throws IOException, SQLException {
+        // Heuristics to check if and existing HBase table can be a salted Phoenix table
+        // with the specified number of buckets.
+        // May give false negatives.
+        byte[] maxStartKey = new byte[] {0} ;
+        List<RegionInfo> regionInfos =
+                admin.getRegions(tableName);
+        for (RegionInfo regionInfo : regionInfos) {
+            if (Bytes.compareTo(regionInfo.getStartKey(), maxStartKey) > 0) {
+                maxStartKey = regionInfo.getStartKey();
+            }
+        }
+        byte lastRegionStartSaltKey = maxStartKey[0];
+        if (lastRegionStartSaltKey == (byte) (buckets - 1)) {
+            return;
+        } else {
+            throw new SQLExceptionInfo.Builder(
+                SQLExceptionCode.EXISTING_TABLE_DOES_NOT_MATCH_SPLIT_BUCKETS)
+            .setTableName(tableName.toString())
+            .build()
+            .buildException();
+        }
+
     }
 }

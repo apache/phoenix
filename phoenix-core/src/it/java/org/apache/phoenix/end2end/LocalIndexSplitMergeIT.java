@@ -317,8 +317,7 @@ public class LocalIndexSplitMergeIT extends BaseTest {
         String indexName = "IDX_" + generateUniqueName();
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), false);
         createBaseTable(tableName, "('a','aaaab','def')");
-        Connection conn1 = getConnectionForLocalIndexTest();
-        try {
+        try (Connection conn1 = getConnectionForLocalIndexTest()) {
             String[] strings =
                     { "aa", "aaa", "aaaa", "bb", "cc", "dd", "dff", "g", "h", "i", "j", "k", "l",
                             "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z" };
@@ -331,7 +330,27 @@ public class LocalIndexSplitMergeIT extends BaseTest {
             conn1.createStatement()
                     .execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
             conn1.createStatement()
-            .execute("CREATE LOCAL INDEX " + indexName + "_2 ON " + tableName + "(k3)");
+                    .execute("CREATE LOCAL INDEX " + indexName + "_2 ON " + tableName + "(k3)");
+
+            // Check that the split points are properly processed, as without processing,
+            // this will fail even without merging
+            String query = "SELECT t_id,k1,v1 FROM " + tableName;
+            ResultSet rs = conn1.createStatement().executeQuery(query);
+            for (int j = 0; j < 26; j++) {
+                assertTrue("result row number " + j + "exists ", rs.next());
+                assertEquals(strings[25-j], rs.getString("t_id"));
+                assertEquals(25-j, rs.getInt("k1"));
+                assertEquals(strings[j], rs.getString("V1"));
+            }
+
+            query = "SELECT t_id,k1,k3 FROM " + tableName;
+            rs = conn1.createStatement().executeQuery(query);
+            for (int j = 0; j < 26; j++) {
+                assertTrue("result row number " + j + "exists ", rs.next());
+                assertEquals(strings[j], rs.getString("t_id"));
+                assertEquals(j, rs.getInt("k1"));
+                assertEquals(j + 2, rs.getInt("k3"));
+            }
 
             Admin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
             List<RegionInfo> regionsOfUserTable =
@@ -349,10 +368,12 @@ public class LocalIndexSplitMergeIT extends BaseTest {
                         MetaTableAccessor.getTableRegions(admin.getConnection(), physicalTableName,
                             false);
             }
-            String query = "SELECT t_id,k1,v1 FROM " + tableName;
-            ResultSet rs = conn1.createStatement().executeQuery(query);
+
+            // Now check again if the merging has caused problems
+            query = "SELECT t_id,k1,v1 FROM " + tableName;
+            rs = conn1.createStatement().executeQuery(query);
             for (int j = 0; j < 26; j++) {
-                assertTrue(rs.next());
+                assertTrue("result row number " + j + "exists ", rs.next());
                 assertEquals(strings[25-j], rs.getString("t_id"));
                 assertEquals(25-j, rs.getInt("k1"));
                 assertEquals(strings[j], rs.getString("V1"));
@@ -360,13 +381,11 @@ public class LocalIndexSplitMergeIT extends BaseTest {
             query = "SELECT t_id,k1,k3 FROM " + tableName;
             rs = conn1.createStatement().executeQuery(query);
             for (int j = 0; j < 26; j++) {
-                assertTrue(rs.next());
+                assertTrue("result row number " + j + "exists ", rs.next());
                 assertEquals(strings[j], rs.getString("t_id"));
                 assertEquals(j, rs.getInt("k1"));
                 assertEquals(j + 2, rs.getInt("k3"));
             }
-        } finally {
-            conn1.close();
         }
     }
 }
