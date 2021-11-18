@@ -568,7 +568,14 @@ public enum SQLExceptionCode {
 
     CANNOT_TRANSFORM_ALREADY_TRANSFORMING_TABLE(910, "43M21",
                                         "Cannot transform an index or a table who is already going through a transform."),
-    CANNOT_TRANSFORM_VIEW_INDEX(911, "43M22", "Cannot transform a view index. Consider creating a new view index.");
+
+    CANNOT_TRANSFORM_LOCAL_OR_VIEW_INDEX(911, "43M22", "Cannot transform a view index or a local index. For view index, consider creating a new view index."),
+
+    CANNOT_TRANSFORM_TABLE_WITH_LOCAL_INDEX(912, "43M23", "Cannot transform a table with a local index."),
+
+    CANNOT_TRANSFORM_TABLE_WITH_APPEND_ONLY_SCHEMA(913, "43M24", "Cannot transform a table with append-only schema."),
+
+    CANNOT_TRANSFORM_TRANSACTIONAL_TABLE(914, "43M25", "Cannot transform a transactional table.");
 
     private final int errorCode;
     private final String sqlState;

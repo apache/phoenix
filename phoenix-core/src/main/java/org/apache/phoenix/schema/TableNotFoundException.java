@@ -34,6 +34,7 @@ import org.apache.phoenix.util.SchemaUtil;
 public class TableNotFoundException extends MetaDataEntityNotFoundException {
     private static final long serialVersionUID = 1L;
     private static SQLExceptionCode code = SQLExceptionCode.TABLE_UNDEFINED;
+    private boolean thrownToForceReReadForTransformingTable = false;
     private final long timestamp;
 
     public TableNotFoundException(TableNotFoundException e, long timestamp) {
@@ -44,21 +45,28 @@ public class TableNotFoundException extends MetaDataEntityNotFoundException {
         this(SchemaUtil.getSchemaNameFromFullName(tableName), SchemaUtil.getTableNameFromFullName(tableName));
     }
 
+    public TableNotFoundException(String tableName, boolean thrownForForce) {
+        this(SchemaUtil.getSchemaNameFromFullName(tableName), SchemaUtil.getTableNameFromFullName(tableName),
+                HConstants.LATEST_TIMESTAMP, code, thrownForForce);
+    }
+
     public TableNotFoundException(String schemaName, String tableName) {
         this(schemaName, tableName, HConstants.LATEST_TIMESTAMP);
     }
     
     public TableNotFoundException(String schemaName, String tableName, long timestamp) {
-        this(schemaName, tableName, timestamp, code);
+        this(schemaName, tableName, timestamp, code, false);
     }
 
-    public TableNotFoundException(String schemaName, String tableName, long timestamp, SQLExceptionCode code) {
+    public TableNotFoundException(String schemaName, String tableName, long timestamp, SQLExceptionCode code, boolean thrownForForceReRead) {
         super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).setTableName(tableName).build().toString(),
                 code.getSQLState(), code.getErrorCode(), schemaName, tableName, null);
         this.timestamp = timestamp;
+        this.thrownToForceReReadForTransformingTable = thrownForForceReRead;
     }
 
     public long getTimeStamp() {
         return timestamp;
     }
+    public boolean isThrownToForceReReadForTransformingTable() { return thrownToForceReReadForTransformingTable;};
 }

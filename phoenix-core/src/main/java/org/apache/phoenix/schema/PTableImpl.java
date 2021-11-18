@@ -697,7 +697,6 @@ public class PTableImpl implements PTable {
             Preconditions.checkNotNull(this.physicalNames);
             //hasColumnsRequiringUpgrade and rowKeyOrderOptimizable are booleans and can never be
             // null, so no need to check them
-
             PName fullName = PNameFactory.newName(SchemaUtil.getTableName(
                     this.schemaName.getString(), this.tableName.getString()));
             int estimatedSize = SizedUtil.OBJECT_SIZE * 2 + 23 * SizedUtil.POINTER_SIZE +

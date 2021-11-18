@@ -38,6 +38,6 @@ public class IndexNotFoundException extends TableNotFoundException {
     }
 
     public IndexNotFoundException(String schemaName, String tableName, long timestamp) {
-        super(schemaName, tableName, timestamp, code);
+        super(schemaName, tableName, timestamp, code, false);
     }
 }

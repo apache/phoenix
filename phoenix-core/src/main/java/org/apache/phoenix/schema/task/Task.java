@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema.task;
 
+import org.apache.commons.lang.StringUtils;
+import org.apache.phoenix.schema.transform.SystemTransformRecord;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
@@ -517,5 +519,16 @@ public class Task {
             this.taskType = taskType;
         }
 
+        public boolean isMatchingTask(SystemTransformRecord transformRecord) {
+            if (getTaskType() != PTable.TaskType.TRANSFORM_MONITOR) {
+                return false;
+            }
+            if (StringUtils.equals(transformRecord.getLogicalTableName(), getTableName())
+                && StringUtils.equals(transformRecord.getTenantId(), getTenantId())
+                && StringUtils.equals(transformRecord.getSchemaName(), getSchemaName())) {
+                return true;
+            }
+            return false;
+        }
     }
 }

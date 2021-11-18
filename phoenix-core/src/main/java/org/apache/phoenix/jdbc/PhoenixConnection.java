@@ -635,7 +635,12 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
 
     public PTable getTable(PTableKey key) throws TableNotFoundException {
-        return metaData.getTableRef(key).getTable();
+        PTable table =  metaData.getTableRef(key).getTable();
+        // Force TableNotFoundException for the table that is going through transform
+        if (table.getTransformingNewTable() != null) {
+            throw new TableNotFoundException("Re-read the transforming table", true);
+        }
+        return table;
     }
 
     public PTableRef getTableRef(PTableKey key) throws TableNotFoundException {

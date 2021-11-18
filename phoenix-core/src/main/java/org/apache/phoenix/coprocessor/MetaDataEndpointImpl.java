@@ -107,7 +107,6 @@ import java.util.NavigableMap;
 import java.util.Properties;
 import java.util.Set;
 
-import org.apache.directory.api.util.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -227,8 +226,6 @@ import org.apache.phoenix.schema.metrics.MetricsMetadataSource;
 import org.apache.phoenix.schema.metrics.MetricsMetadataSourceFactory;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.schema.task.Task;
-import org.apache.phoenix.schema.transform.SystemTransformRecord;
-import org.apache.phoenix.schema.transform.Transform;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;

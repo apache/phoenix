@@ -174,7 +174,11 @@ public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
         assertEquals(offset, explainPlanAttributes.getClientOffset()
             .intValue());
         if (!isSalted) {
-            assertEquals("PARALLEL 5-WAY",
+            // When Parallel stats is actually disabled, it is PARALLEL 4-WAY
+            //  CLIENT PARALLEL 4-WAY FULL SCAN OVER T_N000001
+            //  SERVER SORTED BY [C2.V1] CLIENT MERGE SORT CLIENT OFFSET 10
+            // When enabled, it is 5-WAY
+            assertEquals("PARALLEL 4-WAY",
                 explainPlanAttributes.getIteratorTypeAndScanSize());
         } else {
             assertEquals("PARALLEL 10-WAY",

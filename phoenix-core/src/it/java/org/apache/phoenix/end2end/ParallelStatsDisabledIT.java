@@ -22,6 +22,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.hbase.regionserver.ScanInfoUtil;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -58,6 +59,7 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(ScanInfoUtil.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
+        props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -66,13 +68,13 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
         BaseTest.freeResourcesIfBeyondThreshold();
     }
 
-    protected ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder) throws SQLException {
+    public static ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder) throws SQLException {
         PreparedStatement statement = conn.prepareStatement(queryBuilder.build());
         ResultSet rs = statement.executeQuery();
         return rs;
     }
 
-    protected ResultSet executeQueryThrowsException(Connection conn, QueryBuilder queryBuilder,
+    public static ResultSet executeQueryThrowsException(Connection conn, QueryBuilder queryBuilder,
             String expectedPhoenixExceptionMsg, String expectedSparkExceptionMsg) {
         ResultSet rs = null;
         try {
@@ -85,7 +87,7 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
         return rs;
     }
 
-    protected void validateQueryPlan(Connection conn, QueryBuilder queryBuilder, String expectedPhoenixPlan, String expectedSparkPlan) throws SQLException {
+    public static void validateQueryPlan(Connection conn, QueryBuilder queryBuilder, String expectedPhoenixPlan, String expectedSparkPlan) throws SQLException {
         if (StringUtils.isNotBlank(expectedPhoenixPlan)) {
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + queryBuilder.build());
             assertEquals(expectedPhoenixPlan, QueryUtil.getExplainPlan(rs));

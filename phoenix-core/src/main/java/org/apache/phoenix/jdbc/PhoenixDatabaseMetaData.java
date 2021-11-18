@@ -220,7 +220,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String TRANSFORM_JOB_ID = "JOB_ID";
     public static final String TRANSFORM_RETRY_COUNT = "RETRY_COUNT";
     public static final String TRANSFORM_START_TS = "START_TS";
-    public static final String TRANSFORM_END_TS = "END_TS";
+    public static final String TRANSFORM_LAST_STATE_TS = "END_TS";
     public static final String OLD_METADATA = "OLD_METADATA";
     public static final String NEW_METADATA = "NEW_METADATA";
     public static final String TRANSFORM_FUNCTION = "TRANSFORM_FUNCTION";

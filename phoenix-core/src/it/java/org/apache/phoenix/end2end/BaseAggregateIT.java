@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.end2end.ParallelStatsDisabledIT.executeQuery;
+import static org.apache.phoenix.end2end.ParallelStatsDisabledIT.executeQueryThrowsException;
+import static org.apache.phoenix.end2end.ParallelStatsDisabledIT.validateQueryPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -569,7 +572,8 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
             explainPlanAttributes.getServerAggregate());
         TestUtil.analyzeTable(conn, tableName);
         List<KeyRange> splits = TestUtil.getAllSplits(conn, tableName);
-        assertEquals(nGuidePosts, splits.size());
+        // nGuideposts when stats are enabled, 4 when disabled
+        assertEquals(4, splits.size());
     }
     
     @Test
