@@ -22,6 +22,7 @@ import org.apache.hadoop.hbase.client.MasterRegistry;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -30,19 +31,20 @@ import org.junit.experimental.categories.Category;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertTrue;
 
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class HRpcRegistryIT extends ParallelStatsDisabledIT {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        Map<String, String> serverProps = Collections.singletonMap(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
-                MasterRegistry.class.getName());
+        Map<String, String> serverProps = Collections.singletonMap(QueryUtil.IS_HREGISTRY_CONNECTION, "true");
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(serverProps.entrySet().iterator()));
     }
 
@@ -75,5 +77,9 @@ public class HRpcRegistryIT extends ParallelStatsDisabledIT {
         PreparedStatement statement = conn.prepareStatement(query);
         statement.executeUpdate();
         conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + testTable + "");
+        assertTrue(rs.next());
+
     }
 }

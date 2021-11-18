@@ -138,6 +138,7 @@ public final class QueryUtil {
      */
     public static final int DATA_TYPE_NAME_POSITION = 6;
 
+    public static final String IS_HREGISTRY_CONNECTION = "IS_HREGISTRY_CONNECTION";
     public static final String IS_SERVER_CONNECTION = "IS_SERVER_CONNECTION";
     private static final String SELECT = "SELECT";
     private static final String FROM = "FROM";
@@ -445,12 +446,11 @@ public final class QueryUtil {
         // read the hbase properties from the configuration
 
         boolean zkRegistry = true;
-        String regKey = conf.get(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY);
+        String regKey = conf.get(IS_HREGISTRY_CONNECTION);
         if (!Strings.isNullOrEmpty(regKey)) {
-            if (regKey.equalsIgnoreCase(MasterRegistry.class.getName())) {
-                zkRegistry = false;
-            }
+            zkRegistry = false;
         }
+
         String url;
         if (zkRegistry) {
             int port = getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT, props, conf);
