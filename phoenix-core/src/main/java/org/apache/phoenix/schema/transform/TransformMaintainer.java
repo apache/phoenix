@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.ByteStringer;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
@@ -130,6 +131,10 @@ public class TransformMaintainer extends IndexMaintainer {
         this.isOldTableSalted = isOldTableSalted;
     }
 
+    public Set<ColumnReference> getAllColumns() {
+        return new HashSet<>();
+    }
+
     private TransformMaintainer(final PTable oldTable, final PTable newTable, PhoenixConnection connection) {
         this(oldTable.getRowKeySchema(), oldTable.getBucketNum() != null);
         this.newTableRowKeyOrderOptimizable = newTable.rowKeyOrderOptimizable();
@@ -140,7 +145,7 @@ public class TransformMaintainer extends IndexMaintainer {
         this.oldTableEncodingScheme = oldTable.getEncodingScheme() == null ? PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : oldTable.getEncodingScheme();
         this.oldTableImmutableStorageScheme = oldTable.getImmutableStorageScheme() == null ? PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN : oldTable.getImmutableStorageScheme();
 
-        this.newTableName = SchemaUtil.getTableName(newTable.getSchemaName(), newTable.getTableName()).getBytes();
+        this.newTableName = newTable.getPhysicalName().getBytes();
         boolean newTableWALDisabled = newTable.isWALDisabled();
         int nNewTableColumns = newTable.getColumns().size();
         int nNewTablePKColumns = newTable.getPKColumns().size();
@@ -297,14 +302,11 @@ public class TransformMaintainer extends IndexMaintainer {
             cRefBuilder.setFamily(ByteStringer.wrap(dataTableColRef.getFamily()));
             cRefBuilder.setQualifier(ByteStringer.wrap(dataTableColRef.getQualifier()));
             builder.addOldTableColRefForCoveredColumns(cRefBuilder.build());
-            if (maintainer.newTableEncodingScheme != NON_ENCODED_QUALIFIERS) {
-                // We need to serialize the colRefs of new tables only in case of encoded column names.
-                ColumnReference newTableColRef = e.getValue();
-                cRefBuilder = ServerCachingProtos.ColumnReference.newBuilder();
-                cRefBuilder.setFamily(ByteStringer.wrap(newTableColRef.getFamily()));
-                cRefBuilder.setQualifier(ByteStringer.wrap(newTableColRef.getQualifier()));
-                builder.addNewTableColRefForCoveredColumns(cRefBuilder.build());
-            }
+            ColumnReference newTableColRef = e.getValue();
+            cRefBuilder = ServerCachingProtos.ColumnReference.newBuilder();
+            cRefBuilder.setFamily(ByteStringer.wrap(newTableColRef.getFamily()));
+            cRefBuilder.setQualifier(ByteStringer.wrap(newTableColRef.getQualifier()));
+            builder.addNewTableColRefForCoveredColumns(cRefBuilder.build());
         }
 
         builder.setNewTableColumnCount(maintainer.newTableColumnCount);
@@ -383,19 +385,12 @@ public class TransformMaintainer extends IndexMaintainer {
         List<ServerCachingProtos.ColumnReference> oldTableColRefsForCoveredColumnsList = proto.getOldTableColRefForCoveredColumnsList();
         List<ServerCachingProtos.ColumnReference> newTableColRefsForCoveredColumnsList = proto.getNewTableColRefForCoveredColumnsList();
         maintainer.coveredColumnsMap = Maps.newHashMapWithExpectedSize(oldTableColRefsForCoveredColumnsList.size());
-        boolean encodedColumnNames = maintainer.newTableEncodingScheme != NON_ENCODED_QUALIFIERS;
         Iterator<ServerCachingProtos.ColumnReference> newTableColRefItr = newTableColRefsForCoveredColumnsList.iterator();
         for (ServerCachingProtos.ColumnReference colRefFromProto : oldTableColRefsForCoveredColumnsList) {
             ColumnReference oldTableColRef = new ColumnReference(colRefFromProto.getFamily().toByteArray(), colRefFromProto.getQualifier().toByteArray());
             ColumnReference newTableColRef;
-            if (encodedColumnNames) {
-                ServerCachingProtos.ColumnReference fromProto = newTableColRefItr.next();
-                newTableColRef = new ColumnReference(fromProto.getFamily().toByteArray(), fromProto.getQualifier().toByteArray());
-            } else {
-                byte[] cq = oldTableColRef.getQualifier();
-                byte[] cf = oldTableColRef.getFamily();
-                newTableColRef = new ColumnReference(cf, cq);
-            }
+            ServerCachingProtos.ColumnReference fromProto = newTableColRefItr.next();
+            newTableColRef = new ColumnReference(fromProto.getFamily().toByteArray(), fromProto.getQualifier().toByteArray());
             maintainer.coveredColumnsMap.put(oldTableColRef, newTableColRef);
         }
         maintainer.logicalNewTableName = proto.getLogicalNewTableName();
@@ -460,18 +455,30 @@ public class TransformMaintainer extends IndexMaintainer {
             oldTableRowKeySchema.iterator(rowKeyPtr, ptr, dataPosOffset);
 
             // Write new table row key
+            int trailingVariableWidthColumnNum = 0;
             while (oldTableRowKeySchema.next(ptr, dataPosOffset, maxRowKeyOffset) != null) {
                 output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
                 if (!oldTableRowKeySchema.getField(dataPosOffset).getDataType().isFixedWidth()) {
                     output.writeByte(SchemaUtil.getSeparatorByte(newTableRowKeyOrderOptimizable, ptr.getLength()==0
                             , oldTableRowKeySchema.getField(dataPosOffset)));
+                    trailingVariableWidthColumnNum++;
+                } else {
+                    trailingVariableWidthColumnNum = 0;
                 }
+
                 dataPosOffset++;
             }
 
             byte[] newTableRowKey = stream.getBuffer();
             // Remove trailing nulls
             int length = stream.size();
+            // The existing code does not eliminate the separator if the data type is not nullable. It not clear why.
+            // The actual bug is in the calculation of maxTrailingNulls with view indexes. So, in order not to impact some other cases, we should keep minLength check here.
+            while (trailingVariableWidthColumnNum > 0 && length > 0 && newTableRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
+                length--;
+                trailingVariableWidthColumnNum--;
+            }
+
             if (isNewTableSalted) {
                 // Set salt byte
                 byte saltByte = SaltingUtil.getSaltingByte(newTableRowKey, SaltingUtil.NUM_SALTING_BYTES, length-SaltingUtil.NUM_SALTING_BYTES, nNewTableSaltBuckets);
@@ -483,11 +490,13 @@ public class TransformMaintainer extends IndexMaintainer {
         }
     }
 
-    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable oldRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
+    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable oldRowKeyPtr,
+                                   long ts, byte[] regionStartKey, byte[] regionEndKey, boolean verified) throws IOException {
         byte[] newRowKey = this.buildRowKey(valueGetter, oldRowKeyPtr, regionStartKey, regionEndKey, ts);
         return buildUpdateMutation(kvBuilder, valueGetter, oldRowKeyPtr, ts, regionStartKey, regionEndKey,
                 newRowKey, this.getEmptyKeyValueFamily(), coveredColumnsMap,
-                newTableEmptyKeyValueRef, newTableWALDisabled, oldTableImmutableStorageScheme, newTableImmutableStorageScheme, newTableEncodingScheme, false);
+                newTableEmptyKeyValueRef, newTableWALDisabled, oldTableImmutableStorageScheme, newTableImmutableStorageScheme,
+                newTableEncodingScheme, oldTableEncodingScheme, verified);
     }
 
     public Delete buildRowDeleteMutation(byte[] rowKey, DeleteType deleteType, long ts) {

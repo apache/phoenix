@@ -67,6 +67,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.Format;
 import java.text.SimpleDateFormat;
@@ -2236,23 +2237,19 @@ public class UpgradeUtil {
                     readOnlyProps, PhoenixRuntime.getCurrentScn(readOnlyProps), fullTableName,
                     table.getType(),conn.getTenantId());
             // clear the cache and get new table
-            conn.removeTable(conn.getTenantId(), fullTableName,
-                table.getParentName() != null ? table.getParentName().getString() : null,
-                table.getTimeStamp());
-            byte[] tenantIdBytes = conn.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY :
-                    conn.getTenantId().getBytes();
-            conn.getQueryServices().clearTableFromCache(
-                    tenantIdBytes,
-                    table.getSchemaName().getBytes(), table.getTableName().getBytes(),
-                    PhoenixRuntime.getCurrentScn(readOnlyProps));
-            MetaDataMutationResult result =
-                    new MetaDataClient(conn).updateCache(conn.getTenantId(), schemaName, tableName,
-                        true);
+            MetaDataMutationResult result = clearCacheAndGetNewTable(conn,
+                    conn.getTenantId(),
+                    table.getSchemaName()==null?null:table.getSchemaName().getString(),
+                    table.getTableName().getString(),
+                    table.getParentName()==null?null:table.getParentName().getString(),
+                    table.getTimeStamp());
+
             if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                 throw new TableNotFoundException(schemaName, fullTableName);
             }
             table = result.getTable();
-            
+            byte[] tenantIdBytes = conn.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY :
+                    conn.getTenantId().getBytes();
             // check whether table is properly upgraded before upgrading indexes
             if (table.isNamespaceMapped()) {
                 for (PTable index : table.getIndexes()) {
@@ -2309,6 +2306,7 @@ public class UpgradeUtil {
                                 index.getTableName());
                         conn.commit();
                     }
+
                     conn.getQueryServices().clearTableFromCache(
                             tenantIdBytes,
                             index.getSchemaName().getBytes(), index.getTableName().getBytes(),
@@ -2358,6 +2356,30 @@ public class UpgradeUtil {
         }
     }
 
+    public static MetaDataMutationResult clearCacheAndGetNewTable(PhoenixConnection conn, PName tenantId,
+                                                                  String schemaName, String tableName, String parentName, long timestamp)
+            throws SQLException {
+        clearCache(conn, tenantId, schemaName, tableName, parentName, timestamp);
+        MetaDataMutationResult result =
+                new MetaDataClient(conn).updateCache(tenantId, schemaName, tableName,
+                        true);
+        return result;
+    }
+
+    public static void clearCache(PhoenixConnection conn, PName tenantId,
+                                                String schemaName, String tableName, String parentName, long timestamp)
+            throws SQLException {
+        conn.removeTable(tenantId, SchemaUtil.getTableName(schemaName, tableName),
+                parentName, timestamp);
+        byte[] tenantIdBytes = tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY :
+                tenantId.getBytes();
+        byte[] schemaBytes = schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY :
+                schemaName.getBytes();
+        conn.getQueryServices().clearTableFromCache(
+                tenantIdBytes,
+                schemaBytes, tableName.getBytes(),
+                PhoenixRuntime.getCurrentScn(conn.getQueryServices().getProps()));
+    }
     public static boolean isUpdateViewIndexIdColumnDataTypeFromShortToLongNeeded(
             PhoenixConnection metaConnection, byte[] rowKey, byte[] syscatBytes) {
         try (Table sysTable = metaConnection.getQueryServices().getTable(syscatBytes)) {

@@ -417,6 +417,50 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testPartialUpdateSingleCellTable() throws Exception {
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), testProps)) {
+            conn.setAutoCommit(true);
+            String tableName = "TBL_" + generateUniqueName();
+            String idxName = "IND_" + generateUniqueName();
+
+            createTableAndIndex(conn, tableName, idxName, this.tableDDLOptions, false,3);
+            assertMetadata(conn, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, tableName);
+            assertMetadata(conn, SINGLE_CELL_ARRAY_WITH_OFFSETS, TWO_BYTE_QUALIFIERS, idxName);
+
+            // Partial update 1st row
+            String upsert = "UPSERT INTO " + tableName + " (PK1, INT_PK, V4) VALUES ('PK1',1,'UpdatedV4')";
+            conn.createStatement().execute(upsert);
+            conn.commit();
+            String selectFromData = "SELECT /*+ NO_INDEX */ PK1, INT_PK, V1, V2, V4 FROM " + tableName + " where INT_PK = 1 and V4 LIKE 'UpdatedV4'";
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectFromData);
+            String actualExplainPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(actualExplainPlan.contains(tableName));
+
+            rs = conn.createStatement().executeQuery(selectFromData);
+            assertTrue(rs.next());
+            assertEquals("PK1", rs.getString(1));
+            assertEquals(1, rs.getInt(2));
+            assertEquals("V11", rs.getString(3));
+            assertEquals(2, rs.getInt(4));
+            assertFalse(rs.next());
+
+            String selectFromIndex = "SELECT PK1, INT_PK, V1, V2, V4 FROM " + tableName + " where V2 >= 2 and V4 = 'UpdatedV4'";
+            rs = conn.createStatement().executeQuery("EXPLAIN " + selectFromIndex);
+            actualExplainPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(actualExplainPlan.contains(idxName));
+
+            rs = conn.createStatement().executeQuery(selectFromIndex);
+            assertTrue(rs.next());
+            assertEquals("PK1", rs.getString(1));
+            assertEquals(1, rs.getInt(2));
+            assertEquals("V11", rs.getString(3));
+            assertEquals(2, rs.getInt(4));
+            assertFalse(rs.next());
+        }
+    }
+
     private Connection getTenantConnection(String tenantId) throws Exception {
         Properties tenantProps = PropertiesUtil.deepCopy(testProps);
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);

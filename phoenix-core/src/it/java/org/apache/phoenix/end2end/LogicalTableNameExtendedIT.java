@@ -22,6 +22,7 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
@@ -275,12 +276,16 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
         String schemaName = "S_" + generateUniqueName();
         String tableName = "TBL_" + generateUniqueName();
         String viewName = "VW1_" + generateUniqueName();
+        String viewName2 = "VW2_" + generateUniqueName();
         String viewIndexName1 = "VWIDX1_" + generateUniqueName();
         String viewIndexName2 = "VWIDX2_" + generateUniqueName();
+        String view2IndexName1 = "VW2IDX1_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         String fullViewName = SchemaUtil.getTableName(schemaName, viewName);
+        String fullViewName2 = SchemaUtil.getTableName(schemaName, viewName2);
         String fullViewIndex1Name = SchemaUtil.getTableName(schemaName, viewIndexName1);
         String fullViewIndex2Name = SchemaUtil.getTableName(schemaName, viewIndexName2);
+        String fullView2Index1Name = SchemaUtil.getTableName(schemaName, view2IndexName1);
         String fullTableHName = schemaName + ":" + tableName;
         try (Connection conn = getConnection(propsNamespace)) {
             conn.setAutoCommit(true);
@@ -302,6 +307,17 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
 
             validateIndex(conn, fullViewIndex1Name, true, expected);
             rs = conn.createStatement().executeQuery("SELECT * FROM " + fullViewIndex2Name + " WHERE \"0:VIEW_COL1\"='VIEW_COL1_10'");
+            assertEquals(true, rs.next());
+            assertEquals("VIEW_COL1_10", rs.getString(1));
+            assertEquals("PK10", rs.getString(2));
+            assertEquals("VIEW_COL2_10", rs.getString(3));
+            assertEquals(false, rs.next());
+
+            conn.createStatement().execute("CREATE VIEW " + fullViewName2 + "  (VIEW_COL1 VARCHAR, VIEW_COL2 VARCHAR) AS SELECT * FROM "
+            + fullTableName);
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + view2IndexName1 + " ON " + fullViewName2 + " (VIEW_COL1) include (VIEW_COL2)");
+            populateView(conn, fullViewName2, 20, 1);
+            rs = conn.createStatement().executeQuery("SELECT * FROM " + fullView2Index1Name + " WHERE \"0:VIEW_COL1\"='VIEW_COL1_10'");
             assertEquals(true, rs.next());
             assertEquals("VIEW_COL1_10", rs.getString(1));
             assertEquals("PK10", rs.getString(2));

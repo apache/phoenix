@@ -172,7 +172,8 @@ public class AggregateIT extends BaseAggregateIT {
         assertTrue(rs.next());
         assertEquals(0,rs.getInt(1));
         initAvgGroupTable(conn, tableName, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + "=20 ");
-        testAvgGroupByOrderPreserving(conn, tableName, 13);
+        // When ParallelStats are disabled it is 4. When enabled it is 13
+        testAvgGroupByOrderPreserving(conn, tableName, 4);
         rs = executeQuery(conn, queryBuilder);
         assertTrue(rs.next());
         assertEquals(13,rs.getInt(1));
@@ -185,7 +186,7 @@ public class AggregateIT extends BaseAggregateIT {
         rs = executeQuery(conn, queryBuilder);
         assertTrue(rs.next());
         assertEquals(13,rs.getInt(1));
-        testAvgGroupByOrderPreserving(conn, tableName, 13);
+        testAvgGroupByOrderPreserving(conn, tableName, 4);
         conn.createStatement().execute("ALTER TABLE " + tableName + " SET " + PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + "=100");
         testAvgGroupByOrderPreserving(conn, tableName, 6);
         conn.createStatement().execute("ALTER TABLE " + tableName + " SET " + PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + "=null");
