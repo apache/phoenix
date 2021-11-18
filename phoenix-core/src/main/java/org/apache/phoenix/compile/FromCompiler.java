@@ -787,6 +787,7 @@ public class FromCompiler {
                             tableNode.getName().equals(mutatingTableName)) {
                         alwaysHitServer = true;
                     }
+
                     try {
                         MetaDataMutationResult result = client.updateCache(tenantId, schemaName, tableName, alwaysHitServer);
                         timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
@@ -816,8 +817,8 @@ public class FromCompiler {
                             MetaDataMutationResult result = client.updateCache(schemaName, tableName);
                             if (result.wasUpdated()) {
                                 timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
-                                theTable = result.getTable();
                             }
+                            theTable = result.getTable();
                         }
                         if (theTable == null) {
                             throw new TableNotFoundException(schemaName, tableName, timeStamp);

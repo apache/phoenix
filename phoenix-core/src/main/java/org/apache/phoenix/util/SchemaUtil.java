@@ -1110,10 +1110,20 @@ public class SchemaUtil {
         return TableName.valueOf(schemaName, tableName);
     }
 
+    public static PName getPhysicalHBaseTableName(byte[] fullTableName, boolean isNamespaceMappingEnabled) {
+        String tableName = getTableNameFromFullName(fullTableName);
+        String schemaName = getSchemaNameFromFullName(fullTableName);
+        return getPhysicalHBaseTableName(schemaName, tableName, isNamespaceMappingEnabled);
+    }
+
     public static PName getPhysicalHBaseTableName(String schemaName, String tableName, boolean isNamespaceMapped) {
         if (!isNamespaceMapped) { return PNameFactory.newName(getTableNameAsBytes(schemaName, tableName)); }
         if (schemaName == null || schemaName.isEmpty()) { return PNameFactory.newName(tableName); }
         return PNameFactory.newName(schemaName + QueryConstants.NAMESPACE_SEPARATOR + tableName);
+    }
+
+    public static String replaceNamespaceSeparator(PName name) {
+        return name.getString().replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR);
     }
 
     public static boolean isSchemaCheckRequired(PTableType tableType, ReadOnlyProps props) {

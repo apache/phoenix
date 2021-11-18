@@ -18,6 +18,8 @@
 package org.apache.phoenix.mapreduce.index;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+
+import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
@@ -37,6 +39,8 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -47,6 +51,7 @@ import java.util.List;
 
 public class IndexVerificationOutputRepository implements AutoCloseable {
     public static final byte[] ROW_KEY_SEPARATOR_BYTE = Bytes.toBytes("|");
+    private static final Logger LOGGER = LoggerFactory.getLogger(IndexVerificationOutputRepository.class);
 
     private Table indexTable;
     private byte[] indexName;
@@ -184,7 +189,11 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
                 TableDescriptor tableDescriptor = TableDescriptorBuilder
                     .newBuilder(TableName.valueOf(OUTPUT_TABLE_NAME))
                     .setColumnFamily(columnDescriptor).build();
-                admin.createTable(tableDescriptor);
+                try {
+                    admin.createTable(tableDescriptor);
+                } catch (TableExistsException e) {
+                    LOGGER.warn("Table exists, ignoring", e);
+                }
                 outputTable = admin.getConnection().getTable(outputTableName);
             }
         }

@@ -1058,15 +1058,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey, ts);
         return buildUpdateMutation(kvBuilder, valueGetter, dataRowKeyPtr, ts, regionStartKey, regionEndKey,
                 indexRowKey, this.getEmptyKeyValueFamily(), coveredColumnsMap,
-                indexEmptyKeyValueRef, indexWALDisabled, dataImmutableStorageScheme, immutableStorageScheme, encodingScheme, verified);
+                indexEmptyKeyValueRef, indexWALDisabled, dataImmutableStorageScheme, immutableStorageScheme, encodingScheme, dataEncodingScheme, verified);
     }
 
     public static Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable dataRowKeyPtr, long ts,
                                    byte[] regionStartKey, byte[] regionEndKey, byte[] destRowKey, ImmutableBytesPtr emptyKeyValueCFPtr,
                                           Map<ColumnReference, ColumnReference> coveredColumnsMap,
                                           ColumnReference destEmptyKeyValueRef, boolean destWALDisabled,
-                                          ImmutableStorageScheme srcImmutableStroageScheme, ImmutableStorageScheme destImmutableStorageScheme,
-                                          QualifierEncodingScheme destEncodingScheme, boolean verified) throws IOException {
+                                          ImmutableStorageScheme srcImmutableStorageScheme, ImmutableStorageScheme destImmutableStorageScheme,
+                                          QualifierEncodingScheme destEncodingScheme, QualifierEncodingScheme srcEncodingScheme, boolean verified) throws IOException {
         Set<ColumnReference> coveredColumns = coveredColumnsMap.keySet();
         Put put = null;
         // New row being inserted: add the empty key value
@@ -1115,7 +1115,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     ColumnReference indexColRef = colRefPair.getFirst();
                     ColumnReference dataColRef = colRefPair.getSecond();
                     byte[] value = null;
-                    if (srcImmutableStroageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                    if (srcImmutableStorageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
                         Expression expression = new SingleCellColumnExpression(new PDatum() {
                             @Override public boolean isNullable() {
                                 return false;
@@ -1168,17 +1168,81 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 put.add(kvBuilder.buildPut(rowKey, colFamilyPtr, QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES_PTR, ts, ptr));
             }
         } else {
-            for (ColumnReference ref : coveredColumns) {
-                ColumnReference indexColRef = coveredColumnsMap.get(ref);
-                ImmutableBytesPtr cq = indexColRef.getQualifierWritable();
-                ImmutableBytesPtr cf = indexColRef.getFamilyWritable();
-                ImmutableBytesWritable value = valueGetter.getLatestValue(ref, ts);
-                if (value != null && value != ValueGetter.HIDDEN_BY_DELETE) {
-                    if (put == null) {
-                        put = new Put(destRowKey);
-                        put.setDurability(!destWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
+            if (srcImmutableStorageScheme == destImmutableStorageScheme) { //both ONE_CELL
+                for (ColumnReference ref : coveredColumns) {
+                    ColumnReference indexColRef = coveredColumnsMap.get(ref);
+                    ImmutableBytesPtr cq = indexColRef.getQualifierWritable();
+                    ImmutableBytesPtr cf = indexColRef.getFamilyWritable();
+                    ImmutableBytesWritable value = valueGetter.getLatestValue(ref, ts);
+                    if (value != null && value != ValueGetter.HIDDEN_BY_DELETE) {
+                        if (put == null) {
+                            put = new Put(destRowKey);
+                            put.setDurability(!destWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
+                        }
+                        put.add(kvBuilder.buildPut(rowKey, cf, cq, ts, value));
                     }
-                    put.add(kvBuilder.buildPut(rowKey, cf, cq, ts, value));
+                }
+            } else {
+                // Src is SINGLE_CELL, destination is ONE_CELL
+                Map<ImmutableBytesPtr, List<Pair<ColumnReference, ColumnReference>>> familyToColListMap = Maps.newHashMap();
+                for (ColumnReference ref : coveredColumns) {
+                    ColumnReference indexColRef = coveredColumnsMap.get(ref);
+                    ImmutableBytesPtr cf = new ImmutableBytesPtr(indexColRef.getFamily());
+                    if (!familyToColListMap.containsKey(cf)) {
+                        familyToColListMap.put(cf, Lists.<Pair<ColumnReference, ColumnReference>>newArrayList());
+                    }
+                    familyToColListMap.get(cf).add(Pair.newPair(indexColRef, ref));
+                }
+                // iterate over each column family and create a byte[] containing all the columns
+                for (Entry<ImmutableBytesPtr, List<Pair<ColumnReference, ColumnReference>>> entry : familyToColListMap.entrySet()) {
+                    byte[] columnFamily = entry.getKey().copyBytesIfNecessary();
+                    List<Pair<ColumnReference, ColumnReference>> colRefPairs = entry.getValue();
+                    int maxEncodedColumnQualifier = Integer.MIN_VALUE;
+                    // find the max col qualifier
+                    for (Pair<ColumnReference, ColumnReference> colRefPair : colRefPairs) {
+                        maxEncodedColumnQualifier = Math.max(maxEncodedColumnQualifier, srcEncodingScheme.decode(colRefPair.getSecond().getQualifier()));
+                    }
+                    // set the values of the columns
+                    for (Pair<ColumnReference, ColumnReference> colRefPair : colRefPairs) {
+                        ColumnReference indexColRef = colRefPair.getFirst();
+                        ColumnReference dataColRef = colRefPair.getSecond();
+                        byte[] valueBytes = null;
+                            Expression expression = new SingleCellColumnExpression(new PDatum() {
+                                @Override public boolean isNullable() {
+                                    return false;
+                                }
+
+                                @Override public SortOrder getSortOrder() {
+                                    return null;
+                                }
+
+                                @Override public Integer getScale() {
+                                    return null;
+                                }
+
+                                @Override public Integer getMaxLength() {
+                                    return null;
+                                }
+
+                                @Override public PDataType getDataType() {
+                                    return null;
+                                }
+                            }, dataColRef.getFamily(), dataColRef.getQualifier(), srcEncodingScheme,
+                                    srcImmutableStorageScheme);
+                            ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+                            expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
+                            valueBytes = ptr.copyBytesIfNecessary();
+
+                        if (valueBytes != null) {
+                            ImmutableBytesPtr cq = indexColRef.getQualifierWritable();
+                            ImmutableBytesPtr cf = indexColRef.getFamilyWritable();
+                            if (put == null) {
+                                put = new Put(destRowKey);
+                                put.setDurability(!destWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
+                            }
+                            put.add(kvBuilder.buildPut(rowKey, cf, cq, ts, new ImmutableBytesWritable(valueBytes)));
+                        }
+                    }
                 }
             }
         }

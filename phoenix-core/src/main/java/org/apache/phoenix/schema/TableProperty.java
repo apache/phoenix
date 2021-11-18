@@ -203,6 +203,20 @@ public enum TableProperty {
 
     },
 
+    // Same as COLUMN_ENCODED_BYTES. If we don't have this one, isPhoenixProperty returns false.
+    ENCODING_SCHEME(PhoenixDatabaseMetaData.ENCODING_SCHEME, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false, false) {
+        @Override
+        public Object getValue(Object value) {
+            return COLUMN_ENCODED_BYTES.getValue(value);
+        }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.getEncodingScheme();
+        }
+
+    },
+
     IMMUTABLE_STORAGE_SCHEME(PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false, false) {
         @Override
         public ImmutableStorageScheme getValue(Object value) {

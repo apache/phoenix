@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.schema.task;
 
+import org.apache.commons.lang3.StringUtils;
+import org.apache.phoenix.schema.transform.SystemTransformRecord;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -27,7 +30,6 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.TaskMetaDataProtos
     .TaskMetaDataService;
-import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.hbase.ipc.RpcCall;
 import org.apache.hadoop.hbase.ipc.RpcUtil;
 import org.apache.hadoop.hbase.security.User;
@@ -512,5 +514,16 @@ public class Task {
             this.taskType = taskType;
         }
 
+        public boolean isMatchingTask(SystemTransformRecord transformRecord) {
+            if (getTaskType() != PTable.TaskType.TRANSFORM_MONITOR) {
+                return false;
+            }
+            if (StringUtils.equals(transformRecord.getLogicalTableName(), getTableName())
+                && StringUtils.equals(transformRecord.getTenantId(), getTenantId())
+                && StringUtils.equals(transformRecord.getSchemaName(), getSchemaName())) {
+                return true;
+            }
+            return false;
+        }
     }
 }

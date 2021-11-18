@@ -25,6 +25,9 @@ import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLi
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
 import static org.apache.phoenix.coprocessor.tasks.IndexRebuildTask.INDEX_NAME;
 import static org.apache.phoenix.coprocessor.tasks.IndexRebuildTask.REBUILD_ALL;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_LOCAL_OR_VIEW_INDEX;
+import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
+import static org.apache.phoenix.exception.SQLExceptionCode.PARENT_TABLE_NOT_FOUND;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
@@ -2398,11 +2401,15 @@ public class MetaDataClient {
                         linkStatement.setString(4, physicalName.getString());
                         linkStatement.setByte(5, LinkType.PHYSICAL_TABLE.getSerializedValue());
                         if (tableType == PTableType.VIEW) {
-                            PTable logicalTable = connection.getTable(new PTableKey(null, physicalName.getString()
-                                    .replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR)));
+                            if (parent.getType() == PTableType.TABLE) {
+                                linkStatement.setString(4, SchemaUtil.getTableName(parent.getSchemaName().getString(),parent.getTableName().getString()));
+                                linkStatement.setLong(6, parent.getSequenceNumber());
+                            } else { //This is a grandchild view, find the physical base table
+                                PTable logicalTable = connection.getTable(new PTableKey(null, SchemaUtil.replaceNamespaceSeparator(physicalName)));
+                                linkStatement.setString(4, SchemaUtil.getTableName(logicalTable.getSchemaName().getString(),logicalTable.getTableName().getString()));
+                                linkStatement.setLong(6, logicalTable.getSequenceNumber());
+                            }
                             // Set link to logical name
-                            linkStatement.setString(4, SchemaUtil.getTableName(logicalTable.getSchemaName().getString(),logicalTable.getTableName().getString()));
-                            linkStatement.setLong(6, logicalTable.getSequenceNumber());
                             linkStatement.setString(7, null);
                         } else {
                             linkStatement.setLong(6, parent.getSequenceNumber());
@@ -3367,7 +3374,7 @@ public class MetaDataClient {
                         .setSchemaName(schemaName).setTableName(tableName).build().buildException();
             }
         } catch (TableNotFoundException e) {
-            if (!ifExists) {
+            if (!ifExists && !e.isThrownToForceReReadForTransformingTable()) {
                 if (tableType == PTableType.INDEX)
                     throw new IndexNotFoundException(e.getSchemaName(),
                             e.getTableName(), e.getTimeStamp());
@@ -3866,6 +3873,21 @@ public class MetaDataClient {
                 changingPhoenixTableProperty = evaluateStmtProperties(metaProperties,metaPropertiesEvaluated,table,schemaName,tableName);
 
                 boolean isTransformNeeded = Transform.checkIsTransformNeeded(metaProperties, schemaName, table, tableName, null, tenantIdToUse, connection);
+                if (isTransformNeeded) {
+                    // We can add a support for these later. For now, not supported.
+                    if (MetaDataUtil.hasLocalIndexTable(connection, physicalTableName.getBytes())) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_TRANSFORM_TABLE_WITH_LOCAL_INDEX)
+                                .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                    }
+                    if (table.isAppendOnlySchema()) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_TRANSFORM_TABLE_WITH_APPEND_ONLY_SCHEMA)
+                                .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                    }
+                    if (table.isTransactional()) {
+                        throw new SQLExceptionInfo.Builder(CANNOT_TRANSFORM_TRANSACTIONAL_TABLE)
+                                .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                    }
+                }
 
                 // If changing isImmutableRows to true or it's not being changed and is already true
                 boolean willBeImmutableRows = Boolean.TRUE.equals(metaPropertiesEvaluated.getIsImmutableRows()) || (metaPropertiesEvaluated.getIsImmutableRows() == null && table.isImmutableRows());
@@ -4801,7 +4823,7 @@ public class MetaDataClient {
 
                 if (isTransformNeeded) {
                     if (indexRef.getTable().getViewIndexId() != null) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_TRANSFORM_VIEW_INDEX)
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_TRANSFORM_LOCAL_OR_VIEW_INDEX)
                                 .setSchemaName(schemaName).setTableName(indexName).build().buildException();
                     }
                     try {
@@ -5150,6 +5172,17 @@ public class MetaDataClient {
     private boolean evaluateStmtProperties(MetaProperties metaProperties, MetaPropertiesEvaluated metaPropertiesEvaluated, PTable table, String schemaName, String tableName)
             throws SQLException {
         boolean changingPhoenixTableProperty = false;
+
+        if (metaProperties.getImmutableRowsProp() != null) {
+            if (metaProperties.getImmutableRowsProp().booleanValue() != table.isImmutableRows()) {
+                if (table.getImmutableStorageScheme() != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ALTER_IMMUTABLE_ROWS_PROPERTY)
+                            .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                }
+                metaPropertiesEvaluated.setIsImmutableRows(metaProperties.getImmutableRowsProp());
+                changingPhoenixTableProperty = true;
+            }
+        }
 
         if (metaProperties.getImmutableRowsProp() != null && table.getType() != INDEX) {
             if (metaProperties.getImmutableRowsProp().booleanValue() != table.isImmutableRows()) {

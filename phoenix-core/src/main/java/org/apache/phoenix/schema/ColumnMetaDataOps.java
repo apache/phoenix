@@ -81,9 +81,18 @@ public class ColumnMetaDataOps {
                     IS_ROW_TIMESTAMP +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
+    public static void addColumnMutation(PhoenixConnection connection, String tenantId, String schemaName, String tableName, PColumn column, String parentTableName, String pkName, Short keySeq, boolean isSalted) throws SQLException {
+        addColumnMutationInternal(connection, tenantId, schemaName, tableName, column, parentTableName, pkName, keySeq, isSalted);
+    }
+
     public static void addColumnMutation(PhoenixConnection connection, String schemaName, String tableName, PColumn column, String parentTableName, String pkName, Short keySeq, boolean isSalted) throws SQLException {
+        addColumnMutationInternal(connection, connection.getTenantId() == null ? null : connection.getTenantId().getString()
+                , schemaName, tableName, column, parentTableName, pkName, keySeq, isSalted);
+    }
+
+    private static void addColumnMutationInternal(PhoenixConnection connection, String tenantId, String schemaName, String tableName, PColumn column, String parentTableName, String pkName, Short keySeq, boolean isSalted) throws SQLException {
         try (PreparedStatement colUpsert = connection.prepareStatement(UPSERT_COLUMN)) {
-            colUpsert.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
+            colUpsert.setString(1, tenantId);
             colUpsert.setString(2, schemaName);
             colUpsert.setString(3, tableName);
             colUpsert.setString(4, column.getName().getString());

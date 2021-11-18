@@ -33,7 +33,6 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.phoenix.coprocessor.IndexToolVerificationResult;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.mapreduce.transform.TransformTool;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.PIndexState;
@@ -167,6 +166,10 @@ public class PhoenixIndexImportDirectReducer extends
                 try {
                     Transform.completeTransform(ConnectionUtil
                             .getInputConnection(context.getConfiguration()), context.getConfiguration());
+                    if (PhoenixConfigurationUtil.getForceCutover(context.getConfiguration())) {
+                        Transform.doForceCutover(ConnectionUtil
+                                .getInputConnection(context.getConfiguration()), context.getConfiguration());
+                    }
                 } catch (Exception e) {
                     LOGGER.error(" Failed to complete transform", e);
                     throw new RuntimeException(e.getMessage());

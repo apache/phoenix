@@ -157,7 +157,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_END_TS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_LAST_STATE_TS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_FUNCTION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_JOB_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_RETRY_COUNT;
@@ -562,20 +562,20 @@ public interface QueryConstants {
             TENANT_ID + " VARCHAR NULL,\n" +
             TABLE_SCHEM + " VARCHAR NULL," +
             LOGICAL_TABLE_NAME + " VARCHAR NOT NULL,\n" +
-            NEW_PHYS_TABLE_NAME + " VARCHAR NOT NULL,\n" +
-            TRANSFORM_TYPE + " INTEGER NOT NULL," +
             // Non-PK columns
+            NEW_PHYS_TABLE_NAME + " VARCHAR,\n" +
+            TRANSFORM_TYPE + " INTEGER," +
             LOGICAL_PARENT_NAME + " VARCHAR NULL,\n" + // If this is an index, Logical_Parent_Name is the data table name. Index name is not unique.
             TRANSFORM_STATUS + " VARCHAR NULL," +
             TRANSFORM_JOB_ID + " VARCHAR NULL," +
             TRANSFORM_RETRY_COUNT + " INTEGER NULL," +
             TRANSFORM_START_TS + " TIMESTAMP NULL," +
-            TRANSFORM_END_TS + " TIMESTAMP NULL," +
+            TRANSFORM_LAST_STATE_TS + " TIMESTAMP NULL," +
             OLD_METADATA + " VARCHAR NULL,\n" +
             NEW_METADATA + " VARCHAR NULL,\n" +
             TRANSFORM_FUNCTION + " VARCHAR NULL\n" +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
-            TENANT_ID + "," + TABLE_SCHEM + "," + LOGICAL_TABLE_NAME + "," + NEW_PHYS_TABLE_NAME + "," + TRANSFORM_TYPE + "))\n" +
+            TENANT_ID + "," + TABLE_SCHEM + "," + LOGICAL_TABLE_NAME + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.TTL + "=" + TRANSFORM_TABLE_TTL + ",\n" +     // 10 days

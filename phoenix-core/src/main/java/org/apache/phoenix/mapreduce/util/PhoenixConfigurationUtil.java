@@ -97,7 +97,15 @@ public final class PhoenixConfigurationUtil {
     
     /** For local indexes which are stored in a single separate physical table*/
     public static final String PHYSICAL_TABLE_NAME = "phoenix.output.table.name" ;
-    
+
+    public static final String TRANSFORM_RETRY_COUNT_VALUE = "phoenix.transform.retry.count";
+
+    public static final int DEFAULT_TRANSFORM_RETRY_COUNT = 50;
+
+    public static final String TRANSFORM_MONITOR_ENABLED = "phoenix.transform.monitor.enabled";
+
+    public static final boolean DEFAULT_TRANSFORM_MONITOR_ENABLED = true;
+
     public static final long DEFAULT_UPSERT_BATCH_SIZE = 1000;
     
     public static final String INPUT_CLASS = "phoenix.input.class";
@@ -208,6 +216,9 @@ public final class PhoenixConfigurationUtil {
 
     // Is the mapreduce used for table/index transform
     public static final String IS_TRANSFORMING_VALUE = "phoenix.mr.istransforming";
+
+    // Is force transform cutover
+    public static final String FORCE_CUTOVER_VALUE = "phoenix.mr.force.cutover";
 
     // Is the mapreduce used for table/index transform
     public static final String TRANSFORMING_TABLE_TYPE = "phoenix.mr.transform.tabletype";
@@ -631,6 +642,17 @@ public final class PhoenixConfigurationUtil {
     public static Boolean getIsTransforming(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return Boolean.valueOf(configuration.get(IS_TRANSFORMING_VALUE, "false"));
+    }
+
+    public static void setForceCutover(Configuration configuration, Boolean forceCutover) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(forceCutover);
+        configuration.set(FORCE_CUTOVER_VALUE, Boolean.toString(forceCutover));
+    }
+
+    public static Boolean getForceCutover(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return Boolean.valueOf(configuration.get(FORCE_CUTOVER_VALUE, "false"));
     }
 
     public static void setTransformingTableType(Configuration configuration,

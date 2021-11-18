@@ -789,7 +789,7 @@ public abstract class BaseTest {
             expectedColumnEncoding, String tableName)
             throws Exception {
         PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
-        PTable table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), tableName));
+        PTable table = PhoenixRuntime.getTableNoCache(phxConn, tableName);
         assertEquals(expectedStorageScheme, table.getImmutableStorageScheme());
         assertEquals(expectedColumnEncoding, table.getEncodingScheme());
     }

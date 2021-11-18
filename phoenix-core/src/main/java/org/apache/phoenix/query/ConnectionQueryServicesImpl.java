@@ -4546,8 +4546,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // No tables exist matching "SYSTEM\..*", they are all already in "SYSTEM:.*"
             if (tableNames.size() == 0) { return; }
             // Try to move any remaining tables matching "SYSTEM\..*" into "SYSTEM:"
-            if (tableNames.size() > 8) {
-                LOGGER.warn("Expected 8 system tables but found " + tableNames.size() + ":" + tableNames);
+            if (tableNames.size() > 9) {
+                LOGGER.warn("Expected 9 system tables but found " + tableNames.size() + ":" + tableNames);
             }
 
             byte[] mappedSystemTable = SchemaUtil

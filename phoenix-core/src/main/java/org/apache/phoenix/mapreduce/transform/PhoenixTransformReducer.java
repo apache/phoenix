@@ -19,21 +19,16 @@ package org.apache.phoenix.mapreduce.transform;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.phoenix.mapreduce.index.IndexTool;
-import org.apache.phoenix.mapreduce.index.IndexToolUtil;
 import org.apache.phoenix.mapreduce.index.PhoenixIndexImportDirectReducer;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
-import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.transform.Transform;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.SQLException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.getIndexVerifyType;
@@ -65,6 +60,9 @@ public class PhoenixTransformReducer extends
                          connection = ConnectionUtil.getInputConnection(context.getConfiguration())) {
                 // Complete full Transform and add a partial transform
                 Transform.completeTransform(connection, context.getConfiguration());
+                if (PhoenixConfigurationUtil.getForceCutover(context.getConfiguration())) {
+                    Transform.doForceCutover(connection, context.getConfiguration());
+                }
             } catch (Exception e) {
                 LOGGER.error(" Failed to complete transform", e);
                 throw new RuntimeException(e.getMessage());

@@ -22,6 +22,7 @@ import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL
 import static org.apache.phoenix.util.EncodedColumnsUtil.isReservedColumnQualifier;
 
 import java.io.DataOutputStream;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -201,7 +202,8 @@ public interface PTable extends PMetaDataEntity {
 
     public enum TaskType {
         DROP_CHILD_VIEWS((byte)1),
-        INDEX_REBUILD((byte)2);
+        INDEX_REBUILD((byte)2),
+        TRANSFORM_MONITOR((byte)3);
 
         private final byte[] byteValue;
         private final byte serializedValue;
@@ -250,6 +252,11 @@ public interface PTable extends PMetaDataEntity {
                 return  "FAILED";
             }
         },
+        RETRY {
+            public String toString() {
+                return  "RETRY";
+            }
+        },
     }
 
     public enum TransformType {
@@ -280,6 +287,17 @@ public interface PTable extends PMetaDataEntity {
             }
             return TransformType.values()[serializedValue-1];
         }
+        public static TransformType getPartialTransform(TransformType transformType) {
+            if (transformType == METADATA_TRANSFORM) {
+                return METADATA_TRANSFORM_PARTIAL;
+            }
+            return null;
+        }
+        public static boolean isPartialTransform(TransformType transformType){
+            List<PTable.TransformType> partials = new ArrayList<>();
+            partials.add(PTable.TransformType.METADATA_TRANSFORM_PARTIAL);
+            return partials.contains(transformType);
+        }
     }
 
     public enum TransformStatus {
@@ -291,6 +309,11 @@ public interface PTable extends PMetaDataEntity {
         STARTED {
             public String toString() {
                 return  "STARTED";
+            }
+        },
+        PENDING_CUTOVER {
+            public String toString() {
+                return  "PENDING_CUTOVER";
             }
         },
         COMPLETED {
