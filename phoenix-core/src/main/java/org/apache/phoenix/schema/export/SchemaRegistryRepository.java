@@ -59,12 +59,12 @@ public interface SchemaRegistryRepository extends Closeable {
      * @param schemaId schema identifier
      * @return a schema
      */
-    String getSchemaById(String schemaId);
+    String getSchemaById(String schemaId) throws IOException;
 
     /**
      * Return a schema from an external schema repository using information on a PTable
      * @param table a Phoenix PTable for a table or view
      * @return a schema
      */
-    String getSchemaByTable(PTable table);
+    String getSchemaByTable(PTable table) throws IOException;
 }
