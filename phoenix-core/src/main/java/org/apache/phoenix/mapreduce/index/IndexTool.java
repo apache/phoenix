@@ -666,9 +666,9 @@ public class IndexTool extends Configured implements Tool {
                 String snapshotName;
                 try {
                     admin = pConnection.getQueryServices().getAdmin();
-                    String pdataTableName = pDataTable.getName().getString();
-                    snapshotName = new StringBuilder(pdataTableName).append("-Snapshot").toString();
-                    admin.snapshot(snapshotName, TableName.valueOf(pdataTableName));
+                    TableName hDdataTableName = TableName.valueOf(pDataTable.getPhysicalName().getBytes());
+                    snapshotName = new StringBuilder(hDdataTableName.toString()).append("-Snapshot").toString();
+                    admin.snapshot(snapshotName, hDdataTableName);
                 } finally {
                     if (admin != null) {
                         admin.close();
@@ -1046,9 +1046,10 @@ public class IndexTool extends Configured implements Tool {
             throws SQLException, IOException, IllegalArgumentException {
         int numRegions;
 
+        TableName hDataName = TableName.valueOf(pDataTable.getPhysicalName().getBytes());
         try (org.apache.hadoop.hbase.client.Connection tempHConn = getTemporaryHConnection(pConnection);
                 RegionLocator regionLocator =
-                        tempHConn.getRegionLocator(TableName.valueOf(qDataTable))) {
+                        tempHConn.getRegionLocator(hDataName)) {
             numRegions = regionLocator.getStartKeys().length;
             if (autosplit && (numRegions <= autosplitNumRegions)) {
                 LOGGER.info(String.format(
@@ -1089,10 +1090,10 @@ public class IndexTool extends Configured implements Tool {
                 splitPoints[splitIdx++] = b.getRightBoundExclusive();
             }
             // drop table and recreate with appropriate splits
-            TableName indexTN = TableName.valueOf(pIndexTable.getPhysicalName().getBytes());
-            HTableDescriptor descriptor = admin.getTableDescriptor(indexTN);
-            admin.disableTable(indexTN);
-            admin.deleteTable(indexTN);
+            TableName hIndexName = TableName.valueOf(pIndexTable.getPhysicalName().getBytes());
+            HTableDescriptor descriptor = admin.getTableDescriptor(hIndexName);
+            admin.disableTable(hIndexName);
+            admin.deleteTable(hIndexName);
             admin.createTable(descriptor, splitPoints);
         }
     }
