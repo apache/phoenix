@@ -49,12 +49,12 @@ public class DefaultSchemaRegistryRepository implements SchemaRegistryRepository
     }
 
     @Override
-    public String getSchemaById(String schemaId) {
+    public String getSchemaById(String schemaId) throws IOException {
         return schemaMap.get(schemaId);
     }
 
     @Override
-    public String getSchemaByTable(PTable table) {
+    public String getSchemaByTable(PTable table) throws IOException {
         return schemaMap.get(getSchemaId(table));
     }
 
