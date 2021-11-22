@@ -55,7 +55,6 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
@@ -65,11 +64,11 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.BeforeParam;
 import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -112,6 +111,8 @@ import static org.junit.Assert.fail;
 public class IndexToolIT extends BaseTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexToolIT.class);
 
+    private static String tmpDir;
+
     private final boolean localIndex;
     private final boolean mutable;
     private final boolean transactional;
@@ -120,15 +121,17 @@ public class IndexToolIT extends BaseTest {
     private final String indexDDLOptions;
     private final boolean useSnapshot;
     private final boolean useTenantId;
+    private final boolean namespaceMapped;
 
     public IndexToolIT(String transactionProvider, boolean mutable, boolean localIndex,
-            boolean directApi, boolean useSnapshot, boolean useTenantId) {
+            boolean directApi, boolean useSnapshot, boolean useTenantId, boolean namespaceMapped) {
         this.localIndex = localIndex;
         this.mutable = mutable;
         this.transactional = transactionProvider != null;
         this.directApi = directApi;
         this.useSnapshot = useSnapshot;
         this.useTenantId = useTenantId;
+        this.namespaceMapped = namespaceMapped;
         StringBuilder optionBuilder = new StringBuilder();
         if (!mutable) {
             optionBuilder.append(" IMMUTABLE_ROWS=true ");
@@ -152,54 +155,77 @@ public class IndexToolIT extends BaseTest {
         this.indexDDLOptions = indexOptionBuilder.toString();
     }
 
-    @BeforeClass
-    public static synchronized void setup() throws Exception {
-        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
-        serverProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
-        serverProps.put(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB, Long.toString(5));
-        serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
-            QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        serverProps.put(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(8));
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
-        clientProps.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
-        clientProps.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
-        clientProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
-        clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-            new ReadOnlyProps(clientProps.entrySet().iterator()));
+    @BeforeParam
+    public static synchronized void setup(
+            String transactionProvider, boolean mutable, boolean localIndex,
+            boolean directApi, boolean useSnapshot, boolean useTenantId, boolean namespaceMapped)
+                    throws Exception {
+        if (clusterInitialized && Boolean.valueOf(namespaceMapped).equals(utility.getConfiguration()
+                .getBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, true))) {
+            //Perf optimization: no need to re-initialize the minicluster
+            return;
+        } else {
+            //This has been known to cause flakeyness
+            //Maybe we're gonna have to refactor the namespace
+            if(clusterInitialized) {
+                tearDownMiniCluster(0);
+                System.setProperty("java.io.tmpdir", tmpDir);
+            } else {
+                tmpDir = System.getProperty("java.io.tmpdir");
+            }
+            Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
+            serverProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
+            serverProps.put(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB, Long.toString(5));
+            serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
+                QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+            serverProps.put(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(8));
+            serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
+                Boolean.toString(namespaceMapped));
+            Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
+            clientProps.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
+            clientProps.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
+            clientProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+            clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
+            clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
+                Boolean.toString(namespaceMapped));
+            setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
+                new ReadOnlyProps(clientProps.entrySet().iterator()));
+        }
     }
 
     @Parameters(
             name = "transactionProvider={0},mutable={1},localIndex={2},directApi={3}," +
-                "useSnapshot={4},useTenant={5}")
+                "useSnapshot={4},useTenant={5},namespaceMapped={6}")
     public static synchronized Collection<Object[]> data() {
         List<Object[]> list = Lists.newArrayListWithExpectedSize(48);
         boolean[] Booleans = new boolean[] { false, true };
-        for (String transactionProvider : new String[] {"TEPHRA", "OMID", null}) {
-            for (boolean mutable : Booleans) {
-                for (boolean localIndex : Booleans) {
-                    if (!localIndex 
-                            || transactionProvider == null 
-                            || !TransactionFactory.getTransactionProvider(
-                                    TransactionFactory.Provider.valueOf(transactionProvider))
-                                .isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
-                        if (localIndex) {
-                            for (boolean directApi : Booleans) {
-                                list.add(new Object[]{transactionProvider, mutable, localIndex,
-                                        directApi, false, false});
+        for (boolean namespaceMapped : Booleans) {
+            for (String transactionProvider : new String[] {"TEPHRA", "OMID", null}) {
+                for (boolean mutable : Booleans) {
+                    for (boolean localIndex : Booleans) {
+                        if (!localIndex
+                                || transactionProvider == null
+                                || !TransactionFactory.getTransactionProvider(
+                                        TransactionFactory.Provider.valueOf(transactionProvider))
+                                    .isUnsupported(Feature.ALLOW_LOCAL_INDEX)) {
+                            if (localIndex) {
+                                for (boolean directApi : Booleans) {
+                                    list.add(new Object[]{transactionProvider, mutable, localIndex,
+                                            directApi, false, false, namespaceMapped});
+                                }
                             }
-                        }
-                        else {
-                            // Due to PHOENIX-5375 and PHOENIX-5376, the snapshot and bulk load options are ignored for global indexes
-                            list.add(new Object[]{transactionProvider, mutable, localIndex,
-                                    true, false, false});
+                            else {
+                                // Due to PHOENIX-5375 and PHOENIX-5376, the snapshot and bulk load options are ignored for global indexes
+                                list.add(new Object[]{transactionProvider, mutable, localIndex,
+                                        true, false, false, namespaceMapped});
+                            }
                         }
                     }
                 }
             }
         }
         // Add the usetenantId
-        list.add(new Object[] { null, false, false, true, false, true});
+        list.add(new Object[] { null, false, false, true, false, true, false});
         return TestUtil.filterTxParamData(list,0);
     }
 
@@ -226,6 +252,9 @@ public class IndexToolIT extends BaseTest {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
+            if(namespaceMapped) {
+                conn.createStatement().execute("CREATE SCHEMA " + schemaName);
+            }
             String stmString1 =
                     "CREATE TABLE " + dataTableFullName
                             + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
@@ -285,9 +314,9 @@ public class IndexToolIT extends BaseTest {
             assertEquals("FULL SCAN ",
                 explainPlanAttributes.getExplainScanType());
             assertEquals(dataTableFullName,
-                explainPlanAttributes.getTableName());
+                explainPlanAttributes.getTableName().replaceAll(":", "."));
             assertEquals("SERVER FILTER BY (LPAD(UPPER(NAME, 'en_US'), 8, 'x') || '_xyz') = 'xxUNAME2_xyz'",
-                explainPlanAttributes.getServerWhereFilter());
+                explainPlanAttributes.getServerWhereFilter().replaceAll(":", "."));
 
             ResultSet rs = stmt1.executeQuery(selectSql);
             assertTrue(rs.next());
@@ -317,7 +346,7 @@ public class IndexToolIT extends BaseTest {
                 expectedTableName = indexTableFullName;
             }
             assertEquals(expectedTableName,
-                explainPlanAttributes.getTableName());
+                explainPlanAttributes.getTableName().replaceAll(":", "."));
 
             rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
@@ -545,6 +574,9 @@ public class IndexToolIT extends BaseTest {
         String indexTableName = generateUniqueName();
         try (Connection conn =
                 DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            if(namespaceMapped) {
+                conn.createStatement().execute("CREATE SCHEMA " + schemaName);
+            }
             String dataDDL =
                     "CREATE TABLE " + dataTableFullName + "(\n"
                             + "ID VARCHAR NOT NULL PRIMARY KEY,\n"
@@ -588,13 +620,13 @@ public class IndexToolIT extends BaseTest {
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        final TableName dataTN = TableName.valueOf(dataTableFullName);
         String indexTableName = generateUniqueName();
-        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
-        TableName indexTN = TableName.valueOf(indexTableFullName);
         try (Connection conn =
                 DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
                 HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+            if(namespaceMapped) {
+                conn.createStatement().execute("CREATE SCHEMA " + schemaName);
+            }
             String dataDDL =
                     "CREATE TABLE " + dataTableFullName + "(\n"
                             + "ID VARCHAR NOT NULL PRIMARY KEY,\n"
@@ -614,11 +646,14 @@ public class IndexToolIT extends BaseTest {
             for (String prefix : carNumPrefixes) {
                 splitPoints[--numSplits] = Bytes.toBytes(prefix);
             }
-            HTableDescriptor dataTD = admin.getTableDescriptor(dataTN);
-            admin.disableTable(dataTN);
-            admin.deleteTable(dataTN);
+            TableName hDataName = TableName.valueOf(
+                    SchemaUtil.getPhysicalHBaseTableName(schemaName, dataTableName, namespaceMapped)
+                    .getBytes());
+            HTableDescriptor dataTD = admin.getTableDescriptor(hDataName);
+            admin.disableTable(hDataName);
+            admin.deleteTable(hDataName);
             admin.createTable(dataTD, splitPoints);
-            assertEquals(targetNumRegions, admin.getTableRegions(dataTN).size());
+            assertEquals(targetNumRegions, admin.getTableRegions(hDataName).size());
 
             // insert data where index column values start with a, b, c, d
             int idCounter = 1;
@@ -645,10 +680,13 @@ public class IndexToolIT extends BaseTest {
             // run with 50% sampling rate, split if data table more than 3 regions
             runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, "-sp", "50", "-spa", "3");
 
-            assertEquals(targetNumRegions, admin.getTableRegions(indexTN).size());
+            TableName hIndexName = TableName.valueOf(
+                SchemaUtil.getPhysicalHBaseTableName(schemaName, indexTableName, namespaceMapped)
+                .getBytes());
+            assertEquals(targetNumRegions, admin.getTableRegions(hIndexName).size());
             List<Cell> values = new ArrayList<>();
             // every index region should have been written to, if the index table was properly split uniformly
-            for (HRegion region : getUtility().getHBaseCluster().getRegions(indexTN)) {
+            for (HRegion region : getUtility().getHBaseCluster().getRegions(hIndexName)) {
                 values.clear();
                 RegionScanner scanner = region.getScanner(new Scan());
                 scanner.next(values);
@@ -680,6 +718,9 @@ public class IndexToolIT extends BaseTest {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
+            if(namespaceMapped) {
+                conn.createStatement().execute("CREATE SCHEMA " + sSchemaName);
+            }
             String stmString1 =
                     "CREATE TABLE " + qDataTableName
                          + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
@@ -734,7 +775,7 @@ public class IndexToolIT extends BaseTest {
             assertEquals(String.format(
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER %s\n"
                      + "    SERVER FILTER BY (LPAD(UPPER(NAME, 'en_US'), 8, 'x') || '_xyz') = 'xxUNAME2_xyz'",
-                        dataTableNameForExplain), actualExplainPlan);
+                        dataTableNameForExplain), actualExplainPlan.replaceAll(":", "."));
 
             rs = stmt1.executeQuery(selectSql);
             assertTrue(rs.next());
@@ -784,7 +825,7 @@ public class IndexToolIT extends BaseTest {
                         : indexTableFullName);
         }
         assertTrue(actualExplainPlan + "\n expected to contain \n" + expectedExplainPlan,
-            actualExplainPlan.contains(expectedExplainPlan));
+            actualExplainPlan.replaceAll(":", ".").contains(expectedExplainPlan));
     }
 
     public static CounterGroup getMRJobCounters(IndexTool indexTool) throws IOException {
