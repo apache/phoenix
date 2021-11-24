@@ -33,6 +33,7 @@ import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestClock;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Assume;
@@ -53,7 +54,7 @@ public class IndexToolTimeRangeIT extends BaseTest {
 
     private static String dataTableFullName, indexTableFullName,
             schemaName, dataTableName, indexTableName;
-    static MyClock myClock;
+    static TestClock testClock;
 
     @BeforeClass
     public static synchronized void setup() throws Exception {
@@ -78,16 +79,16 @@ public class IndexToolTimeRangeIT extends BaseTest {
     }
 
     private static void populateDataTable() throws SQLException {
-        myClock = new MyClock();
-        EnvironmentEdgeManager.injectEdge(myClock);
+        testClock = new TestClock(System.currentTimeMillis());
+        EnvironmentEdgeManager.injectEdge(testClock);
         try {
             //So that we don't have to recompute the values below
-            myClock.tickTime();
-            myClock.tickTime();
+            testClock.advanceTime(1);
+            testClock.advanceTime(1);
             try (Connection conn = getConnection()) {
                 //row 1-> time 4, row 2-> time 5, row 3-> time 6, row 4-> time 7, row 5-> time 8
                 for (int i=0; i<5; i++) {
-                    myClock.tickTime();
+                    testClock.advanceTime(1);
                     PreparedStatement ps = conn.prepareStatement(
                             String.format(UPSERT_TABLE_DML, dataTableFullName));
                     ps.setInt(1, i+1);
@@ -138,8 +139,8 @@ public class IndexToolTimeRangeIT extends BaseTest {
     public void testValidTimeRange() throws Exception {
         Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         String [] args = {"--delete-all-and-rebuild",
-                "--start-time", myClock.getRelativeTimeAsString(1),
-                "--end-time", myClock.getRelativeTimeAsString(9)};
+                "--start-time", Long.toString(testClock.initialTime()),
+                "--end-time", Long.toString(testClock.initialTime() + 8)};
         runIndexTool(args, 0);
         // all rows should be rebuilt
         Assert.assertEquals(5, countRowsInIndex());
@@ -149,8 +150,8 @@ public class IndexToolTimeRangeIT extends BaseTest {
     public void testValidTimeRange_startTimeInBetween() throws Exception {
         Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         String [] args = {"--delete-all-and-rebuild",
-                "--start-time", myClock.getRelativeTimeAsString(6),
-                "--end-time", myClock.getRelativeTimeAsString(9)};
+                "--start-time", Long.toString(testClock.initialTime() + 5),
+                "--end-time", Long.toString(testClock.initialTime() + 8)};
         runIndexTool(args, 0);
         // only last 3 rows should be rebuilt
         Assert.assertEquals(3, countRowsInIndex());
@@ -160,8 +161,8 @@ public class IndexToolTimeRangeIT extends BaseTest {
     public void testValidTimeRange_endTimeInBetween() throws Exception {
         Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         String [] args = {"--delete-all-and-rebuild",
-                "--start-time", myClock.getRelativeTimeAsString(1),
-                "--end-time", myClock.getRelativeTimeAsString(6)};
+                "--start-time", Long.toString(testClock.initialTime()),
+                "--end-time", Long.toString(testClock.initialTime() + 5)};
         runIndexTool(args, 0);
         // only first 2 should be rebuilt
         Assert.assertEquals(2, countRowsInIndex());
@@ -180,7 +181,7 @@ public class IndexToolTimeRangeIT extends BaseTest {
         Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         //starttime passed of last upsert
         String [] args = {"--delete-all-and-rebuild",
-                "--start-time", myClock.getRelativeTimeAsString(8)};
+                "--start-time", Long.toString(testClock.initialTime() + 7)};
         runIndexTool(args, 0);
         Assert.assertEquals(1, countRowsInIndex());
     }
@@ -189,7 +190,7 @@ public class IndexToolTimeRangeIT extends BaseTest {
     public void testValidTimeRange_onlyEndTimePassed() throws Exception {
         //end time passed as time of second upsert
         String [] args = {"--delete-all-and-rebuild",
-                "--end-time", myClock.getRelativeTimeAsString(5)};
+                "--end-time", Long.toString(testClock.initialTime() + 4)};
         runIndexTool(args, 0);
         Assert.assertEquals(1, countRowsInIndex());
     }
@@ -198,33 +199,6 @@ public class IndexToolTimeRangeIT extends BaseTest {
         IndexToolIT.runIndexTool(true, false, schemaName, dataTableName,
                 indexTableName, null, expectedStatus,
                 IndexTool.IndexVerifyType.NONE, args);
-    }
-
-    private static class MyClock extends EnvironmentEdge {
-        public long epoch;
-        public volatile long time;
-
-        public MyClock() {
-            epoch = System.currentTimeMillis();
-            time = epoch;
-        }
-
-        @Override
-        public long currentTime() {
-            return time;
-        }
-
-        public long getRelativeTime(long n) {
-            return epoch + n - 1;
-        }
-
-        public String getRelativeTimeAsString(long n) {
-            return Long.toString(getRelativeTime(n));
-        }
-
-        public void tickTime() {
-            time++;
-        }
     }
 
     @AfterClass

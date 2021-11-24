@@ -20,6 +20,7 @@ package org.apache.phoenix.monitoring;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.TestClock;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -56,26 +57,10 @@ public class OverAllQueryMetricsTest {
         EnvironmentEdgeManager.reset();
     }
 
-    private static class MyClock extends EnvironmentEdge {
-        private long time;
-        private long delta;
-
-        public MyClock(long time, long delta) {
-            this.time = time;
-            this.delta = delta;
-        }
-
-        @Override public long currentTime() {
-            long prevTime = this.time;
-            this.time += this.delta;
-            return prevTime;
-        }
-    }
-
         @Test
     public void testQueryWatchTimer() {
         assertEquals(0L, overAllQueryMetrics.getWallClockTimeMs());
-        MyClock clock = new MyClock(10L, delta);
+        TestClock clock = new TestClock(10, delta, true);
         EnvironmentEdgeManager.injectEdge(clock);
         overAllQueryMetrics.startQuery();
         overAllQueryMetrics.endQuery();
@@ -88,7 +73,7 @@ public class OverAllQueryMetricsTest {
     @Test
     public void testResultSetWatch() {
         assertEquals(0L, overAllQueryMetrics.getResultSetTimeMs());
-        MyClock clock = new MyClock(10L, delta);
+        TestClock clock = new TestClock(10, delta, true);
         EnvironmentEdgeManager.injectEdge(clock);
         overAllQueryMetrics.startResultSetWatch();
         overAllQueryMetrics.stopResultSetWatch();
@@ -100,7 +85,7 @@ public class OverAllQueryMetricsTest {
 
     @Test
     public void testPublish() {
-        MyClock clock = new MyClock(10L, delta);
+        TestClock clock = new TestClock(10, delta, true);
         EnvironmentEdgeManager.injectEdge(clock);
         overAllQueryMetrics.startQuery();
         overAllQueryMetrics.startResultSetWatch();

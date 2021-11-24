@@ -40,10 +40,10 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.TestClock;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -118,26 +118,7 @@ public class IndexBuildTimestampIT extends BaseTest {
         IndexToolIT.assertExplainPlan(localIndex, actualExplainPlan, dataTableFullName, indexTableFullName);
     }
 
-    private class MyClock extends EnvironmentEdge {
-        long initialTime;
-        long delta;
-
-        public MyClock(long delta) {
-            initialTime = System.currentTimeMillis() + delta;
-            this.delta = delta;
-        }
-
-        @Override
-        public long currentTime() {
-            return System.currentTimeMillis() + delta;
-        }
-
-        public long initialTime() {
-            return initialTime;
-        }
-    }
-
-    private void populateTable(String tableName, MyClock clock1, MyClock clock2) throws Exception {
+    private void populateTable(String tableName, TestClock clock1, TestClock clock2) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("create table " + tableName +
                 " (id varchar(10) not null primary key, val varchar(10), ts timestamp)" + tableDDLOptions);
@@ -191,12 +172,15 @@ public class IndexBuildTimestampIT extends BaseTest {
     public void testCellTimestamp() throws Exception {
         EnvironmentEdgeManager.reset();
         try {
-            MyClock clock1 = new MyClock(100000);
-            MyClock clock2 = new MyClock(200000);
+            TestClock clock1 = new TestClock(System.currentTimeMillis() + 100000);
+            clock1.advanceTime(100000);
+            TestClock clock2 = new TestClock(System.currentTimeMillis() + 200000);
+            clock2.advanceTime(200000);
             String dataTableName = generateUniqueName();
             populateTable(dataTableName, clock1, clock2);
 
-            MyClock clock3 = new MyClock(300000);
+            TestClock clock3 = new TestClock(System.currentTimeMillis() + 300000);
+            clock3.advanceTime(300000);
             EnvironmentEdgeManager.injectEdge(clock3);
 
             Properties props = new Properties();
