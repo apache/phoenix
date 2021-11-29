@@ -119,11 +119,11 @@ public class PhoenixIndexRpcSchedulerTest {
         ServerCall call = Mockito.mock(ServerCall.class);
         when(call.getHeader()).thenReturn(header);
         when(call.getRequestUser()).thenReturn(Optional.empty());
-        Mockito.when(task.getCall()).thenReturn(call);
+        Mockito.when(task.getRpcCall()).thenReturn(call);
 
         scheduler.dispatch(task);
 
-        Mockito.verify(task).getCall();
+        Mockito.verify(task).getRpcCall();
         Mockito.verifyNoMoreInteractions(task);
         server.stop();
     }
