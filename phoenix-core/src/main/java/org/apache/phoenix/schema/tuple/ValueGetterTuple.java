@@ -55,15 +55,19 @@ public class ValueGetterTuple extends BaseTuple {
         return true;
     }
 
-    @Override
-    public KeyValue getValue(byte[] family, byte[] qualifier) {
+    public KeyValue getValueUnsafe(byte[] family, byte[] qualifier) {
         try {
-            KeyValue kv = valueGetter.getLatestKeyValue(new ColumnReference(family, qualifier), ts);
-            if (kv != null) {
-                return kv;
-            }
+            return valueGetter.getLatestKeyValue(new ColumnReference(family, qualifier), ts);
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public KeyValue getValue(byte[] family, byte[] qualifier) {
+        KeyValue kv = getValueUnsafe(family, qualifier);
+        if (kv != null) {
+            return kv;
         }
         byte[] rowKey = valueGetter.getRowKey();
         byte[] valueBytes = HConstants.EMPTY_BYTE_ARRAY;
@@ -89,8 +93,19 @@ public class ValueGetterTuple extends BaseTuple {
     public boolean getValue(byte[] family, byte[] qualifier,
             ImmutableBytesWritable ptr) {
         KeyValue kv = getValue(family, qualifier);
-        if (kv == null)
+        if (kv == null) {
             return false;
+        }
+        ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
+        return true;
+    }
+
+    public boolean getValueUnsafe(byte[] family, byte[] qualifier,
+                            ImmutableBytesWritable ptr) {
+        KeyValue kv = getValueUnsafe(family, qualifier);
+        if (kv == null) {
+            return false;
+        }
         ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
         return true;
     }

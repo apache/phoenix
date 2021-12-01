@@ -22,6 +22,8 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
+import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 
@@ -44,7 +46,15 @@ public class DefaultValueExpression extends ScalarFunction {
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        boolean evaluated = children.get(0).evaluate(tuple, ptr);
+        Expression firstChild = children.get(0);
+        boolean evaluated;
+        if (firstChild instanceof SingleCellColumnExpression) {
+            evaluated = ((SingleCellColumnExpression) firstChild).evaluateUnsafe(tuple, ptr);
+        } else if (firstChild instanceof KeyValueColumnExpression) {
+            evaluated = ((KeyValueColumnExpression) firstChild).evaluateUnsafe(tuple, ptr);
+        } else {
+            evaluated = children.get(0).evaluate(tuple, ptr);
+        }
         if (evaluated) {
             // Will potentially evaluate to null without evaluating the second expression
             return true;

@@ -1530,9 +1530,6 @@ public class MetaDataClient {
                     String columnFamilyName = column.getFamilyName()!=null ? column.getFamilyName().getString() : null;
                     colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(columnFamilyName, column.getName().getString()));
                     isRowTimestamp = column.isRowTimestamp();
-                    if (colRef.getColumn().getExpressionStr() != null) {
-                        expressionStr = colRef.getColumn().getExpressionStr();
-                    }
                 }
                 else {
                     // if this is an expression
@@ -3766,7 +3763,7 @@ public class MetaDataClient {
         // if cascade keyword is passed and indexes are provided either implicitly or explicitly
         if (cascade && (indexes == null || !indexes.isEmpty())) {
             indexesPTable = getIndexesPTableForCascade(indexes, table);
-            if(indexesPTable.size() == 0) {
+            if (indexesPTable.size() == 0) {
                 // go back to regular behavior of altering the table/view
                 cascade = false;
             } else {
@@ -4768,7 +4765,7 @@ public class MetaDataClient {
             try {
                 if (newIndexState == PIndexState.ACTIVE){
                     tableUpsert = connection.prepareStatement(UPDATE_INDEX_STATE_TO_ACTIVE);
-                }else{
+                } else {
                     tableUpsert = connection.prepareStatement(UPDATE_INDEX_STATE);
                 }
                 tableUpsert.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
