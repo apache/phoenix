@@ -33,7 +33,9 @@ public abstract class AbstractValueGetter implements ValueGetter{
         int valueOffset = 0;
         int valueLength = 0;
         byte[] valueBytes = HConstants.EMPTY_BYTE_ARRAY;
-        if (value != null) {
+        if (value == null) {
+            return null;
+        } else {
             valueBytes = value.get();
             valueOffset = value.getOffset();
             valueLength = value.getLength();
