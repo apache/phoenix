@@ -1530,9 +1530,6 @@ public class MetaDataClient {
                     String columnFamilyName = column.getFamilyName()!=null ? column.getFamilyName().getString() : null;
                     colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(columnFamilyName, column.getName().getString()));
                     isRowTimestamp = column.isRowTimestamp();
-                    if (colRef.getColumn().getExpressionStr() != null) {
-                        expressionStr = colRef.getColumn().getExpressionStr();
-                    }
                 }
                 else {
                     // if this is an expression
@@ -3766,7 +3763,7 @@ public class MetaDataClient {
         // if cascade keyword is passed and indexes are provided either implicitly or explicitly
         if (cascade && (indexes == null || !indexes.isEmpty())) {
             indexesPTable = getIndexesPTableForCascade(indexes, table);
-            if(indexesPTable.size() == 0) {
+            if (indexesPTable.size() == 0) {
                 // go back to regular behavior of altering the table/view
                 cascade = false;
             } else {
@@ -4761,7 +4758,7 @@ public class MetaDataClient {
             try {
                 if (newIndexState == PIndexState.ACTIVE){
                     tableUpsert = connection.prepareStatement(UPDATE_INDEX_STATE_TO_ACTIVE);
-                }else{
+                } else {
                     tableUpsert = connection.prepareStatement(UPDATE_INDEX_STATE);
                 }
                 tableUpsert.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
@@ -5650,8 +5647,10 @@ public class MetaDataClient {
 
             if (changePermsStatement.getSchemaName() != null) {
                 // SYSTEM.CATALOG doesn't have any entry for "default" HBase namespace, hence we will bypass the check
-                if(!changePermsStatement.getSchemaName().equals(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE)) {
-                    FromCompiler.getResolverForSchema(changePermsStatement.getSchemaName(), connection);
+                if (!changePermsStatement.getSchemaName()
+                        .equals(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE)) {
+                    FromCompiler.getResolverForSchema(changePermsStatement.getSchemaName(),
+                            connection);
                 }
 
                 changePermsOnSchema(clusterConnection, changePermsStatement);
@@ -5684,7 +5683,7 @@ public class MetaDataClient {
     }
 
     private void changePermsOnSchema(ClusterConnection clusterConnection, ChangePermsStatement changePermsStatement) throws Throwable {
-        if(changePermsStatement.isGrantStatement()) {
+        if (changePermsStatement.isGrantStatement()) {
             AccessControlClient.grant(clusterConnection, changePermsStatement.getSchemaName(), changePermsStatement.getName(), changePermsStatement.getPermsList());
         } else {
             AccessControlClient.revoke(clusterConnection, changePermsStatement.getSchemaName(), changePermsStatement.getName(), Permission.Action.values());
@@ -5701,14 +5700,14 @@ public class MetaDataClient {
         boolean schemaInconsistency = false;
         List<PTable> inconsistentTables = null;
 
-        for(PTable indexTable : inputTable.getIndexes()) {
+        for (PTable indexTable : inputTable.getIndexes()) {
             // Local Indexes don't correspond to new physical table, they are just stored in separate CF of base table.
-            if(indexTable.getIndexType().equals(IndexType.LOCAL)) {
+            if (indexTable.getIndexType().equals(IndexType.LOCAL)) {
                 continue;
             }
             if (inputTable.isNamespaceMapped() != indexTable.isNamespaceMapped()) {
                 schemaInconsistency = true;
-                if(inconsistentTables == null) {
+                if (inconsistentTables == null) {
                     inconsistentTables = new ArrayList<>();
                 }
                 inconsistentTables.add(indexTable);
@@ -5720,8 +5719,8 @@ public class MetaDataClient {
             changePermsOnTable(clusterConnection, changePermsStatement, tableName);
         }
 
-        if(schemaInconsistency) {
-            for(PTable table : inconsistentTables) {
+        if (schemaInconsistency) {
+            for (PTable table : inconsistentTables) {
                 LOGGER.error("Fail to propagate permissions to Index Table: " + table.getName());
             }
             throw new TablesNotInSyncException(inputTable.getTableName().getString(),
@@ -5732,12 +5731,12 @@ public class MetaDataClient {
         byte[] viewIndexTableBytes = MetaDataUtil.getViewIndexPhysicalName(inputTable.getPhysicalName().getBytes());
         tableName = org.apache.hadoop.hbase.TableName.valueOf(viewIndexTableBytes);
         boolean viewIndexTableExists = admin.tableExists(tableName);
-        if(viewIndexTableExists) {
+        if (viewIndexTableExists) {
             LOGGER.info("Updating permissions for View Index Table: " +
                     Bytes.toString(viewIndexTableBytes) + " Base Table: " + inputTable.getName());
             changePermsOnTable(clusterConnection, changePermsStatement, tableName);
         } else {
-            if(inputTable.isMultiTenant()) {
+            if (inputTable.isMultiTenant()) {
                 LOGGER.error("View Index Table not found for MultiTenant Table: " + inputTable.getName());
                 LOGGER.error("Fail to propagate permissions to view Index Table: " + tableName.getNameAsString());
                 throw new TablesNotInSyncException(inputTable.getTableName().getString(),
@@ -5748,7 +5747,7 @@ public class MetaDataClient {
 
     private void changePermsOnTable(ClusterConnection clusterConnection, ChangePermsStatement changePermsStatement, org.apache.hadoop.hbase.TableName tableName)
             throws Throwable {
-        if(changePermsStatement.isGrantStatement()) {
+        if (changePermsStatement.isGrantStatement()) {
             AccessControlClient.grant(clusterConnection, tableName, changePermsStatement.getName(),
                     null, null, changePermsStatement.getPermsList());
         } else {
@@ -5759,7 +5758,7 @@ public class MetaDataClient {
 
     private void changePermsOnUser(ClusterConnection clusterConnection, ChangePermsStatement changePermsStatement)
             throws Throwable {
-        if(changePermsStatement.isGrantStatement()) {
+        if (changePermsStatement.isGrantStatement()) {
             AccessControlClient.grant(clusterConnection, changePermsStatement.getName(), changePermsStatement.getPermsList());
         } else {
             AccessControlClient.revoke(clusterConnection, changePermsStatement.getName(), Permission.Action.values());
