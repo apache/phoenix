@@ -21,9 +21,12 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.MasterRegistry;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -80,6 +83,10 @@ public class HRpcRegistryIT extends ParallelStatsDisabledIT {
 
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + testTable + "");
         assertTrue(rs.next());
+    }
 
+    @AfterClass
+    public static synchronized void cleanUp() throws Exception {
+        DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
     }
 }
