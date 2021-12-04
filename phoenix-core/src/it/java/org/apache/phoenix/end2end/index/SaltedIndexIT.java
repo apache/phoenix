@@ -219,5 +219,21 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
                  "CLIENT 2 ROW LIMIT";
         String explainPlan = QueryUtil.getExplainPlan(rs);
         assertEquals(expectedPlan,explainPlan);
+
+        // PHOENIX-6604
+        query = "SELECT * FROM " + dataTableFullName + " ORDER BY v DESC LIMIT 1";
+        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        expectedPlan = indexSaltBuckets == null ?
+            "CLIENT SERIAL 1-WAY FULL SCAN OVER " + indexTableFullName + "\n"
+          + "    SERVER FILTER BY FIRST KEY ONLY\n"
+          + "    SERVER 1 ROW LIMIT\n"
+          + "CLIENT 1 ROW LIMIT"
+            :
+            "CLIENT PARALLEL 4-WAY FULL SCAN OVER " + indexTableFullName + "\n"
+          + "    SERVER FILTER BY FIRST KEY ONLY\n"
+          + "    SERVER 1 ROW LIMIT\n"
+          + "CLIENT MERGE SORT\n"
+          + "CLIENT 1 ROW LIMIT";
+        assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
     }
 }
