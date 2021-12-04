@@ -51,6 +51,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ProjectedColumn;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -90,6 +91,10 @@ public class TupleProjectionCompiler {
                             table.getSchemaName().getString(),
                             table.getParentTableName().getString());
                     for (PColumn column : parentTableRef.getTable().getColumns()) {
+                        // don't attempt to rewrite the parents SALTING COLUMN
+                        if (column == SaltingUtil.SALTING_COLUMN) {
+                            continue;
+                        }
                         NODE_FACTORY.column(null, '"' + IndexUtil.getIndexColumnName(column) + '"', null).accept(visitor);
                     }
                 }
