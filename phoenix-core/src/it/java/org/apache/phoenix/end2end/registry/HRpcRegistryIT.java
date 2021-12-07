@@ -23,6 +23,7 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.BaseTest2;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -44,7 +45,7 @@ import static org.junit.Assert.assertTrue;
 
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class HRpcRegistryIT extends ParallelStatsDisabledIT {
+public class HRpcRegistryIT extends BaseTest2 {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Collections.singletonMap(QueryUtil.IS_HREGISTRY_CONNECTION, "true");
