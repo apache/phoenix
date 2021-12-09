@@ -1297,6 +1297,29 @@ public class SchemaUtil {
         return name;
     }
 
+    public static String formatIndexColumnName(String name) {
+        String[] splitName = name.split("\\.");
+        if(splitName.length < 2) {
+            if (!name.contains("\"")) {
+                if (quotesNeededForColumn(name)) {
+                    name = "\"" + name + "\"";
+                }
+                return name;
+            } else if (name.startsWith("\"") && name.endsWith("\"")) {
+                if (quotesNeededForColumn(name.substring(1, name.length() - 1))) {
+                    return name;
+                } else {
+                    return name.substring(1, name.length() - 1);
+                }
+            } else {
+                return name;
+            }
+        } else {
+            return String.format("%s.%s", formatIndexColumnName(splitName[0]),
+                    formatIndexColumnName(splitName[1]));
+        }
+    }
+
     public static boolean containsLowerCase(String name) {
         if (Strings.isNullOrEmpty(name)) {
             return false;
