@@ -134,8 +134,8 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         StringBuilder indexedColumnsBuilder = new StringBuilder();
 
         for (PColumn indexedColumn : indexPK) {
-            String indexColumn = extractIndexColumn(indexedColumn.getName().getString(), defaultCF);
-            if(indexColumn.equalsIgnoreCase(MetaDataUtil.VIEW_INDEX_ID_COLUMN_NAME)) {
+            String indexColumn = extractIndexColumn(indexedColumn.getExpressionStr(), defaultCF);
+            if (indexColumn == null) {
                 continue;
             }
             indexPKName.add(indexColumn);
@@ -183,18 +183,34 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
     }
 
     private String extractIndexColumn(String columnName, String defaultCF) {
+        if (columnName == null) {
+            return null;
+        }
         String [] columnNameSplit = columnName.split(":");
         if(columnNameSplit[0].equals("") || columnNameSplit[0].equalsIgnoreCase(defaultCF) ||
                 (defaultCF.startsWith("L#") && columnNameSplit[0].equalsIgnoreCase(defaultCF.substring(2)))) {
-            return SchemaUtil.formatColumnName(columnNameSplit[1]);
+            return formatColumnOrExpression(columnNameSplit[1]);
         } else {
             if (columnNameSplit.length > 1) {
                 String schema = SchemaUtil.formatSchemaName(columnNameSplit[0]);
                 String name = SchemaUtil.formatColumnName(columnNameSplit[1]);
                 return String.format("%s.%s", schema, name);
             } else {
-                return SchemaUtil.formatColumnName(columnNameSplit[0]);
+                return formatColumnOrExpression(columnNameSplit[0]);
             }
+        }
+    }
+
+    private String formatColumnOrExpression(String columnOrExpression) {
+        if (columnOrExpression.startsWith("(")) {
+            //Expressions like (a*b) are always parenthesised
+            return columnOrExpression.substring(1, columnOrExpression.length()-1);
+        } else if (columnOrExpression.contains("(")) {
+            //Expressions like like func(a) are always have a parenthesis
+            return columnOrExpression;
+        } else {
+            //If there are no parentheses, this is a column name
+            return SchemaUtil.formatIndexColumnName(columnOrExpression);
         }
     }
 
@@ -207,7 +223,9 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             }
             if(cc.getFamilyName()!=null) {
                 String indexColumn = extractIndexColumn(cc.getName().getString(), defaultCF);
-                coveredColumnsBuilder.append(indexColumn);
+                if (indexColumn != null) {
+                    coveredColumnsBuilder.append(indexColumn);
+                }
             }
         }
         return coveredColumnsBuilder.toString();
