@@ -54,6 +54,7 @@ import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.transaction.TransactionFactory;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
@@ -61,16 +62,27 @@ public class IndexBuildTimestampIT extends BaseTest {
     private final boolean localIndex;
     private final boolean async;
     private final boolean view;
+    private final boolean snapshot;
+    private final boolean transactional;
     private final String tableDDLOptions;
+    private String scnPropName;
 
-    public IndexBuildTimestampIT(boolean mutable, boolean localIndex,
-                            boolean async, boolean view) {
+    public IndexBuildTimestampIT(String transactionProvider, boolean mutable, boolean localIndex,
+                            boolean async, boolean view, boolean snapshot) {
         this.localIndex = localIndex;
         this.async = async;
         this.view = view;
+        this.snapshot = snapshot;
+        this.transactional = transactionProvider != null;
         StringBuilder optionBuilder = new StringBuilder();
         if (!mutable) {
             optionBuilder.append(" IMMUTABLE_ROWS=true ");
+        }
+        if (transactional) {
+            if (!(optionBuilder.length() == 0)) {
+                optionBuilder.append(",");
+            }
+            optionBuilder.append(" TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + transactionProvider + "'");
         }
         optionBuilder.append(" SPLIT ON(1,2)");
         this.tableDDLOptions = optionBuilder.toString();
@@ -81,6 +93,7 @@ public class IndexBuildTimestampIT extends BaseTest {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
         serverProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         serverProps.put(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB, Long.toString(5));
+        serverProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         serverProps.put(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(8));
@@ -94,7 +107,7 @@ public class IndexBuildTimestampIT extends BaseTest {
     }
 
     @Parameters(
-            name = "mutable={0},localIndex={1},async={2},view={3}")
+            name = "transactionProvider={0},mutable={1},localIndex={2},async={3},view={4},snapshot={5}")
     public static synchronized Collection<Object[]> data() {
         List<Object[]> list = Lists.newArrayListWithExpectedSize(16);
         boolean[] Booleans = new boolean[]{false, true};
@@ -102,8 +115,20 @@ public class IndexBuildTimestampIT extends BaseTest {
             for (boolean localIndex : Booleans) {
                 for (boolean async : Booleans) {
                     for (boolean view : Booleans) {
-                        list.add(new Object[]{mutable, localIndex, async, view});
-                    }
+                        for (boolean snapshot : Booleans) {
+                            for (String transactionProvider : new String[]
+                                    {"TEPHRA", "OMID", null}) {
+                                if(snapshot || transactionProvider !=null) {
+                                    //FIXME PHOENIX-5375 TS is set to index creation time
+                                    continue;
+                                }
+                                if ((localIndex || !async) && snapshot) {
+                                    continue;
+                                }
+                                list.add(new Object[]{transactionProvider, mutable, localIndex, async, view, snapshot});
+                            }
+                        }
+                     }
                 }
             }
         }
@@ -218,7 +243,7 @@ public class IndexBuildTimestampIT extends BaseTest {
 
             if (async) {
                 // run the index MR job.
-                IndexToolIT.runIndexTool(true, false, null, (view ? viewName : dataTableName), indexName);
+                IndexToolIT.runIndexTool(snapshot, null, (view ? viewName : dataTableName), indexName);
             }
 
             // Verify the index timestamps via Phoenix

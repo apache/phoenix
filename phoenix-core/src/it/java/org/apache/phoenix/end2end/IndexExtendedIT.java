@@ -116,6 +116,9 @@ public class IndexExtendedIT extends BaseTest {
             for (boolean localIndex : Booleans) {
                 for (boolean useViewIndex : Booleans) {
                     for (boolean useSnapshot : Booleans) {
+                        if(localIndex && useSnapshot) {
+                            continue;
+                        }
                         list.add(new Boolean[] { mutable, localIndex, useViewIndex, useSnapshot});
                     }
                 }
@@ -186,7 +189,7 @@ public class IndexExtendedIT extends BaseTest {
             assertFalse(rs.next());
            
             //run the index MR job.
-            IndexToolIT.runIndexTool(true, useSnapshot, schemaName, dataTableName, indexTableName);
+            IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName);
             
             plan = conn.prepareStatement(selectSql)
                 .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
@@ -244,7 +247,7 @@ public class IndexExtendedIT extends BaseTest {
             conn.commit();
 
             //run the index MR job.
-            IndexToolIT.runIndexTool(true, useSnapshot, schemaName, dataTableName, indexTableName);
+            IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName);
 
             // upsert two more rows
             conn.createStatement().execute(
@@ -344,7 +347,7 @@ public class IndexExtendedIT extends BaseTest {
             assertEquals(dataCnt, indexCnt+1);
 
             //run the index MR job.
-            IndexToolIT.runIndexTool(true, useSnapshot, schemaName, baseTableNameOfIndex, indexName);
+            IndexToolIT.runIndexTool(useSnapshot, schemaName, baseTableNameOfIndex, indexName);
 
             dataCnt = getRowCount(conn, baseTableFullNameOfIndex);
             indexCnt = getUtility().countRows(hIndexTable);
@@ -391,7 +394,7 @@ public class IndexExtendedIT extends BaseTest {
 
             if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
                 // Run the index MR job and verify that the index table rebuild fails
-                IndexToolIT.runIndexTool(true, false, schemaName, dataTableName,
+                IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                         indexTableName, null, -1, IndexTool.IndexVerifyType.AFTER);
                 // job failed, verify that the index table is still not in the ACTIVE state
                 assertFalse(checkIndexState(conn, indexFullName, PIndexState.ACTIVE, 0L));
@@ -399,7 +402,7 @@ public class IndexExtendedIT extends BaseTest {
 
             IndexRebuildRegionScanner.setIgnoreIndexRebuildForTesting(false);
             // Run the index MR job and verify that the index table rebuild succeeds
-            IndexToolIT.runIndexTool(true, false, schemaName, dataTableName,
+            IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                     indexTableName, null, 0, IndexTool.IndexVerifyType.AFTER);
 
             // job passed, verify that the index table is in the ACTIVE state
