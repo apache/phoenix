@@ -19,12 +19,8 @@ package org.apache.phoenix.index;
 
 import static org.apache.phoenix.compat.hbase.CompatUtil.setSingleRow;
 import static org.apache.phoenix.compat.hbase.CompatUtil.setStartRow;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CHECK_VERIFY_COLUMN;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME;
-import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
 import static org.apache.phoenix.index.IndexMaintainer.getIndexMaintainer;
+import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ScanUtil.getDummyResult;
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;

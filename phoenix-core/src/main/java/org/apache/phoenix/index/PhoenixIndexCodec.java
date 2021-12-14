@@ -70,7 +70,9 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
     }
 
     @Override
-    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
+    public Iterable<IndexUpdate> getIndexUpserts(
+            TableState state, IndexMetaData context, byte[] regionStartKey, byte[] regionEndKey,
+            boolean verified) throws IOException {
         PhoenixIndexMetaData metaData = (PhoenixIndexMetaData)context;
         List<IndexMaintainer> indexMaintainers = metaData.getIndexMaintainers();
         if (indexMaintainers.get(0).isRowDeleted(state.getPendingUpdate())) {
@@ -85,7 +87,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             IndexUpdate indexUpdate = statePair.getSecond();
             indexUpdate.setTable(maintainer.isLocalIndex() ? tableName : maintainer.getIndexTableName());
             Put put = maintainer.buildUpdateMutation(KV_BUILDER, valueGetter, ptr, state.getCurrentTimestamp(),
-                    regionStartKey, regionEndKey);
+                    regionStartKey, regionEndKey, verified);
             indexUpdate.setUpdate(put);
             indexUpdates.add(indexUpdate);
         }

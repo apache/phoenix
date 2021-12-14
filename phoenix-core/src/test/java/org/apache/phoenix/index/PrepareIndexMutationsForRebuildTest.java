@@ -26,7 +26,6 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
@@ -789,7 +788,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 im.getEmptyKeyValueFamily().copyBytesIfNecessary(),
                 QueryConstants.EMPTY_COLUMN_BYTES,
                 ts,
-                IndexRegionObserver.VERIFIED_BYTES);
+                QueryConstants.VERIFIED_BYTES);
     }
 
     /**

@@ -53,11 +53,11 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.IndexUtil.IndexStatusUpdater;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpsertExecutor;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -192,7 +192,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
                         }
                         List<KeyValue> cellsForTable = map.get(i);
                         if (indexStatusUpdaters[i] != null) {
-                            indexStatusUpdaters[i].setVerfied(keyValueList);
+                            indexStatusUpdaters[i].setVerified(keyValueList);
                         }
                         cellsForTable.addAll(keyValueList);
                         break;
@@ -428,41 +428,4 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
         }
     }
 
-    /**
-     * Updates the EMPTY cell value to VERIFIED for global index table rows
-     */
-    private static class IndexStatusUpdater {
-
-        private final byte[] emptyKeyValueCF;
-        private final int emptyKeyValueCFLength;
-        private final byte[] emptyKeyValueQualifier;
-        private final int emptyKeyValueQualifierLength;
-
-        public IndexStatusUpdater(final byte[] emptyKeyValueCF, final byte[] emptyKeyValueQualifier) {
-            this.emptyKeyValueCF = emptyKeyValueCF;
-            this.emptyKeyValueQualifier = emptyKeyValueQualifier;
-            emptyKeyValueCFLength = emptyKeyValueCF.length;
-            emptyKeyValueQualifierLength = emptyKeyValueQualifier.length;
-        }
-
-        /**
-         * Update the Empty cell values to VERIFIED in the passed keyValues list
-         * 
-         * @param keyValues will be modified
-         */
-        public void setVerfied(List<KeyValue> keyValues) {
-            for (int i = 0; i < keyValues.size() ; i++) {
-                Cell kv = keyValues.get(i);
-                if (CellUtil.matchingFamily(kv, emptyKeyValueCF, 0, emptyKeyValueCFLength)
-                        && CellUtil.matchingQualifier(kv, emptyKeyValueQualifier, 0, emptyKeyValueQualifierLength)) {
-                    if (kv.getValueLength() != 1) {
-                        //This should never happen. Fail fast if it does.
-                       throw new IllegalArgumentException("Empty cell value length is not 1");
-                    }
-                    //We are directly overwriting the value for performance
-                    kv.getValueArray()[kv.getValueOffset()] = IndexRegionObserver.VERIFIED_BYTES[0];
-                }
-            }
-        }
-    }
 }

@@ -1037,8 +1037,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         return indexRowKeySchema;
     }
-    
-    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
+
+    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey, boolean verified) throws IOException {
         byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey, ts);
         Put put = null;
         // New row being inserted: add the empty key value
@@ -1055,8 +1055,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             put = new Put(indexRowKey);
             // add the keyvalue for the empty row
             put.add(kvBuilder.buildPut(new ImmutableBytesPtr(indexRowKey),
-                    this.getEmptyKeyValueFamily(), indexEmptyKeyValueRef.getQualifierWritable(), ts,
-                    QueryConstants.EMPTY_COLUMN_VALUE_BYTES_PTR));
+                    emptyKeyValueCFPtr, indexEmptyKeyValueRef.getQualifierWritable(), ts,
+                    verified ? QueryConstants.VERIFIED_BYTES_PTR : QueryConstants.EMPTY_COLUMN_VALUE_BYTES_PTR));
             put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
         }
 

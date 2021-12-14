@@ -189,7 +189,7 @@ public class IndexToolTimeRangeIT extends BaseTest {
     }
 
     private void runIndexTool(String [] args, int expectedStatus) throws Exception {
-        IndexToolIT.runIndexTool(true, false, schemaName, dataTableName,
+        IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                 indexTableName, null, expectedStatus,
                 IndexTool.IndexVerifyType.NONE, args);
     }

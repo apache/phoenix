@@ -50,48 +50,37 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Durability;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
-import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -99,9 +88,6 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 
 @Category(NeedsOwnMiniClusterTest.class)
@@ -349,8 +335,8 @@ public class ImmutableIndexIT extends BaseTest {
                 rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexName);
                 assertTrue(rs.next());
                 assertEquals(numRows, rs.getInt(1));
-                assertEquals(true, verifyRowsForEmptyColValue(conn, fullIndexName,
-                        IndexRegionObserver.VERIFIED_BYTES));
+                IndexTestUtil.assertRowsForEmptyColValue(conn, fullIndexName,
+                    QueryConstants.VERIFIED_BYTES);
                 rs = conn.createStatement().executeQuery("SELECT * FROM " + fullIndexName);
                 assertTrue(rs.next());
                 assertEquals("1", rs.getString(1));
@@ -399,7 +385,8 @@ public class ImmutableIndexIT extends BaseTest {
             rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexName);
             assertTrue(rs.next());
             assertEquals(numRows - 1, rs.getInt(1));
-            assertEquals(true, verifyRowsForEmptyColValue(conn, fullIndexName, IndexRegionObserver.VERIFIED_BYTES));
+            IndexTestUtil.assertRowsForEmptyColValue(conn, fullIndexName,
+                QueryConstants.VERIFIED_BYTES);
 
             // Force delete to fail (data removed but operation failed) on data table and check index table row remains as unverified
             TestUtil.addCoprocessor(conn, fullTableName, DeleteFailingRegionObserver.class);
@@ -414,7 +401,8 @@ public class ImmutableIndexIT extends BaseTest {
             TestUtil.removeCoprocessor(conn, fullTableName, DeleteFailingRegionObserver.class);
             assertEquals(numRows - 1, getRowCount(conn.unwrap(PhoenixConnection.class).getQueryServices()
                     .getTable(Bytes.toBytes(fullIndexName)), false));
-            assertEquals(true, verifyRowsForEmptyColValue(conn, fullIndexName, IndexRegionObserver.UNVERIFIED_BYTES));
+            IndexTestUtil.assertRowsForEmptyColValue(conn, fullIndexName,
+                QueryConstants.UNVERIFIED_BYTES);
 
             // Now delete via hbase, read from unverified index and see that we don't get any data
             admin.disableTable(TableName.valueOf(fullTableName));
@@ -446,26 +434,6 @@ public class ImmutableIndexIT extends BaseTest {
             throw new DoNotRetryIOException();
         }
     }
-
-    public static boolean verifyRowsForEmptyColValue(Connection conn, String tableName, byte[] valueBytes)
-            throws IOException, SQLException {
-        PTable table = PhoenixRuntime.getTable(conn, tableName);
-        byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
-        byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst();
-        HTable htable = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(table.getPhysicalName().getBytes());
-        Scan scan = new Scan();
-        scan.addColumn(emptyCF, emptyCQ);
-        ResultScanner resultScanner = htable.getScanner(scan);
-
-        for (Result result = resultScanner.next(); result != null; result = resultScanner.next()) {
-            if (Bytes.compareTo(result.getValue(emptyCF, emptyCQ), 0, valueBytes.length,
-                    valueBytes, 0, valueBytes.length) != 0) {
-                return false;
-            }
-        }
-        return true;
-    }
-
 
     // This test is know to flap. We need PHOENIX-2582 to be fixed before enabling this back.
     @Ignore

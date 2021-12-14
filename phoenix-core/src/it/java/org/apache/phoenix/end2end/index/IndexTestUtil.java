@@ -24,7 +24,9 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TAB
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
+import static org.junit.Assert.assertNull;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -34,14 +36,32 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
+
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.GenericTestUtils;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.index.GlobalIndexChecker;
+import org.apache.phoenix.index.PhoenixIndexBuilder;
+import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
@@ -50,6 +70,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -165,4 +186,24 @@ public class IndexTestUtil {
         return row.toRowMutations();
     }
 
+    public static void assertRowsForEmptyColValue(Connection conn, String tableName,
+            byte[] emptyValue) throws SQLException, IOException {
+        ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        PTable pTable = PhoenixRuntime.getTable(conn, tableName);
+        Table hTable = cqs.getTable(pTable.getPhysicalName().getBytes());
+
+        byte[] emptyKeyValueCF = SchemaUtil.getEmptyColumnFamily(pTable);
+        byte[] emptyKeyValueQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(pTable).getFirst();
+
+        Scan scan = new Scan();
+        scan.setFilter(new SingleColumnValueFilter(
+                emptyKeyValueCF,
+                emptyKeyValueQualifier,
+                CompareOp.NOT_EQUAL,
+                new org.apache.hadoop.hbase.filter.BinaryComparator(emptyValue)));
+        try (ResultScanner scanner = hTable.getScanner(scan)) {
+            assertNull("There are rows with in the table where the empty value is not "
+                    + Bytes.toStringBinary(emptyValue), scanner.next());
+        }
+    }
 }

@@ -74,7 +74,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_NAME;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT;
@@ -84,6 +83,7 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
+import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -249,7 +249,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         String indexTableName, String indexTableFullName,
         int expectedStatus) throws Exception {
 
-        IndexTool tool = IndexToolIT.runIndexTool(getUtility().getConfiguration(), true, false, schemaName, dataTableName,
+        IndexTool tool = IndexToolIT.runIndexTool(getUtility().getConfiguration(), false, schemaName, dataTableName,
             indexTableName,
             null,
             expectedStatus, verifyType, disableLoggingType, "-fi");
@@ -301,7 +301,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             initTablesAndAddExtraRowsToIndex(conn, schemaName, dataTableName, indexTableName, NROWS);
 
             // do index rebuild without -fi and check with scrutiny that index tool failed to fix the extra rows
-            IndexToolIT.runIndexTool(false, false, schemaName, dataTableName,
+            IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                 indexTableName, null, 0, IndexVerifyType.BEFORE);
 
             boolean failed;
@@ -314,7 +314,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             assertTrue(failed);
 
             // now repair the index with -fi
-            IndexTool indexTool = IndexToolIT.runIndexTool(false, false, schemaName, dataTableName,
+            IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                 indexTableName, null, 0, IndexVerifyType.BEFORE, "-fi");
 
             long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
@@ -358,7 +358,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             conn.commit();
             IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
 
-            IndexTool indexTool = IndexToolIT.runIndexTool(false, false, schemaName, dataTableName,
+            IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                 indexTableName, null, 0, IndexVerifyType.BEFORE, "-fi");
 
             CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
@@ -372,7 +372,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             assertEquals(0,
                 mrJobCounters.findCounter(BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT.name()).getValue());
 
-            indexTool = IndexToolIT.runIndexTool(false, false, schemaName, dataTableName,
+            indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                 indexTableName, null, 0, IndexVerifyType.ONLY, "-fi");
             mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
             assertEquals(0,
@@ -424,7 +424,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
             TestUtil.doMajorCompaction(conn, dataTableFullName);
 
-            IndexTool indexTool = IndexToolIT.runIndexTool(false, false, schemaName, dataTableName,
+            IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                 indexTableName, null, 0, IndexVerifyType.BEFORE, "-fi");
 
             CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
@@ -438,7 +438,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             assertEquals(1,
                 mrJobCounters.findCounter(BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT.name()).getValue());
 
-            indexTool = IndexToolIT.runIndexTool(false, false, schemaName, dataTableName,
+            indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                 indexTableName, null, 0, IndexVerifyType.ONLY, "-fi");
             mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
 
@@ -488,7 +488,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             commitWithException(conn);
             IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
 
-            IndexTool indexTool = IndexToolIT.runIndexTool(false, false, schemaName, dataTableName,
+            IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                 indexTableName, null, 0, IndexVerifyType.BEFORE, "-fi");
 
             long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
@@ -511,7 +511,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             initTablesAndAddExtraRowsToIndex(conn, schemaName, dataTableName, indexTableName, NROWS);
 
-            IndexToolIT.runIndexTool(false, false, schemaName, dataTableName,
+            IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                 indexTableName, null, 0, IndexVerifyType.ONLY, "-fi");
 
             Cell cell = IndexToolIT.getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, indexTableFullName);
@@ -535,7 +535,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             initTablesAndAddExtraRowsToIndex(conn, schemaName, dataTableName, indexTableName, NROWS);
 
             // Run -v AFTER and check it doesn't fix the extra rows and the job fails
-            IndexTool indexTool = IndexToolIT.runIndexTool(false, false, schemaName, dataTableName,
+            IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                 indexTableName, null, -1, IndexVerifyType.AFTER, "-fi");
 
             boolean failed;
@@ -564,7 +564,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             initTablesAndAddExtraRowsToIndex(conn, schemaName, dataTableName, indexTableName, NROWS);
 
-            IndexTool indexTool = IndexToolIT.runIndexTool(false, false, schemaName, dataTableName,
+            IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                 indexTableName, null, 0, IndexVerifyType.BOTH, "-fi");
 
             long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
@@ -589,7 +589,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
 
             Configuration conf = new Configuration(getUtility().getConfiguration());
             conf.set(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(2));
-            IndexTool indexTool = IndexToolIT.runIndexTool(conf,false, false, schemaName, dataTableName,
+            IndexTool indexTool = IndexToolIT.runIndexTool(conf, false, schemaName, dataTableName,
                 indexTableName, null, 0, IndexVerifyType.BEFORE, IndexDisableLoggingType.NONE,"-fi");
 
             long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
@@ -634,11 +634,11 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             conn.commit();
             setIndexRowStatusesToVerified(conn, viewFullName, indexTableFullName1);
 
-            IndexTool indexTool = IndexToolIT.runIndexTool(false, false, schemaName, viewName,
+            IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, viewName,
                 indexTableName1, null, 0, IndexVerifyType.BEFORE, "-fi");
             assertExtraCounters(indexTool, 1, 0, true);
 
-            indexTool = IndexToolIT.runIndexTool(false, false, schemaName, viewName,
+            indexTool = IndexToolIT.runIndexTool(false, schemaName, viewName,
                 indexTableName2, null, 0, IndexVerifyType.BEFORE, "-fi");
             assertExtraCounters(indexTool, 1, 0, true);
 
@@ -692,7 +692,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             long t1 = customEdge.currentTime();
 
             IndexTool it;
-            it = IndexToolIT.runIndexTool(false, false, schemaName, dataTableName,
+            it = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                 indexTableName, null, 0, IndexVerifyType.ONLY,
                 "-fi", "-st", String.valueOf(t0), "-et", String.valueOf(t1));
 
@@ -721,7 +721,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             setIndexRowStatusesToVerified(conn, dataTableFullName, indexTableFullName);
             customEdge.incrementValue(delta);
             long t2 = customEdge.currentTime();
-            it = IndexToolIT.runIndexTool(false, false, schemaName, dataTableName,
+            it = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                 indexTableName, null, 0, IndexVerifyType.ONLY,
                 "-fi", "-st", String.valueOf(t1), "-et", String.valueOf(t2));
 
@@ -735,7 +735,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
                 mrJobCounters.findCounter(BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT.name()).getValue());
 
             // now run another verification over the entire window [t0, t2]
-            it = IndexToolIT.runIndexTool(false, false, schemaName, dataTableName,
+            it = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                 indexTableName, null, 0, IndexVerifyType.ONLY,
                 "-fi", "-st", String.valueOf(t0), "-et", String.valueOf(t2));
 

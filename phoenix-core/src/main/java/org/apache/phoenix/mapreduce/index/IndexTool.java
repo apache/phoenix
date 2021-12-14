@@ -487,6 +487,10 @@ public class IndexTool extends Configured implements Tool {
                 }
                 if (useSnapshot || (!isLocalIndexBuild && pDataTable.isTransactional())) {
                     PhoenixConfigurationUtil.setCurrentScnValue(configuration, maxTimeRange);
+                    if (indexVerifyType != IndexVerifyType.NONE) {
+                        LOGGER.warn("Verification is not supported for snapshots and transactional"
+                                + "table index rebuilds, verification parameter ignored");
+                    }
                     return configureJobForAsyncIndex();
                 } else {
                     // Local and non-transactional global indexes to be built on the server side
@@ -630,6 +634,7 @@ public class IndexTool extends Configured implements Tool {
 
             configuration.set(PhoenixConfigurationUtil.UPSERT_STATEMENT, upsertQuery);
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, physicalIndexTable);
+            PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
             PhoenixConfigurationUtil.setDisableIndexes(configuration, indexTable);
 
             PhoenixConfigurationUtil.setUpsertColumnNames(configuration,
@@ -661,7 +666,12 @@ public class IndexTool extends Configured implements Tool {
                 try {
                     admin = pConnection.getQueryServices().getAdmin();
                     TableName hDdataTableName = TableName.valueOf(pDataTable.getPhysicalName().getBytes());
-                    snapshotName = new StringBuilder(hDdataTableName.toString()).append("-Snapshot").toString();
+                    snapshotName = new StringBuilder("INDEXTOOL-")
+                            .append(pDataTable.getName().getString())
+                            .append("-Snapshot-")
+                            .append(System.currentTimeMillis())
+                            .toString();
+                    //FIXME Drop this snapshot after we're done ?
                     admin.snapshot(snapshotName, hDdataTableName);
                 } finally {
                     if (admin != null) {
@@ -966,6 +976,11 @@ public class IndexTool extends Configured implements Tool {
         qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
         if (IndexType.LOCAL.equals(indexType)) {
             isLocalIndexBuild = true;
+            if (useSnapshot) {
+                throw new IllegalArgumentException(String.format(
+                    "%s is a local index. snapshots are not supported for local indexes.",
+                    qIndexTable));
+            }
             HTable htable = (HTable)connection.unwrap(PhoenixConnection.class).getQueryServices()
                     .getTable(pIndexTable.getPhysicalName().getBytes());
                 splitKeysBeforeJob = htable.getRegionLocator().getStartKeys();

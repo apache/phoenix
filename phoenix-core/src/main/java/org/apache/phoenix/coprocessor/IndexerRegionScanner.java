@@ -142,7 +142,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
         ValueGetter valueGetter = new SimpleValueGetter(dataRow);
         long ts = getMaxTimestamp(dataRow);
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
-                valueGetter, new ImmutableBytesWritable(dataRow.getRow()), ts, null, null);
+                valueGetter, new ImmutableBytesWritable(dataRow.getRow()), ts, null, null, false);
 
         if (indexPut == null) {
             // This means the data row does not have any covered column values
