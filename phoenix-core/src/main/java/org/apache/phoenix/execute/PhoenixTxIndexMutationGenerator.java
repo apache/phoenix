@@ -364,7 +364,8 @@ public class PhoenixTxIndexMutationGenerator {
                 throw new IOException(e);
             }
         }
-        Iterable<IndexUpdate> puts = codec.getIndexUpserts(state, indexMetaData, regionStartKey, regionEndKey);
+        Iterable<IndexUpdate> puts =
+                codec.getIndexUpserts(state, indexMetaData, regionStartKey, regionEndKey, true);
         boolean validPut = false;
         for (IndexUpdate put : puts) {
             if (put.isValid()) {

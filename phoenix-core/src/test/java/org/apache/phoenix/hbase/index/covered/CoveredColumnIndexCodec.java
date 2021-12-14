@@ -58,7 +58,7 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
     }
 
     @Override
-    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData indexMetaData, byte[] regionStartKey, byte[] regionEndKey) {
+    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData indexMetaData, byte[] regionStartKey, byte[] regionEndKey, boolean verified) {
         List<IndexUpdate> updates = new ArrayList<IndexUpdate>(groups.size());
         for (ColumnGroup group : groups) {
             IndexUpdate update = getIndexUpdateForGroup(group, state, indexMetaData);

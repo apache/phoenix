@@ -184,7 +184,7 @@ public class TestCoveredColumnIndexCodec {
     // get the updates with the pending update
     state.setCurrentTimestamp(1);
     state.addPendingUpdates(kvs);
-    updates = codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA, null, null);
+    updates = codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA, null, null, false);
     assertTrue("Didn't find index updates for pending primary table update!", updates.iterator()
         .hasNext());
     for (IndexUpdate update : updates) {
@@ -237,7 +237,7 @@ public class TestCoveredColumnIndexCodec {
     state.setCurrentTimestamp(d.getTimeStamp());
     // now we shouldn't see anything when getting the index update
     state.addPendingUpdates(d.getFamilyCellMap().get(FAMILY));
-    Iterable<IndexUpdate> updates = codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA, null, null);
+    Iterable<IndexUpdate> updates = codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA, null, null, false);
     for (IndexUpdate update : updates) {
       assertFalse("Had some index updates, though it should have been covered by the delete",
         update.isValid());

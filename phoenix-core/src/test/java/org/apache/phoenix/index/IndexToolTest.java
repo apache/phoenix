@@ -73,7 +73,7 @@ public class IndexToolTest extends BaseTest {
         Long startTime = 10L;
         Long endTime = 15L;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -85,7 +85,7 @@ public class IndexToolTest extends BaseTest {
     @Test
     public void testParseOptions_timeRange_null() throws Exception {
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE);
         CommandLine cmdLine = it.parseOptions(args);
         it.populateIndexToolAttributes(cmdLine);
@@ -98,7 +98,7 @@ public class IndexToolTest extends BaseTest {
         Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         Long startTime = 10L;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         startTime , null);
         CommandLine cmdLine = it.parseOptions(args);
@@ -111,7 +111,7 @@ public class IndexToolTest extends BaseTest {
     public void testParseOptions_timeRange_endTimeNotNull() throws Exception {
         Long endTime = 15L;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         null , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -124,7 +124,7 @@ public class IndexToolTest extends BaseTest {
     public void testParseOptions_timeRange_startTimeNullEndTimeInFuture() throws Exception {
         Long endTime = EnvironmentEdgeManager.currentTimeMillis() + 100000;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         null , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -138,7 +138,7 @@ public class IndexToolTest extends BaseTest {
         Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         Long startTime = EnvironmentEdgeManager.currentTimeMillis() + 100000;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         startTime , null);
         CommandLine cmdLine = it.parseOptions(args);
@@ -153,7 +153,7 @@ public class IndexToolTest extends BaseTest {
         Long startTime = EnvironmentEdgeManager.currentTimeMillis() + 100000;
         Long endTime = EnvironmentEdgeManager.currentTimeMillis() + 200000;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -168,7 +168,7 @@ public class IndexToolTest extends BaseTest {
         Long startTime = EnvironmentEdgeManager.currentTimeMillis();
         Long endTime = EnvironmentEdgeManager.currentTimeMillis() + 100000;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -183,7 +183,7 @@ public class IndexToolTest extends BaseTest {
         Long startTime = 10L;
         Long endTime = 10L;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -198,7 +198,7 @@ public class IndexToolTest extends BaseTest {
         Long startTime = 10L;
         Long endTime = 1L;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -222,7 +222,7 @@ public class IndexToolTest extends BaseTest {
         when(mockTool.getLastVerifyTime()).thenCallRealMethod();
         Long lastVerifyTime = 10L;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         lastVerifyTime, null, IndexTool.IndexDisableLoggingType.NONE, lastVerifyTime);
         when(mockTool.parseOptions(args)).thenCallRealMethod();
@@ -248,7 +248,7 @@ public class IndexToolTest extends BaseTest {
         when(mockTool.getLastVerifyTime()).thenCallRealMethod();
         Long lastVerifyTime = 10L;
         String [] args =
-            IndexToolIT.getArgValues(true, true, schema,
+            IndexToolIT.getArgValues(true, schema,
                 dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.AFTER,
                 lastVerifyTime, null, IndexTool.IndexDisableLoggingType.NONE,
                 lastVerifyTime);
@@ -274,7 +274,7 @@ public class IndexToolTest extends BaseTest {
             IndexTool it = new IndexTool();
             Long lastVerifyTime = 10L;
             String[] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                     dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.AFTER,
                     lastVerifyTime, null, IndexTool.IndexDisableLoggingType.NONE,
                     lastVerifyTime);
@@ -288,7 +288,7 @@ public class IndexToolTest extends BaseTest {
             IndexTool it = new IndexTool();
             Long lastVerifyTime = 10L;
             String[] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                     dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.AFTER,
                     null, null, IndexTool.IndexDisableLoggingType.NONE,
                     lastVerifyTime);
@@ -303,7 +303,7 @@ public class IndexToolTest extends BaseTest {
         Long startTime = null;
         Long endTime = 10L;
         String [] args =
-            IndexToolIT.getArgValues(true, true, schema,
+            IndexToolIT.getArgValues(true, schema,
                 dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                 startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -361,7 +361,7 @@ public class IndexToolTest extends BaseTest {
         Long startTime = null;
         Long endTime = 10L;
         String[] args =
-            IndexToolIT.getArgValues(true, true, schema,
+            IndexToolIT.getArgValues(true, schema,
                 dataTable, indexTable, tenantId, verifyType,
                 startTime, endTime, disableType, null);
         CommandLine cmdLine = it.parseOptions(args);
@@ -374,7 +374,7 @@ public class IndexToolTest extends BaseTest {
         Long startTime = null;
         Long endTime = 10L;
         String[] args =
-            IndexToolIT.getArgValues(true, true, schema,
+            IndexToolIT.getArgValues(true, schema,
                 dataTable, indexTable, tenantId, verifyType,
                 startTime, endTime, disableType, null);
         exceptionRule.expect(IllegalStateException.class);
@@ -387,7 +387,7 @@ public class IndexToolTest extends BaseTest {
         Long startTime = 1L;
         Long endTime = 10L;
         String [] args =
-            IndexToolIT.getArgValues(true, true, schema,
+            IndexToolIT.getArgValues(true, schema,
                 dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                 startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
