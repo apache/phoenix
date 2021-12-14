@@ -156,7 +156,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
                     dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") + this.indexDDLOptions);
             if (async) {
                 // run the index MR job.
-                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
+                IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
             }
             // Count the number of index rows
             String query = "SELECT COUNT(*) from " + indexTableName;
@@ -189,7 +189,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
                     dataTableName + " (val1, PHOENIX_ROW_TIMESTAMP()) " + "include (val2, val3) " + (async ? "ASYNC" : "")+ this.indexDDLOptions);
             if (async) {
                 // Run the index MR job to rebuild the index and verify that index is built correctly
-                IndexToolIT.runIndexTool(true, false, null, dataTableName,
+                IndexToolIT.runIndexTool(false, null, dataTableName,
                         indexTableName, null, 0, IndexTool.IndexVerifyType.AFTER);
             }
 
@@ -274,7 +274,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
                     (async ? "ASYNC" : "")+ this.indexDDLOptions);
             if (async) {
                 // Run the index MR job to rebuild the index and verify that index is built correctly
-                IndexToolIT.runIndexTool(true, false, null, dataTableName,
+                IndexToolIT.runIndexTool(false, null, dataTableName,
                         indexTableName, null, 0, IndexTool.IndexVerifyType.AFTER);
             }
             // Add one more row
@@ -327,7 +327,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
             conn.createStatement().executeUpdate(dml);
             conn.commit();
             // Make sure this delete attempt did not make the index and data table inconsistent
-            IndexToolIT.runIndexTool(true, false, "", dataTableName, indexTableName, null,
+            IndexToolIT.runIndexTool(false, "", dataTableName, indexTableName, null,
                     0, IndexTool.IndexVerifyType.ONLY);
         }
     }
@@ -438,7 +438,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
                     dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") + this.indexDDLOptions);
             if (async) {
                 // run the index MR job.
-                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
+                IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
             }
             // For the concurrent updates on the same row, the last write phase is ignored.
             // Configure IndexRegionObserver to fail the last write phase (i.e., the post index update phase) where the
@@ -482,7 +482,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
                     dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") + this.indexDDLOptions);
             if (async) {
                 // run the index MR job.
-                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
+                IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
             }
             String selectSql = "SELECT id from " + dataTableName + " WHERE val1  = 'ab'";
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
@@ -527,7 +527,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
                 dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") + this.indexDDLOptions);
         if (async) {
             // run the index MR job.
-            IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
+            IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
         }
         conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('a', 'abcc')");
         conn.commit();
@@ -620,7 +620,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
                     dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") + this.indexDDLOptions);
             if (async) {
                 // run the index MR job.
-                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
+                IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
             }
             // Configure IndexRegionObserver to fail the first write phase (i.e., the pre index update phase). This should not
             // lead to any change on index or data table rows
@@ -653,7 +653,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
                     dataTableName + " (val1) include (val2, val3)" + (async ? "ASYNC" : "") + this.indexDDLOptions);
             if (async) {
                 // run the index MR job.
-                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName);
+                IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
             }
             // Configure IndexRegionObserver to fail the last write phase (i.e., the post index update phase) where the verify flag is set
             // to true and/or index rows are deleted and check that this does not impact the correctness
@@ -662,7 +662,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
             conn.commit();
             conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2) values ('c', 'cd','cde')");
             conn.commit();
-            IndexTool indexTool = IndexToolIT.runIndexTool(true, false, "", dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.ONLY);
+            IndexTool indexTool = IndexToolIT.runIndexTool(false, "", dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.ONLY);
             assertEquals(3, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
             assertEquals(3, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
@@ -800,8 +800,8 @@ public class GlobalIndexCheckerIT extends BaseTest {
                     dataTableName + " (val2) include (val1, val3)" + (async ? "ASYNC" : "") + this.indexDDLOptions);
             if (async) {
                 // run the index MR job.
-                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "1");
-                IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "2");
+                IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName + "1");
+                IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName + "2");
             }
             // Two Phase write. This write is recoverable
             IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
@@ -920,8 +920,8 @@ public class GlobalIndexCheckerIT extends BaseTest {
         conn.commit();
         if (async) {
             // run the index MR job.
-            IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "1");
-            IndexToolIT.runIndexTool(true, false, null, dataTableName, indexTableName + "2");
+            IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName + "1");
+            IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName + "2");
         }
     }
 
