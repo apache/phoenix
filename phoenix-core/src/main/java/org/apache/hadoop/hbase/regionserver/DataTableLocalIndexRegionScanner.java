@@ -109,8 +109,8 @@ public class DataTableLocalIndexRegionScanner extends DelegateRegionScanner {
                 ValueGetter valueGetter = maintainer
                         .createGetterFromKeyValues(ImmutableBytesPtr.copyBytesIfNecessary(ptr), dataTableResults);
                 List<Cell> list = maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr,
-                        dataTableResults.get(0).getTimestamp(), startKey, endKey).getFamilyCellMap()
-                        .get(localIndexFamily);
+                        dataTableResults.get(0).getTimestamp(), startKey, endKey, false)
+                        .getFamilyCellMap().get(localIndexFamily);
                 Put put = null;
                 Delete del = null;
                 for (Cell cell : list) {

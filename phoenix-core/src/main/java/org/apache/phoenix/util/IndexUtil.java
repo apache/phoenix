@@ -40,19 +40,22 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.PhoenixTagType;
+import org.apache.hadoop.hbase.Tag;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.PhoenixTagType;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.Tag;
 import org.apache.hadoop.hbase.TagRewriteCell;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -68,7 +71,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
-import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -389,7 +391,7 @@ public class IndexUtil {
                         regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
                         regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
                     }
-                    indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, regionStartKey, regionEndkey));
+                    indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, regionStartKey, regionEndkey, false));
                 }
             }
             return indexMutations;
@@ -975,6 +977,60 @@ public class IndexUtil {
             for (Cell cell : updatedCells) {
                 Delete d = (Delete) m;
                 d.addDeleteMarker(cell);
+            }
+        }
+    }
+
+    /**
+     * Updates the EMPTY cell value to VERIFIED for global index table rows.
+     */
+    public static class IndexStatusUpdater {
+
+        private final byte[] emptyKeyValueCF;
+        private final int emptyKeyValueCFLength;
+        private final byte[] emptyKeyValueQualifier;
+        private final int emptyKeyValueQualifierLength;
+
+        public IndexStatusUpdater(final byte[] emptyKeyValueCF, final byte[] emptyKeyValueQualifier) {
+            this.emptyKeyValueCF = emptyKeyValueCF;
+            this.emptyKeyValueQualifier = emptyKeyValueQualifier;
+            this.emptyKeyValueCFLength = emptyKeyValueCF.length;
+            this.emptyKeyValueQualifierLength = emptyKeyValueQualifier.length;
+        }
+
+        /**
+         * Update the Empty cell values to VERIFIED in the passed keyValues list
+         *
+         * @param keyValues will be modified
+         */
+        public void setVerified(List<KeyValue> keyValues) {
+            for (int i = 0; i < keyValues.size(); i++) {
+                updateVerified(keyValues.get(i));
+            }
+        }
+
+        /**
+         * Update the Empty cell values to VERIFIED in the passed keyValues list
+         *
+         * @param cellScanner contents will be modified
+         * @throws IOException
+         */
+        public void setVerified(CellScanner cellScanner) throws IOException {
+            while (cellScanner.advance()) {
+                updateVerified(cellScanner.current());
+            }
+        }
+
+        private void updateVerified(Cell cell) {
+            if (CellUtil.matchingFamily(cell, emptyKeyValueCF, 0, emptyKeyValueCFLength)
+                    && CellUtil.matchingQualifier(cell, emptyKeyValueQualifier,
+                        0, emptyKeyValueQualifierLength)) {
+                if (cell.getValueLength() != 1) {
+                    //This should never happen. Fail fast if it does.
+                   throw new IllegalArgumentException("Empty cell value length is not 1");
+                }
+                //We are directly overwriting the value for performance
+                cell.getValueArray()[cell.getValueOffset()] = QueryConstants.VERIFIED_BYTE;
             }
         }
     }

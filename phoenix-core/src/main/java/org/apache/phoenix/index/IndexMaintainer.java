@@ -1056,11 +1056,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return indexRowKeySchema;
     }
 
-    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
+    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey, boolean verified) throws IOException {
         byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey, ts);
         return buildUpdateMutation(kvBuilder, valueGetter, dataRowKeyPtr, ts, regionStartKey, regionEndKey,
                 indexRowKey, this.getEmptyKeyValueFamily(), coveredColumnsMap,
-                indexEmptyKeyValueRef, indexWALDisabled, dataImmutableStorageScheme, immutableStorageScheme, encodingScheme);
+                indexEmptyKeyValueRef, indexWALDisabled, dataImmutableStorageScheme, immutableStorageScheme, encodingScheme, verified);
     }
 
     public static Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable dataRowKeyPtr, long ts,
@@ -1068,7 +1068,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                                           Map<ColumnReference, ColumnReference> coveredColumnsMap,
                                           ColumnReference destEmptyKeyValueRef, boolean destWALDisabled,
                                           ImmutableStorageScheme srcImmutableStroageScheme, ImmutableStorageScheme destImmutableStorageScheme,
-                                          QualifierEncodingScheme destEncodingScheme) throws IOException {
+                                          QualifierEncodingScheme destEncodingScheme, boolean verified) throws IOException {
         Set<ColumnReference> coveredColumns = coveredColumnsMap.keySet();
         Put put = null;
         // New row being inserted: add the empty key value
@@ -1086,7 +1086,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             // add the keyvalue for the empty row
             put.add(kvBuilder.buildPut(new ImmutableBytesPtr(destRowKey),
                     emptyKeyValueCFPtr, destEmptyKeyValueRef.getQualifierWritable(), ts,
-                    QueryConstants.EMPTY_COLUMN_VALUE_BYTES_PTR));
+                    verified ? QueryConstants.VERIFIED_BYTES_PTR : QueryConstants.EMPTY_COLUMN_VALUE_BYTES_PTR));
             put.setDurability(!destWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
         }
 

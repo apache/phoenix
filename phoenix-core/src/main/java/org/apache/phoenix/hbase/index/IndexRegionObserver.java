@@ -84,6 +84,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PRow;
@@ -141,10 +142,6 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
     private static final Logger LOG = LoggerFactory.getLogger(IndexRegionObserver.class);
     private static final OperationStatus IGNORE = new OperationStatus(OperationStatusCode.SUCCESS);
     private static final OperationStatus NOWRITE = new OperationStatus(OperationStatusCode.SUCCESS);
-    protected static final byte VERIFIED_BYTE = 1;
-    protected static final byte UNVERIFIED_BYTE = 2;
-    public static final byte[] UNVERIFIED_BYTES = new byte[] { UNVERIFIED_BYTE };
-    public static final byte[] VERIFIED_BYTES = new byte[] { VERIFIED_BYTE };
     public static final String PHOENIX_APPEND_METADATA_TO_WAL = "phoenix.append.metadata.to.wal";
     public static final boolean DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL = false;
 
@@ -880,7 +877,7 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
                 if (nextDataRowState != null) {
                     ValueGetter nextDataRowVG = new GlobalIndexRegionScanner.SimpleValueGetter(nextDataRowState);
                     Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
-                            nextDataRowVG, rowKeyPtr, ts, null, null);
+                            nextDataRowVG, rowKeyPtr, ts, null, null, false);
                     if (indexPut == null) {
                         // No covered column. Just prepare an index row with the empty column
                         byte[] indexRowKey = indexMaintainer.buildRowKey(nextDataRowVG, rowKeyPtr,
@@ -890,8 +887,10 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
                         removeEmptyColumn(indexPut, indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
                                 indexMaintainer.getEmptyKeyValueQualifier());
                     }
-                    indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
-                            indexMaintainer.getEmptyKeyValueQualifier(), ts, UNVERIFIED_BYTES);
+                    indexPut.addColumn(
+                            indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+                            indexMaintainer.getEmptyKeyValueQualifier(), ts,
+                            QueryConstants.UNVERIFIED_BYTES);
                     context.indexUpdates.put(hTableInterfaceReference,
                             new Pair<Mutation, byte[]>(indexPut, rowKeyPtr.get()));
                     // Delete the current index row if the new index key is different than the current one
@@ -958,7 +957,8 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
                     } else {
                         // Set the status of the index row to "unverified"
                         Put unverifiedPut = new Put(m.getRow());
-                        unverifiedPut.addColumn(emptyCF, emptyCQ, now, UNVERIFIED_BYTES);
+                        unverifiedPut.addColumn(
+                            emptyCF, emptyCQ, now, QueryConstants.UNVERIFIED_BYTES);
                         // This will be done before the data table row is updated (i.e., in the first write phase)
                         context.preIndexUpdates.put(hTableInterfaceReference, unverifiedPut);
                     }
@@ -997,7 +997,7 @@ public class IndexRegionObserver extends CompatIndexRegionObserver {
                 if (m instanceof Put) {
                     Put verifiedPut = new Put(m.getRow());
                     // Set the status of the index row to "verified"
-                    verifiedPut.addColumn(emptyCF, emptyCQ, now, VERIFIED_BYTES);
+                    verifiedPut.addColumn(emptyCF, emptyCQ, now, QueryConstants.VERIFIED_BYTES);
                     context.postIndexUpdates.put(hTableInterfaceReference, verifiedPut);
                 } else {
                     context.postIndexUpdates.put(hTableInterfaceReference, m);

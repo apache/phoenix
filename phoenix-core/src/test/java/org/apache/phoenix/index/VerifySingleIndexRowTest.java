@@ -58,8 +58,8 @@ import java.sql.SQLException;
 import java.util.*;
 
 import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.MUTATION_TS_DESC_COMPARATOR;
-import static org.apache.phoenix.hbase.index.IndexRegionObserver.UNVERIFIED_BYTES;
-import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
+import static org.apache.phoenix.query.QueryConstants.UNVERIFIED_BYTES;
+import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_BYTES;
 import static org.junit.Assert.*;
 import static org.mockito.Matchers.any;
@@ -478,7 +478,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
                 QueryConstants.EMPTY_COLUMN_BYTES,
                 EnvironmentEdgeManager.currentTimeMillis(),
                 KeyValue.Type.Put.getCode(),
-                IndexRegionObserver.VERIFIED_BYTES);
+                QueryConstants.VERIFIED_BYTES);
         put.add(cell);
         // This mutation is beyond maxLookBack, so add it to expectedMutations only.
         expectedMutations.add(put);
@@ -492,7 +492,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
                 QueryConstants.EMPTY_COLUMN_BYTES,
                 EnvironmentEdgeManager.currentTimeMillis(),
                 KeyValue.Type.Put.getCode(),
-                IndexRegionObserver.VERIFIED_BYTES);
+                QueryConstants.VERIFIED_BYTES);
         put.add(cell);
         // This mutation is in both expectedMutations and actualMutations, as it is within the maxLookBack, so it will not get chance to be compacted away
         expectedMutations.add(put);

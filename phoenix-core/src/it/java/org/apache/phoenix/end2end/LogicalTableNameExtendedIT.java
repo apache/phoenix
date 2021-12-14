@@ -91,7 +91,7 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
         conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
         // Create tables and change physical index table
         test_IndexTableChange(conn, conn2, schemaName, tableName, indexName,
-                IndexRegionObserver.UNVERIFIED_BYTES, true);
+                QueryConstants.UNVERIFIED_BYTES, true);
         // Now change physical data table
         createAndPointToNewPhysicalTable(conn, fullTableHName, true);
         try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
@@ -149,7 +149,7 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
                         htable.put(put);
                     }
 
-                    IndexToolIT.runIndexTool(true, false, schemaName, tableName, indexName);
+                    IndexToolIT.runIndexTool(false, schemaName, tableName, indexName);
                     rs = conn.createStatement().executeQuery("SELECT * FROM " +  fullIndexName + " WHERE \":PK1\"='PK30'");
                     assertEquals(true, rs.next());
 

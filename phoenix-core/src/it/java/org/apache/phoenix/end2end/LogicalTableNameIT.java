@@ -23,7 +23,6 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.end2end.join.HashJoinGlobalIndexIT;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
 import org.apache.phoenix.schema.PTable;
@@ -31,6 +30,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.query.QueryConstants;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -108,7 +108,7 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
                         indexName, false, createChildAfterRename);
 
                 // We have to rebuild index for this to work
-                IndexToolIT.runIndexTool(true, false, schemaName, tableName, indexName);
+                IndexToolIT.runIndexTool(false, schemaName, tableName, indexName);
 
                 validateTable(conn, fullTableName);
                 validateTable(conn2, fullTableName);
@@ -181,7 +181,7 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
         String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
         try (Connection conn = getConnection(props)) {
             try (Connection conn2 = getConnection(props)) {
-                HashMap<String, ArrayList<String>> expected = test_IndexTableChange(conn, conn2, schemaName, tableName, indexName, IndexRegionObserver.VERIFIED_BYTES, false);
+                HashMap<String, ArrayList<String>> expected = test_IndexTableChange(conn, conn2, schemaName, tableName, indexName, QueryConstants.VERIFIED_BYTES, false);
 
                 validateIndex(conn, fullIndexName, false, expected);
                 validateIndex(conn2, fullIndexName, false, expected);
@@ -213,7 +213,7 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
         String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
         try (Connection conn = getConnection(props)) {
             try (Connection conn2 = getConnection(props)) {
-                test_IndexTableChange(conn, conn2, schemaName, tableName, indexName, IndexRegionObserver.VERIFIED_BYTES, false);
+                test_IndexTableChange(conn, conn2, schemaName, tableName, indexName, QueryConstants.VERIFIED_BYTES, false);
                 List<Job>
                         completedJobs =
                         IndexScrutinyToolBaseIT.runScrutinyTool(schemaName, tableName, indexName, 1L,
@@ -231,7 +231,7 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
                 // Try with unverified bytes
                 String tableName2 = "TBL_" + generateUniqueName();
                 String indexName2 = "IDX_" + generateUniqueName();
-                test_IndexTableChange(conn, conn2, schemaName, tableName2, indexName2, IndexRegionObserver.UNVERIFIED_BYTES, false);
+                test_IndexTableChange(conn, conn2, schemaName, tableName2, indexName2, QueryConstants.UNVERIFIED_BYTES, false);
 
                 completedJobs =
                         IndexScrutinyToolBaseIT.runScrutinyTool(schemaName, tableName2, indexName2, 1L,
@@ -271,9 +271,9 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
                         schemaName, tableName, view1Name, view1IndexName1, view1IndexName2, view2Name, view2IndexName1, false, createChildAfterRename);
 
                 // We have to rebuild index for this to work
-                IndexToolIT.runIndexTool(true, false, schemaName, view1Name, view1IndexName1);
-                IndexToolIT.runIndexTool(true, false, schemaName, view1Name, view1IndexName2);
-                IndexToolIT.runIndexTool(true, false, schemaName, view2Name, view2IndexName1);
+                IndexToolIT.runIndexTool(false, schemaName, view1Name, view1IndexName1);
+                IndexToolIT.runIndexTool(false, schemaName, view1Name, view1IndexName2);
+                IndexToolIT.runIndexTool(false, schemaName, view2Name, view2IndexName1);
 
                 validateIndex(conn, fullView1IndexName1, true, expected);
                 validateIndex(conn2, fullView1IndexName2, true, expected);

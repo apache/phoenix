@@ -409,7 +409,8 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                 Put put = maintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
                         valueGetter, ptr, results.get(0).getTimestamp(),
                         env.getRegion().getRegionInfo().getStartKey(),
-                        env.getRegion().getRegionInfo().getEndKey());
+                        env.getRegion().getRegionInfo().getEndKey(),
+                        false);
 
                 if (txnProvider != null) {
                     put = txnProvider.markPutAsCommitted(put, ts, ts);

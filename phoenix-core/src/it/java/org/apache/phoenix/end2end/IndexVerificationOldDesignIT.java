@@ -88,7 +88,7 @@ public class IndexVerificationOldDesignIT extends BaseTest {
 
             upsertValidRows(conn, dataTableFullName);
 
-            IndexTool indexTool = IndexToolIT.runIndexTool(true, false, schemaName, dataTableName, indexTableName,
+            IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY);
 
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
@@ -97,7 +97,7 @@ public class IndexVerificationOldDesignIT extends BaseTest {
 
             conn.createStatement().execute("upsert into " + indexTableFullName + " values ('Phoenix5', 6,'G')");
             conn.commit();
-            indexTool = IndexToolIT.runIndexTool(true, false, schemaName, dataTableName, indexTableName,
+            indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY);
 
             assertEquals(1, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
@@ -108,7 +108,7 @@ public class IndexVerificationOldDesignIT extends BaseTest {
             injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis() + ttl*1000);
             EnvironmentEdgeManager.injectEdge(injectEdge);
 
-            indexTool = IndexToolIT.runIndexTool(true, false, schemaName, dataTableName, indexTableName,
+            indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY);
 
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
@@ -140,14 +140,14 @@ public class IndexVerificationOldDesignIT extends BaseTest {
 
             upsertValidRows(conn, fullViewName);
 
-            IndexToolIT.runIndexTool(true, false, schemaName, viewName, indexTableName,
+            IndexToolIT.runIndexTool(false, schemaName, viewName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY);
 
             conn.createStatement().execute("upsert into " + indexTableFullName + " values ('Phoenix5', 6,'G')");
             conn.createStatement().execute("delete from " + indexTableFullName + " where \"0:CODE\" = 'D'");
             conn.commit();
 
-            IndexTool indexTool = IndexToolIT.runIndexTool(true, false, schemaName, viewName, indexTableName,
+            IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, viewName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY);
             assertEquals(1, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
             assertEquals(4, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());

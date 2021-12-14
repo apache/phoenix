@@ -42,8 +42,12 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.IndexUtil.IndexStatusUpdater;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,6 +75,7 @@ public class PhoenixIndexImportDirectMapper extends
     private MutationState mutationState;
     private int currentBatchCount = 0;
 
+    private IndexStatusUpdater indexStatusUpdater;
 
     @Override
     protected void setup(final Context context) throws IOException, InterruptedException {
@@ -86,7 +91,7 @@ public class PhoenixIndexImportDirectMapper extends
             final Properties overrideProps = new Properties();
             String scn = configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE);
             String txScnValue = configuration.get(PhoenixConfigurationUtil.TX_SCN_VALUE);
-            if(txScnValue==null) {
+            if (txScnValue == null && scn != null) {
                 overrideProps.put(PhoenixRuntime.BUILD_INDEX_AT_ATTRIB, scn);
             }
             connection = ConnectionUtil.getOutputConnection(configuration, overrideProps);
@@ -105,6 +110,14 @@ public class PhoenixIndexImportDirectMapper extends
 
             final String upsertQuery = PhoenixConfigurationUtil.getUpsertStatement(configuration);
             this.pStatement = connection.prepareStatement(upsertQuery);
+
+            String indexTableName =
+                    PhoenixConfigurationUtil.getIndexToolIndexTableName(configuration);
+            PTable pIndexTable = PhoenixRuntime.getTable(connection, indexTableName);
+
+            indexStatusUpdater = new IndexStatusUpdater(
+                SchemaUtil.getEmptyColumnFamily(pIndexTable),
+                EncodedColumnsUtil.getEmptyKeyValueInfo(pIndexTable).getFirst());
 
         } catch (Exception e) {
             tryClosingResources();
@@ -155,6 +168,9 @@ public class PhoenixIndexImportDirectMapper extends
             List<List<Mutation>> batchOfBatchMutations =
                 MutationState.getMutationBatchList(batchSize, batchSizeBytes, batchMutations);
             for (List<Mutation> mutationList : batchOfBatchMutations) {
+                for (Mutation mutation: mutationList) {
+                    indexStatusUpdater.setVerified(mutation.cellScanner());
+                }
                 writer.write(mutationList);
             }
             context.getCounter(PhoenixJobCounters.OUTPUT_RECORDS).increment(

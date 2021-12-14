@@ -265,6 +265,14 @@ public interface QueryConstants {
     byte[] DEFAULT_COLUMN_FAMILY_BYTES = Bytes.toBytes(DEFAULT_COLUMN_FAMILY);
     ImmutableBytesPtr DEFAULT_COLUMN_FAMILY_BYTES_PTR = new ImmutableBytesPtr(
             DEFAULT_COLUMN_FAMILY_BYTES);
+
+    byte VERIFIED_BYTE = 1;
+    byte UNVERIFIED_BYTE = 2;
+    byte[] VERIFIED_BYTES = new byte[] { VERIFIED_BYTE };
+    byte[] UNVERIFIED_BYTES = new byte[] { UNVERIFIED_BYTE };
+    ImmutableBytesPtr VERIFIED_BYTES_PTR = new ImmutableBytesPtr(VERIFIED_BYTES);
+    ImmutableBytesPtr UNVERIFIED_BYTES_PTR = new ImmutableBytesPtr(UNVERIFIED_BYTES);
+
     // column qualifier of the single key value used to store all columns for the
     // COLUMNS_STORED_IN_SINGLE_CELL storage scheme
     String SINGLE_KEYVALUE_COLUMN_QUALIFIER = "1";

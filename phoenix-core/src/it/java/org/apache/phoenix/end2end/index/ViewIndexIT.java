@@ -361,7 +361,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
             }
 
             // run the MR job
-            IndexToolIT.runIndexTool(true, false, SCHEMA2, globalViewName, globalViewIdx);
+            IndexToolIT.runIndexTool(false, SCHEMA2, globalViewName, globalViewIdx);
             try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
                 // Verify that query uses the global view index works while querying the tenant view
                 PreparedStatement stmt = tenantConn.prepareStatement("SELECT KV1 FROM  " + tenantView + " WHERE PK3 = ? AND KV3 = ?");
