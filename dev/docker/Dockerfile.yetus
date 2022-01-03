@@ -43,7 +43,7 @@ RUN mkdir -p /run/user/910/gnupg/ \
 # Update Java 11 packages to 11.0.11 (to avoid Java 11.0.9.1 version Jetty bug)
 #####
 RUN apt-get update \
-    && apt-get -q install --no-install-recommends -y openjdk-11-jdk-headless=11.0.11+9-0ubuntu2~20.04 openjdk-11-jre-headless=11.0.11+9-0ubuntu2~20.04 openjdk-11-jre=11.0.11+9-0ubuntu2~20.04
+    && apt-get -q install --no-install-recommends -y openjdk-11-jdk-headless openjdk-11-jre-headless openjdk-11-jre
 #####
 # Set default JDK to 11
 #####
