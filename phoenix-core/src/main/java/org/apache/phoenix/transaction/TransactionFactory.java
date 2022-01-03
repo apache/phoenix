@@ -30,7 +30,7 @@ public class TransactionFactory {
         try {
             tephraTransactionProvider = (PhoenixTransactionProvider)
                     Class.forName("org.apache.phoenix.transaction.TephraTransactionProvider")
-                    .newInstance();
+                    .getMethod("getInstance").invoke(null);
         } catch (Throwable e) {
             tephraTransactionProvider = NotAvailableTransactionProvider.getInstance();
         }
