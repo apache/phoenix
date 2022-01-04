@@ -224,7 +224,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String OLD_METADATA = "OLD_METADATA";
     public static final String NEW_METADATA = "NEW_METADATA";
     public static final String TRANSFORM_FUNCTION = "TRANSFORM_FUNCTION";
-    public static final String TRANSFORM_TABLE_TTL = "864000";
+    public static final String TRANSFORM_TABLE_TTL = "7776000"; // 90 days
 
     public static final int TTL_FOR_MUTEX = 15 * 60; // 15min
     public static final String ARRAY_SIZE = "ARRAY_SIZE";

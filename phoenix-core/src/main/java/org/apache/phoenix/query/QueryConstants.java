@@ -567,14 +567,14 @@ public interface QueryConstants {
             TRANSFORM_RETRY_COUNT + " INTEGER NULL," +
             TRANSFORM_START_TS + " TIMESTAMP NULL," +
             TRANSFORM_LAST_STATE_TS + " TIMESTAMP NULL," +
-            OLD_METADATA + " VARCHAR NULL,\n" +
+            OLD_METADATA + " VARBINARY NULL,\n" +
             NEW_METADATA + " VARCHAR NULL,\n" +
             TRANSFORM_FUNCTION + " VARCHAR NULL\n" +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
             TENANT_ID + "," + TABLE_SCHEM + "," + LOGICAL_TABLE_NAME + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
             HColumnDescriptor.KEEP_DELETED_CELLS + "=%s,\n" +
-            HColumnDescriptor.TTL + "=" + TRANSFORM_TABLE_TTL + ",\n" +     // 10 days
+            HColumnDescriptor.TTL + "=" + TRANSFORM_TABLE_TTL + ",\n" +     // 90 days
             HTableDescriptor.SPLIT_POLICY + "='"
             + SystemTaskSplitPolicy.class.getName() + "',\n" +
             TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
