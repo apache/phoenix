@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.NavigableMap;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
@@ -36,6 +37,9 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.expression.OrderByExpression;
+import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
+import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
+import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
@@ -66,6 +70,22 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
     public static final String WILDCARD_SCAN_INCLUDES_DYNAMIC_COLUMNS =
             "_WildcardScanIncludesDynCols";
 
+    private static boolean readRepairTransformingTable = false;
+    private static  GlobalIndexChecker.GlobalIndexScanner globalIndexScanner;
+    private static GlobalIndexChecker globalIndexChecker = new GlobalIndexChecker();
+    private static GlobalIndexCheckerSource metricsSource = MetricsIndexerSourceFactory.getInstance().getGlobalIndexCheckerSource();
+
+    @Override
+    public void start(CoprocessorEnvironment env) throws IOException {
+        globalIndexChecker.start(env);
+        super.start(env);
+    }
+
+    @Override
+    public void stop(CoprocessorEnvironment env) throws IOException {
+        globalIndexChecker.stop(env);
+        super.stop(env);
+    }
 
     public static void serializeIntoScan(Scan scan, int limit,
             List<OrderByExpression> orderByExpressions, int estimatedRowSize) {
@@ -184,6 +204,11 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws Throwable {
         NonAggregateRegionScannerFactory nonAggregateROUtil = new NonAggregateRegionScannerFactory(c.getEnvironment());
+        if (scan.getAttribute(BaseScannerRegionObserver.READ_REPAIR_TRANSFORMING_TABLE) != null) {
+            readRepairTransformingTable = true;
+            globalIndexScanner = globalIndexChecker.new GlobalIndexScanner(c.getEnvironment(), scan, s, metricsSource);
+            return nonAggregateROUtil.getRegionScanner(scan, globalIndexScanner);
+        }
         return nonAggregateROUtil.getRegionScanner(scan, s);
     }
 

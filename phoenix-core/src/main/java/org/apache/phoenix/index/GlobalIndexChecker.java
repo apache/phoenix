@@ -18,6 +18,7 @@
 package org.apache.phoenix.index;
 
 import static org.apache.phoenix.index.IndexMaintainer.getIndexMaintainer;
+import static org.apache.phoenix.query.QueryConstants.UNVERIFIED_BYTES;
 import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ScanUtil.getDummyResult;
@@ -63,6 +64,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
@@ -122,7 +124,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver {
      * An instance of this class is created for each scanner on an index
      * and used to verify individual rows and rebuild them if they are not valid
      */
-    private class GlobalIndexScanner extends BaseRegionScanner {
+    public class GlobalIndexScanner extends BaseRegionScanner {
         private RegionScanner scanner;
         private long ageThreshold;
         private Scan scan;
@@ -543,9 +545,18 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver {
             while (cellIterator.hasNext()) {
                 cell = cellIterator.next();
                 if (isEmptyColumn(cell)) {
-                    if (Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
-                            VERIFIED_BYTES, 0, VERIFIED_BYTES.length) != 0) {
-                        return false;
+                    if (indexMaintainer instanceof TransformMaintainer) {
+                        // This is a transforming table. After cutoff, if there are new mutations on the table,
+                        // their empty col value would be x. So, we are only interested in unverified ones.
+                        if (Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
+                                UNVERIFIED_BYTES, 0, UNVERIFIED_BYTES.length) == 0) {
+                            return false;
+                        }
+                    } else {
+                        if (Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
+                                VERIFIED_BYTES, 0, VERIFIED_BYTES.length) != 0) {
+                            return false;
+                        }
                     }
                     // Empty column is not supposed to be returned to the client except it is the only column included
                     // in the scan

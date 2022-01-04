@@ -64,6 +64,7 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -76,7 +77,7 @@ import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCOD
 
 public class TransformMaintainer extends IndexMaintainer {
     private boolean isMultiTenant;
-    // indexed expressions that are not present in the row key of the data table, the expression can also refer to a regular column
+    // expressions that are not present in the row key of the old table, the expression can also refer to a regular column
     private List<Expression> newTableExpressions;
     private Set<ColumnReference> newTableColumns;
 
@@ -194,6 +195,19 @@ public class TransformMaintainer extends IndexMaintainer {
         } catch (ColumnNotFoundException e) {
             return null;
         }
+    }
+
+    public Set<ColumnReference> getAllColumnsForDataTable() {
+        Set<ColumnReference> result = Sets.newLinkedHashSetWithExpectedSize(newTableExpressions.size() + coveredColumnsMap.size());
+        result.addAll(newTableColumns);
+        for (ColumnReference colRef : coveredColumnsMap.keySet()) {
+            if (oldTableImmutableStorageScheme == PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
+                result.add(colRef);
+            } else {
+                result.add(new ColumnReference(colRef.getFamily(), QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES));
+            }
+        }
+        return result;
     }
 
     /*
@@ -375,6 +389,16 @@ public class TransformMaintainer extends IndexMaintainer {
         maintainer.newTableColumnsInfo = Sets.newHashSet();
         for (ServerCachingProtos.ColumnInfo info : newTblColumnInfoList) {
             maintainer.newTableColumnsInfo.add(new Pair<>(info.getFamilyName(), info.getColumnName()));
+        }
+        maintainer.newTableExpressions = new ArrayList<>();
+        try (ByteArrayInputStream stream = new ByteArrayInputStream(proto.getNewTableExpressions().toByteArray())) {
+            DataInput input = new DataInputStream(stream);
+            while (stream.available() > 0) {
+                int expressionOrdinal = WritableUtils.readVInt(input);
+                Expression expression = ExpressionType.values()[expressionOrdinal].newInstance();
+                expression.readFields(input);
+                maintainer.newTableExpressions.add(expression);
+            }
         }
         // proto doesn't support single byte so need an explicit cast here
         maintainer.newTableEncodingScheme = PTable.QualifierEncodingScheme.fromSerializedValue((byte) proto.getNewTableEncodingScheme());
