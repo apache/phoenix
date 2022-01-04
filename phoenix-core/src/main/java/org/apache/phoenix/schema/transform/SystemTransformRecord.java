@@ -45,14 +45,14 @@ public class SystemTransformRecord {
     private final Integer transformRetryCount;
     private final Timestamp startTs;
     private final Timestamp lastStateTs;
-    private final String oldMetadata;
+    private final byte[] oldMetadata;
     private final String newMetadata;
     private final String transformFunction;
 
     public SystemTransformRecord(PTable.TransformType transformType,
                                  String schemaName, String logicalTableName, String tenantId, String newPhysicalTableName, String logicalParentName,
                                  String transformStatus, String transformJobId, Integer transformRetryCount, Timestamp startTs,
-                                 Timestamp lastStateTs, String oldMetadata, String newMetadata, String transformFunction) {
+                                 Timestamp lastStateTs, byte[] oldMetadata, String newMetadata, String transformFunction) {
         this.transformType = transformType;
         this.schemaName = schemaName;
         this.tenantId = tenantId;
@@ -119,7 +119,7 @@ public class SystemTransformRecord {
         return lastStateTs;
     }
 
-    public String getOldMetadata() {
+    public byte[] getOldMetadata() {
         return oldMetadata;
     }
     public String getNewMetadata() {
@@ -149,7 +149,7 @@ public class SystemTransformRecord {
         private int transformRetryCount =0;
         private Timestamp startTs = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
         private Timestamp lastStateTs;
-        private String oldMetadata;
+        private byte[] oldMetadata;
         private String newMetadata;
         private String transformFunction;
 
@@ -214,7 +214,7 @@ public class SystemTransformRecord {
             return this;
         }
 
-        public SystemTransformBuilder setOldMetadata(String oldMetadata) {
+        public SystemTransformBuilder setOldMetadata(byte[] oldMetadata) {
             this.oldMetadata = oldMetadata;
             return this;
         }
@@ -268,7 +268,7 @@ public class SystemTransformRecord {
             builder.setTransformRetryCount(resultSet.getInt(col++));
             builder.setStartTs(resultSet.getTimestamp(col++));
             builder.setLastStateTs(resultSet.getTimestamp(col++));
-            builder.setOldMetadata(resultSet.getString(col++));
+            builder.setOldMetadata(resultSet.getBytes(col++));
             builder.setNewMetadata(resultSet.getString(col++));
             builder.setTransformFunction(resultSet.getString(col++));
 

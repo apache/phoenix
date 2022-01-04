@@ -413,6 +413,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 }
             });
         }
+
         boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
         int offsetToBe = 0;
         if (localIndexScan) {

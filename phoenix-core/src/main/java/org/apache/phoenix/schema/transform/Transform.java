@@ -109,7 +109,7 @@ public class Transform {
                                     long sequenceNum, PTable.TransformType transformType) throws SQLException {
         try {
             String newMetadata = JacksonUtil.getObjectWriter().writeValueAsString(changingProperties);
-            String oldMetadata = "";
+            byte[] oldMetadata = PTableImpl.toProto(table).toByteArray();
             String newPhysicalTableName = "";
             SystemTransformRecord.SystemTransformBuilder transformBuilder = new SystemTransformRecord.SystemTransformBuilder();
             String schema = table.getSchemaName()!=null ? table.getSchemaName().getString() : null;
@@ -401,9 +401,9 @@ public class Transform {
                 stmt.setNull(colNum++, Types.TIMESTAMP);
             }
             if (systemTransformParams.getOldMetadata() != null) {
-                stmt.setString(colNum++, systemTransformParams.getOldMetadata());
+                stmt.setBytes(colNum++, systemTransformParams.getOldMetadata());
             } else {
-                stmt.setNull(colNum++, Types.VARCHAR);
+                stmt.setNull(colNum++, Types.VARBINARY);
             }
             if (systemTransformParams.getNewMetadata() != null) {
                 stmt.setString(colNum++, systemTransformParams.getNewMetadata());

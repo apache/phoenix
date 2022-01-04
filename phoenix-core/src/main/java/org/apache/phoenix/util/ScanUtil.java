@@ -58,6 +58,7 @@ import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.BaseQueryPlan;
@@ -85,11 +86,16 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.tool.SchemaExtractionProcessor;
+import org.apache.phoenix.schema.transform.SystemTransformRecord;
+import org.apache.phoenix.schema.transform.Transform;
+import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
@@ -1129,46 +1135,89 @@ public class ScanUtil {
     }
 
     public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table, PhoenixConnection phoenixConnection) throws SQLException {
-        if (table.isTransactional() || table.getType() != PTableType.INDEX) {
-            return;
-        }
+        boolean isTransforming = (table.getTransformingNewTable() != null);
         PTable indexTable = table;
-        if (indexTable.getIndexType() != PTable.IndexType.GLOBAL) {
-            return;
-        }
-        String schemaName = indexTable.getParentSchemaName().getString();
-        String tableName = indexTable.getParentTableName().getString();
-        PTable dataTable;
-        try {
-            dataTable = PhoenixRuntime.getTable(phoenixConnection, SchemaUtil.getTableName(schemaName, tableName));
-        } catch (TableNotFoundException e) {
-            // This index table must be being deleted. No need to set the scan attributes
-            return;
-        }
-        // MetaDataClient modifies the index table name for view indexes if the parent view of an index has a child
-        // view. This, we need to recreate a PTable object with the correct table name for the rest of this code to work
-        if (indexTable.getViewIndexId() != null && indexTable.getName().getString().contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
-            int lastIndexOf = indexTable.getName().getString().lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
-            String indexName = indexTable.getName().getString().substring(lastIndexOf + 1);
-            indexTable = PhoenixRuntime.getTable(phoenixConnection, indexName);
-        }
-        if (!dataTable.getIndexes().contains(indexTable)) {
-            return;
-        }
-        if (scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD) == null) {
-            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-            IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(indexTable), phoenixConnection);
-            scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
-        }
-        scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
-        scan.setAttribute(BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME, dataTable.getPhysicalName().getBytes());
-        IndexMaintainer indexMaintainer = indexTable.getIndexMaintainer(dataTable, phoenixConnection);
-        byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
-        byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
-        scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
-        scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
-        if (scan.getAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS) == null) {
-            BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
+        // Transforming index table can be repaired in regular path via globalindexchecker coproc on it.
+        // phoenixConnection is closed when it is called from mappers
+        if (!phoenixConnection.isClosed() && table.getType() == PTableType.TABLE && isTransforming) {
+            SystemTransformRecord systemTransformRecord = Transform.getTransformRecord(indexTable.getSchemaName(), indexTable.getTableName(),
+                    null, phoenixConnection.getTenantId(), phoenixConnection);
+            if (systemTransformRecord == null) {
+                return;
+            }
+            // Old table is still active, cutover didn't happen yet, so, no need to read repair
+            if (!systemTransformRecord.getTransformStatus().equals(PTable.TransformStatus.COMPLETED.name())) {
+                return;
+            }
+            byte[] oldTableBytes = systemTransformRecord.getOldMetadata();
+            if (oldTableBytes == null || oldTableBytes.length == 0) {
+                return;
+            }
+            PTable oldTable = null;
+            try {
+                oldTable = PTableImpl.createFromProto(PTableProtos.PTable.parseFrom(oldTableBytes));
+            } catch (IOException e) {
+                LOGGER.error("Cannot parse old table info for read repair for table " + table.getName());
+                return;
+            }
+            TransformMaintainer indexMaintainer = indexTable.getTransformMaintainer(oldTable, phoenixConnection);
+            // This is the path where we are reading from the newly transformed table
+            if (scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD) == null) {
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                TransformMaintainer.serialize(oldTable, ptr, indexTable, phoenixConnection);
+                scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
+            }
+            scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
+            scan.setAttribute(BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME, oldTable.getPhysicalName().getBytes());
+            byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
+            byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
+            scan.setAttribute(BaseScannerRegionObserver.READ_REPAIR_TRANSFORMING_TABLE, TRUE_BYTES);
+        } else {
+            if (table.isTransactional() || table.getType() != PTableType.INDEX) {
+                return;
+            }
+            if (indexTable.getIndexType() != PTable.IndexType.GLOBAL) {
+                return;
+            }
+
+            String schemaName = indexTable.getParentSchemaName().getString();
+            String tableName = indexTable.getParentTableName().getString();
+            PTable dataTable;
+            try {
+                dataTable = PhoenixRuntime.getTable(phoenixConnection, SchemaUtil.getTableName(schemaName, tableName));
+            } catch (TableNotFoundException e) {
+                // This index table must be being deleted. No need to set the scan attributes
+                return;
+            }
+            // MetaDataClient modifies the index table name for view indexes if the parent view of an index has a child
+            // view. This, we need to recreate a PTable object with the correct table name for the rest of this code to work
+            if (indexTable.getViewIndexId() != null && indexTable.getName().getString().contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+                int lastIndexOf = indexTable.getName().getString().lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+                String indexName = indexTable.getName().getString().substring(lastIndexOf + 1);
+                indexTable = PhoenixRuntime.getTable(phoenixConnection, indexName);
+            }
+            if (!dataTable.getIndexes().contains(indexTable)) {
+                return;
+            }
+
+            if (scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD) == null) {
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(indexTable), phoenixConnection);
+                scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
+            }
+            scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
+            scan.setAttribute(BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME, dataTable.getPhysicalName().getBytes());
+            IndexMaintainer indexMaintainer = indexTable.getIndexMaintainer(dataTable, phoenixConnection);
+            byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
+            byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
+            if (scan.getAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS) == null) {
+                BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
+            }
+            addEmptyColumnToScan(scan, emptyCF, emptyCQ);
         }
     }
 
