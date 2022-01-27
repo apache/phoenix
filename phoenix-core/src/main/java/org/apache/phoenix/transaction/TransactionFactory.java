@@ -18,8 +18,6 @@
 package org.apache.phoenix.transaction;
 
 import java.io.IOException;
-import java.util.List;
-
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 
 public class TransactionFactory {
