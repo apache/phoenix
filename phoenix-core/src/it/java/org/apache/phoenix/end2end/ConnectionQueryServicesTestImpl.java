@@ -32,6 +32,7 @@ import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.transaction.PhoenixTransactionClient;
 import org.apache.phoenix.transaction.PhoenixTransactionService;
+import org.apache.phoenix.transaction.TestTransactionServiceManager;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
 import org.apache.phoenix.util.SQLCloseables;
@@ -105,7 +106,7 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
         PhoenixTransactionService txService = txServices[provider.ordinal()];
         if (txService == null) {
             int port = TestUtil.getRandomPort();
-            txService = txServices[provider.ordinal()] = provider.getTransactionProvider().getTransactionService(config, connectionInfo, port);
+            txService = txServices[provider.ordinal()] = TestTransactionServiceManager.startTransactionService(provider, config, connectionInfo, port);
         }
         return super.initTransactionClient(provider);
     }

@@ -105,7 +105,6 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -151,7 +150,6 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.coprocessor.MultiRowMutationEndpoint;
-import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
@@ -1150,26 +1148,26 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
 
             if (isTransactional) {
-                Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
-                if (!newDesc.hasCoprocessor(coprocessorClass.getName())) {
-                    builder.addCoprocessor(coprocessorClass.getName(), null, priority - 10, null);
+                String coprocessorClassName = provider.getTransactionProvider().getCoprocessorClassName();
+                if (!newDesc.hasCoprocessor(coprocessorClassName)) {
+                    builder.addCoprocessor(coprocessorClassName, null, priority - 10, null);
                 }
-                Class<? extends RegionObserver> coprocessorGCClass = provider.getTransactionProvider().getGCCoprocessor();
-                if (coprocessorGCClass != null) {
-                    if (!newDesc.hasCoprocessor(coprocessorGCClass.getName())) {
-                        builder.addCoprocessor(coprocessorGCClass.getName(), null, priority - 10, null);
+                String coprocessorGCClassName = provider.getTransactionProvider().getGCCoprocessorClassName();
+                if (coprocessorGCClassName != null) {
+                    if (!newDesc.hasCoprocessor(coprocessorGCClassName)) {
+                        builder.addCoprocessor(coprocessorGCClassName, null, priority - 10, null);
                     }
                 }
             } else {
                 // Remove all potential transactional coprocessors
                 for (TransactionFactory.Provider aprovider : TransactionFactory.Provider.available()) {
-                    Class<? extends RegionObserver> coprocessorClass = aprovider.getTransactionProvider().getCoprocessor();
-                    Class<? extends RegionObserver> coprocessorGCClass = aprovider.getTransactionProvider().getGCCoprocessor();
-                    if (coprocessorClass != null && newDesc.hasCoprocessor(coprocessorClass.getName())) {
-                        builder.removeCoprocessor(coprocessorClass.getName());
+                    String coprocessorClassName = aprovider.getTransactionProvider().getCoprocessorClassName();
+                    String coprocessorGCClassName = aprovider.getTransactionProvider().getGCCoprocessorClassName();
+                    if (coprocessorClassName != null && newDesc.hasCoprocessor(coprocessorClassName)) {
+                        builder.removeCoprocessor(coprocessorClassName);
                     }
-                    if (coprocessorGCClass != null && newDesc.hasCoprocessor(coprocessorGCClass.getName())) {
-                        builder.removeCoprocessor(coprocessorGCClass.getName());
+                    if (coprocessorGCClassName != null && newDesc.hasCoprocessor(coprocessorGCClassName)) {
+                        builder.removeCoprocessor(coprocessorGCClassName);
                     }
                 }
             }
@@ -1610,8 +1608,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private static boolean hasTxCoprocessor(TableDescriptor descriptor) {
         for (TransactionFactory.Provider provider : TransactionFactory.Provider.available()) {
-            Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
-            if (coprocessorClass != null && descriptor.hasCoprocessor(coprocessorClass.getName())) {
+            String coprocessorClassName = provider.getTransactionProvider().getCoprocessorClassName();
+            if (coprocessorClassName != null && descriptor.hasCoprocessor(coprocessorClassName)) {
                 return true;
             }
         }
@@ -1619,8 +1617,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     private static boolean equalTxCoprocessor(TransactionFactory.Provider provider, TableDescriptor existingDesc, TableDescriptor newDesc) {
-        Class<? extends RegionObserver> coprocessorClass = provider.getTransactionProvider().getCoprocessor();
-        return (coprocessorClass != null && existingDesc.hasCoprocessor(coprocessorClass.getName()) && newDesc.hasCoprocessor(coprocessorClass.getName()));
+        String coprocessorClassName = provider.getTransactionProvider().getCoprocessorClassName();
+        return (coprocessorClassName != null && existingDesc.hasCoprocessor(coprocessorClassName) && newDesc.hasCoprocessor(coprocessorClassName));
 }
 
     private void modifyTable(byte[] tableName, TableDescriptor newDesc, boolean shouldPoll) throws IOException,
