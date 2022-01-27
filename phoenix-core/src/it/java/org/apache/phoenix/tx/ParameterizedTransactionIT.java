@@ -41,7 +41,6 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.TephraTransactionalProcessor;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -390,8 +389,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
         
         htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("SYSTEM." + nonTxTableName));
-        Class<? extends RegionObserver> clazz = transactionProvider.getCoprocessor();
-        assertFalse(htable.getTableDescriptor().getCoprocessors().contains(clazz.getName()));
+        assertFalse(htable.getTableDescriptor().getCoprocessors().contains(transactionProvider.getCoprocessorClassName()));
         assertEquals(1,conn.unwrap(PhoenixConnection.class).getQueryServices().
                 getTableDescriptor(Bytes.toBytes("SYSTEM." + nonTxTableName)).
                 getFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES).getMaxVersions());
@@ -414,8 +412,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         PTable table = pconn.getTable(new PTableKey(null, t1));
         HTableInterface htable = pconn.getQueryServices().getTable(Bytes.toBytes(t1));
         assertTrue(table.isTransactional());
-        Class<? extends RegionObserver> clazz = transactionProvider.getCoprocessor();
-        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(clazz.getName()));
+        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(transactionProvider.getCoprocessorClassName()));
         
         try {
             ddl = "ALTER TABLE " + t1 + " SET transactional=false";
@@ -460,7 +457,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         table = pconn.getTable(new PTableKey(null, t1));
         htable = pconn.getQueryServices().getTable(Bytes.toBytes(t1));
         assertTrue(table.isTransactional());
-        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(clazz.getName()));
+        assertTrue(htable.getTableDescriptor().getCoprocessors().contains(transactionProvider.getCoprocessorClassName()));
     }
 
     @Test

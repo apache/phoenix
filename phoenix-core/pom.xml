@@ -231,6 +231,8 @@
     <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
     <optional>true</optional>
   </dependency>
+
+  <!-- Transaction dependencies -->
   <dependency>
     <groupId>org.apache.omid</groupId>
     <artifactId>omid-hbase-client-hbase1.x</artifactId>
@@ -302,22 +304,20 @@
     </exclusions>
   </dependency>
 
-    <!-- Transaction dependencies -->
+    <!-- Omid test dependencies -->
     <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-api</artifactId>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-tso-server-hbase1.x</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-core-shaded</artifactId>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-tso-server-hbase1.x</artifactId>
+      <scope>test</scope>
+      <type>test-jar</type>
     </dependency>
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
-      <classifier>shaded</classifier>
-    </dependency>
-  
-    <!-- Make sure we have all the antlr dependencies -->
+
+    <!-- Other dependencies -->
     <dependency>
       <groupId>org.antlr</groupId>
       <artifactId>antlr-runtime</artifactId>
