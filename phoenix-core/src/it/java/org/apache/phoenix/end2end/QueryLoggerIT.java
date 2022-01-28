@@ -94,7 +94,6 @@ public class QueryLoggerIT extends BaseTest {
             return time;
         }
     }
-    
 
     @Test
     public void testDebugLogs() throws Exception {
@@ -105,46 +104,49 @@ public class QueryLoggerIT extends BaseTest {
         Connection conn = DriverManager.getConnection(getUrl(),props);
         assertEquals(conn.unwrap(PhoenixConnection.class).getLogLevel(),LogLevel.DEBUG);
         String query = "SELECT * FROM " + tableName;
-        ResultSet rs = conn.createStatement().executeQuery(query);
-        StatementContext context = ((PhoenixResultSet)rs).getContext();
-        String queryId = context.getQueryLogger().getQueryId();
-        while (rs.next()) {
-            rs.getString(1);
-            rs.getString(2);
+        StatementContext context;
+        try (ResultSet rs = conn.createStatement().executeQuery(query)) {
+            context = ((PhoenixResultSet) rs).getContext();
+            while (rs.next()) {
+                rs.getString(1);
+                rs.getString(2);
+            }
         }
-        ResultSet explainRS = conn.createStatement().executeQuery("Explain " + query);
+        String queryId = context.getQueryLogger().getQueryId();
 
         String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
         int delay = 5000;
 
         // sleep for sometime to let query log committed
         Thread.sleep(delay);
-        rs = conn.createStatement().executeQuery(logQuery);
-        boolean foundQueryLog = false;
+        try (ResultSet explainRS = conn.createStatement().executeQuery("Explain " + query);
+             ResultSet rs = conn.createStatement().executeQuery(logQuery)) {
+            boolean foundQueryLog = false;
 
-        while (rs.next()) {
-            if (rs.getString(QUERY_ID).equals(queryId)) {
-                foundQueryLog = true;
-                assertEquals(rs.getString(BIND_PARAMETERS), null);
-                assertEquals(rs.getString(USER), System.getProperty("user.name"));
-                assertEquals(rs.getString(CLIENT_IP), InetAddress.getLocalHost().getHostAddress());
-                assertEquals(rs.getString(EXPLAIN_PLAN), QueryUtil.getExplainPlan(explainRS));
-                assertEquals(rs.getString(GLOBAL_SCAN_DETAILS), context.getScan().toJSON());
-                assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 10);
-                assertEquals(rs.getString(QUERY), query);
-                assertEquals(rs.getString(QUERY_STATUS), QueryStatus.COMPLETED.toString());
-                assertEquals(rs.getString(TENANT_ID), null);
-                assertTrue(rs.getString(SCAN_METRICS_JSON)==null);
-                assertEquals(rs.getString(EXCEPTION_TRACE),null);
-            }else{
-                //confirm we are not logging system queries
-                assertFalse(rs.getString(QUERY).toString().contains(SYSTEM_CATALOG_SCHEMA));
+            while (rs.next()) {
+                if (rs.getString(QUERY_ID).equals(queryId)) {
+                    foundQueryLog = true;
+                    assertEquals(rs.getString(BIND_PARAMETERS), null);
+                    assertEquals(rs.getString(USER), System.getProperty("user.name"));
+                    assertEquals(rs.getString(CLIENT_IP), InetAddress.getLocalHost().getHostAddress());
+                    assertEquals(rs.getString(EXPLAIN_PLAN), QueryUtil.getExplainPlan(explainRS));
+                    assertEquals(rs.getString(GLOBAL_SCAN_DETAILS), context.getScan().toJSON());
+                    assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 10);
+                    assertEquals(rs.getString(QUERY), query);
+                    assertEquals(rs.getString(QUERY_STATUS), QueryStatus.COMPLETED.toString());
+                    assertEquals(rs.getString(TENANT_ID), null);
+                    assertTrue(rs.getString(SCAN_METRICS_JSON) == null);
+                    assertEquals(rs.getString(EXCEPTION_TRACE), null);
+                } else {
+                    //confirm we are not logging system queries
+                    assertFalse(rs.getString(QUERY).toString().contains(SYSTEM_CATALOG_SCHEMA));
+                }
             }
+            assertTrue(foundQueryLog);
+            conn.close();
         }
-        assertTrue(foundQueryLog);
-        conn.close();
     }
-    
+
     @Test
     public void testLogSampling() throws Exception {
         String tableName = generateUniqueName();
@@ -157,28 +159,29 @@ public class QueryLoggerIT extends BaseTest {
         String query = "SELECT * FROM " + tableName;
         int count=100;
         for (int i = 0; i < count; i++) {
-            ResultSet rs = conn.createStatement().executeQuery(query);
-            while(rs.next()){
-                
+            try (ResultSet rs = conn.createStatement().executeQuery(query)) {
+                while (rs.next()) {
+
+                }
             }
         }
-        
         String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
-        ResultSet rs = conn.createStatement().executeQuery(logQuery);
+
         int delay = 5000;
 
         // sleep for sometime to let query log committed
         Thread.sleep(delay);
+        ResultSet rs = conn.createStatement().executeQuery(logQuery);
         int logCount=0;
         while (rs.next()) {
             logCount++;
         }
-        
-        //sampling rate is 0.5 , but with lesser count, uniformity of thread random may not be perfect, so taking 0.75 for comparison 
+
+        //sampling rate is 0.5 , but with lesser count, uniformity of thread random may not be perfect, so taking 0.75 for comparison
         assertTrue(logCount != 0 && logCount < count * 0.75);
         conn.close();
     }
-    
+
     @Test
     public void testInfoLogs() throws Exception{
         String tableName = generateUniqueName();
@@ -188,39 +191,41 @@ public class QueryLoggerIT extends BaseTest {
         Connection conn = DriverManager.getConnection(getUrl(),props);
         assertEquals(conn.unwrap(PhoenixConnection.class).getLogLevel(),LogLevel.INFO);
         String query = "SELECT * FROM " + tableName;
-        
-        ResultSet rs = conn.createStatement().executeQuery(query);
-        StatementContext context = ((PhoenixResultSet)rs).getContext();
-        String queryId = context.getQueryLogger().getQueryId();
-        while (rs.next()) {
-            rs.getString(1);
-            rs.getString(2);
+        StatementContext context;
+        try (ResultSet rs = conn.createStatement().executeQuery(query)) {
+            context = ((PhoenixResultSet) rs).getContext();
+            while (rs.next()) {
+                rs.getString(1);
+                rs.getString(2);
+            }
         }
+        String queryId = context.getQueryLogger().getQueryId();
 
         String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
         int delay = 5000;
 
         // sleep for sometime to let query log committed
         Thread.sleep(delay);
-        rs = conn.createStatement().executeQuery(logQuery);
-        boolean foundQueryLog = false;
-        while (rs.next()) {
-            if (rs.getString(QUERY_ID).equals(queryId)) {
-                foundQueryLog = true;
-                assertEquals(rs.getString(USER), System.getProperty("user.name"));
-                assertEquals(rs.getString(CLIENT_IP), InetAddress.getLocalHost().getHostAddress());
-                assertEquals(rs.getString(EXPLAIN_PLAN), null);
-                assertEquals(rs.getString(GLOBAL_SCAN_DETAILS),null);
-                assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 10);
-                assertEquals(rs.getString(QUERY), query);
-                assertEquals(rs.getString(QUERY_STATUS),QueryStatus.COMPLETED.toString());
-                assertEquals(rs.getString(TENANT_ID), null);
+        try (ResultSet rs = conn.createStatement().executeQuery(logQuery)) {
+            boolean foundQueryLog = false;
+            while (rs.next()) {
+                if (rs.getString(QUERY_ID).equals(queryId)) {
+                    foundQueryLog = true;
+                    assertEquals(rs.getString(USER), System.getProperty("user.name"));
+                    assertEquals(rs.getString(CLIENT_IP), InetAddress.getLocalHost().getHostAddress());
+                    assertEquals(rs.getString(EXPLAIN_PLAN), null);
+                    assertEquals(rs.getString(GLOBAL_SCAN_DETAILS), null);
+                    assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 10);
+                    assertEquals(rs.getString(QUERY), query);
+                    assertEquals(rs.getString(QUERY_STATUS), QueryStatus.COMPLETED.toString());
+                    assertEquals(rs.getString(TENANT_ID), null);
+                }
             }
+            assertTrue(foundQueryLog);
+            conn.close();
         }
-        assertTrue(foundQueryLog);
-        conn.close();
     }
-    
+
     @Test
     public void testWithLoggingOFF() throws Exception{
         String tableName = generateUniqueName();
@@ -265,7 +270,7 @@ public class QueryLoggerIT extends BaseTest {
     public void testPreparedStatementWithDebug() throws Exception{
         testPreparedStatement(LogLevel.DEBUG);
     }
-            
+
     private void testPreparedStatement(LogLevel loglevel) throws Exception{
         String tableName = generateUniqueName();
         createTableAndInsertValues(tableName, true);
@@ -276,51 +281,53 @@ public class QueryLoggerIT extends BaseTest {
         final MyClock clock = new MyClock(100);
         EnvironmentEdgeManager.injectEdge(clock);
         try{
-        String query = "SELECT * FROM " + tableName +" where V = ?";
-        
-        PreparedStatement pstmt = conn.prepareStatement(query);
-        pstmt.setString(1, "value5");
-        ResultSet rs = pstmt.executeQuery();
-        StatementContext context = ((PhoenixResultSet)rs).getContext();
-        String queryId = context.getQueryLogger().getQueryId();
-        while (rs.next()) {
-            rs.getString(1);
-            rs.getString(2);
-        }
-        ResultSet explainRS = conn.createStatement()
-                .executeQuery("Explain " + "SELECT * FROM " + tableName + " where V = 'value5'");
-        String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
-        int delay = 5000;
-
-        // sleep for sometime to let query log committed
-        Thread.sleep(delay);
-        rs = conn.createStatement().executeQuery(logQuery);
-        boolean foundQueryLog = false;
-        while (rs.next()) {
-            if (rs.getString(QUERY_ID).equals(queryId)) {
-                foundQueryLog = true;
-                assertEquals(rs.getString(BIND_PARAMETERS), loglevel == LogLevel.TRACE ? "value5" : null);
-                assertEquals(rs.getString(USER), System.getProperty("user.name"));
-                assertEquals(rs.getString(CLIENT_IP), InetAddress.getLocalHost().getHostAddress());
-                assertEquals(rs.getString(EXPLAIN_PLAN), QueryUtil.getExplainPlan(explainRS));
-                assertEquals(rs.getString(GLOBAL_SCAN_DETAILS), context.getScan().toJSON());
-                assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 1);
-                assertEquals(rs.getString(QUERY), query);
-                assertEquals(rs.getString(QUERY_STATUS), QueryStatus.COMPLETED.toString());
-                assertTrue(LogLevel.TRACE == loglevel ? rs.getString(SCAN_METRICS_JSON).contains("scanMetrics")
-                        : rs.getString(SCAN_METRICS_JSON) == null);
-                assertEquals(rs.getTimestamp(START_TIME).getTime(),100);
-                assertEquals(rs.getString(TENANT_ID), null);
+            String query = "SELECT * FROM " + tableName +" where V = ?";
+            StatementContext context;
+            PreparedStatement pstmt = conn.prepareStatement(query);
+            pstmt.setString(1, "value5");
+            try (ResultSet rs = pstmt.executeQuery()) {
+                context = ((PhoenixResultSet) rs).getContext();
+                while (rs.next()) {
+                    rs.getString(1);
+                    rs.getString(2);
+                }
             }
-        }
-        assertTrue(foundQueryLog);
-        conn.close();
-        }finally{
+            String queryId = context.getQueryLogger().getQueryId();
+
+            String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
+            int delay = 5000;
+
+            // sleep for sometime to let query log committed
+            Thread.sleep(delay);
+            String explainQuery = "Explain " + "SELECT * FROM " + tableName + " where V = 'value5'";
+            try (ResultSet explainRS = conn.createStatement()
+                    .executeQuery(explainQuery);
+                 ResultSet rs = conn.createStatement().executeQuery(logQuery)) {
+                boolean foundQueryLog = false;
+                while (rs.next()) {
+                    if (rs.getString(QUERY_ID).equals(queryId)) {
+                        foundQueryLog = true;
+                        assertEquals(rs.getString(BIND_PARAMETERS), loglevel == LogLevel.TRACE ? "value5" : null);
+                        assertEquals(rs.getString(USER), System.getProperty("user.name"));
+                        assertEquals(rs.getString(CLIENT_IP), InetAddress.getLocalHost().getHostAddress());
+                        assertEquals(rs.getString(EXPLAIN_PLAN), QueryUtil.getExplainPlan(explainRS));
+                        assertEquals(rs.getString(GLOBAL_SCAN_DETAILS), context.getScan().toJSON());
+                        assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 1);
+                        assertEquals(rs.getString(QUERY), query);
+                        assertEquals(rs.getString(QUERY_STATUS), QueryStatus.COMPLETED.toString());
+                        assertTrue(LogLevel.TRACE == loglevel ? rs.getString(SCAN_METRICS_JSON).contains("scanMetrics")
+                                : rs.getString(SCAN_METRICS_JSON) == null);
+                        assertEquals(rs.getTimestamp(START_TIME).getTime(), 100);
+                        assertEquals(rs.getString(TENANT_ID), null);
+                    }
+                }
+                assertTrue(foundQueryLog);
+                conn.close();
+            }
+        }finally {
             EnvironmentEdgeManager.injectEdge(null);
         }
     }
-    
-    
     
     @Test
     public void testFailedQuery() throws Exception {
