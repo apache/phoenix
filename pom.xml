@@ -99,9 +99,9 @@
     <!-- Dependency versions -->
     <jackson.version>2.12.4</jackson.version>
     <antlr.version>3.5.2</antlr.version>
-    <log4j.version>1.2.17</log4j.version>
+    <reload4j.version>1.2.19</reload4j.version>
     <disruptor.version>3.3.6</disruptor.version>
-    <slf4j.version>1.7.25</slf4j.version>
+    <slf4j.version>1.7.36</slf4j.version>
     <!-- com.google repo will be used except on Aarch64 platform. -->
     <protobuf.group>com.google.protobuf</protobuf.group>
     <protobuf-java.version>2.5.0</protobuf-java.version>
@@ -373,7 +373,7 @@
                   org.apache.omid:omid-timestamp-storage-hbase2.x
                 </ignoredUnusedDeclaredDependency>
                 <ignoredUnusedDeclaredDependency>
-                  org.slf4j:slf4j-log4j12
+                  org.slf4j:slf4j-reload4j
                 </ignoredUnusedDeclaredDependency>
                 <ignoredUnusedDeclaredDependency>
                   org.apache.hbase:hbase-testing-util
@@ -1482,15 +1482,15 @@
       </dependency>
 
        <!-- Runtime dependencies -->
-       <dependency>
-         <groupId>log4j</groupId>
-         <artifactId>log4j</artifactId>
-         <version>${log4j.version}</version>
-         <scope>runtime</scope>
+      <dependency>
+        <groupId>ch.qos.reload4j</groupId>
+        <artifactId>reload4j</artifactId>
+        <version>${reload4j.version}</version>
+        <scope>runtime</scope>
       </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-log4j12</artifactId>
+        <artifactId>slf4j-reload4j</artifactId>
         <version>${slf4j.version}</version>
         <scope>runtime</scope>
       </dependency>
