@@ -310,6 +310,9 @@
             <trimStackTrace>false</trimStackTrace>
             <!-- https://www.orpiske.net/2021/04/test-woes-with-maven-failsafe-3-0-0-m5 -->
             <useModulePath>false</useModulePath>
+            <classpathDependencyExcludes>
+              org.apache.tephra:tephra-api,org.apache.tephra:tephra-core,org.apache.thrift:libthrift
+            </classpathDependencyExcludes>
           </configuration>
           <executions>
             <execution>
@@ -508,6 +511,9 @@
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
           <shutdown>exit</shutdown>
           <trimStackTrace>false</trimStackTrace>
+          <classpathDependencyExcludes>
+            org.apache.tephra:tephra-api,org.apache.tephra:tephra-core,org.apache.thrift:libthrift
+          </classpathDependencyExcludes>
         </configuration>
       </plugin>
       <!-- All projects create a test jar -->
