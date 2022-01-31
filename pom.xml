@@ -97,9 +97,9 @@
     <hadoop.version>2.7.1</hadoop.version>
     <jackson.version>2.12.4</jackson.version>
     <antlr.version>3.5.2</antlr.version>
-    <log4j.version>1.2.17</log4j.version>
+    <reload4j.version>1.2.19</reload4j.version>
     <disruptor.version>3.3.6</disruptor.version>
-    <slf4j.version>1.6.4</slf4j.version>
+    <slf4j.version>1.7.36</slf4j.version>
     <commons-io.version>2.6</commons-io.version>
     <commons-lang.version>2.5</commons-lang.version>
     <!-- com.google repo will be used except on Aarch64 platform. -->
@@ -1090,18 +1090,13 @@
         <version>${protobuf-java.version}</version>
       </dependency>
       <dependency>
-        <groupId>log4j</groupId>
-        <artifactId>log4j</artifactId>
-        <version>${log4j.version}</version>
-      </dependency>
-      <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-api</artifactId>
         <version>${slf4j.version}</version>
       </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-log4j12</artifactId>
+        <artifactId>slf4j-reload4j</artifactId>
         <version>${slf4j.version}</version>
       </dependency>
       <dependency>
@@ -1174,6 +1169,40 @@
             <artifactId>httpcore</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+
+      <!-- Other test dependencies -->
+      <dependency>
+        <groupId>junit</groupId>
+        <artifactId>junit</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-core</artifactId>
+        <version>${mockito.version}</version>
+        <scope>test</scope>
+      </dependency>
+
+       <!-- Runtime dependencies -->
+      <dependency>
+        <groupId>ch.qos.reload4j</groupId>
+        <artifactId>reload4j</artifactId>
+        <version>${reload4j.version}</version>
+        <scope>runtime</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-reload4j</artifactId>
+        <version>${slf4j.version}</version>
+        <scope>runtime</scope>
+      </dependency>
+      <dependency>
+        <groupId>sqlline</groupId>
+        <artifactId>sqlline</artifactId>
+        <version>${sqlline.version}</version>
+        <scope>runtime</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>
