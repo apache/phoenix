@@ -163,7 +163,7 @@
     <jacoco.instruction.coverage.percentage>0.700</jacoco.instruction.coverage.percentage>
     <jacoco.branch.coverage.percentage>0.600</jacoco.branch.coverage.percentage>
 
-    <maven-owasp-plugin.version>6.3.1</maven-owasp-plugin.version>
+    <maven-owasp-plugin.version>6.5.3</maven-owasp-plugin.version>
     <protobuf.plugin.version>0.6.1</protobuf.plugin.version>
     <os.maven.version>1.5.0.Final</os.maven.version>
   </properties>
