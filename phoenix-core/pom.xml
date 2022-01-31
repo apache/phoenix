@@ -302,21 +302,6 @@
     </exclusions>
   </dependency>
 
-    <!-- Transaction dependencies -->
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-api</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-core-shaded</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
-      <classifier>shaded</classifier>
-    </dependency>
-  
     <!-- Make sure we have all the antlr dependencies -->
     <dependency>
       <groupId>org.antlr</groupId>

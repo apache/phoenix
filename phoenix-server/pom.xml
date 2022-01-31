@@ -101,7 +101,6 @@
                   <include>org.apache.phoenix:phoenix-hbase-compat-${hbase.compat.version}</include>
                   <include>org.iq80.snappy:snappy</include>
                   <include>org.antlr:antlr*</include>
-                  <include>org.apache.tephra:tephra*</include>
                   <include>org.apache.omid:omid*</include>
                   <include>org.apache.commons:commons-collections4</include>
                   <include>org.jboss.netty:netty</include>
@@ -113,7 +112,6 @@
                   <include>com.google.inject.extensions:guice-assistedinject</include>
                   <include>it.unimi.dsi:fastutil</include>
                   <include>io.dropwizard.metrics:metrics-core</include>
-                  <include>org.apache.thrift:libthrift</include>
                   <include>com.clearspring.analytics:stream</include>
                   <include>com.salesforce.i18n:i18n-util</include>
                   <include>com.ibm.icu:icu4j</include>
@@ -162,7 +160,6 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-auth</artifactId>
-      <version>2.7.1</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -170,12 +167,40 @@
       <artifactId>hbase-testing-util</artifactId>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-core</artifactId>
-      <version>${tephra.version}</version>
-      <type>test-jar</type>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
+
+  <profiles>
+    <profile>
+      <id>include-tephra</id>
+      <activation>
+        <property>
+          <name>!without.tephra</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-shade-plugin</artifactId>
+            <executions>
+              <execution>
+                <phase>package</phase>
+                <goals>
+                  <goal>shade</goal>
+                </goals>
+                <configuration>
+                  <artifactSet>
+                    <includes>
+                      <include>org.apache.tephra:tephra*</include>
+                      <include>org.apache.thrift:libthrift</include>
+                    </includes>
+                  </artifactSet>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>
