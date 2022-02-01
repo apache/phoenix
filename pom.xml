@@ -1233,7 +1233,11 @@
             <artifactId>maven-failsafe-plugin</artifactId>
             <configuration>
               <classpathDependencyExcludes>
-                org.apache.tephra:tephra-api,org.apache.tephra:tephra-core,org.apache.thrift:libthrift
+                <classpathDependencyExclude>org.apache.tephra:tephra-api</classpathDependencyExclude>
+                <classpathDependencyExclude>org.apache.tephra:tephra-core-shaded</classpathDependencyExclude>
+                <classpathDependencyExclude>org.apache.tephra:tephra-core</classpathDependencyExclude>
+                <classpathDependencyExclude>org.apache.tephra:tephra-hbase-compat-${tephra.hbase.compat.version}</classpathDependencyExclude>
+                <classpathDependencyExclude>org.apache.thrift:libthrift</classpathDependencyExclude>
               </classpathDependencyExcludes>
             </configuration>
           </plugin>
@@ -1242,7 +1246,11 @@
             <artifactId>maven-surefire-plugin</artifactId>
             <configuration>
               <classpathDependencyExcludes>
-                org.apache.tephra:tephra-api,org.apache.tephra:tephra-core,org.apache.thrift:libthrift
+                <classpathDependencyExclude>org.apache.tephra:tephra-api</classpathDependencyExclude>
+                <classpathDependencyExclude>org.apache.tephra:tephra-core-shaded</classpathDependencyExclude>
+                <classpathDependencyExclude>org.apache.tephra:tephra-core</classpathDependencyExclude>
+                <classpathDependencyExclude>org.apache.tephra:tephra-hbase-compat-${tephra.hbase.compat.version}</classpathDependencyExclude>
+                <classpathDependencyExclude>org.apache.thrift:libthrift</classpathDependencyExclude>
               </classpathDependencyExcludes>
             </configuration>
           </plugin>
