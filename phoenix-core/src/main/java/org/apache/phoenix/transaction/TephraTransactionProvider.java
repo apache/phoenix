@@ -40,6 +40,8 @@ import org.apache.tephra.metrics.TxMetricsCollector;
 import org.apache.tephra.persist.HDFSTransactionStateStorage;
 import org.apache.tephra.snapshot.SnapshotCodecProvider;
 import org.apache.tephra.zookeeper.TephraZKClientService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.tephra.shaded.org.apache.twill.discovery.DiscoveryService;
 import org.apache.tephra.shaded.org.apache.twill.discovery.ZKDiscoveryService;
 import org.apache.tephra.shaded.org.apache.twill.zookeeper.RetryStrategies;
@@ -57,19 +59,30 @@ public class TephraTransactionProvider implements PhoenixTransactionProvider {
         return INSTANCE;
     }
     
+    private static final Logger LOGGER = LoggerFactory.getLogger(TephraTransactionProvider.class);
+
     private TephraTransactionProvider() {
+        //Make sure that the constructor fails if the Tephra libraries are not present
+        try {
+            Class.forName("org.apache.tephra.TxConstants");
+            //Without the logging statement the whole constructor seems to be optimized out.
+            LOGGER.info("Tephra libraries present, Tephra enabled");
+        } catch (ClassNotFoundException e) {
+            LOGGER.info("Tephra libraries not present, Tephra disabled");
+            throw new RuntimeException(e);
+        }
     }
-    
+
     @Override
     public String toString() {
         return getProvider().toString();
     }
-    
+
     @Override
     public PhoenixTransactionContext getTransactionContext(byte[] txnBytes) throws IOException {
        return new TephraTransactionContext(txnBytes);
     }
-    
+
     @Override
     public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) throws SQLException {
         return new TephraTransactionContext(connection);
