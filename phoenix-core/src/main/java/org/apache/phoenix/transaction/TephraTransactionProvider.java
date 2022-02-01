@@ -52,24 +52,24 @@ import com.google.inject.util.Providers;
 
 public class TephraTransactionProvider implements PhoenixTransactionProvider {
     private static final TephraTransactionProvider INSTANCE = new TephraTransactionProvider();
-    
+
     public static final TephraTransactionProvider getInstance() {
         return INSTANCE;
     }
-    
+
     private TephraTransactionProvider() {
     }
-    
+
     @Override
     public String toString() {
         return getProvider().toString();
     }
-    
+
     @Override
     public PhoenixTransactionContext getTransactionContext(byte[] txnBytes) throws IOException {
        return new TephraTransactionContext(txnBytes);
     }
-    
+
     @Override
     public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) throws SQLException {
         return new TephraTransactionContext(connection);
