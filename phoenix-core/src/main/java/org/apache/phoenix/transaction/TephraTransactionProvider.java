@@ -51,25 +51,39 @@ import org.apache.tephra.shaded.com.google.common.collect.ArrayListMultimap;
 import com.google.inject.util.Providers;
 
 public class TephraTransactionProvider implements PhoenixTransactionProvider {
-    private static final TephraTransactionProvider INSTANCE = new TephraTransactionProvider();
+    private static final TephraTransactionProvider INSTANCE;
     
     public static final TephraTransactionProvider getInstance() {
         return INSTANCE;
     }
     
+    static {
+        boolean enabled = true;
+        try {
+            Class.forName("org.apache.tephra.TransactionFailureException");
+        } catch (Throwable e) {
+            enabled = false;
+        }
+        if (enabled) {
+            INSTANCE = new TephraTransactionProvider();
+        } else {
+            INSTANCE = null;
+        }
+    }
+
     private TephraTransactionProvider() {
     }
-    
+
     @Override
     public String toString() {
         return getProvider().toString();
     }
-    
+
     @Override
     public PhoenixTransactionContext getTransactionContext(byte[] txnBytes) throws IOException {
        return new TephraTransactionContext(txnBytes);
     }
-    
+
     @Override
     public PhoenixTransactionContext getTransactionContext(PhoenixConnection connection) throws SQLException {
         return new TephraTransactionContext(connection);
