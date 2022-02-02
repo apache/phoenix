@@ -258,9 +258,12 @@
       </exclusion>
     </exclusions>
   </dependency>
+
+    <!-- Omid test dependencies -->
   <dependency>
     <groupId>org.apache.omid</groupId>
     <artifactId>omid-tso-server-hbase1.x</artifactId>
+    <scope>test</scope>
     <exclusions>
       <exclusion>
         <groupId>org.apache.curator</groupId>
@@ -283,6 +286,7 @@
   <dependency>
     <groupId>org.apache.omid</groupId>
     <artifactId>omid-tso-server-hbase1.x</artifactId>
+    <scope>test</scope>
     <type>test-jar</type>
     <exclusions>
       <exclusion>
@@ -303,19 +307,6 @@
       </exclusion>
     </exclusions>
   </dependency>
-
-    <!-- Omid test dependencies -->
-    <dependency>
-      <groupId>org.apache.omid</groupId>
-      <artifactId>omid-tso-server-hbase1.x</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.omid</groupId>
-      <artifactId>omid-tso-server-hbase1.x</artifactId>
-      <scope>test</scope>
-      <type>test-jar</type>
-    </dependency>
 
     <!-- Other dependencies -->
     <dependency>
