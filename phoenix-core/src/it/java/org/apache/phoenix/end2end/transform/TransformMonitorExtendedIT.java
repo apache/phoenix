@@ -64,7 +64,7 @@ public class TransformMonitorExtendedIT extends BaseTest {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        Map<String, String> serverProps = com.google.common.collect.Maps.newHashMapWithExpectedSize(2);
+        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
         serverProps.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
                 Integer.toString(60*60)); // An hour
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());

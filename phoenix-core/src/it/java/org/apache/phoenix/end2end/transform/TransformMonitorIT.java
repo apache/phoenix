@@ -654,7 +654,7 @@ public class TransformMonitorIT extends ParallelStatsDisabledIT {
     }
 
     public static void waitForTransformToGetToState(PhoenixConnection conn, SystemTransformRecord record, PTable.TransformStatus status) throws InterruptedException, SQLException {
-        int maxTries = 200, nTries = 0;
+        int maxTries = 250, nTries = 0;
         String lastStatus = "";
         do {
             if (status.name().equals(record.getTransformStatus())) {
