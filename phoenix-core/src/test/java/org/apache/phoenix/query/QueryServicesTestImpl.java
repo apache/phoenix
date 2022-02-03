@@ -20,10 +20,10 @@ package org.apache.phoenix.query;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SPOOL_DIRECTORY;
 import static org.apache.phoenix.query.QueryServicesOptions.withDefaults;
 
-import org.apache.phoenix.thirdparty.com.google.common.io.Files;
 import org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.apache.tephra.TxConstants;
 
 
@@ -88,6 +88,13 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     }
     
     private static QueryServicesOptions getDefaultServicesOptions() {
+        String txSnapshotDir;
+        try {
+            txSnapshotDir = TestUtil.createTempDirectory().toString();
+        } catch (Exception e) {
+            throw new RuntimeException("Could not create "
+                    + TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, e);
+        }
     	return withDefaults()
     	        .setSequenceCacheSize(DEFAULT_SEQUENCE_CACHE_SIZE)
     	        .setTransactionsEnabled(DEFAULT_TRANSACTIONS_ENABLED)
@@ -129,7 +136,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .set(TxConstants.Service.CFG_DATA_TX_CLIENT_RETRY_STRATEGY, "n-times")
                 .set(TxConstants.Service.CFG_DATA_TX_CLIENT_ATTEMPTS, 1)
                 .set(TxConstants.Service.CFG_DATA_TX_CLIENT_DISCOVERY_TIMEOUT_SEC, 60)
-                .set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, Files.createTempDir().getAbsolutePath())
+                .set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, txSnapshotDir)
                 .set(TxConstants.Manager.CFG_TX_TIMEOUT, DEFAULT_TXN_TIMEOUT_SECONDS)
                 .set(TxConstants.Manager.CFG_TX_SNAPSHOT_INTERVAL, 5L)
                 ;
