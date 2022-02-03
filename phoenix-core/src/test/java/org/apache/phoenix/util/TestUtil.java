@@ -38,6 +38,9 @@ import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.ServerSocket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -1407,6 +1410,10 @@ public class TestUtil {
         }
     }
 
-
+    public static Path createTempDirectory() throws IOException {
+        // We cannot use java.nio.file.Files.createTempDirectory(null),
+        // because that caches the value of "java.io.tmpdir" on class load.
+        return Files.createTempDirectory(Paths.get(System.getProperty("java.io.tmpdir")), null);
+    }
 
 }
