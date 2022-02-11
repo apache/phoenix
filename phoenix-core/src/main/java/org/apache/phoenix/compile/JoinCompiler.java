@@ -1526,7 +1526,7 @@ public class JoinCompiler {
         List<PColumn> merged = Lists.<PColumn> newArrayList();
         int startingPosition = left.getBucketNum() == null ? 0 : 1;
         if (type == JoinType.Full) {
-            for(int i = startingPosition; i < left.getColumns().size(); i++) {
+            for (int i = startingPosition; i < left.getColumns().size(); i++) {
                 PColumn c  = left.getColumns().get(i);
                 merged.add(new ProjectedColumn(c.getName(), c.getFamilyName(),
                         c.getPosition(), true, ((ProjectedColumn) c).getSourceColumnRef(), SchemaUtil.isPKColumn(c) ? null : c.getName().getBytes()));
