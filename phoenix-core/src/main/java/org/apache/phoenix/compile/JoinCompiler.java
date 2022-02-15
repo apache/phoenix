@@ -1533,6 +1533,9 @@ public class JoinCompiler {
             }
         } else {
             merged.addAll(left.getColumns());
+            if(left.getBucketNum() != null) {
+                merged.remove(0);
+            }
         }
         int position = merged.size() + startingPosition;
         for (PColumn c : right.getColumns()) {
