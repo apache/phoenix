@@ -430,7 +430,7 @@ public abstract class BaseTest {
         return url;
     }
     
-    private static String checkClusterInitialized(ReadOnlyProps serverProps) throws Exception {
+    protected static String checkClusterInitialized(ReadOnlyProps serverProps) throws Exception {
         if (!clusterInitialized) {
             url = setUpTestCluster(config, serverProps);
             clusterInitialized = true;

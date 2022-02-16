@@ -413,7 +413,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     }
 
     private int executeMutation(final CompilableStatement stmt, final boolean doRetryOnMetaNotFoundError, final AuditQueryLogger queryLogger) throws SQLException {
-	 if (connection.isReadOnly()) {
+        if (connection.isReadOnly()) {
             throw new SQLExceptionInfo.Builder(
                 SQLExceptionCode.READ_ONLY_CONNECTION).
                 build().buildException();
