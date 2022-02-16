@@ -126,7 +126,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
@@ -154,6 +153,7 @@ import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.User;
+import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -3833,8 +3833,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
             addViewIndexToParentLinks(metaConnection);
-        }
-        if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
             metaConnection = addColumnsIfNotExists(
                     metaConnection,
                     PhoenixDatabaseMetaData.SYSTEM_CATALOG,
@@ -3942,13 +3940,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
             String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
             metaConnection = new PhoenixConnection(ConnectionQueryServicesImpl.this, globalUrl,
-                    scnProps, newEmptyMetaData());
+                    scnProps, latestMetaData);
             metaConnection.setRunningUpgrade(true);
             // Always try to create SYSTEM.MUTEX table first since we need it to acquire the
             // upgrade mutex. Upgrade or migration is not possible without the upgrade mutex
             try (HBaseAdmin admin = getAdmin()) {
                 createSysMutexTableIfNotExists(admin);
             }
+            UpgradeRequiredException caughtUpgradeRequiredException = null;
+            TableAlreadyExistsException caughtTableAlreadyExistsException = null;
             try {
                 metaConnection.createStatement().executeUpdate(getSystemCatalogTableDDL());
             } catch (NewerTableAlreadyExistsException ignore) {
@@ -3958,61 +3958,43 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } catch (UpgradeRequiredException e) {
                 // This is thrown while trying to create SYSTEM:CATALOG to indicate that we must
                 // migrate SYSTEM tables to the SYSTEM namespace and/or upgrade SYSCAT if required
-                long currentServerSideTableTimeStamp = e.getSystemCatalogTimeStamp();
-                if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
-                    moveChildLinks = true;
-                }
-                sysCatalogTableName = SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getNameAsString();
-                if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, ConnectionQueryServicesImpl.this.getProps())) {
-                    String snapshotName = null;
-                    // Try acquiring a lock in SYSMUTEX table before migrating the tables since it involves disabling the table.
-                    if (acquiredMutexLock = acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_MIGRATION_TIMESTAMP)) {
-                        LOGGER.debug("Acquired lock in SYSMUTEX table for migrating SYSTEM tables to SYSTEM namespace "
-                          + "and/or upgrading " + sysCatalogTableName);
-                        snapshotName = getSysTableSnapshotName(
-                            currentServerSideTableTimeStamp, SYSTEM_CATALOG_NAME);
-                        createSnapshot(snapshotName, SYSTEM_CATALOG_NAME);
-                        systemTableToSnapshotMap.put(SYSTEM_CATALOG_NAME,
-                            snapshotName);
-                        LOGGER.info("Created snapshot {} for {}", snapshotName,
-                            SYSTEM_CATALOG_NAME);
-                    }
-                    // We will not reach here if we fail to acquire the lock, since it throws UpgradeInProgressException
-
-                    // If SYSTEM tables exist, they are migrated to HBase SYSTEM namespace
-                    // If they don't exist or they're already migrated, this method will return immediately
-                    ensureSystemTablesMigratedToSystemNamespace();
-                    LOGGER.debug("Migrated SYSTEM tables to SYSTEM namespace");
-                    if (snapshotName != null) {
-                        deleteSnapshot(snapshotName);
-                    } else {
-                        snapshotName = getSysTableSnapshotName(
-                            currentServerSideTableTimeStamp, SYSTEM_CATALOG_NAME);
-                    }
-                    systemTableToSnapshotMap.remove(SYSTEM_CATALOG_NAME);
-                    // take snapshot of SYSTEM:CATALOG
-                    createSnapshot(snapshotName, sysCatalogTableName);
-                    systemTableToSnapshotMap.put(sysCatalogTableName,
-                        snapshotName);
-                    LOGGER.info("Created snapshot {} for {}", snapshotName,
-                        sysCatalogTableName);
-
-                    metaConnection = upgradeSystemCatalogIfRequired(metaConnection,
-                            currentServerSideTableTimeStamp);
-                }
+                caughtUpgradeRequiredException = e;
             } catch (TableAlreadyExistsException e) {
-                long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
-                sysCatalogTableName = e.getTable().getPhysicalName().getString();
-                if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP) {
-                    // Try acquiring a lock in SYSMUTEX table before upgrading SYSCAT. If we cannot acquire the lock,
-                    // it means some old client is either migrating SYSTEM tables or trying to upgrade the schema of
-                    // SYSCAT table and hence it should not be interrupted
-                    if (acquiredMutexLock = acquireUpgradeMutex(currentServerSideTableTimeStamp)) {
-                        LOGGER.debug("Acquired lock in SYSMUTEX table for upgrading " + sysCatalogTableName);
-                        takeSnapshotOfSysTable(systemTableToSnapshotMap, e);
-                    }
-                    // We will not reach here if we fail to acquire the lock, since it throws UpgradeInProgressException
+                caughtTableAlreadyExistsException = e;
+            }
+
+            if (caughtUpgradeRequiredException != null
+                    || caughtTableAlreadyExistsException != null) {
+                long currentServerSideTableTimeStamp;
+                if (caughtUpgradeRequiredException != null) {
+                    currentServerSideTableTimeStamp =
+                            caughtUpgradeRequiredException.getSystemCatalogTimeStamp();
+                } else {
+                    currentServerSideTableTimeStamp =
+                            caughtTableAlreadyExistsException.getTable().getTimeStamp();
                 }
+                acquiredMutexLock = acquireUpgradeMutex(
+                    MetaDataProtocol.MIN_SYSTEM_TABLE_MIGRATION_TIMESTAMP);
+                LOGGER.debug(
+                    "Acquired lock in SYSMUTEX table for migrating SYSTEM tables to SYSTEM "
+                    + "namespace and/or upgrading " + sysCatalogTableName);
+                String snapshotName = getSysTableSnapshotName(currentServerSideTableTimeStamp,
+                    SYSTEM_CATALOG_NAME);
+                createSnapshot(snapshotName, SYSTEM_CATALOG_NAME);
+                systemTableToSnapshotMap.put(SYSTEM_CATALOG_NAME, snapshotName);
+                LOGGER.info("Created snapshot {} for {}", snapshotName, SYSTEM_CATALOG_NAME);
+
+                if (caughtUpgradeRequiredException != null) {
+                    if (SchemaUtil.isNamespaceMappingEnabled(
+                            PTableType.SYSTEM, ConnectionQueryServicesImpl.this.getProps())) {
+                        // If SYSTEM tables exist, they are migrated to HBase SYSTEM namespace
+                        // If they don't exist or they're already migrated, this method will return
+                        //immediately
+                        ensureSystemTablesMigratedToSystemNamespace();
+                        LOGGER.debug("Migrated SYSTEM tables to SYSTEM namespace");
+                    }
+                }
+
                 metaConnection = upgradeSystemCatalogIfRequired(metaConnection, currentServerSideTableTimeStamp);
                 if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
                     moveChildLinks = true;
@@ -4511,6 +4493,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             admin.snapshot(snapshotName, tableName);
             LOGGER.info("Successfully created snapshot " + snapshotName + " for "
                     + tableName);
+        } catch (SnapshotCreationException e) {
+            if (e.getMessage().contains("doesn't exist")) {
+                LOGGER.warn("Could not create snapshot {}, table is missing." + snapshotName, e);
+            } else {
+                sqlE = new SQLException(e);
+            }
         } catch (Exception e) {
             sqlE = new SQLException(e);
         } finally {

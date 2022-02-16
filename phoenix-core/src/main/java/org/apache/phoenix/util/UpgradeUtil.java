@@ -369,12 +369,12 @@ public class UpgradeUtil {
                         HTableDescriptor dataTableDesc = admin.getTableDescriptor(TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(table.getNameAsString())));
                         HColumnDescriptor[] columnFamilies = dataTableDesc.getColumnFamilies();
                         boolean modifyTable = false;
-                        for(HColumnDescriptor cf : columnFamilies) {
+                        for (HColumnDescriptor cf : columnFamilies) {
                             String localIndexCf = QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX+cf.getNameAsString();
-                            if(dataTableDesc.getFamily(Bytes.toBytes(localIndexCf))==null){
+                            if (dataTableDesc.getFamily(Bytes.toBytes(localIndexCf))==null){
                                 HColumnDescriptor colDef =
                                         new HColumnDescriptor(localIndexCf);
-                                for(Entry<ImmutableBytesWritable, ImmutableBytesWritable>keyValue: cf.getValues().entrySet()){
+                                for (Entry<ImmutableBytesWritable, ImmutableBytesWritable>keyValue: cf.getValues().entrySet()){
                                     colDef.setValue(keyValue.getKey().copyBytes(), keyValue.getValue().copyBytes());
                                 }
                                 dataTableDesc.addFamily(colDef);
@@ -382,8 +382,8 @@ public class UpgradeUtil {
                             }
                         }
                         List<String> coprocessors = dataTableDesc.getCoprocessors();
-                        for(String coprocessor:  coprocessors) {
-                            if(coprocessor.equals(localIndexSplitter)) {
+                        for (String coprocessor:  coprocessors) {
+                            if (coprocessor.equals(localIndexSplitter)) {
                                 dataTableDesc.removeCoprocessor(localIndexSplitter);
                                 modifyTable = true;
                             }
@@ -621,7 +621,7 @@ public class UpgradeUtil {
                         String indexPhysicalTableName = MetaDataUtil.getViewIndexPhysicalName(viewPTable.getPhysicalName().getString());
                         if (physicalTables.add(indexPhysicalTableName)) {
                             final TableName tableName = TableName.valueOf(indexPhysicalTableName);
-                            if(admin.tableExists(tableName)) {
+                            if (admin.tableExists(tableName)) {
                                 admin.disableTable(tableName);
                                 admin.truncateTable(tableName, false);
                             }
@@ -2662,4 +2662,5 @@ public class UpgradeUtil {
         return tableDesc.getFamily(
             SchemaUtil.getEmptyColumnFamily(table)).getMaxVersions() > 1;
     }
+
 }
