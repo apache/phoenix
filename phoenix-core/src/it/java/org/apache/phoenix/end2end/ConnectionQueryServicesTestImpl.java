@@ -23,8 +23,10 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
@@ -53,9 +55,9 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(ConnectionQueryServicesTestImpl.class);
-    protected int NUM_SLAVES_BASE = 1; // number of slaves for the cluster
     // Track open connections to free them on close as unit tests don't always do this.
-    private Set<PhoenixConnection> connections = Sets.newHashSet();
+    private Set<PhoenixConnection> connections =
+            Collections.newSetFromMap(new ConcurrentHashMap<PhoenixConnection, Boolean>());
     private final PhoenixTransactionService[] txServices = new PhoenixTransactionService[TransactionFactory.Provider.values().length];
     
     public ConnectionQueryServicesTestImpl(QueryServices services, ConnectionInfo info, Properties props) throws SQLException {
@@ -63,13 +65,15 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     }
     
     @Override
-    public synchronized void addConnection(PhoenixConnection connection) throws SQLException {
+    public void addConnection(PhoenixConnection connection) throws SQLException {
         connections.add(connection);
+        super.addConnection(connection);
     }
     
     @Override
-    public synchronized void removeConnection(PhoenixConnection connection) throws SQLException {
+    public void removeConnection(PhoenixConnection connection) throws SQLException {
         connections.remove(connection);
+        super.removeConnection(connection);
     }
 
     @Override

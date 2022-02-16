@@ -242,8 +242,10 @@ public class MetaDataUtil {
         return ((int)((version << Byte.SIZE * 3) >>> Byte.SIZE * 7) & 0x1) != 0;
     }
 
-    // The first 3 bytes of the long is used to encoding the HBase version as major.minor.patch.
-    // The next 4 bytes of the value is used to encode the Phoenix version as major.minor.patch.
+    // The first three bytes of the long encode the HBase version as major.minor.patch.
+    // The fourth byte is isTableNamespaceMappingEnabled
+    // The fifth to seventh bytes of the value encode the Phoenix version as major.minor.patch.
+    // The eights byte encodes whether the WAL codec is correctly installed
     /**
      * Encode HBase and Phoenix version along with some server-side config information such as whether WAL codec is
      * installed (necessary for non transactional, mutable secondar indexing), and whether systemNamespace mapping is enabled.
@@ -262,7 +264,9 @@ public class MetaDataUtil {
         long version =
         // Encode HBase major, minor, patch version
         (hbaseVersion << (Byte.SIZE * 5))
-                // Encode if systemMappingEnabled are enabled on the server side
+                // Encode if table namespace mapping is enabled on the server side
+                // Note that we DO NOT return information on whether system tables are mapped
+                // on the server side
                 | (isTableNamespaceMappingEnabled << (Byte.SIZE * 4))
                 // Encode Phoenix major, minor, patch version
                 | (phoenixVersion << (Byte.SIZE * 1))
@@ -764,7 +768,9 @@ public class MetaDataUtil {
     public static boolean hasLocalIndexTable(PhoenixConnection connection, byte[] physicalTableName) throws SQLException {
         try {
             HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalTableName);
-            if(desc == null ) return false;
+            if (desc == null ) {
+                return false;
+            }
             return hasLocalIndexColumnFamily(desc);
         } catch (TableNotFoundException e) {
             return false;
@@ -792,7 +798,9 @@ public class MetaDataUtil {
 
     public static List<byte[]> getLocalIndexColumnFamilies(PhoenixConnection conn, byte[] physicalTableName) throws SQLException {
         HTableDescriptor desc = conn.getQueryServices().getTableDescriptor(physicalTableName);
-        if(desc == null ) return Collections.emptyList();
+        if (desc == null ) {
+            return Collections.emptyList();
+        }
         List<byte[]> families = new ArrayList<byte[]>(desc.getColumnFamilies().length / 2);
         for (HColumnDescriptor cf : desc.getColumnFamilies()) {
             if (cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
@@ -1036,19 +1044,19 @@ public class MetaDataUtil {
             connection.setAutoCommit(true);
             Set<String> physicalTablesSet = new HashSet<>();
             physicalTablesSet.add(table.getPhysicalName().getString());
-            for(byte[] physicalTableName:physicalTableNames) {
+            for (byte[] physicalTableName:physicalTableNames) {
                 physicalTablesSet.add(Bytes.toString(physicalTableName));
             }
-            for(MetaDataProtocol.SharedTableState s: sharedTableStates) {
+            for (MetaDataProtocol.SharedTableState s: sharedTableStates) {
                 physicalTablesSet.add(s.getPhysicalNames().get(0).getString());
             }
             StringBuilder buf = new StringBuilder("DELETE FROM SYSTEM.STATS WHERE PHYSICAL_NAME IN (");
             Iterator itr = physicalTablesSet.iterator();
-            while(itr.hasNext()) {
+            while (itr.hasNext()) {
                 buf.append("'" + itr.next() + "',");
             }
             buf.setCharAt(buf.length() - 1, ')');
-            if(table.getIndexType()==IndexType.LOCAL) {
+            if (table.getIndexType()==IndexType.LOCAL) {
                 buf.append(" AND COLUMN_FAMILY IN(");
                 if (table.getColumnFamilies().isEmpty()) {
                     buf.append("'" + QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY + "',");
