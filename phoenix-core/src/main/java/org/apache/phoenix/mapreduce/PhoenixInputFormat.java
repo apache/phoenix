@@ -89,7 +89,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
         return generateSplits(queryPlan, configuration);
     }
 
-    private List<InputSplit> generateSplits(final QueryPlan qplan, Configuration config) throws IOException {
+    protected List<InputSplit> generateSplits(final QueryPlan qplan, Configuration config) throws IOException {
         // We must call this in order to initialize the scans and splits from the query plan
         setupParallelScansFromQueryPlan(qplan);
         final List<KeyRange> splits = qplan.getSplits();
