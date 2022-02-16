@@ -1533,7 +1533,7 @@ public class JoinCompiler {
             }
         } else {
             merged.addAll(left.getColumns());
-            if(left.getBucketNum() != null) {
+            if (left.getBucketNum() != null) {
                 merged.remove(0);
             }
         }
