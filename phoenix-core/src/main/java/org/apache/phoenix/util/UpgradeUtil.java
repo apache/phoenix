@@ -373,7 +373,7 @@ public class UpgradeUtil {
                     + "           AND INDEX_TYPE=" + IndexType.LOCAL.getSerializedValue());
             boolean droppedLocalIndexes = false;
             while (rs.next()) {
-                if(!droppedLocalIndexes) {
+                if (!droppedLocalIndexes) {
                     TableDescriptor[] localIndexTables = admin.listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
                     String localIndexSplitter = LocalIndexSplitter.class.getName();
                     for (TableDescriptor table : localIndexTables) {
@@ -383,10 +383,10 @@ public class UpgradeUtil {
                         boolean modifyTable = false;
                         for(ColumnFamilyDescriptor cf : columnFamilies) {
                             String localIndexCf = QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX+cf.getNameAsString();
-                            if(dataTableDesc.getColumnFamily(Bytes.toBytes(localIndexCf))==null){
+                            if (dataTableDesc.getColumnFamily(Bytes.toBytes(localIndexCf))==null){
                                 ColumnFamilyDescriptorBuilder colDefBuilder =
                                         ColumnFamilyDescriptorBuilder.newBuilder(Bytes.toBytes(localIndexCf));
-                                for(Entry<Bytes, Bytes> keyValue: cf.getValues().entrySet()){
+                                for (Entry<Bytes, Bytes> keyValue: cf.getValues().entrySet()){
                                     colDefBuilder.setValue(keyValue.getKey().copyBytes(), keyValue.getValue().copyBytes());
                                 }
                                 dataTableDescBuilder.addColumnFamily(colDefBuilder.build());
@@ -394,13 +394,13 @@ public class UpgradeUtil {
                             }
                         }
                         Collection<String> coprocessors = dataTableDesc.getCoprocessors();
-                        for(String coprocessor:  coprocessors) {
-                            if(coprocessor.equals(localIndexSplitter)) {
+                        for (String coprocessor:  coprocessors) {
+                            if (coprocessor.equals(localIndexSplitter)) {
                                 dataTableDescBuilder.removeCoprocessor(localIndexSplitter);
                                 modifyTable = true;
                             }
                         }
-                        if(modifyTable) {
+                        if (modifyTable) {
                             admin.modifyTable(dataTableDescBuilder.build());
                         }
                     }
@@ -633,7 +633,7 @@ public class UpgradeUtil {
                         String indexPhysicalTableName = MetaDataUtil.getViewIndexPhysicalName(viewPTable.getPhysicalName().getString());
                         if (physicalTables.add(indexPhysicalTableName)) {
                             final TableName tableName = TableName.valueOf(indexPhysicalTableName);
-                            if(admin.tableExists(tableName)) {
+                            if (admin.tableExists(tableName)) {
                                 admin.disableTable(tableName);
                                 admin.truncateTable(tableName, false);
                             }
@@ -2673,4 +2673,5 @@ public class UpgradeUtil {
         return tableDesc.getColumnFamily(
             SchemaUtil.getEmptyColumnFamily(table)).getMaxVersions() > 1;
     }
+
 }
