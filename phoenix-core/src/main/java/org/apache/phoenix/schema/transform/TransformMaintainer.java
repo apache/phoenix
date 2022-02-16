@@ -90,6 +90,8 @@ public class TransformMaintainer extends IndexMaintainer {
     private int nOldTableCFs;
     private boolean newTableWALDisabled;
     private boolean newTableImmutableRows;
+    private Set<ColumnReference> allColumns;
+
     // Transient state
     private final boolean isOldTableSalted;
     private final RowKeySchema oldTableRowKeySchema;
@@ -133,9 +135,13 @@ public class TransformMaintainer extends IndexMaintainer {
     }
 
     public Set<ColumnReference> getAllColumns() {
-        return new HashSet<>();
+        return allColumns;
     }
 
+    public Set<ColumnReference> getCoveredColumns() {
+        return coveredColumnsMap.keySet();
+    }
+    
     private TransformMaintainer(final PTable oldTable, final PTable newTable, PhoenixConnection connection) {
         this(oldTable.getRowKeySchema(), oldTable.getBucketNum() != null);
         this.newTableRowKeyOrderOptimizable = newTable.rowKeyOrderOptimizable();
@@ -250,6 +256,8 @@ public class TransformMaintainer extends IndexMaintainer {
      * Init calculated state reading/creating
      */
     private void initCachedState() {
+        this.allColumns = Sets.newLinkedHashSetWithExpectedSize(newTableExpressions.size() + coveredColumnsMap.size());
+
         byte[] newTableEmptyKvQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(newTableEncodingScheme).getFirst();
         byte[] oldTableEmptyKvQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(oldTableEncodingScheme).getFirst();
         newTableEmptyKeyValueRef = new ColumnReference(oldTableEmptyKeyValueCF, newTableEmptyKvQualifier);
