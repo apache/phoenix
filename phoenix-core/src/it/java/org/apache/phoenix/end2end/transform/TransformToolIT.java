@@ -73,7 +73,6 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
-import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.UNVERIFIED_BYTES;
 import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -137,22 +136,33 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
     }
 
     public static void createTableAndUpsertRows(Connection conn, String dataTableFullName, int numOfRows, String tableOptions) throws SQLException {
+        createTableAndUpsertRows(conn, dataTableFullName, numOfRows, "", tableOptions);
+    }
+
+    public static void createTableAndUpsertRows(Connection conn, String dataTableFullName, int numOfRows, String constantVal, String tableOptions) throws SQLException {
         String stmString1 =
                 "CREATE TABLE IF NOT EXISTS " + dataTableFullName
-                        + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) "
+                        + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, DATA VARCHAR) "
                         + tableOptions;
         conn.createStatement().execute(stmString1);
-        upsertRows(conn, dataTableFullName, 1, numOfRows);
+        upsertRows(conn, dataTableFullName, 1, numOfRows, constantVal);
         conn.commit();
     }
 
     public static void upsertRows(Connection conn, String dataTableFullName, int startIdx, int numOfRows) throws SQLException {
-        String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
-        PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
+        upsertRows(conn, dataTableFullName, startIdx, numOfRows, "");
+    }
+    public static void upsertRows(Connection conn, String dataTableFullName, int startIdx, int numOfRows, String constantVal) throws SQLException {
+        String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?, ?)", dataTableFullName);
+        PreparedStatement stmt = conn.prepareStatement(upsertQuery);
 
         // insert rows
         for (int i = startIdx; i < startIdx+numOfRows; i++) {
-            IndexToolIT.upsertRow(stmt1, i);
+            stmt.setInt(1, i);
+            stmt.setString(2, "uname" + String.valueOf(i));
+            stmt.setInt(3, 95050 + i);
+            stmt.setString(4, constantVal);
+            stmt.executeUpdate();
         }
     }
     @Test
@@ -946,6 +956,175 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
             assertEquals(SchemaUtil.getTableNameFromFullName(record.getNewPhysicalTableName()),
                     pOldTable.getPhysicalName(true).getString());
         }
+    }
+
+    @Test
+    public void testTransformForGlobalViews() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String view1Name = "VW1_" + generateUniqueName();
+        String view2Name = "VW2_" + generateUniqueName();
+        String upsertQuery = "UPSERT INTO %s VALUES(?, ?, ?, ?, ?, ?)";
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            int numOfRows = 0;
+            createTableAndUpsertRows(conn, dataTableFullName, numOfRows, tableDDLOptions);
+            SingleCellIndexIT.assertMetadata(conn, PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN, PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, dataTableFullName);
+
+            String createViewSql = "CREATE VIEW " + view1Name + " ( VIEW_COL11 INTEGER, VIEW_COL12 VARCHAR ) AS SELECT * FROM "
+                    + dataTableFullName + " where ID=1";
+            conn.createStatement().execute(createViewSql);
+
+            createViewSql = "CREATE VIEW " + view2Name + " ( VIEW_COL21 INTEGER, VIEW_COL22 VARCHAR ) AS SELECT * FROM "
+                    + dataTableFullName + " where ID=11";
+            conn.createStatement().execute(createViewSql);
+
+            PreparedStatement stmt1 = conn.prepareStatement(String.format(upsertQuery, view1Name));
+            stmt1.setInt(1, 1);
+            stmt1.setString(2, "uname1");
+            stmt1.setInt(3, 95051);
+            stmt1.setString(4, "");
+            stmt1.setInt(5, 101);
+            stmt1.setString(6, "viewCol12");
+            stmt1.executeUpdate();
+            conn.commit();
+
+            stmt1 = conn.prepareStatement(String.format(upsertQuery, view2Name));
+            stmt1.setInt(1, 11);
+            stmt1.setString(2, "uname11");
+            stmt1.setInt(3, 950511);
+            stmt1.setString(4, "");
+            stmt1.setInt(5, 111);
+            stmt1.setString(6, "viewCol22");
+            stmt1.executeUpdate();
+            conn.commit();
+
+            conn.createStatement().execute("ALTER TABLE " + dataTableFullName +
+                    " SET IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+            SystemTransformRecord record = Transform.getTransformRecord(schemaName, dataTableName, null, null, conn.unwrap(PhoenixConnection.class));
+            assertNotNull(record);
+            assertMetadata(conn, PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS, PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, record.getNewPhysicalTableName());
+
+            List<String> args = getArgList(schemaName, dataTableName, null,
+                    null, null, null, false, false, false, false, false);
+            runTransformTool(args.toArray(new String[0]), 0);
+            Transform.doCutover(conn.unwrap(PhoenixConnection.class), record);
+            Transform.updateTransformRecord(conn.unwrap(PhoenixConnection.class), record, PTable.TransformStatus.COMPLETED);
+            try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+                admin.disableTable(TableName.valueOf(dataTableFullName));
+                admin.truncateTable(TableName.valueOf(dataTableFullName), true);
+            }
+
+            String sql = "SELECT VIEW_COL11, VIEW_COL12 FROM %s ";
+            ResultSet rs1 = conn.createStatement().executeQuery(String.format(sql, view1Name));
+            assertTrue(rs1.next());
+            assertEquals(101, rs1.getInt(1));
+            assertEquals("viewCol12", rs1.getString(2));
+
+            sql = "SELECT VIEW_COL21, VIEW_COL22 FROM %s ";
+            rs1 = conn.createStatement().executeQuery(String.format(sql, view2Name));
+            assertTrue(rs1.next());
+            assertEquals(111, rs1.getInt(1));
+            assertEquals("viewCol22", rs1.getString(2));
+        }
+    }
+
+    @Test
+    public void testTransformForTenantViews() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String view1Name = "VW1_" + generateUniqueName();
+        String view2Name = "VW2_" + generateUniqueName();
+        String upsertQuery = "UPSERT INTO %s VALUES(?, ?, ?, ?, ?, ?)";
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            int numOfRows = 0;
+            createTableAndUpsertRows(conn, dataTableFullName, numOfRows, tableDDLOptions);
+            SingleCellIndexIT.assertMetadata(conn, PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN, PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, dataTableFullName);
+        }
+
+        try (Connection tenantConn1 = getTenantConnection("tenant1")) {
+            String createViewSql = "CREATE VIEW " + view1Name + " ( VIEW_COL11 INTEGER, VIEW_COL12 VARCHAR ) AS SELECT * FROM "
+                    + dataTableFullName + " where ID=1";
+            tenantConn1.createStatement().execute(createViewSql);
+        }
+
+        try (Connection tenantConn2 = getTenantConnection("tenant2")) {
+            String createViewSql = "CREATE VIEW " + view2Name + " ( VIEW_COL21 INTEGER, VIEW_COL22 VARCHAR ) AS SELECT * FROM "
+                    + dataTableFullName + " where ID=11";
+            tenantConn2.createStatement().execute(createViewSql);
+        }
+
+        try (Connection tenantConn1 = getTenantConnection("tenant1")) {
+            PreparedStatement stmt1 = tenantConn1.prepareStatement(String.format(upsertQuery, view1Name));
+            stmt1.setInt(1, 1);
+            stmt1.setString(2, "uname1");
+            stmt1.setInt(3, 95051);
+            stmt1.setString(4, "");
+            stmt1.setInt(5, 101);
+            stmt1.setString(6, "viewCol12");
+            stmt1.executeUpdate();
+            tenantConn1.commit();
+        }
+
+        try (Connection tenantConn2 = getTenantConnection("tenant2")) {
+            PreparedStatement stmt1 = tenantConn2.prepareStatement(String.format(upsertQuery, view2Name));
+            stmt1.setInt(1, 11);
+            stmt1.setString(2, "uname11");
+            stmt1.setInt(3, 950511);
+            stmt1.setString(4, "");
+            stmt1.setInt(5, 111);
+            stmt1.setString(6, "viewCol22");
+            stmt1.executeUpdate();
+            tenantConn2.commit();
+        }
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("ALTER TABLE " + dataTableFullName +
+                    " SET IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+            SystemTransformRecord record = Transform.getTransformRecord(schemaName, dataTableName, null, null, conn.unwrap(PhoenixConnection.class));
+            assertNotNull(record);
+            assertMetadata(conn, PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS, PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, record.getNewPhysicalTableName());
+
+            List<String> args = getArgList(schemaName, dataTableName, null,
+                    null, null, null, false, false, false, false, false);
+            runTransformTool(args.toArray(new String[0]), 0);
+            Transform.doCutover(conn.unwrap(PhoenixConnection.class), record);
+            Transform.updateTransformRecord(conn.unwrap(PhoenixConnection.class), record, PTable.TransformStatus.COMPLETED);
+            try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+                admin.disableTable(TableName.valueOf(dataTableFullName));
+                admin.truncateTable(TableName.valueOf(dataTableFullName), true);
+            }
+        }
+
+        try (Connection tenantConn1 = getTenantConnection("tenant1")) {
+            String sql = "SELECT VIEW_COL11, VIEW_COL12 FROM %s ";
+            ResultSet rs1 = tenantConn1.createStatement().executeQuery(String.format(sql, view1Name));
+            assertTrue(rs1.next());
+            assertEquals(101, rs1.getInt(1));
+            assertEquals("viewCol12", rs1.getString(2));
+        }
+
+        try (Connection tenantConn2 = getTenantConnection("tenant2")) {
+            String sql = "SELECT VIEW_COL21, VIEW_COL22 FROM %s ";
+            ResultSet rs1 = tenantConn2.createStatement().executeQuery(String.format(sql, view2Name));
+            assertTrue(rs1.next());
+            assertEquals(111, rs1.getInt(1));
+            assertEquals("viewCol22", rs1.getString(2));
+        }
+    }
+
+
+    public static Connection getTenantConnection(String tenant) throws SQLException {
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenant);
+        return DriverManager.getConnection(getUrl(), props);
     }
 
     public static void assertTransformStatusOrPartial(PTable.TransformStatus expectedStatus, SystemTransformRecord systemTransformRecord) {

@@ -18,6 +18,7 @@
 package org.apache.phoenix.mapreduce.transform;
 
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.phoenix.mapreduce.PhoenixTTLTool;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -83,6 +84,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TransactionUtil;
+import org.apache.phoenix.util.ViewUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -97,6 +99,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.apache.hadoop.hbase.HConstants.EMPTY_BYTE_ARRAY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexTool.createIndexToolTables;
 import static org.apache.phoenix.mapreduce.index.IndexTool.isTimeRangeSet;
 import static org.apache.phoenix.mapreduce.index.IndexTool.validateTimeRange;
@@ -171,6 +174,9 @@ public class TransformTool extends Configured implements Tool {
     private static final Option END_TIME_OPTION = new Option("et", "end-time",
             true, "End time for transform");
 
+    private static final Option SPLIT_SIZE_OPTION = new Option("ms", "split-size-per-mapper", true,
+            "Define split size for each mapper.");
+
     public static final String TRANSFORM_JOB_NAME_TEMPLATE = "PHOENIX_TRANS_%s.%s.%s";
 
     public static final String PARTIAL_TRANSFORM_NOT_APPLICABLE = "Partial transform accepts "
@@ -219,6 +225,7 @@ public class TransformTool extends Configured implements Tool {
     private boolean shouldFixUnverified;
     private boolean shouldUseNewTableAsSource;
     private boolean shouldForceCutover;
+    private int splitSize;
     private Job job;
 
     public Long getStartTime() {
@@ -265,6 +272,7 @@ public class TransformTool extends Configured implements Tool {
         options.addOption(PARTIAL_TRANSFORM_OPTION);
         options.addOption(START_TIME_OPTION);
         options.addOption(END_TIME_OPTION);
+        options.addOption(SPLIT_SIZE_OPTION);
         options.addOption(FIX_UNVERIFIED_TRANSFORM_OPTION);
         options.addOption(FORCE_CUTOVER_OPTION);
         options.addOption(USE_NEW_TABLE_AS_SOURCE_OPTION);
@@ -350,6 +358,11 @@ public class TransformTool extends Configured implements Tool {
         indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
         qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
         isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
+        if (cmdLine.hasOption(SPLIT_SIZE_OPTION.getOpt())) {
+            splitSize = Integer.parseInt(cmdLine.getOptionValue(SPLIT_SIZE_OPTION.getOpt()));
+        } else {
+            splitSize = PhoenixTTLTool.DEFAULT_MAPPER_SPLIT_SIZE;
+        }
         logicalTableName = dataTable;
         logicalParentName = null;
         if (!Strings.isNullOrEmpty(indexTable)) {
@@ -574,12 +587,28 @@ public class TransformTool extends Configured implements Tool {
             fs = outputPath.getFileSystem(configuration);
             fs.delete(outputPath, true);
         }
+        PhoenixConfigurationUtil.setMultiInputMapperSplitSize(configuration, splitSize);
+
         this.job = Job.getInstance(getConf(), jobName);
         job.setJarByClass(TransformTool.class);
         job.setPriority(this.jobPriority);
-        PhoenixMapReduceUtil.setInput(job, PhoenixServerBuildIndexDBWritable.class, PhoenixServerBuildIndexInputFormat.class,
-                oldTableWithSchema, "");
 
+        boolean hasChildViews = false;
+        try (Table hTable = connection.unwrap(PhoenixConnection.class).getQueryServices().getTable(
+                SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES, configuration).toBytes())) {
+            byte[] tenantIdBytes = Strings.isNullOrEmpty(tenantId) ? null : tenantId.getBytes();
+            byte[] schemaNameBytes = Strings.isNullOrEmpty(schemaName) ? null : schemaName.getBytes();
+            hasChildViews = ViewUtil.hasChildViews(hTable, tenantIdBytes, schemaNameBytes,
+                    pOldTable.getTableName().getBytes(), HConstants.LATEST_TIMESTAMP);
+        }
+
+        if (hasChildViews && Strings.isNullOrEmpty(tenantId)) {
+            PhoenixMapReduceUtil.setInput(job, PhoenixServerBuildIndexDBWritable.class, PhoenixTransformWithViewsInputFormat.class,
+                    oldTableWithSchema, "");
+        } else {
+            PhoenixMapReduceUtil.setInput(job, PhoenixServerBuildIndexDBWritable.class, PhoenixServerBuildIndexInputFormat.class,
+                    oldTableWithSchema, "");
+        }
         if (outputPath != null) {
             FileOutputFormat.setOutputPath(job, outputPath);
         }

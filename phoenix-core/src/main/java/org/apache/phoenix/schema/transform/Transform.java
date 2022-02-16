@@ -61,6 +61,7 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -463,11 +464,16 @@ public class Transform {
                 // We need to update the columns's qualifiers as well
                 mutateColumns(connection.unwrap(PhoenixConnection.class), pOldTable, pNewTable);
 
+                HashMap<String, PColumn> columnMap = new HashMap<>();
+                for (PColumn column : pNewTable.getColumns()) {
+                    columnMap.put(column.getName().getString(), column);
+                }
+
                 // Also update view column qualifiers
                 for (TableInfo view : childViewsResult.getLinks()) {
                     PTable pView = PhoenixRuntime.getTable(connection, view.getTenantId()==null? null: Bytes.toString(view.getTenantId())
                             , SchemaUtil.getTableName(view.getSchemaName(), view.getTableName()));
-                    mutateViewColumns(connection.unwrap(PhoenixConnection.class), pView, pNewTable);
+                    mutateViewColumns(connection.unwrap(PhoenixConnection.class), pView, pNewTable, columnMap);
                 }
             }
             connection.commit();
@@ -612,13 +618,16 @@ public class Transform {
         }
     }
 
-    private static void mutateViewColumns(PhoenixConnection connection, PTable pView, PTable pNewTable) throws SQLException {
-        if (pView.getEncodingScheme() != pNewTable.getEncodingScheme()) {
+    public static PTable getTransformedView(PTable pOldView, PTable pNewTable, HashMap<String, PColumn> columnMap, boolean withDerivedColumns) throws SQLException {
+        List<PColumn> newColumns = new ArrayList<>();
+        PTable pNewView = null;
+        if (pOldView.getEncodingScheme() != pNewTable.getEncodingScheme()) {
             Short nextKeySeq = 0;
             PTable.EncodedCQCounter cqCounterToUse = pNewTable.getEncodedCQCounter();
             String defaultColumnFamily = pNewTable.getDefaultFamilyName() != null && !Strings.isNullOrEmpty(pNewTable.getDefaultFamilyName().getString()) ?
                     pNewTable.getDefaultFamilyName().getString() : DEFAULT_COLUMN_FAMILY;
-            for (PColumn column : pView.getColumns()) {
+
+            for (PColumn column : pOldView.getColumns()) {
                 boolean isPk = SchemaUtil.isPKColumn(column);
                 Short keySeq = isPk ? ++nextKeySeq : null;
                 if (isPk) {
@@ -630,15 +639,18 @@ public class Transform {
                 } else {
                     familyName = defaultColumnFamily;
                 }
-                int encodedCQ = pView.isAppendOnlySchema() ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + keySeq) : cqCounterToUse.getNextQualifier(familyName);
-                if (!pView.isAppendOnlySchema()) {
-                    cqCounterToUse.increment(familyName);
-                }
-
+                int encodedCQ = pOldView.isAppendOnlySchema() ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + keySeq) : cqCounterToUse.getNextQualifier(familyName);
                 byte[] colQualifierBytes = EncodedColumnsUtil.getColumnQualifierBytes(column.getName().getString(),
                         encodedCQ, pNewTable, isPk);
+                if (columnMap.containsKey(column.getName().getString())) {
+                    colQualifierBytes = columnMap.get(column.getName().getString()).getColumnQualifierBytes();
+                } else {
+                    if (!column.isDerived()) {
+                        cqCounterToUse.increment(familyName);
+                    }
+                }
 
-                if (column.isDerived()) {
+                if (!withDerivedColumns && column.isDerived()) {
                     // Don't need to add/change derived columns
                     continue;
                 }
@@ -648,8 +660,37 @@ public class Transform {
                         , column.getArraySize(),
                         column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr(), column.isRowTimestamp(),
                         column.isDynamic(), colQualifierBytes, EnvironmentEdgeManager.currentTimeMillis());
-                String tenantId = pView.getTenantId() == null? null:pView.getTenantId().getString();
-                addColumnMutation(connection, tenantId, pView.getSchemaName()==null?null:pView.getSchemaName().getString()
+                newColumns.add(newCol);
+                if (!columnMap.containsKey(newCol.getName().getString())) {
+                    columnMap.put(newCol.getName().getString(), newCol) ;
+                }
+            }
+
+            pNewView = PTableImpl.builderWithColumns(pOldView, newColumns)
+                        .setQualifierEncodingScheme(pNewTable.getEncodingScheme())
+                        .setImmutableStorageScheme(pNewTable.getImmutableStorageScheme())
+                        .setPhysicalNames(
+                                Collections.singletonList(SchemaUtil.getPhysicalHBaseTableName(
+                                        pNewTable.getSchemaName(), pNewTable.getTableName(), pNewTable.isNamespaceMapped())))
+                        .build();
+        } else {
+            // Have to change this per transform type
+        }
+        return pNewView;
+    }
+
+    private static void mutateViewColumns(PhoenixConnection connection, PTable pView, PTable pNewTable, HashMap<String, PColumn> columnMap) throws SQLException {
+        if (pView.getEncodingScheme() != pNewTable.getEncodingScheme()) {
+            Short nextKeySeq = 0;
+            PTable newView = getTransformedView(pView, pNewTable, columnMap,false);
+            for (PColumn newCol : newView.getColumns()) {
+                boolean isPk = SchemaUtil.isPKColumn(newCol);
+                Short keySeq = isPk ? ++nextKeySeq : null;
+                if (isPk) {
+                    continue;
+                }
+                String tenantId = pView.getTenantId() == null ? null : pView.getTenantId().getString();
+                addColumnMutation(connection, tenantId, pView.getSchemaName() == null ? null : pView.getSchemaName().getString()
                         , pView.getTableName().getString(), newCol,
                         pView.getParentTableName() == null ? null : pView.getParentTableName().getString()
                         , pView.getPKName() == null ? null : pView.getPKName().getString(), keySeq, pView.getBucketNum() != null);
