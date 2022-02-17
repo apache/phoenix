@@ -1524,15 +1524,20 @@ public class JoinCompiler {
         Preconditions.checkArgument(left.getType() == PTableType.PROJECTED);
         Preconditions.checkArgument(right.getType() == PTableType.PROJECTED);
         List<PColumn> merged = Lists.<PColumn> newArrayList();
+        int startingPosition = left.getBucketNum() == null ? 0 : 1;
         if (type == JoinType.Full) {
-            for (PColumn c : left.getColumns()) {
+            for (int i = startingPosition; i < left.getColumns().size(); i++) {
+                PColumn c  = left.getColumns().get(i);
                 merged.add(new ProjectedColumn(c.getName(), c.getFamilyName(),
                         c.getPosition(), true, ((ProjectedColumn) c).getSourceColumnRef(), SchemaUtil.isPKColumn(c) ? null : c.getName().getBytes()));
             }
         } else {
             merged.addAll(left.getColumns());
+            if (left.getBucketNum() != null) {
+                merged.remove(0);
+            }
         }
-        int position = merged.size();
+        int position = merged.size() + startingPosition;
         for (PColumn c : right.getColumns()) {
             if (!SchemaUtil.isPKColumn(c)) {
                 PColumn column = new ProjectedColumn(c.getName(), c.getFamilyName(), 
@@ -1540,9 +1545,6 @@ public class JoinCompiler {
                         ((ProjectedColumn) c).getSourceColumnRef(), c.getName().getBytes());
                 merged.add(column);
             }
-        }
-        if (left.getBucketNum() != null) {
-            merged.remove(0);
         }
         return new PTableImpl.Builder()
                 .setType(left.getType())
