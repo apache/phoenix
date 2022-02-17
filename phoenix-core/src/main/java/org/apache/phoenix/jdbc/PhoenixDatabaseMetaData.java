@@ -428,6 +428,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     //SYSTEM:LOG
     public static final String SYSTEM_LOG_TABLE = "LOG";
+    public static final String SYSTEM_LOG_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_LOG_TABLE);
     public static final String QUERY_ID = "QUERY_ID";
     public static final String USER = "USER";
     public static final String CLIENT_IP = "CLIENT_IP";
@@ -1361,6 +1362,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                             new RowKeyValueAccessor(Collections.<PDatum>singletonList(TABLE_TYPE_DATUM), 0)), false)
             ), 0, true);
     private static final Collection<Tuple> TABLE_TYPE_TUPLES = Lists.newArrayListWithExpectedSize(PTableType.values().length);
+    public static final String SYSTEM_STATS = null;
     static {
         List<byte[]> tableTypes = Lists.<byte[]>newArrayList(
                 PTableType.INDEX.getValue().getBytes(),
