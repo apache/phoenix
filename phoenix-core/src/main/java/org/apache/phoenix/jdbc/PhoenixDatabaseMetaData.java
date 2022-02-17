@@ -401,6 +401,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final TableName SYSTEM_TASK_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_TASK_NAME);
     //SYSTEM:LOG
     public static final String SYSTEM_LOG_TABLE = "LOG";
+    public static final String SYSTEM_LOG_NAME =
+            SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_LOG_TABLE);
     public static final String QUERY_ID = "QUERY_ID";
     public static final String USER = "USER";
     public static final String CLIENT_IP = "CLIENT_IP";
