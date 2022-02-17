@@ -46,7 +46,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCH
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
@@ -91,6 +90,7 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
@@ -2618,5 +2618,27 @@ public class UpgradeUtil {
             metaConnection.commit();
         }
         LOGGER.info("Setting DDL timestamps for tables and views is complete");
+    }
+
+    public static boolean tableHasKeepDeleted(PhoenixConnection conn, String pTableName)
+            throws SQLException, org.apache.hadoop.hbase.TableNotFoundException, IOException {
+        ConnectionQueryServices cqs = conn.getQueryServices();
+        Admin admin = cqs.getAdmin();
+        PTable table = PhoenixRuntime.getTable(conn, pTableName);
+        HTableDescriptor tableDesc = admin.getTableDescriptor(SchemaUtil.getPhysicalTableName(
+            pTableName, cqs.getProps()));
+        return KeepDeletedCells.TRUE.equals(tableDesc.getFamily(
+            SchemaUtil.getEmptyColumnFamily(table)).getKeepDeletedCells());
+    }
+
+    public static boolean tableHasMaxVersions(PhoenixConnection conn, String pTableName)
+            throws SQLException, org.apache.hadoop.hbase.TableNotFoundException, IOException {
+        ConnectionQueryServices cqs = conn.getQueryServices();
+        Admin admin = cqs.getAdmin();
+        PTable table = PhoenixRuntime.getTable(conn, pTableName);
+        HTableDescriptor tableDesc = admin.getTableDescriptor(SchemaUtil.getPhysicalTableName(
+            pTableName, cqs.getProps()));
+        return tableDesc.getFamily(
+            SchemaUtil.getEmptyColumnFamily(table)).getMaxVersions() > 1;
     }
 }
