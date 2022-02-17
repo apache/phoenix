@@ -46,7 +46,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCH
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
@@ -67,7 +66,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.Format;
 import java.text.SimpleDateFormat;
@@ -92,6 +90,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -2651,5 +2650,27 @@ public class UpgradeUtil {
             metaConnection.commit();
         }
         LOGGER.info("Setting DDL timestamps for tables and views is complete");
+    }
+
+    public static boolean tableHasKeepDeleted(PhoenixConnection conn, String pTableName)
+            throws SQLException, org.apache.hadoop.hbase.TableNotFoundException, IOException {
+        ConnectionQueryServices cqs = conn.getQueryServices();
+        Admin admin = cqs.getAdmin();
+        PTable table = PhoenixRuntime.getTable(conn, pTableName);
+        TableDescriptor tableDesc = admin.getDescriptor(SchemaUtil.getPhysicalTableName(
+            pTableName, cqs.getProps()));
+        return KeepDeletedCells.TRUE.equals(tableDesc.getColumnFamily(
+            SchemaUtil.getEmptyColumnFamily(table)).getKeepDeletedCells());
+    }
+
+    public static boolean tableHasMaxVersions(PhoenixConnection conn, String pTableName)
+            throws SQLException, org.apache.hadoop.hbase.TableNotFoundException, IOException {
+        ConnectionQueryServices cqs = conn.getQueryServices();
+        Admin admin = cqs.getAdmin();
+        PTable table = PhoenixRuntime.getTable(conn, pTableName);
+        TableDescriptor tableDesc = admin.getDescriptor(SchemaUtil.getPhysicalTableName(
+            pTableName, cqs.getProps()));
+        return tableDesc.getColumnFamily(
+            SchemaUtil.getEmptyColumnFamily(table)).getMaxVersions() > 1;
     }
 }
