@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.hadoop.hbase.HColumnDescriptor.KEEP_DELETED_CELLS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP;
@@ -43,7 +44,9 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
@@ -60,6 +63,9 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -78,6 +84,7 @@ import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SequenceAllocation;
@@ -356,6 +363,58 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
 
             assertEquals("Unexpected child links", expectedChildLinkSet, actualChildLinkSet);
         }
+    }
+
+    @Test
+    public void testRemoveScnFromTaskAndLog() throws Exception {
+        PhoenixConnection conn = getConnection(false, null).unwrap(PhoenixConnection.class);
+        ConnectionQueryServicesImpl cqs = (ConnectionQueryServicesImpl)(conn.getQueryServices());
+        //Set the SCN related properties on SYSTEM.STATS and SYSTEM.LOG
+        try (Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate("ALTER TABLE " +
+                    PhoenixDatabaseMetaData.SYSTEM_LOG_NAME + " SET " +
+                    KEEP_DELETED_CELLS + "='" + KeepDeletedCells.TRUE + "',\n" +
+                    HConstants.VERSIONS + "='1000'\n");
+            stmt.executeUpdate("ALTER TABLE " +
+                    PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " SET " +
+                    KEEP_DELETED_CELLS + "='" + KeepDeletedCells.TRUE + "',\n" +
+                    HConstants.VERSIONS + "='1000'\n");
+        }
+        //Check that the HBase tables reflect the change
+        PTable sysLogTable = PhoenixRuntime.getTable(conn, PhoenixDatabaseMetaData.SYSTEM_LOG_NAME);
+        HTableDescriptor sysLogDesc = utility.getHBaseAdmin().getTableDescriptor(SchemaUtil.getPhysicalTableName(
+            PhoenixDatabaseMetaData.SYSTEM_LOG_NAME, cqs.getProps()));
+        assertEquals(KeepDeletedCells.TRUE, sysLogDesc.getFamily(
+            SchemaUtil.getEmptyColumnFamily(sysLogTable)).getKeepDeletedCells());
+        assertEquals(1000, sysLogDesc.getFamily(
+                SchemaUtil.getEmptyColumnFamily(sysLogTable)).getMaxVersions());
+
+        PTable sysStatsTable = PhoenixRuntime.getTable(conn, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
+        HTableDescriptor sysStatsDesc = utility.getHBaseAdmin().getTableDescriptor(SchemaUtil.getPhysicalTableName(
+            PhoenixDatabaseMetaData.SYSTEM_STATS_NAME, cqs.getProps()));
+        assertEquals(KeepDeletedCells.TRUE, sysStatsDesc.getFamily(
+            SchemaUtil.getEmptyColumnFamily(sysStatsTable)).getKeepDeletedCells());
+        assertEquals(1000, sysStatsDesc.getFamily(
+            SchemaUtil.getEmptyColumnFamily(sysStatsTable)).getMaxVersions());
+
+        //now call the upgrade code
+        cqs.upgradeSystemLog(conn, new HashMap<String, String>());
+        cqs.upgradeSystemStats(conn, new HashMap<String, String>());
+
+        //Check that HBase tables are fixed
+        sysLogDesc = utility.getHBaseAdmin().getTableDescriptor(SchemaUtil.getPhysicalTableName(
+            PhoenixDatabaseMetaData.SYSTEM_LOG_NAME, cqs.getProps()));
+        assertEquals(KeepDeletedCells.FALSE, sysLogDesc.getFamily(
+            SchemaUtil.getEmptyColumnFamily(sysLogTable)).getKeepDeletedCells());
+        assertEquals(1, sysLogDesc.getFamily(
+                SchemaUtil.getEmptyColumnFamily(sysLogTable)).getMaxVersions());
+
+        sysStatsDesc = utility.getHBaseAdmin().getTableDescriptor(SchemaUtil.getPhysicalTableName(
+            PhoenixDatabaseMetaData.SYSTEM_STATS_NAME, cqs.getProps()));
+        assertEquals(KeepDeletedCells.FALSE, sysStatsDesc.getFamily(
+            SchemaUtil.getEmptyColumnFamily(sysStatsTable)).getKeepDeletedCells());
+        assertEquals(1, sysStatsDesc.getFamily(
+            SchemaUtil.getEmptyColumnFamily(sysStatsTable)).getMaxVersions());
     }
 
     private Set<String> getChildLinks(Connection conn) throws SQLException {
