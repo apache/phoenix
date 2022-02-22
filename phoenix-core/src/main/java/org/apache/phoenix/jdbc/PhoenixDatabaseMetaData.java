@@ -1362,7 +1362,6 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                             new RowKeyValueAccessor(Collections.<PDatum>singletonList(TABLE_TYPE_DATUM), 0)), false)
             ), 0, true);
     private static final Collection<Tuple> TABLE_TYPE_TUPLES = Lists.newArrayListWithExpectedSize(PTableType.values().length);
-    public static final String SYSTEM_STATS = null;
     static {
         List<byte[]> tableTypes = Lists.<byte[]>newArrayList(
                 PTableType.INDEX.getValue().getBytes(),
