@@ -4407,7 +4407,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             Map<String, String> systemTableToSnapshotMap)
     throws SQLException, org.apache.hadoop.hbase.TableNotFoundException, IOException {
         try (Statement statement = metaConnection.createStatement()) {
-            statement.executeUpdate(getTaskDDL());
+            statement.executeUpdate(getLogTableDDL());
         } catch (NewerTableAlreadyExistsException ignored) {
         } catch (TableAlreadyExistsException e) {
             // take snapshot first
