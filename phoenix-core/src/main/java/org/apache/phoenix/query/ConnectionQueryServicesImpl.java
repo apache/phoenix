@@ -4256,7 +4256,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public PhoenixConnection upgradeSystemStats(
             PhoenixConnection metaConnection,
             Map<String, String> systemTableToSnapshotMap) throws
-    SQLException, org.apache.hadoop.hbase.TableNotFoundException, IOException {
+        SQLException, org.apache.hadoop.hbase.TableNotFoundException, IOException {
         try (Statement statement = metaConnection.createStatement()) {
             statement.executeUpdate(QueryConstants.CREATE_STATS_TABLE_METADATA);
         } catch (NewerTableAlreadyExistsException ignored) {
@@ -4288,17 +4288,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0);
                 clearCache();
             }
-            if(UpgradeUtil.tableHasKeepDeleted(
-                metaConnection, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME) ) {
-                metaConnection.createStatement().executeUpdate("ALTER TABLE " +
-                        PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " SET " +
-                            KEEP_DELETED_CELLS + "='" + KeepDeletedCells.FALSE + "'");
+            if (UpgradeUtil.tableHasKeepDeleted(
+                metaConnection, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
+                try (Statement stmt = metaConnection.createStatement()){
+                    stmt.executeUpdate("ALTER TABLE "
+                            + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " SET "
+                            + KEEP_DELETED_CELLS + "='" + KeepDeletedCells.FALSE + "'");
+                }
             }
             if (UpgradeUtil.tableHasMaxVersions(
                 metaConnection, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
-                metaConnection.createStatement().executeUpdate("ALTER TABLE " +
-                        PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " SET " +
-                        HConstants.VERSIONS + "='1'");
+                try (Statement stmt = metaConnection.createStatement()){
+                    stmt.executeUpdate("ALTER TABLE "
+                            + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " SET "
+                            + HConstants.VERSIONS + "='1'");
+                }
             }
         }
         return metaConnection;
@@ -4414,15 +4418,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             takeSnapshotOfSysTable(systemTableToSnapshotMap, e);
             if(UpgradeUtil.tableHasKeepDeleted(
                 metaConnection, PhoenixDatabaseMetaData.SYSTEM_LOG_NAME) ) {
-                metaConnection.createStatement().executeUpdate("ALTER TABLE " +
-                        PhoenixDatabaseMetaData.SYSTEM_LOG_NAME + " SET " +
+                try (Statement stmt = metaConnection.createStatement()) {
+                    stmt.executeUpdate("ALTER TABLE " +
+                            PhoenixDatabaseMetaData.SYSTEM_LOG_NAME + " SET " +
                             KEEP_DELETED_CELLS + "='" + KeepDeletedCells.FALSE + "'");
+                }
             }
             if (UpgradeUtil.tableHasMaxVersions(
                 metaConnection, PhoenixDatabaseMetaData.SYSTEM_LOG_NAME)) {
-                metaConnection.createStatement().executeUpdate("ALTER TABLE " +
-                        PhoenixDatabaseMetaData.SYSTEM_LOG_NAME + " SET " +
-                        HConstants.VERSIONS + "='1'");
+                try (Statement stmt = metaConnection.createStatement()) {
+                    stmt.executeUpdate("ALTER TABLE " +
+                            PhoenixDatabaseMetaData.SYSTEM_LOG_NAME + " SET " +
+                            HConstants.VERSIONS + "='1'");
+                }
             }
         }
         return metaConnection;
