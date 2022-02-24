@@ -97,7 +97,7 @@ public class QueryIT extends BaseQueryIT {
 
     @Test
     public void testColumnAliasMapping() throws Exception {
-        String query = "SELECT a.a_string, " + tableName + ".b_string FROM " + tableName + " a WHERE ?=organization_id and 5=a_integer ORDER BY a_string, b_string";
+        String query = "SELECT a.a_string FROM " + tableName + " a WHERE ?=organization_id and 5=a_integer ORDER BY a_string, b_string";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -106,13 +106,13 @@ public class QueryIT extends BaseQueryIT {
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
             assertEquals(rs.getString(1), B_VALUE);
-            assertEquals(rs.getString("B_string"), C_VALUE);
+            assertEquals(rs.getString("a_string"), B_VALUE);
             assertFalse(rs.next());
         } finally {
             conn.close();
         }
     }
-    
+
     @Test
     public void testAllScan() throws Exception {
         String query = "SELECT ALL a_string, b_string FROM " + tableName + " WHERE ?=organization_id and 5=a_integer";
