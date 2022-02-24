@@ -281,13 +281,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
 
             if (perScanLimit != null) {
-                if (scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER) == null) {
+                if (scan.getAttribute(BaseScannerRegionObserver.INDEX_FILTER) == null) {
                     ScanUtil.andFilterAtEnd(scan, new PageFilter(perScanLimit));
                 } else {
-                    // if we have a local index filter and a limit, handle the limit after the filter
+                    // if we have an index filter and a limit, handle the limit after the filter
                     // we cast the limit to a long even though it passed as an Integer so that
                     // if we need extend this in the future the serialization is unchanged
-                    scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_LIMIT, Bytes.toBytes((long)perScanLimit));
+                    scan.setAttribute(BaseScannerRegionObserver.INDEX_LIMIT,
+                            Bytes.toBytes((long) perScanLimit));
                 }
             }
             

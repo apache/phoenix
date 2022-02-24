@@ -23,17 +23,23 @@ import java.util.Set;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.ColumnExpression;
+import org.apache.phoenix.expression.IsNullExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.util.IndexUtil;
 
-public class LocalIndexDataColumnRef extends ColumnRef {
+/**
+ * Even when a column is not covered by an index table for a given query, we may still want to
+ * use index in the query plan and fetch the missing columns from the data table rows on the
+ * server side. This class is used to keep track of such data columns.
+ */
+public class IndexDataColumnRef extends ColumnRef {
     final private int position;
     final private Set<PColumn> columns;
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
 
-    public LocalIndexDataColumnRef(StatementContext context, TableRef tRef, String indexColumnName)
+    public IndexDataColumnRef(StatementContext context, TableRef tRef, String indexColumnName)
             throws MetaDataEntityNotFoundException, SQLException {
         super(FromCompiler.getResolver(
             FACTORY.namedTable(
@@ -48,20 +54,41 @@ public class LocalIndexDataColumnRef extends ColumnRef {
         columns = context.getDataColumns();
     }
 
-    protected LocalIndexDataColumnRef(LocalIndexDataColumnRef localIndexDataColumnRef, long timestamp) {
-        super(localIndexDataColumnRef, timestamp);
-        this.position = localIndexDataColumnRef.position;
-        this.columns = localIndexDataColumnRef.columns;
+    protected IndexDataColumnRef(IndexDataColumnRef indexDataColumnRef, long timestamp) {
+        super(indexDataColumnRef, timestamp);
+        this.position = indexDataColumnRef.position;
+        this.columns = indexDataColumnRef.columns;
     }
 
     @Override
     public ColumnRef cloneAtTimestamp(long timestamp) {
-        return new LocalIndexDataColumnRef(this, timestamp);
+        return new IndexDataColumnRef(this, timestamp);
     }
 
     @Override
     public ColumnExpression newColumnExpression(boolean schemaNameCaseSensitive, boolean colNameCaseSensitive) {
         String displayName = this.getTableRef().getColumnDisplayName(this, schemaNameCaseSensitive, colNameCaseSensitive);
         return new ProjectedColumnExpression(this.getColumn(), columns, position, displayName);
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = super.hashCode();
+        result = prime * result + position;
+        result = prime * result + ((columns == null) ? 0 : columns.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (!super.equals(o)) {
+            return false;
+        }
+        IndexDataColumnRef that = (IndexDataColumnRef) o;
+        if (position != that.position) {
+            return false;
+        }
+        return columns.equals(that.columns);
     }
 }

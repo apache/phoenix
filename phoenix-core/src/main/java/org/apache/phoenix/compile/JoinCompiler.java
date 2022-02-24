@@ -20,6 +20,7 @@ package org.apache.phoenix.compile;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+import static org.apache.phoenix.util.IndexUtil.isHintedGlobalIndex;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -75,7 +76,7 @@ import org.apache.phoenix.parse.TableNodeVisitor;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.LocalIndexDataColumnRef;
+import org.apache.phoenix.schema.IndexDataColumnRef;
 import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PNameFactory;
@@ -1127,7 +1128,8 @@ public class JoinCompiler {
                     if (columnRef.getTableRef().equals(tableRef)
                             && (!retainPKColumns || !SchemaUtil.isPKColumn(columnRef.getColumn()))) {
                         if (columnRef instanceof LocalIndexColumnRef) {
-                            sourceColumns.add(new LocalIndexDataColumnRef(context, tableRef, IndexUtil.getIndexColumnName(columnRef.getColumn())));
+                            sourceColumns.add(new IndexDataColumnRef(context, tableRef,
+                                    IndexUtil.getIndexColumnName(columnRef.getColumn())));
                         } else {
                             sourceColumns.add(columnRef);
                         }
@@ -1392,10 +1394,11 @@ public class JoinCompiler {
             try {
                 columnRef = resolver.resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
             } catch (ColumnNotFoundException e) {
-                // This could be a LocalIndexDataColumnRef. If so, the table name must have
+                // This could be an IndexDataColumnRef. If so, the table name must have
                 // been appended by the IndexStatementRewriter, and we can convert it into.
                 TableRef tableRef = resolver.resolveTable(node.getSchemaName(), node.getTableName());
-                if (tableRef.getTable().getIndexType() == IndexType.LOCAL) {
+                if (tableRef.getTable().getIndexType() == IndexType.LOCAL
+                        || isHintedGlobalIndex(tableRef)) {
                     TableRef parentTableRef = FromCompiler.getResolver(
                             NODE_FACTORY.namedTable(null, TableName.create(tableRef.getTable()
                                     .getSchemaName().getString(), tableRef.getTable()

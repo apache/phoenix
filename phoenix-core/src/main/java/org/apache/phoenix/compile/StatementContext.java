@@ -87,6 +87,7 @@ public class StatementContext {
     private final OverAllQueryMetrics overAllQueryMetrics;
     private QueryLogger queryLogger;
     private boolean isClientSideUpsertSelect;
+    private boolean isUncoveredIndex;
     
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
@@ -328,6 +329,14 @@ public class StatementContext {
 
     public void setClientSideUpsertSelect(boolean isClientSideUpsertSelect) {
         this.isClientSideUpsertSelect = isClientSideUpsertSelect;
+    }
+
+    public boolean isUncoveredIndex() {
+        return isUncoveredIndex;
+    }
+
+    public void setUncoveredIndex(boolean isUncoveredIndex) {
+        this.isUncoveredIndex = isUncoveredIndex;
     }
 
     /*

@@ -86,6 +86,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String GROUP_BY_LIMIT = "_GroupByLimit";
     public static final String LOCAL_INDEX = "_LocalIndex";
     public static final String LOCAL_INDEX_BUILD = "_LocalIndexBuild";
+    public static final String UNCOVERED_GLOBAL_INDEX = "_UncoveredGlobalIndex";
     public static final String INDEX_REBUILD_PAGING = "_IndexRebuildPaging";
     // The number of index rows to be rebuild in one RPC call
     public static final String INDEX_REBUILD_PAGE_ROWS = "_IndexRebuildPageRows";
@@ -97,9 +98,15 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
         "_IndexRebuildDisableLoggingVerifyType";
     public static final String INDEX_REBUILD_DISABLE_LOGGING_BEYOND_MAXLOOKBACK_AGE =
         "_IndexRebuildDisableLoggingBeyondMaxLookbackAge";
+    @Deprecated
     public static final String LOCAL_INDEX_FILTER = "_LocalIndexFilter";
+    @Deprecated
     public static final String LOCAL_INDEX_LIMIT = "_LocalIndexLimit";
+    @Deprecated
     public static final String LOCAL_INDEX_FILTER_STR = "_LocalIndexFilterStr";
+    public static final String INDEX_FILTER = "_IndexFilter";
+    public static final String INDEX_LIMIT = "_IndexLimit";
+    public static final String INDEX_FILTER_STR = "_IndexFilterStr";
 
     /* 
     * Attribute to denote that the index maintainer has been serialized using its proto-buf presentation.

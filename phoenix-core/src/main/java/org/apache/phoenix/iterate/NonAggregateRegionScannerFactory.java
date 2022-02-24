@@ -128,21 +128,15 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     PhoenixTransactionContext tx = null;
     ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
     if (dataColumns != null) {
-      tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
-      dataRegion = env.getRegion();
-      boolean useProto = false;
-      byte[] localIndexBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD_PROTO);
-      useProto = localIndexBytes != null;
-      if (localIndexBytes == null) {
-        localIndexBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD);
-      }
-      int clientVersion = ScanUtil.getClientVersion(scan);
-      List<IndexMaintainer> indexMaintainers =
-              IndexMaintainer.deserialize(localIndexBytes, useProto);
-      indexMaintainer = indexMaintainers.get(0);
-      viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
-      byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
-      tx = TransactionFactory.getTransactionContext(txState, clientVersion);
+        tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
+        dataRegion = env.getRegion();
+        int clientVersion = ScanUtil.getClientVersion(scan);
+        List<IndexMaintainer> indexMaintainers =
+                IndexUtil.deSerializeIndexMaintainersFromScan(scan);
+        indexMaintainer = indexMaintainers.get(0);
+        viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+        byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
+        tx = TransactionFactory.getTransactionContext(txState, clientVersion);
     }
 
     final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
