@@ -230,17 +230,12 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ t_id, k1, k2, k3, V1 from " + dataTableFullName + "  where v1<='z' and k3 > 1 order by V1,t_id";
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             
-            expected = 
-                    "CLIENT PARALLEL \\d-WAY FULL SCAN OVER " + dataTableName + "\n" +
-                    "    SERVER FILTER BY K3 > 1\n" +
-                    "    SERVER SORTED BY \\[" + dataTableName + ".V1, " + dataTableName + ".T_ID\\]\n" +
-                    "CLIENT MERGE SORT\n" +
-                    "    SKIP-SCAN-JOIN TABLE 0\n" +
-                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " \\[\\*\\] - \\['z'\\]\n" +
-                    "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                    "    DYNAMIC SERVER FILTER BY \\(\"" + dataTableName + ".T_ID\", \"" + dataTableName + ".K1\", \"" + dataTableName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+            expected =
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " [*] - ['z']\n"+
+                    "    SERVER MERGE [0.K3]\n" +
+                    "    SERVER FILTER BY FIRST KEY ONLY AND \"K3\" > 1";
             actual = QueryUtil.getExplainPlan(rs);
-            assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
+            assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, actual.equals(expected));
             
             rs = conn1.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -265,17 +260,15 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             
             query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ t_id, V1, k3 from " + dataTableFullName + "  where v1 <='z' group by v1,t_id, k3";
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
-            
-            expected = 
-                    "CLIENT PARALLEL \\d-WAY FULL SCAN OVER " + dataTableName + "\n" +
-                            "    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[" + dataTableName + ".V1, " + dataTableName + ".T_ID, " + dataTableName + ".K3\\]\n" +
-                            "CLIENT MERGE SORT\n" +
-                            "    SKIP-SCAN-JOIN TABLE 0\n" +
-                            "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " \\[\\*\\] - \\['z'\\]\n" +
-                            "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                            "    DYNAMIC SERVER FILTER BY \\(\"" + dataTableName + ".T_ID\", \"" + dataTableName + ".K1\", \"" + dataTableName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+            expected =
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " [*] - ['z']\n"+
+                    "    SERVER MERGE [0.K3]\n" +
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                    "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"V1\", \"T_ID\", \"K3\"]\n"+
+                    "CLIENT MERGE SORT";
+
             actual = QueryUtil.getExplainPlan(rs);
-            assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
+            assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, actual.equals(expected));
             
             rs = conn1.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -299,16 +292,13 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ v1,sum(k3) from " + dataTableFullName + " where v1 <='z'  group by v1 order by v1";
             
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
-            expected = 
-                    "CLIENT PARALLEL \\d-WAY FULL SCAN OVER " + dataTableName + "\n" +
-                            "    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[" + dataTableName + ".V1\\]\n" +
-                            "CLIENT MERGE SORT\n" +
-                            "    SKIP-SCAN-JOIN TABLE 0\n" +
-                            "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " \\[\\*\\] - \\['z'\\]\n" +
-                            "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                            "    DYNAMIC SERVER FILTER BY \\(\"" + dataTableName + ".T_ID\", \"" + dataTableName + ".K1\", \"" + dataTableName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+            expected =
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " [*] - ['z']\n"+
+                            "    SERVER MERGE [0.K3]\n" +
+                            "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                            "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"V1\"]";
             actual = QueryUtil.getExplainPlan(rs);
-            assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
+            assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, actual.equals(expected));
             
             rs = conn1.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -340,12 +330,10 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             ResultSet rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
             String actual = QueryUtil.getExplainPlan(rs);
-            String expected = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + dataTableName + " \\['tid1'\\]\n" +
-                            "    SKIP-SCAN-JOIN TABLE 0\n" +
-                            "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " \\['tid1','a'\\]\n" +
-                            "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                            "    DYNAMIC SERVER FILTER BY \\(\"" + dataTableName + ".K1\", \"" + dataTableName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
-            assertTrue("Expected:\n" + expected + "\ndid not match\n" + actual, Pattern.matches(expected, actual));
+            String expected = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " ['tid1','a']\n" +
+                    "    SERVER MERGE [0.K3]\n" +
+                    "    SERVER FILTER BY FIRST KEY ONLY";
+            assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, actual.equals(expected));
             
             rs = conn1.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -393,15 +381,15 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
              * This inner "_IDX_" + dataTableName use skipScan, and all the whereExpressions are already in SkipScanFilter,
              * so there is no other RowKeyComparisonFilter needed.
              */
+
             String actual = QueryUtil.getExplainPlan(rs);
             String expected = 
-                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableName + "\n" +
-                    "    SERVER FILTER BY V1 = 'a'\n" +
-                    "    SKIP-SCAN-JOIN TABLE 0\n" +
-                    "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER _IDX_" + dataTableName + " \\[" + Short.MIN_VALUE + ",1\\] - \\[" + Short.MIN_VALUE + ",2\\]\n" +
-                    "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                    "    DYNAMIC SERVER FILTER BY \\(\"" + viewName + ".T_ID\", \"" + viewName + ".K1\", \"" + viewName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
-            assertTrue("Expected:\n" + expected + "\ndid not match\n" + actual, Pattern.matches(expected,actual));
+                    "CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER _IDX_" + dataTableName +
+                            " [" + Short.MIN_VALUE + ",1] - [" + Short.MIN_VALUE + ",2]\n" +
+                    "    SERVER MERGE [0.K3]\n" +
+                    "    SERVER FILTER BY FIRST KEY ONLY";
+
+            assertEquals(expected,actual);
             
             rs = conn1.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -409,7 +397,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             assertEquals(2, rs.getInt("k1"));
             assertEquals(4, rs.getInt("k2"));
             assertEquals(2, rs.getInt("k3"));
-            assertEquals("a", rs.getString("v1"));
+            assertEquals("a", rs.getString(5)); //TODO use name v1 instead of position 5, see PHOENIX-6644
             assertFalse(rs.next());
         } finally {
             conn1.close();
@@ -474,7 +462,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
             
             // No where clause
-            query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ t_id, k1, k2, k3, V1 from " + dataTableFullName + " order by V1,t_id";
+            query = "SELECT  t_id, k1, k2, k3, V1 from " + dataTableFullName + " order by V1,t_id";
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             
             assertEquals(
@@ -511,7 +499,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
             
             // No where clause in index scan
-            query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ t_id, k1, k2, k3, V1 from " + dataTableFullName + "  where k3 > 1 order by V1,t_id";
+            query = "SELECT t_id, k1, k2, k3, V1 from " + dataTableFullName + "  where k3 > 1 order by V1,t_id";
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             
             assertEquals(
