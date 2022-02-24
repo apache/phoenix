@@ -108,7 +108,7 @@ public class SnapshotTestTemplateIT extends BaseTest {
         assertEquals(0, importExitCode);
 
         //load the snapshot
-        utility.getAdmin().restoreSnapshot(key);
+        utility.getHBaseAdmin().restoreSnapshot(key);
     }
 
     @Test
