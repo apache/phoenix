@@ -191,7 +191,11 @@ public abstract class ExplainTable {
         if (whereFilter != null) {
             whereFilterStr = whereFilter.toString();
         } else {
-            byte[] expBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER_STR);
+            byte[] expBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_FILTER_STR);
+            if (expBytes == null) {
+                // For older clients
+                expBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER_STR);
+            }
             if (expBytes != null) {
                 whereFilterStr = Bytes.toString(expBytes);
             }
