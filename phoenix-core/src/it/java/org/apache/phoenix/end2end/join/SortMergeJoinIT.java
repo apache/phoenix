@@ -150,17 +150,16 @@ public abstract class SortMergeJoinIT extends BaseJoinIT {
             conn.close();
         }
     }
-            
+
     @Test
     public void testLeftJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
         String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
-        String query[] = new String[3];
+        String query[] = new String[2];
         query[0] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name, next value for " + seqName + " FROM " + tableName1 + " item LEFT JOIN " + tableName2 + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
         query[1] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ " + tableName1 + ".\"item_id\", " + tableName1 + ".name, " + tableName2 + ".\"supplier_id\", " + tableName2 + ".name, next value for " + seqName + " FROM " + tableName1 + " LEFT JOIN " + tableName2 + " ON " + tableName1 + ".\"supplier_id\" = " + tableName2 + ".\"supplier_id\" ORDER BY \"item_id\"";
-        query[2] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", " + tableName1 + ".name, supp.\"supplier_id\", " + tableName2 + ".name, next value for " + seqName + " FROM " + tableName1 + " item LEFT JOIN " + tableName2 + " supp ON " + tableName1 + ".\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
         try {
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
@@ -1190,7 +1189,7 @@ public abstract class SortMergeJoinIT extends BaseJoinIT {
         String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
         String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
         String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ s.*, "+ tableName1 + ".*, \"order_id\" FROM " + tableName4 + " o RIGHT JOIN " 
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ s.*, i.*, \"order_id\" FROM " + tableName4 + " o RIGHT JOIN "
                 + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
                 + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         try {

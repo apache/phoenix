@@ -1116,6 +1116,8 @@ public class JoinCompiler {
                 }
             }
             if (isWildCardSelect()) {
+                // Wildcard local indexes are handled here in
+                // ProjectionCompiler.projectAllIndexColumns()
                 for (PColumn column : table.getColumns()) {
                     if (!retainPKColumns || !SchemaUtil.isPKColumn(column)) {
                         sourceColumns.add(new ColumnRef(tableRef, column.getPosition()));
