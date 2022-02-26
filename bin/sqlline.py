@@ -108,12 +108,13 @@ if os.name == 'nt':
     colorSetting = "false"
 
 java_cmd = java + ' $PHOENIX_OPTS ' + \
-    ' -cp "' + phoenix_utils.sqlline_with_deps_jar + os.pathsep + hbase_config_path + os.pathsep + \
+    ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + \
+    phoenix_utils.hadoop_conf + os.pathsep + \
+    phoenix_utils.sqlline_with_deps_jar + os.pathsep + \
     phoenix_utils.slf4j_backend_jar + os.pathsep + \
-    phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_client_embedded_jar + \
-    os.pathsep + phoenix_utils.hadoop_common_jar + os.pathsep + phoenix_utils.hadoop_hdfs_jar + \
-    os.pathsep + phoenix_utils.hadoop_conf + os.pathsep + phoenix_utils.hadoop_classpath + '" -Dlog4j.configuration=file:' + \
-    os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
+    phoenix_utils.logging_jar + os.pathsep + \
+    phoenix_utils.phoenix_client_embedded_jar + \
+    '" -Dlog4j.configuration=file:' + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver" + \
     " -u jdbc:phoenix:" + phoenix_utils.shell_quote([zookeeper]) + \
     " -n none -p none --color=" + colorSetting + " --fastConnect=" + tryDecode(args.fastconnect) + \
