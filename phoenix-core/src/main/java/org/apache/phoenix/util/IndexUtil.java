@@ -76,6 +76,7 @@ import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
@@ -601,7 +602,11 @@ public class IndexUtil {
             Result joinResult = null;
             if (ScanUtil.isLocalIndex(scan)) {
                 if (dataRegion != null) {
-                    joinResult = dataRegion.get(get);
+                    try (RegionScanner scanner = dataRegion.getScanner(new Scan(get))) {
+                        List<Cell> cells = new ArrayList<>();
+                        scanner.next(cells);
+                        joinResult = ServerUtil.convertCellListToResult(cells, get, dataRegion);
+                    }
                 } else {
                     TableName dataTable =
                             TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(
