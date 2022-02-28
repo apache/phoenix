@@ -23,6 +23,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -37,12 +38,13 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
@@ -150,8 +152,13 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
         final Get get = new Get(rowKey);
         if (isDupKeyIgnore(opBytes)) {
             get.setFilter(new FirstKeyOnlyFilter());
-            Result result = this.env.getRegion().get(get);
-            return result.isEmpty() ? convertIncrementToPutInSingletonList(inc) : Collections.<Mutation>emptyList();
+            try (RegionScanner scanner = this.env.getRegion().getScanner(new Scan(get))) {
+                List<Cell> cells = new ArrayList<>();
+                scanner.next(cells);
+                return cells.isEmpty()
+                        ? convertIncrementToPutInSingletonList(inc)
+                        : Collections.<Mutation>emptyList();
+            }
         }
         ByteArrayInputStream stream = new ByteArrayInputStream(opBytes);
         DataInputStream input = new DataInputStream(stream);
