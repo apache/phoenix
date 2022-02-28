@@ -19,6 +19,7 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -36,13 +37,14 @@ import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Region.RowLock;
+import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -121,32 +123,35 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
         region.startRegionOperation();
         try {
             ServerUtil.acquireLock(region, row, locks);
-            try {
-                long maxTimestamp = tr.getMax();
-                boolean validateOnly = true;
-                Get get = new Get(row);
-                get.setTimeRange(tr.getMin(), tr.getMax());
-                for (Map.Entry<byte[], List<Cell>> entry : increment.getFamilyCellMap().entrySet()) {
-                    byte[] cf = entry.getKey();
-                    for (Cell cq : entry.getValue()) {
-                    	long value = Bytes.toLong(cq.getValueArray(), cq.getValueOffset());
-                        get.addColumn(cf, CellUtil.cloneQualifier(cq));
-                        long cellTimestamp = cq.getTimestamp();
-                        // Workaround HBASE-15698 by using the lowest of the timestamps found
-                        // on the Increment or any of its Cells.
-                        if (cellTimestamp > 0 && cellTimestamp < maxTimestamp) {
-                            maxTimestamp = cellTimestamp;
-                            get.setTimeRange(MetaDataProtocol.MIN_TABLE_TIMESTAMP, maxTimestamp);
-                        }
-                        validateOnly &= (Sequence.ValueOp.VALIDATE_SEQUENCE.ordinal() == value);
+            long maxTimestamp = tr.getMax();
+            boolean validateOnly = true;
+            Get get = new Get(row);
+            get.setTimeRange(tr.getMin(), tr.getMax());
+            for (Map.Entry<byte[], List<Cell>> entry : increment.getFamilyCellMap().entrySet()) {
+                byte[] cf = entry.getKey();
+                for (Cell cq : entry.getValue()) {
+                    long value = Bytes.toLong(cq.getValueArray(), cq.getValueOffset());
+                    get.addColumn(cf, CellUtil.cloneQualifier(cq));
+                    long cellTimestamp = cq.getTimestamp();
+                    // Workaround HBASE-15698 by using the lowest of the timestamps found
+                    // on the Increment or any of its Cells.
+                    if (cellTimestamp > 0 && cellTimestamp < maxTimestamp) {
+                        maxTimestamp = cellTimestamp;
+                        get.setTimeRange(MetaDataProtocol.MIN_TABLE_TIMESTAMP, maxTimestamp);
                     }
+                    validateOnly &= (Sequence.ValueOp.VALIDATE_SEQUENCE.ordinal() == value);
                 }
-                Result result = region.get(get);
-                if (result.isEmpty()) {
+            }
+            try (RegionScanner scanner = region.getScanner(new Scan(get))) {
+                List<Cell> currentCells = new ArrayList<>();
+                scanner.next(currentCells);
+                // These cells are returned by this method, and may be backed by ByteBuffers
+                // that we free when the RegionScanner is closed on return
+                PhoenixKeyValueUtil.maybeCopyCellList(currentCells);
+                if (currentCells.isEmpty()) {
                     return getErrorResult(row, maxTimestamp, SQLExceptionCode.SEQUENCE_UNDEFINED.getErrorCode());
                 }
-                
-                 
+                Result result = Result.create(currentCells);
                 Cell currentValueKV = Sequence.getCurrentValueKV(result);
                 Cell incrementByKV = Sequence.getIncrementByKV(result);
                 Cell cacheSizeKV = Sequence.getCacheSizeKV(result);
@@ -379,15 +384,17 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
         region.startRegionOperation();
         try {
             ServerUtil.acquireLock(region, row, locks);
-            try {
-                byte[] family = CellUtil.cloneFamily(keyValue);
-                byte[] qualifier = CellUtil.cloneQualifier(keyValue);
 
-                Get get = new Get(row);
-                get.setTimeRange(minGetTimestamp, maxGetTimestamp);
-                get.addColumn(family, qualifier);
-                Result result = region.get(get);
-                if (result.isEmpty()) {
+            byte[] family = CellUtil.cloneFamily(keyValue);
+            byte[] qualifier = CellUtil.cloneQualifier(keyValue);
+
+            Get get = new Get(row);
+            get.setTimeRange(minGetTimestamp, maxGetTimestamp);
+            get.addColumn(family, qualifier);
+            try (RegionScanner scanner = region.getScanner(new Scan(get))) {
+                List<Cell> cells = new ArrayList<>();
+                scanner.next(cells);
+                if (cells.isEmpty()) {
                     if (op == Sequence.MetaOp.DROP_SEQUENCE || op == Sequence.MetaOp.RETURN_SEQUENCE) {
                         return getErrorResult(row, clientTimestamp, SQLExceptionCode.SEQUENCE_UNDEFINED.getErrorCode());
                     }
@@ -399,7 +406,7 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
                 Mutation m = null;
                 switch (op) {
                 case RETURN_SEQUENCE:
-                    KeyValue currentValueKV = PhoenixKeyValueUtil.maybeCopyCell(result.rawCells()[0]);
+                    KeyValue currentValueKV = PhoenixKeyValueUtil.maybeCopyCell(cells.get(0));
                     long expectedValue = PLong.INSTANCE.getCodec().decodeLong(append.getAttribute(CURRENT_VALUE_ATTRIB), 0, SortOrder.getDefault());
                     long value = PLong.INSTANCE.getCodec().decodeLong(currentValueKV.getValueArray(),
                       currentValueKV.getValueOffset(), SortOrder.getDefault());

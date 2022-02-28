@@ -3514,19 +3514,22 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             if (rowLock == null) {
                 throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
             }
-            try {
-                Get get = new Get(key);
-                get.addColumn(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
-                get.addColumn(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
-                get.addColumn(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
-                get.addColumn(TABLE_FAMILY_BYTES, ROW_KEY_ORDER_OPTIMIZABLE_BYTES);
-                Result currentResult = region.get(get);
-                if (currentResult.rawCells().length == 0) {
+
+            Get get = new Get(key);
+            get.addColumn(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
+            get.addColumn(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
+            get.addColumn(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
+            get.addColumn(TABLE_FAMILY_BYTES, ROW_KEY_ORDER_OPTIMIZABLE_BYTES);
+            try (RegionScanner scanner = region.getScanner(new Scan(get))) {
+                List<Cell> cells = new ArrayList<>();
+                scanner.next(cells);
+                if (cells.isEmpty()) {
                     builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
                     builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
                     done.run(builder.build());
                     return;
                 }
+                Result currentResult = Result.create(cells);
                 Cell dataTableKV = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
                 Cell currentStateKV = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
                 Cell currentDisableTimeStamp = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
@@ -3628,10 +3631,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (currentState == PIndexState.PENDING_DISABLE) {
                     if (newState == PIndexState.ACTIVE) {
                         //before making index ACTIVE check if all clients succeed otherwise keep it PENDING_DISABLE
-                        byte[] count = region
-                                .get(new Get(key).addColumn(TABLE_FAMILY_BYTES,
-                                        PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES))
-                                .getValue(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
+                        byte[] count;
+                        try (RegionScanner countScanner = region.getScanner(new Scan(get))) {
+                            List<Cell> countCells = new ArrayList<>();
+                            scanner.next(countCells);
+                            count = Result.create(countCells)
+                                    .getValue(TABLE_FAMILY_BYTES,
+                                        PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
+                        }
                         if (count != null && Bytes.toLong(count) != 0) {
                             newState = PIndexState.PENDING_DISABLE;
                             newKVs.remove(disableTimeStampKVIndex);
@@ -4055,7 +4062,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 Region region = env.getRegion();
                 Scan scan = MetaDataUtil.newTableRowsScan(keys.get(0), MIN_TABLE_TIMESTAMP, clientTimeStamp);
                 List<Cell> results = Lists.newArrayList();
-                try (RegionScanner scanner = region.getScanner(scan);) {
+                try (RegionScanner scanner = region.getScanner(scan)) {
                     scanner.next(results);
                     if (results.isEmpty()) { // Should not be possible
                         return new MetaDataMutationResult(MutationCode.FUNCTION_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
