@@ -73,6 +73,7 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
     public static final String INDEX_REBUILD_PAGING = "_IndexRebuildPaging";
     // The number of index rows to be rebuild in one RPC call
     public static final String INDEX_REBUILD_PAGE_ROWS = "_IndexRebuildPageRows";
+    public static final String INDEX_PAGE_ROWS = "_IndexPageRows";
     public static final String SERVER_PAGE_SIZE_MS = "_ServerPageSizeMs";
     // Index verification type done by the index tool
     public static final String INDEX_REBUILD_VERIFY_TYPE = "_IndexRebuildVerifyType";
@@ -389,7 +390,8 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
             final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
             final Region dataRegion, final IndexMaintainer indexMaintainer,
             final byte[][] viewConstants, final TupleProjector projector,
-            final ImmutableBytesWritable ptr, final boolean useQualiferAsListIndex) {
+            final ImmutableBytesWritable ptr, final boolean useQualiferAsListIndex)
+            throws IOException {
 
         RegionScannerFactory regionScannerFactory = new NonAggregateRegionScannerFactory(c.getEnvironment());
 
