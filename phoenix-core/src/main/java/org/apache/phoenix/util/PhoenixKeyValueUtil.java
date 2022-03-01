@@ -236,7 +236,7 @@ public class PhoenixKeyValueUtil {
      */
     public static List<Cell> maybeCopyCellList(List<Cell> cells) {
         ListIterator<Cell> cellsIt = cells.listIterator();
-        while(cellsIt.hasNext()) {
+        while (cellsIt.hasNext()) {
             Cell c = cellsIt.next();
             if (c instanceof ByteBufferExtendedCell) {
                 cellsIt.set(KeyValueUtil.copyToNewKeyValue(c));
