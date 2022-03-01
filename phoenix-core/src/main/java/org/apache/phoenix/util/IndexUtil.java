@@ -604,8 +604,9 @@ public class IndexUtil {
                 if (dataRegion != null) {
                     try (RegionScanner scanner = dataRegion.getScanner(new Scan(get))) {
                         List<Cell> cells = new ArrayList<>();
+                        PhoenixKeyValueUtil.maybeCopyCellList(cells);
                         scanner.next(cells);
-                        joinResult = ServerUtil.convertCellListToResult(cells, get, dataRegion);
+                        joinResult = Result.create(cells);
                     }
                 } else {
                     TableName dataTable =

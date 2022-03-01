@@ -3889,7 +3889,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     done.run(builder.build());
                     return;
                 }
-                Result currentResult = ServerUtil.convertCellListToResult(cells, get, region);
+                Result currentResult = Result.create(cells);
                 Cell dataTableKV = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
                 Cell currentStateKV = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
                 Cell currentDisableTimeStamp = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
@@ -3995,8 +3995,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         try (RegionScanner countScanner = region.getScanner(new Scan(get))) {
                             List<Cell> countCells = new ArrayList<>();
                             scanner.next(countCells);
-                            count = ServerUtil.convertCellListToResult(countCells, get, region)
-                                    .getValue(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
+                            count = Result.create(countCells)
+                                    .getValue(TABLE_FAMILY_BYTES,
+                                        PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
                         }
                         if (count != null && Bytes.toLong(count) != 0) {
                             newState = PIndexState.PENDING_DISABLE;

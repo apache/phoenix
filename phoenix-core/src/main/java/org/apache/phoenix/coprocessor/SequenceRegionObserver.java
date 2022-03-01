@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
@@ -145,10 +146,13 @@ public class SequenceRegionObserver implements RegionObserver, RegionCoprocessor
             try (RegionScanner scanner = region.getScanner(new Scan(get))) {
                 List<Cell> currentCells = new ArrayList<>();
                 scanner.next(currentCells);
+                // These cells are returned by this method, and may be backed by ByteBuffers
+                // that we free when the RegionScanner is closed on return
+                PhoenixKeyValueUtil.maybeCopyCellList(currentCells);
                 if (currentCells.isEmpty()) {
                     return getErrorResult(row, maxTimestamp, SQLExceptionCode.SEQUENCE_UNDEFINED.getErrorCode());
                 }
-                Result result = ServerUtil.convertCellListToResult(currentCells, get, region);
+                Result result = Result.create(currentCells);
                 Cell currentValueKV = Sequence.getCurrentValueKV(result);
                 Cell incrementByKV = Sequence.getIncrementByKV(result);
                 Cell cacheSizeKV = Sequence.getCacheSizeKV(result);

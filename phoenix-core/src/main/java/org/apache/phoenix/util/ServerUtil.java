@@ -34,14 +34,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -419,10 +416,5 @@ public class ServerUtil {
             t = e;
         }
         return t;
-    }
-
-    public static Result convertCellListToResult(List<Cell> cells, Get get, Region region) {
-        boolean stale = region.getRegionInfo().getReplicaId() != 0;
-        return Result.create(cells, get.isCheckExistenceOnly() ? !cells.isEmpty() : null, stale);
     }
 }
