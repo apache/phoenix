@@ -42,8 +42,10 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -713,6 +715,101 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
                     " (pk5,pk6,pk7) in ((4,7,8),(5,4,3)) and pk8 > 8 order by pk1,pk2,pk3";
             rs = conn.prepareStatement(sql).executeQuery();
             assertResultSet(rs, new Object[][]{{1,3,2,10},{1,3,5,6}});
+        }
+    }
+
+    @Test
+    public void testRVCBug6659() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, PK2 INTEGER NOT NULL, " +
+                "PK3 BIGINT NOT NULL CONSTRAINT PK PRIMARY KEY (PK1,PK2,PK3))";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a',0,1)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a',1,1)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a',2,1)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a',3,1)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a',3,2)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a',4,1)");
+            conn.commit();
+            String query = "SELECT * FROM " + tableName +
+                    " WHERE (PK1 = 'a') AND (PK1,PK2,PK3) <= ('a',3,1)";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            int rowCnt = 0;
+            do {
+                rowCnt++;
+            } while (rs.next());
+            assertEquals(4, rowCnt);
+        }
+    }
+
+    @Test
+    public void testRVCBug6659_Delete() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName + " (PK1 DOUBLE NOT NULL, PK2 INTEGER NOT NULL, " +
+                " CONSTRAINT PK PRIMARY KEY (PK1,PK2))";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(10.0,10)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(20.0,20)");
+            conn.commit();
+            String query = "DELETE FROM " + tableName +
+                    " WHERE (PK1,PK2) IN ((10.0, 10),(20.0, 20))";
+            conn.createStatement().execute(query);
+            conn.commit();
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testRVCBug6659_AllVarchar() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, PK2 VARCHAR NOT NULL, " +
+                "PK3 BIGINT NOT NULL CONSTRAINT PK PRIMARY KEY (PK1,PK2,PK3))";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a','0',1)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a','1',1)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a','3',1)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a','3',2)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a','4',1)");
+            conn.commit();
+            String query = "SELECT * FROM " + tableName +
+                    " WHERE (PK1 = 'a') AND (PK1,PK2,PK3) <= ('a','3',1)";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            int rowCnt = 0;
+            do {
+                rowCnt++;
+            } while (rs.next());
+            assertEquals(3, rowCnt);
+        }
+    }
+
+    @Test
+    public void testRVCBug6659_IntVarcharBigint() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName + " (PK1 INTEGER NOT NULL, PK2 VARCHAR NOT NULL, " +
+                "PK3 BIGINT NOT NULL CONSTRAINT PK PRIMARY KEY (PK1,PK2,PK3))";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,'0',1)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,'1',1)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,'3',1)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,'3',2)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,'4',1)");
+            conn.commit();
+            String query = "SELECT * FROM " + tableName +
+                    " WHERE (PK1 = 1) AND (PK1,PK2,PK3) <= (1,'3',1)";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            int rowCnt = 0;
+            do {
+                rowCnt++;
+            } while (rs.next());
+            assertEquals(3, rowCnt);
         }
     }
 
