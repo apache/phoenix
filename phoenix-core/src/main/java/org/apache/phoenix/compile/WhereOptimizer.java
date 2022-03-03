@@ -406,8 +406,10 @@ public class WhereOptimizer {
         }
     }
     
-    private static KeyRange getTrailingRange(RowKeySchema rowKeySchema, int pkPos, KeyRange range, KeyRange clippedResult, ImmutableBytesWritable ptr) {
-        int separatorLength = rowKeySchema.getField(pkPos).getDataType().isFixedWidth() ? 0 : 1;
+    private static KeyRange getTrailingRange(RowKeySchema rowKeySchema, int clippedPkPos, KeyRange range, KeyRange clippedResult, ImmutableBytesWritable ptr) {
+        // We are interested in the clipped part's Seperator. Since we combined first part, we need to
+        // remove its separator from the trailing parts' start
+        int clippedSepLength= rowKeySchema.getField(clippedPkPos).getDataType().isFixedWidth() ? 0 : 1;
         byte[] lowerRange = KeyRange.UNBOUND;
         boolean lowerInclusive = false;
         // Lower range of trailing part of RVC must be true, so we can form a new range to intersect going forward
@@ -415,7 +417,7 @@ public class WhereOptimizer {
                 && range.getLowerRange().length > clippedResult.getLowerRange().length
                 && Bytes.startsWith(range.getLowerRange(), clippedResult.getLowerRange())) {
             lowerRange = range.getLowerRange();
-            int offset = clippedResult.getLowerRange().length + separatorLength;
+            int offset = clippedResult.getLowerRange().length + clippedSepLength;
             ptr.set(lowerRange, offset, lowerRange.length - offset);
             lowerRange = ptr.copyBytes();
             lowerInclusive = range.isLowerInclusive();
@@ -426,7 +428,7 @@ public class WhereOptimizer {
                 && range.getUpperRange().length > clippedResult.getUpperRange().length
                 && Bytes.startsWith(range.getUpperRange(), clippedResult.getUpperRange())) {
             upperRange = range.getUpperRange();
-            int offset = clippedResult.getUpperRange().length + separatorLength;
+            int offset = clippedResult.getUpperRange().length + clippedSepLength;
             ptr.set(upperRange, offset, upperRange.length - offset);
             upperRange = ptr.copyBytes();
             upperInclusive = range.isUpperInclusive();
@@ -1352,7 +1354,7 @@ public class WhereOptimizer {
                 // code doesn't work correctly for WhereOptimizerTest.testMultiSlotTrailingIntersect()
                 if (result.isSingleKey() && !(range.isSingleKey() && otherRange.isSingleKey())) {
                     int trailingPkPos = pkPos + Math.min(minSpan, otherMinSpan);
-                    KeyRange trailingRange = getTrailingRange(rowKeySchema, trailingPkPos, minSpan > otherMinSpan ? range : otherRange, result, ptr);
+                    KeyRange trailingRange = getTrailingRange(rowKeySchema, pkPos, minSpan > otherMinSpan ? range : otherRange, result, ptr);
                     trailingRanges[trailingPkPos] = trailingRanges[trailingPkPos].intersect(trailingRange);
                 } else {
                     // Add back clipped part of range 
