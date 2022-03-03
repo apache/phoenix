@@ -369,7 +369,7 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
                 count++;
             }
             // we have key values (7,5) (8,4) and (9,3) present in aTable. So the query should return the 3 records.
-            assertTrue(count == 3); 
+            assertEquals(3, count);
         } finally {
             conn.close();
         }
