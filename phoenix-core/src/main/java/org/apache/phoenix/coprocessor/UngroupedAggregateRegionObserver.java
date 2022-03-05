@@ -391,6 +391,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         final Region region = env.getRegion();
         long ts = scan.getTimeRange().getMax();
         boolean localIndexScan = ScanUtil.isLocalIndex(scan);
+        boolean uncoveredGlobalIndexScan = ScanUtil.isUncoveredGlobalIndex(scan);
         if (ScanUtil.isAnalyzeTable(scan)) {
             byte[] gp_width_bytes =
                     scan.getAttribute(BaseScannerRegionObserver.GUIDEPOST_WIDTH_BYTES);
@@ -423,13 +424,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         final int offset = offsetToBe;
         byte[] descRowKeyTableBytes = scan.getAttribute(UPGRADE_DESC_ROW_KEY);
         boolean isDescRowKeyOrderUpgrade = descRowKeyTableBytes != null;
-        boolean useProto = false;
-        byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD_PROTO);
-        useProto = localIndexBytes != null;
-        if (localIndexBytes == null) {
-            localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
-        }
-        List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes, useProto);
+        List<IndexMaintainer> indexMaintainers = IndexUtil.deSerializeIndexMaintainersFromScan(scan);
         RegionScanner theScanner = s;
         byte[] upsertSelectTable = scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE);
         boolean isDelete = false;
@@ -443,7 +438,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
         boolean useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan));
-        if ((localIndexScan && !isDelete && !isDescRowKeyOrderUpgrade) || (j == null && p != null)) {
+        if (((localIndexScan || uncoveredGlobalIndexScan) && !isDelete && !isDescRowKeyOrderUpgrade) || (j == null && p != null)) {
             if (dataColumns != null) {
                 tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
                 viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
