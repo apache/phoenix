@@ -534,6 +534,12 @@ public class GlobalIndexCheckerIT extends BaseTest {
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
             assertFalse(rs.next());
+            selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ count(val3) from " + dataTableName + " where val1 > '0'";
+            //Verify that we will read from the index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
             // Run an order by query where the uncovered index should be used
             // Verify that without hint, the index table is not selected
             assertIndexTableNotSelected(conn, dataTableName, indexTableName,
