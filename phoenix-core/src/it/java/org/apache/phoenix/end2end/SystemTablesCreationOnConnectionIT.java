@@ -49,6 +49,8 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.ipc.HBaseRpcController;
+import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -63,6 +65,7 @@ import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesTestImpl;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.junit.After;
@@ -217,7 +220,48 @@ public class SystemTablesCreationOnConnectionIT {
         assertEquals(1, countUpgradeAttempts);
     }
 
+    // Conditions: isDoNotUpgradePropSet is true
+    // Conditions: IS_SERVER_CONNECTION is true
+    // Expected: We do not create SYSTEM.CATALOG even if this is the first connection to the server
+    @Test
+    public void testGetConnectionOnServer() throws Exception {
+        startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
+        verifyCQSIUsingAppropriateRPCContoller(true);
+    }
 
+    // Conditions: isDoNotUpgradePropSet is true
+    // Conditions: IS_SERVER_CONNECTION is false
+    // Expected: We do not create SYSTEM.CATALOG even if this is the first connection to the server
+    @Test
+    public void testGetRegularConnection() throws Exception {
+        startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
+        verifyCQSIUsingAppropriateRPCContoller(false);
+    }
+
+    private void verifyCQSIUsingAppropriateRPCContoller(boolean isServerSideConnection) throws Exception {
+        Properties serverSideProperties = new Properties();
+        // Set doNotUpgradeProperty to true
+        UpgradeUtil.doNotUpgradeOnFirstConnection(serverSideProperties);
+        if (isServerSideConnection) {
+            QueryUtil.setServerConnection(serverSideProperties);
+        }
+        PhoenixTestDriver driver = new PhoenixTestDriver(ReadOnlyProps.EMPTY_PROPS);
+
+        ConnectionQueryServices cqsi = driver.getConnectionQueryServices(getJdbcUrl(), serverSideProperties);
+        assertTrue(cqsi instanceof ConnectionQueryServicesTestImpl);
+        ConnectionQueryServicesTestImpl testCQSI = (ConnectionQueryServicesTestImpl)cqsi;
+        if (isServerSideConnection) {
+            assertTrue( testCQSI.getController() instanceof HBaseRpcController);
+        } else {
+            assertTrue( testCQSI.getController() instanceof ServerRpcController);
+        }
+        assertTrue(testCQSI.isUpgradeRequired());
+        hbaseTables = getHBaseTables();
+        assertFalse(hbaseTables.contains(PHOENIX_SYSTEM_CATALOG) ||
+                hbaseTables.contains(PHOENIX_NAMESPACE_MAPPED_SYSTEM_CATALOG));
+        assertEquals(0, hbaseTables.size());
+
+    }
     /********************* Testing SYSTEM.CATALOG/SYSTEM:CATALOG creation/upgrade behavior for subsequent connections *********************/
 
     // We are ignoring this test because we aren't testing SYSCAT timestamp anymore if
