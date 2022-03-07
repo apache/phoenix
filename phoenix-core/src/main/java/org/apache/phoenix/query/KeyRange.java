@@ -615,7 +615,7 @@ public class KeyRange implements Writable {
         }
         return result;
     }
-    
+
     public KeyRange invert() {
         // these special ranges do not get inverted because we
         // represent NULL in the same way for ASC and DESC.
