@@ -20,11 +20,14 @@ package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.coprocessor.ScanRegionObserver.WILDCARD_SCAN_INCLUDES_DYNAMIC_COLUMNS;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
-import static org.apache.phoenix.util.ScanUtil.getDummyResult;
-import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;
-import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.phoenix.coprocessor.UncoveredGlobalIndexRegionScanner;
+import org.apache.phoenix.schema.KeyValueSchema;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnImpl;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 import org.apache.hadoop.hbase.Cell;
@@ -51,10 +54,6 @@ import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.KeyValueSchema;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnImpl;
-import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.PositionBasedResultTuple;
 import org.apache.phoenix.schema.tuple.ResultTuple;
@@ -115,20 +114,20 @@ public abstract class RegionScannerFactory {
    * @param viewConstants
    */
   public RegionScanner getWrappedScanner(final RegionCoprocessorEnvironment env,
-      final RegionScanner s, final Set<KeyValueColumnExpression> arrayKVRefs,
+      final RegionScanner regionScanner, final Set<KeyValueColumnExpression> arrayKVRefs,
       final Expression[] arrayFuncRefs, final int offset, final Scan scan,
       final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
       final Region dataRegion, final IndexMaintainer indexMaintainer,
       PhoenixTransactionContext tx,
       final byte[][] viewConstants, final KeyValueSchema kvSchema,
       final ValueBitSet kvSchemaBitSet, final TupleProjector projector,
-      final ImmutableBytesWritable ptr, final boolean useQualifierAsListIndex) {
+      final ImmutableBytesWritable ptr, final boolean useQualifierAsListIndex) throws IOException {
     return new RegionScanner() {
-
+      private RegionScanner s = regionScanner;
       private RegionInfo regionInfo = env.getRegionInfo();
       private byte[] actualStartKey = getActualStartKey();
       private boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
-      final long pageSizeMs = getPageSizeMsForRegionScanner(scan);
+      final long pageSizeMs = ScanUtil.getPageSizeMsForRegionScanner(scan);
       Expression extraWhere = null;
       long extraLimit = -1;
 
@@ -159,6 +158,19 @@ public abstract class RegionScannerFactory {
               if (limitBytes != null) {
                   extraLimit = Bytes.toLong(limitBytes);
               }
+              if (ScanUtil.isUncoveredGlobalIndex(scan) && tupleProjector != null) {
+                  PTable.ImmutableStorageScheme storageScheme = indexMaintainer.getIndexStorageScheme();
+                  Scan dataTableScan = new Scan();
+                  for (int i = 0; i < dataColumns.length; i++) {
+                      if (storageScheme == PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                          scan.addFamily(dataColumns[i].getFamily());
+                      } else {
+                          scan.addColumn(dataColumns[i].getFamily(), dataColumns[i].getQualifier());
+                      }
+                  }
+                  s = new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
+                          dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs);
+              }
           }
       }
 
@@ -173,7 +185,7 @@ public abstract class RegionScannerFactory {
       public boolean next(List<Cell> results) throws IOException {
         try {
           boolean next = s.next(results);
-          if (isDummy(results)) {
+          if (ScanUtil.isDummy(results)) {
             return true;
           }
           return next;
@@ -217,7 +229,7 @@ public abstract class RegionScannerFactory {
       public boolean nextRaw(List<Cell> result) throws IOException {
         try {
           boolean next = s.nextRaw(result);
-          if (isDummy(result)) {
+          if (ScanUtil.isDummy(result)) {
             return true;
           }
           if (result.size() == 0) {
@@ -225,19 +237,21 @@ public abstract class RegionScannerFactory {
           }
           if ((ScanUtil.isLocalOrUncoveredGlobalIndex(scan))
                   && !ScanUtil.isAnalyzeTable(scan)) {
-            if(actualStartKey!=null) {
-              next = scanTillScanStartRow(s, arrayKVRefs, arrayFuncRefs, result,
-                  null);
-              if (result.isEmpty() || isDummy(result)) {
-                return next;
+            if (ScanUtil.isLocalIndex(scan)) {
+              if (actualStartKey != null) {
+                next = scanTillScanStartRow(s, arrayKVRefs, arrayFuncRefs, result,
+                        null);
+                if (result.isEmpty() || ScanUtil.isDummy(result)) {
+                  return next;
+                }
               }
-            }
             /* In the following, c is only used when data region is null.
             dataRegion will never be null in case of non-coprocessor call,
             therefore no need to refactor
              */
-            IndexUtil.wrapResultUsingOffset(env, result, scan, offset, dataColumns,
-                   tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
+              IndexUtil.wrapResultUsingOffset(env, result, scan, offset, dataColumns,
+                      tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
+            }
 
             if (extraWhere != null) {
                 Tuple merged = useQualifierAsListIndex ? new PositionBasedResultTuple(result) :
@@ -361,7 +375,7 @@ public abstract class RegionScannerFactory {
           if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
             byte[] rowKey = CellUtil.cloneRow(result.get(0));
             result.clear();
-            getDummyResult(rowKey, result);
+            ScanUtil.getDummyResult(rowKey, result);
             return true;
           }
           result.clear();
@@ -373,7 +387,7 @@ public abstract class RegionScannerFactory {
           if (result.isEmpty()) {
             return next;
           }
-          if (isDummy(result)) {
+          if (ScanUtil.isDummy(result)) {
             return true;
           }
           firstCell = result.get(0);
