@@ -19,7 +19,6 @@ package org.apache.phoenix.util;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LOCAL_INDEX_BUILD;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LOCAL_INDEX_BUILD_PROTO;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
@@ -578,7 +577,21 @@ public class IndexUtil {
         whereNode.toSQL(indexResolver, buf);
         return QueryUtil.getViewStatement(index.getSchemaName().getString(), index.getTableName().getString(), buf.toString());
     }
-    
+    public static void addTupleAsOneCell(List<Cell> result,
+                                 Tuple tuple,
+                                 TupleProjector tupleProjector,
+                                 ImmutableBytesWritable ptr) {
+        // This will create a byte[] that captures all of the values from the data table
+        byte[] value =
+                tupleProjector.getSchema().toBytes(tuple, tupleProjector.getExpressions(),
+                        tupleProjector.getValueBitSet(), ptr);
+        Cell firstCell = result.get(0);
+        Cell keyValue =
+                KeyValueUtil.newKeyValue(firstCell.getRowArray(),
+                        firstCell.getRowOffset(),firstCell.getRowLength(), VALUE_COLUMN_FAMILY,
+                        VALUE_COLUMN_QUALIFIER, firstCell.getTimestamp(), value, 0, value.length);
+        result.add(keyValue);
+    }
     public static void wrapResultUsingOffset(final RegionCoprocessorEnvironment environment,
             List<Cell> result, final Scan scan, final int offset, ColumnReference[] dataColumns,
             TupleProjector tupleProjector, Region dataRegion, IndexMaintainer indexMaintainer,
@@ -606,35 +619,18 @@ public class IndexUtil {
                 } else {
                     TableName dataTable =
                             TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(
-                                environment.getRegion().getTableDesc().getNameAsString()));
+                                    environment.getRegion().getTableDesc().getNameAsString()));
                     try (Table table = environment.getTable(dataTable)) {
                         joinResult = table.get(get);
                     }
                 }
-            } else if (ScanUtil.isUncoveredGlobalIndex(scan)) {
-                byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
-
-                HTableFactory hTableFactory = ServerUtil.getDelegateHTableFactory(environment,
-                        ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION);
-                try (Table table = hTableFactory.
-                        getTable(new ImmutableBytesPtr(dataTableName))) {
-                    joinResult = table.get(get);
-                } finally {
-                    hTableFactory.shutdown();
-                }
             }
             // at this point join result has data from the data table. We now need to take this result and
-            // add it to the cells that we are returning. 
+            // add it to the cells that we are returning.
             // TODO: handle null case (but shouldn't happen)
             Tuple joinTuple = new ResultTuple(joinResult);
             // This will create a byte[] that captures all of the values from the data table
-            byte[] value =
-                    tupleProjector.getSchema().toBytes(joinTuple, tupleProjector.getExpressions(),
-                        tupleProjector.getValueBitSet(), ptr);
-            KeyValue keyValue =
-                    KeyValueUtil.newKeyValue(firstCell.getRowArray(),firstCell.getRowOffset(),firstCell.getRowLength(), VALUE_COLUMN_FAMILY,
-                        VALUE_COLUMN_QUALIFIER, firstCell.getTimestamp(), value, 0, value.length);
-            result.add(keyValue);
+            addTupleAsOneCell(result, joinTuple, tupleProjector, ptr);
         }
         
         ListIterator<Cell> itr = result.listIterator();
