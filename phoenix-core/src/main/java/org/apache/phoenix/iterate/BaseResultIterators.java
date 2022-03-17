@@ -821,8 +821,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             offset = offset + rangeSpan;
         }
         useSkipScan &= dataScanRanges.useSkipScanFilter();
+        KeyRange minMaxRange = 
+                clipRange(dataScanRanges.getSchema(), 0, nColumnsInCommon, dataScanRanges.getMinMaxRange());
         slotSpan = slotSpan.length == cnf.size() ? slotSpan : Arrays.copyOf(slotSpan, cnf.size());
-        ScanRanges commonScanRanges = ScanRanges.create(dataScanRanges.getSchema(), cnf, slotSpan, null, useSkipScan, -1);
+        ScanRanges commonScanRanges = ScanRanges.create(dataScanRanges.getSchema(), cnf, slotSpan, minMaxRange, null, useSkipScan, -1);
         return commonScanRanges;
     }
         

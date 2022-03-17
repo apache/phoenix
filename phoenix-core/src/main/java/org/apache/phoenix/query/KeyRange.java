@@ -53,13 +53,12 @@ public class KeyRange implements Writable {
     public enum Bound { LOWER, UPPER };
     private static final byte[] DEGENERATE_KEY = new byte[] {1};
     public static final byte[] UNBOUND = new byte[0];
-    public static final byte[] NULL_BOUND = new byte[0];
     /**
      * KeyRange for variable length null values. Since we need to represent this using an empty byte array (which
      * is what we use for upper/lower bound), we create this range using the private constructor rather than
      * going through the static creation method (where this would not be possible).
      */
-    public static final KeyRange IS_NULL_RANGE = new KeyRange(NULL_BOUND, true, NULL_BOUND, true);
+    public static final KeyRange IS_NULL_RANGE = new KeyRange(ByteUtil.EMPTY_BYTE_ARRAY, true, ByteUtil.EMPTY_BYTE_ARRAY, true);
     /**
      * KeyRange for non null variable length values. Since we need to represent this using an empty byte array (which
      * is what we use for upper/lower bound), we create this range using the private constructor rather than going
@@ -161,7 +160,7 @@ public class KeyRange implements Writable {
             // than an unbound RANGE.
             return lowerInclusive && upperInclusive ? IS_NULL_RANGE : EVERYTHING_RANGE;
         }
-        if ( ( lowerRange.length != 0 || lowerRange == NULL_BOUND ) && ( upperRange.length != 0 || upperRange == NULL_BOUND ) ) {
+        if (lowerRange.length != 0 && upperRange.length != 0) {
             int cmp = Bytes.compareTo(lowerRange, upperRange);
             if (cmp > 0 || (cmp == 0 && !(lowerInclusive && upperInclusive))) {
                 return EMPTY_RANGE;
@@ -178,12 +177,12 @@ public class KeyRange implements Writable {
         }
         boolean unboundLower = false;
         boolean unboundUpper = false;
-        if (lowerRange.length == 0 && lowerRange != NULL_BOUND) {
+        if (lowerRange.length == 0) {
             lowerRange = UNBOUND;
             lowerInclusive = false;
             unboundLower = true;
         }
-        if (upperRange.length == 0 && upperRange != NULL_BOUND) {
+        if (upperRange.length == 0) {
             upperRange = UNBOUND;
             upperInclusive = false;
             unboundUpper = true;
@@ -617,25 +616,20 @@ public class KeyRange implements Writable {
     }
 
     public KeyRange invert() {
-        // these special ranges do not get inverted because we
-        // represent NULL in the same way for ASC and DESC.
-        if (this == IS_NOT_NULL_RANGE || this == IS_NULL_RANGE) {
-            return this;
-        }
-        byte[] lowerBound = this.getLowerRange();
+        byte[] lower = this.getLowerRange();
         if (!this.lowerUnbound()) {
-            lowerBound = SortOrder.invert(lowerBound, 0, lowerBound.length);
+            lower = SortOrder.invert(lower, 0, lower.length);
         }
-        byte[] upperBound;
+        byte[] upper;
         if (this.isSingleKey()) {
-            upperBound = lowerBound;
+            upper = lower;
         } else {
-            upperBound = this.getUpperRange();
+            upper = this.getUpperRange();
             if (!this.upperUnbound()) {
-                upperBound = SortOrder.invert(upperBound, 0, upperBound.length);
+                upper = SortOrder.invert(upper, 0, upper.length);
             }
         }
-        return KeyRange.getKeyRange(upperBound, this.isUpperInclusive(), lowerBound, this.isLowerInclusive());
+        return KeyRange.getKeyRange(lower, this.isLowerInclusive(), upper, this.isUpperInclusive());
     }
 
     @Override

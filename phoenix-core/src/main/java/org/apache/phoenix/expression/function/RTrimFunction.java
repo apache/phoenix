@@ -168,11 +168,7 @@ public class RTrimFunction extends ScalarFunction {
                         upperRange = type.pad(upperRange, length, SortOrder.ASC);
                     }
                 }
-                KeyRange range = KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
-                if (getColumn().getSortOrder() == SortOrder.DESC) {
-                    range = range.invert();
-                }
-                return range;
+                return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
             }
 
             @Override

@@ -104,7 +104,7 @@ public class KeyRangeClipTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void test() {
-        ScanRanges scanRanges = ScanRanges.create(schema, Collections.<List<KeyRange>>singletonList(Collections.<KeyRange>singletonList(input)), new int[] {schema.getFieldCount()-1}, null, false, -1);
+        ScanRanges scanRanges = ScanRanges.create(schema, Collections.<List<KeyRange>>singletonList(Collections.<KeyRange>singletonList(input)), new int[] {schema.getFieldCount()-1}, KeyRange.EVERYTHING_RANGE, null, false, -1);
         ScanRanges clippedRange = BaseResultIterators.computePrefixScanRanges(scanRanges, clipTo);
         assertEquals(expectedOutput, clippedRange.getScanRange());
     }

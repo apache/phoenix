@@ -377,6 +377,9 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         }
     }
     
+    // FIXME: this repros PHOENIX-3382, but turned up two more issues:
+    // 1) PHOENIX-3383 Comparison between descending row keys used in RVC is reverse
+    // 2) PHOENIX-3384 Optimize RVC expressions for non leading row key columns
     @Test
     public void testRVCOnDescWithLeadingPKEquality() throws Exception {
         final Connection conn = DriverManager.getConnection(getUrl());
@@ -400,6 +403,9 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES ('org1',1,'02')");
         conn.commit();
 
+        // FIXME: PHOENIX-3383
+        // This comparison is really backwards: it should be (score, entity_id) < (2, '04'),
+        // but because we're matching a descending key, our comparison has to be switched.
         try (Statement stmt = conn.createStatement()) {
             final ResultSet rs = stmt.executeQuery("SELECT entity_id, score\n" + 
                     "FROM " + fullTableName + "\n" + 
@@ -414,6 +420,8 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
             assertEquals(1.0, rs.getDouble(2), 0.001);
             assertFalse(rs.next());
         }
+        // FIXME: PHOENIX-3384
+        // It should not be necessary to specify organization_id in this query
         try (Statement stmt = conn.createStatement()) {
             final ResultSet rs = stmt.executeQuery("SELECT entity_id, score\n" + 
                     "FROM " + fullTableName + "\n" +
