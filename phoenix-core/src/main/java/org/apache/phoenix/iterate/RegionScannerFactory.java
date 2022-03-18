@@ -28,6 +28,7 @@ import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.phoenix.coprocessor.UncoveredGlobalIndexRegionScanner;
+import org.apache.phoenix.coprocessor.UncoveredLocalIndexRegionScanner;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
@@ -165,18 +166,28 @@ public abstract class RegionScannerFactory {
               if (limitBytes != null) {
                   extraLimit = Bytes.toLong(limitBytes);
               }
-              if (ScanUtil.isUncoveredGlobalIndex(scan) && tupleProjector != null) {
-                  PTable.ImmutableStorageScheme storageScheme = indexMaintainer.getIndexStorageScheme();
+              if (ScanUtil.isLocalOrUncoveredGlobalIndex(scan) && tupleProjector != null) {
+                  PTable.ImmutableStorageScheme storageScheme =
+                          indexMaintainer.getIndexStorageScheme();
                   Scan dataTableScan = new Scan();
                   for (int i = 0; i < dataColumns.length; i++) {
-                      if (storageScheme == PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
-                          scan.addFamily(dataColumns[i].getFamily());
+                      if (storageScheme ==
+                              PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                          dataTableScan.addFamily(dataColumns[i].getFamily());
                       } else {
-                          scan.addColumn(dataColumns[i].getFamily(), dataColumns[i].getQualifier());
+                          dataTableScan.addColumn(dataColumns[i].getFamily(),
+                                  dataColumns[i].getQualifier());
                       }
                   }
-                  s = new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
-                          dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs);
+                  if (ScanUtil.isLocalIndex(scan)) {
+                    s = new UncoveredLocalIndexRegionScanner(regionScanner, dataRegion, scan, env,
+                            dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
+                            pageSizeMs, offset, actualStartKey);
+                  } else {
+                    s = new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
+                            dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
+                            pageSizeMs);
+                  }
               }
           }
       }
@@ -244,20 +255,14 @@ public abstract class RegionScannerFactory {
           }
           if ((ScanUtil.isLocalOrUncoveredGlobalIndex(scan))
                   && !ScanUtil.isAnalyzeTable(scan)) {
-            if (ScanUtil.isLocalIndex(scan)) {
+            if (ScanUtil.isLocalIndex(scan) && tupleProjector == null) {
               if (actualStartKey != null) {
-                next = scanTillScanStartRow(s, arrayKVRefs, arrayFuncRefs, result,
-                        null);
+                next = scanTillScanStartRow(s,  result, null);
                 if (result.isEmpty() || ScanUtil.isDummy(result)) {
                   return next;
                 }
               }
-            /* In the following, c is only used when data region is null.
-            dataRegion will never be null in case of non-coprocessor call,
-            therefore no need to refactor
-             */
-              IndexUtil.wrapResultUsingOffset(env, result, scan, offset, dataColumns,
-                      tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
+              IndexUtil.wrapResultUsingOffset(result, offset);
             }
 
             if (extraWhere != null) {
@@ -371,9 +376,8 @@ public abstract class RegionScannerFactory {
        * TODO try to fix this case in LocalIndexStoreFileScanner when there is a merge.
        */
       private boolean scanTillScanStartRow(final RegionScanner s,
-          final Set<KeyValueColumnExpression> arrayKVRefs,
-          final Expression[] arrayFuncRefs, List<Cell> result,
-          ScannerContext scannerContext) throws IOException {
+                                           List<Cell> result,
+                                           ScannerContext scannerContext) throws IOException {
         boolean next = true;
         Cell firstCell = result.get(0);
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
