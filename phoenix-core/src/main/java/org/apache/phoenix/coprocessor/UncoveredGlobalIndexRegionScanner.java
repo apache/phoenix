@@ -19,50 +19,41 @@ package org.apache.phoenix.coprocessor;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME;
 import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY;
-import static org.apache.phoenix.query.QueryServices.INDEX_PAGE_SIZE_IN_ROWS;
-import static org.apache.phoenix.util.ScanUtil.getDummyResult;
-import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Iterator;
+import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.execute.TupleProjector;
-import org.apache.phoenix.hbase.index.parallel.*;
+import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
+import org.apache.phoenix.hbase.index.parallel.Task;
+import org.apache.phoenix.hbase.index.parallel.TaskBatch;
+import org.apache.phoenix.hbase.index.parallel.TaskRunner;
+import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
+import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
+import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.HBaseFactoryProvider;
-import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.tuple.ResultTuple;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.compile.ScanRanges;
-import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,44 +63,20 @@ import org.slf4j.LoggerFactory;
  * data table row keys from them. Using the data table row keys, the data table rows are scanned
  * using the HBase client available to region servers.
  */
-public class UncoveredGlobalIndexRegionScanner extends BaseRegionScanner {
+public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScanner {
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(UncoveredGlobalIndexRegionScanner.class);
     public static final String NUM_CONCURRENT_INDEX_THREADS_CONF_KEY = "index.threads.max";
     public static final int DEFAULT_CONCURRENT_INDEX_THREADS = 16;
     public static final String INDEX_ROW_COUNTS_PER_TASK_CONF_KEY = "index.row.count.per.task";
     public static final int DEFAULT_INDEX_ROW_COUNTS_PER_TASK = 2048;
 
-    /**
-     * The states of the processing a page of index rows
-     */
-    private enum State {
-        INITIAL, SCANNING_INDEX, SCANNING_DATA, SCANNING_DATA_INTERRUPTED, READY
-    }
-    State state = State.INITIAL;
-    private static final Logger LOGGER =
-            LoggerFactory.getLogger(UncoveredGlobalIndexRegionScanner.class);
-    protected final byte[][] viewConstants;
-    protected final RegionCoprocessorEnvironment env;
     protected byte[][] regionEndKeys;
     protected final Table dataHTable;
-    protected final int pageSizeInRows;
     protected final int rowCountPerTask;
-    protected final Scan scan;
-    protected final Scan dataTableScan;
-    protected final RegionScanner innerScanner;
-    protected final Region region;
-    protected final IndexMaintainer indexMaintainer;
-    protected final TupleProjector tupleProjector;
-    protected final ImmutableBytesWritable ptr;
     protected final TaskRunner pool;
     protected String exceptionMessage;
     protected final HTableFactory hTableFactory;
-    protected List<List<Cell>> indexRows = null;
-    protected Map<ImmutableBytesPtr, Result> dataRows = null;
-    protected Iterator<List<Cell>> indexRowIterator = null;
-    protected Map<byte[], byte[]> indexToDataRowKeyMap = null;
-    protected int indexRowCount = 0;
-    protected final long pageSizeMs;
-    protected byte[] lastIndexRowKey = null;
 
     public UncoveredGlobalIndexRegionScanner(final RegionScanner innerScanner,
                                              final Region region,
@@ -122,29 +89,9 @@ public class UncoveredGlobalIndexRegionScanner extends BaseRegionScanner {
                                              final ImmutableBytesWritable ptr,
                                              final long pageSizeMs)
             throws IOException {
-        super(innerScanner);
+        super(innerScanner, region, scan, env, dataTableScan, tupleProjector, indexMaintainer,
+                viewConstants, ptr, pageSizeMs);
         final Configuration config = env.getConfiguration();
-
-        byte[] pageSizeFromScan =
-                scan.getAttribute(BaseScannerRegionObserver.INDEX_PAGE_ROWS);
-        if (pageSizeFromScan != null) {
-            pageSizeInRows = (int) Bytes.toLong(pageSizeFromScan);
-        } else {
-            pageSizeInRows = (int)
-                    config.getLong(INDEX_PAGE_SIZE_IN_ROWS,
-                            QueryServicesOptions.DEFAULT_INDEX_PAGE_SIZE_IN_ROWS);
-        }
-
-        this.indexMaintainer = indexMaintainer;
-        this.viewConstants = viewConstants;
-        this.scan = scan;
-        this.dataTableScan = dataTableScan;
-        this.innerScanner = innerScanner;
-        this.region = region;
-        this.env = env;
-        this.ptr = ptr;
-        this.tupleProjector = tupleProjector;
-        this.pageSizeMs = pageSizeMs;
         hTableFactory = IndexWriterUtils.getDefaultDelegateHTableFactory(env);
         rowCountPerTask = config.getInt(INDEX_ROW_COUNTS_PER_TASK_CONF_KEY,
                 DEFAULT_INDEX_ROW_COUNTS_PER_TASK);
@@ -164,20 +111,6 @@ public class UncoveredGlobalIndexRegionScanner extends BaseRegionScanner {
     }
 
     @Override
-    public long getMvccReadPoint() {
-        return innerScanner.getMvccReadPoint();
-    }
-    @Override
-    public RegionInfo getRegionInfo() {
-        return region.getRegionInfo();
-    }
-
-    @Override
-    public boolean isFilterDone() {
-        return false;
-    }
-
-    @Override
     public void close() throws IOException {
         innerScanner.close();
         hTableFactory.shutdown();
@@ -187,39 +120,26 @@ public class UncoveredGlobalIndexRegionScanner extends BaseRegionScanner {
         this.pool.stop("UncoveredGlobalIndexRegionScanner is closing");
     }
 
-    @Override
-    public long getMaxResultSize() {
-        return innerScanner.getMaxResultSize();
-    }
-
-    @Override
-    public int getBatch() {
-        return innerScanner.getBatch();
-    }
-
-    private void scanDataRows(Set<byte[]> dataRowKeys, long startTime) throws IOException {
-        List<KeyRange> keys = new ArrayList<>(dataRowKeys.size());
-        for (byte[] dataRowKey: dataRowKeys) {
-            keys.add(PVarbinary.INSTANCE.getKeyRange(dataRowKey));
-        }
-        ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
-        Scan dataScan = new Scan(dataTableScan);
-        dataScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
-        scanRanges.initializeScan(dataScan);
-        SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
-        dataScan.setFilter(new SkipScanFilter(skipScanFilter, false));
+    protected void scanDataRows(Collection<byte[]> dataRowKeys, long startTime) throws IOException {
+        Scan dataScan = prepareDataTableScan(dataRowKeys);
         try (ResultScanner resultScanner = dataHTable.getScanner(dataScan)) {
             for (Result result = resultScanner.next(); (result != null);
                  result = resultScanner.next()) {
-                dataRows.put(new ImmutableBytesPtr(result.getRow()), result);
-                if ((EnvironmentEdgeManager.currentTimeMillis() - startTime) >= pageSizeMs) {
-                    LOGGER.info("One of the scan tasks in UncoveredGlobalIndexRegionScanner"
-                            + " for region " + region.getRegionInfo().getRegionNameAsString()
-                            + " could not complete on time (in " + pageSizeMs+ " ms) and"
-                            + " will be resubmitted");
+                if (ScanUtil.isDummy(result)) {
                     state = State.SCANNING_DATA_INTERRUPTED;
                     break;
                 }
+                dataRows.put(new ImmutableBytesPtr(result.getRow()), result);
+                if ((EnvironmentEdgeManager.currentTimeMillis() - startTime) >= pageSizeMs) {
+                    state = State.SCANNING_DATA_INTERRUPTED;
+                    break;
+                }
+            }
+            if (state == State.SCANNING_DATA_INTERRUPTED) {
+                LOGGER.info("One of the scan tasks in UncoveredGlobalIndexRegionScanner"
+                        + " for region " + region.getRegionInfo().getRegionNameAsString()
+                        + " could not complete on time (in " + pageSizeMs + " ms) and"
+                        + " will be resubmitted");
             }
         } catch (Throwable t) {
             exceptionMessage = "scanDataRows fails for at least one task";
@@ -274,8 +194,8 @@ public class UncoveredGlobalIndexRegionScanner extends BaseRegionScanner {
         }
     }
 
-    private void scanDataTableRows(long startTime)
-            throws IOException {
+    @Override
+    protected void scanDataTableRows(long startTime) throws IOException {
         if (indexToDataRowKeyMap.size() == 0) {
             state = State.READY;
             return;
@@ -296,110 +216,6 @@ public class UncoveredGlobalIndexRegionScanner extends BaseRegionScanner {
             state = State.SCANNING_DATA;
         } else {
             state = State.READY;
-        }
-    }
-
-    /**
-     * A page of index rows are scanned and then their corresponding data table rows are retrieved
-     * from the data table regions in parallel. These data rows are then joined with index rows.
-     * The join is for adding uncovered columns to index rows.
-     *
-     * This implementation conforms to server paging such that if the server side operation takes
-     * more than pageSizeInMs, a dummy result is returned to signal the client that more work
-     * to do on the server side. This is done to prevent RPC timeouts.
-     *
-     * @param result
-     * @return boolean to indicate if there are more rows to scan
-     * @throws IOException
-     */
-    @Override
-    public boolean next(List<Cell> result) throws IOException {
-        long startTime = EnvironmentEdgeManager.currentTimeMillis();
-        boolean hasMore;
-        region.startRegionOperation();
-        try {
-            synchronized (innerScanner) {
-                if (state == State.READY && !indexRowIterator.hasNext()) {
-                    state = State.INITIAL;
-                }
-                if (state == State.INITIAL) {
-                    indexRowCount = 0;
-                    indexRows = new ArrayList();
-                    dataRows = Maps.newConcurrentMap();
-                    indexToDataRowKeyMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
-                    state = State.SCANNING_INDEX;
-                }
-                if (state == State.SCANNING_INDEX) {
-                    do {
-                        List<Cell> row = new ArrayList<Cell>();
-                        hasMore = innerScanner.nextRaw(row);
-                        if (!row.isEmpty()) {
-                            if (isDummy(row)) {
-                                result.addAll(row);
-                                // We got a dummy request from lower layers. This means that
-                                // the scan took more than pageSizeMs. Just return true here.
-                                // The client will drop this dummy request and continue to scan.
-                                // Then the lower layer scanner will continue
-                                // wherever it stopped due to this dummy request
-                                return true;
-                            }
-                            lastIndexRowKey = CellUtil.cloneRow(row.get(0));
-                            indexToDataRowKeyMap.put(lastIndexRowKey, indexMaintainer.buildDataRowKey(
-                                    new ImmutableBytesWritable(lastIndexRowKey), viewConstants));
-                            indexRows.add(row);
-                            indexRowCount++;
-                            if (hasMore && (EnvironmentEdgeManager.currentTimeMillis() - startTime)
-                                    >= pageSizeMs) {
-                                getDummyResult(lastIndexRowKey, result);
-                                // We do not need to change the state, State.SCANNING_INDEX
-                                // since we will continue scanning the index table after
-                                // the client drops the dummy request and then calls the next
-                                // method on its ResultScanner within ScanningResultIterator
-                                return true;
-                            }
-                        }
-                    } while (hasMore && indexRowCount < pageSizeInRows);
-                    state = State.SCANNING_DATA;
-                }
-                if (state == State.SCANNING_DATA) {
-                    scanDataTableRows(startTime);
-                    indexRowIterator = indexRows.iterator();
-                }
-                if (state == State.READY) {
-                    if (indexRowIterator.hasNext()) {
-                        List<Cell> indexRow = indexRowIterator.next();
-                        result.addAll(indexRow);
-                        try {
-                            Result dataRow = dataRows.get(new ImmutableBytesPtr(
-                                    indexToDataRowKeyMap.get(CellUtil.cloneRow(indexRow.get(0)))));
-                            if (dataRow != null) {
-                                IndexUtil.addTupleAsOneCell(result, new ResultTuple(dataRow),
-                                        tupleProjector, ptr);
-                            } else {
-                                // The data row does not exist, we should skip this index row. This can happen
-                                // if index row is replicated but the data row has not been
-                                result.clear();
-                            }
-                        } catch (Throwable e) {
-                            LOGGER.error("Exception in UncoveredGlobalIndexRegionScanner for region "
-                                    + region.getRegionInfo().getRegionNameAsString(), e);
-                            throw e;
-                        }
-                        return true;
-                    } else {
-                        return false;
-                    }
-                } else {
-                    getDummyResult(lastIndexRowKey, result);
-                    return true;
-                }
-            }
-        } catch (Throwable e) {
-            LOGGER.error("Exception in UncoveredGlobalIndexRegionScanner for region "
-                    + region.getRegionInfo().getRegionNameAsString(), e);
-            throw e;
-        } finally {
-            region.closeRegionOperation();
         }
     }
 }
