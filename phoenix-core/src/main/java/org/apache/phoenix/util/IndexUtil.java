@@ -51,6 +51,8 @@ import org.apache.hadoop.hbase.RawCell;
 import org.apache.hadoop.hbase.Tag;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
@@ -58,7 +60,6 @@ import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Increment;
@@ -69,13 +70,10 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
-import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compat.hbase.OffsetCell;
@@ -133,7 +131,6 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema.Field;
-import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PDataType;
@@ -576,6 +573,7 @@ public class IndexUtil {
         whereNode.toSQL(indexResolver, buf);
         return QueryUtil.getViewStatement(index.getSchemaName().getString(), index.getTableName().getString(), buf.toString());
     }
+
     public static void addTupleAsOneCell(List<Cell> result,
                                  Tuple tuple,
                                  TupleProjector tupleProjector,
@@ -591,49 +589,8 @@ public class IndexUtil {
                         VALUE_COLUMN_QUALIFIER, firstCell.getTimestamp(), value, 0, value.length);
         result.add(keyValue);
     }
-    public static void wrapResultUsingOffset(final RegionCoprocessorEnvironment environment,
-            List<Cell> result, final Scan scan, final int offset, ColumnReference[] dataColumns,
-            TupleProjector tupleProjector, Region dataRegion, IndexMaintainer indexMaintainer,
-            byte[][] viewConstants, ImmutableBytesWritable ptr) throws IOException {
-        if (tupleProjector != null) {
-            // Join back to data table here by issuing a local get projecting
-            // all of the cq:cf from the KeyValueColumnExpression into the Get.
-            Cell firstCell = result.get(0);
-            byte[] indexRowKey = firstCell.getRowArray();
-            ptr.set(indexRowKey, firstCell.getRowOffset() + offset, firstCell.getRowLength() - offset);
-            byte[] dataRowKey = indexMaintainer.buildDataRowKey(ptr, viewConstants);
-            Get get = new Get(dataRowKey);
-            ImmutableStorageScheme storageScheme = indexMaintainer.getIndexStorageScheme();
-            for (int i = 0; i < dataColumns.length; i++) {
-                if (storageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
-                    get.addFamily(dataColumns[i].getFamily());
-                } else {
-                    get.addColumn(dataColumns[i].getFamily(), dataColumns[i].getQualifier());
-                }
-            }
-            Result joinResult = null;
-            if (ScanUtil.isLocalIndex(scan)) {
-                if (dataRegion != null) {
-                    joinResult = dataRegion.get(get);
-                } else {
-                    TableName dataTable =
-                            TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(
-                                    environment.getRegion().getTableDescriptor().getTableName().
-                                            getNameAsString()));
-                    try (Table table = environment.getConnection().getTable(dataTable)) {
-                        joinResult = table.get(get);
-                    }
-                }
-            }
 
-            // at this point join result has data from the data table. We now need to take this result and
-            // add it to the cells that we are returning. 
-            // TODO: handle null case (but shouldn't happen)
-            Tuple joinTuple = new ResultTuple(joinResult);
-            // This will create a byte[] that captures all of the values from the data table
-            addTupleAsOneCell(result, joinTuple, tupleProjector, ptr);
-        }
-        
+    public static void wrapResultUsingOffset(List<Cell> result, final int offset) throws IOException {
         ListIterator<Cell> itr = result.listIterator();
         while (itr.hasNext()) {
             final Cell cell = itr.next();
@@ -642,7 +599,7 @@ public class IndexUtil {
             itr.set(newCell);
         }
     }
-    
+
     public static String getIndexColumnExpressionStr(PColumn col) {
         return col.getExpressionStr() == null ? IndexUtil.getCaseSensitiveDataColumnFullName(col.getName().getString())
                 : col.getExpressionStr();
