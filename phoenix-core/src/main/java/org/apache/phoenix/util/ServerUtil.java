@@ -311,7 +311,7 @@ public class ServerUtil {
                 @Override
                     public Connection apply(ConnectionType t) {
                     try {
-                        return env.createConnection(getTypeSpecificConfiguration(connectionType, env.getConfiguration()));
+                        return org.apache.hadoop.hbase.client.ConnectionFactory.createConnection(getTypeSpecificConfiguration(connectionType, env.getConfiguration()));
                     } catch (IOException e) {
                        throw new RuntimeException(e);
                     }
