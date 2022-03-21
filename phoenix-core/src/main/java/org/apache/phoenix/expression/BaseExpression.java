@@ -226,9 +226,21 @@ public abstract class BaseExpression implements Expression {
         if (iterator == null) {
             iterator = visitor.defaultIterator(this);
         }
-        List<T> l = Collections.emptyList();
+
+        // PHOENIX-6669 Sort RVCs together and first so that where optimizer intersectrages work correctly
+        List<Expression> children = new ArrayList<>();
         while (iterator.hasNext()) {
             Expression child = iterator.next();
+            if (child != null && child.getChildren() != null && child.getChildren().size() > 1 &&
+                    child.getChildren().get(1) instanceof RowValueConstructorExpression) {
+                children.add(0, child);
+            } else {
+                children.add(child);
+            }
+        }
+
+        List<T> l = Collections.emptyList();
+        for (Expression child : children) {
             T t = child.accept(visitor);
             if (t != null) {
                 if (l.isEmpty()) {
