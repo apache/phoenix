@@ -3031,8 +3031,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
             assertTrue(filterList.getFilters().get(1) instanceof RowKeyComparisonFilter);
             rowKeyComparisonFilter =(RowKeyComparisonFilter) filterList.getFilters().get(1);
             assertTrue(rowKeyComparisonFilter.toString().equals(
-                    "((TO_INTEGER(PK3), PK4) < (TO_INTEGER(TO_INTEGER(3)), 4) AND "+
-                    "(PK5, TO_INTEGER(PK6), PK7) < (5, TO_INTEGER(TO_INTEGER(6)), 7))"));
+                    "((PK5, TO_INTEGER(PK6), PK7) < (5, TO_INTEGER(TO_INTEGER(6)), 7) AND " +
+                            "(TO_INTEGER(PK3), PK4) < (TO_INTEGER(TO_INTEGER(3)), 4))"));
         }
     }
 }
