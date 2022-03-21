@@ -386,6 +386,46 @@ public class SequenceIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testSequenceMultipleValues() throws Exception {
+        String sequenceName = generateSequenceNameWithSchema();
+
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 4 INCREMENT BY 7");
+        String query = "SELECT NEXT 5 VALUES FOR " + sequenceName;
+        try (PreparedStatement nextStmt = conn.prepareStatement(query)) {
+            nextStmt.getMetaData();
+            ResultSet rs = nextStmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertFalse(rs.next());
+            rs = nextStmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(4 + 5*7, rs.getInt(1));
+        }
+        conn.close();
+    }
+
+    @Test
+    public void testPreparedQuerySequenceMultipleValues() throws Exception {
+        String sequenceName = generateSequenceNameWithSchema();
+
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 4 INCREMENT BY 7");
+        String query = "SELECT NEXT ? VALUES FOR " + sequenceName;
+        try (PreparedStatement nextStmt = conn.prepareStatement(query)) {
+            nextStmt.getMetaData();
+            nextStmt.setInt(1, 5);
+            ResultSet rs = nextStmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertFalse(rs.next());
+            nextStmt.setInt(1, 5);
+            rs = nextStmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(4 + 5*7, rs.getInt(1));
+        }
+        conn.close();
+    }
+
+    @Test
     public void testMultipleSequenceValues() throws Exception {
         String sequenceName = generateSequenceNameWithSchema();
         String alternateSequenceName = generateSequenceNameWithSchema();

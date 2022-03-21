@@ -63,7 +63,7 @@ import org.apache.phoenix.thirdparty.com.google.common.math.LongMath;
 public class Sequence {
     public static final int SUCCESS = 0;
     
-    public enum ValueOp {VALIDATE_SEQUENCE, INCREMENT_SEQUENCE};
+    public enum ValueOp {VALIDATE_SEQUENCE, INCREMENT_SEQUENCE, NOOP};
     public enum MetaOp {CREATE_SEQUENCE, DROP_SEQUENCE, RETURN_SEQUENCE};
     
     // create empty Sequence key values used while created a sequence row
