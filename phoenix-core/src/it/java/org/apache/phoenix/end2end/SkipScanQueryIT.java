@@ -966,6 +966,38 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testPHOENIX6669() throws SQLException {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE IF NOT EXISTS "+ tableName + " (\n" +
+                "    PK1 VARCHAR NOT NULL,\n" +
+                "    PK2 BIGINT NOT NULL,\n" +
+                "    PK3 BIGINT NOT NULL,\n" +
+                "    PK4 VARCHAR NOT NULL,\n" +
+                "    COL1 BIGINT,\n" +
+                "    COL2 INTEGER,\n" +
+                "    COL3 VARCHAR,\n" +
+                "    COL4 VARCHAR,    CONSTRAINT PK PRIMARY KEY\n" +
+                "    (\n" +
+                "        PK1,\n" +
+                "        PK2,\n" +
+                "        PK3,\n" +
+                "        PK4\n" +
+                "    )\n" +
+                ")";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " (PK1, PK4, COL1, PK2, COL2, PK3, COL3, COL4)" +
+                    "            VALUES ('xx', 'xid1', 0, 7, 7, 7, 'INSERT', null)");
+            conn.commit();
+
+            ResultSet rs = conn.createStatement().executeQuery("select PK2 from "+  tableName
+                    +  " where (PK1 = 'xx') and (PK1, PK2, PK3) > ('xx', 5, 2) "
+                    +  " and (PK1, PK2, PK3) <= ('xx', 5, 2)");
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
     public void testKeyRangesContainsAllValues() throws Exception {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + "(" +
