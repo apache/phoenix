@@ -26,7 +26,6 @@ import java.util.Map;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -150,7 +149,7 @@ public class SequenceManager {
         if (node.getOp() == Op.NEXT_VALUE) {
             isNextSequence.set(expression.getIndex());
         }
-           
+
         return expression;
     }
 
@@ -196,7 +195,7 @@ public class SequenceManager {
                 maxNumToAllocate = numToAllocate;
             }
         }
-        
+
         return maxNumToAllocate;
     }
 

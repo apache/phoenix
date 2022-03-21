@@ -50,6 +50,7 @@ public class SequenceValueExpression extends BaseTerminalExpression {
         this.key = seqIn.getKey();
         this.op = op;
         this.index = seqIn.getIndex();
+        this.numToAllocateExpressions.addAll(seqIn.numToAllocateExpressions);
         this.numToAllocateExpressions.add(numToAllocateExp);
     }
 
