@@ -40,7 +40,6 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
@@ -239,11 +238,7 @@ public class RoundDecimalExpression extends ScalarFunction {
                         throw new AssertionError("Invalid CompareOp: " + op);
                 }
 
-                KeyRange range = KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
-                if (getColumn().getSortOrder() == SortOrder.DESC) {
-                    range = range.invert();
-                }
-                return range;
+                return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
             }
             
             /**

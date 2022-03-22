@@ -21,6 +21,7 @@ package org.apache.phoenix.expression.function;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Expression;
@@ -33,7 +34,8 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 
 abstract public class PrefixFunction extends ScalarFunction {
-    public PrefixFunction() { }
+    public PrefixFunction() {
+    }
 
     public PrefixFunction(List<Expression> children) {
         super(children);
@@ -43,7 +45,7 @@ abstract public class PrefixFunction extends ScalarFunction {
     public int getKeyFormationTraversalIndex() {
         return preservesOrder() == OrderPreserving.NO ? NO_TRAVERSAL : 0;
     }
-    
+
     protected boolean extractNode() {
         return false;
     }
@@ -54,9 +56,7 @@ abstract public class PrefixFunction extends ScalarFunction {
     }
 
     private class PrefixKeyPart implements KeyPart {
-        private final List<Expression> extractNodes = extractNode() ?
-                Collections.<Expression>singletonList(PrefixFunction.this)
-                : Collections.<Expression>emptyList();
+        private final List<Expression> extractNodes = extractNode() ? Collections.<Expression>singletonList(PrefixFunction.this) : Collections.<Expression>emptyList();
         private final KeyPart childPart;
 
         PrefixKeyPart(KeyPart childPart) {
@@ -114,15 +114,11 @@ abstract public class PrefixFunction extends ScalarFunction {
                 // causing rows to be skipped that should be included. For example, with rows 'ab', 'a',
                 // a lowerRange of 'a\xFF' would skip 'ab', while 'a\x00\xFF' would not.
                 if (lowerRange != KeyRange.UNBOUND) {
-                    lowerRange = Arrays.copyOf(lowerRange, lowerRange.length+1);
-                    lowerRange[lowerRange.length-1] = QueryConstants.SEPARATOR_BYTE;
+                    lowerRange = Arrays.copyOf(lowerRange, lowerRange.length + 1);
+                    lowerRange[lowerRange.length - 1] = QueryConstants.SEPARATOR_BYTE;
                 }
             }
-            KeyRange range = KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, false);
-            if (column.getSortOrder() == SortOrder.DESC) {
-                range = range.invert();
-            }
-            return range;
+            return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, false);
         }
 
         @Override
@@ -130,5 +126,4 @@ abstract public class PrefixFunction extends ScalarFunction {
             return childPart.getTable();
         }
     }
-
 }

@@ -166,14 +166,14 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
         assertOrderByHasBeenOptimizedOut(conn, sql);
 
         // Query with predicate ordered by full row key
-        sql = "SELECT * FROM v1 WHERE k3 <= TO_DATE('" + createStaticDate() + "') ORDER BY k3 DESC";
-        expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz','abcde',~'2015-01-01 08:00:00.000'] - ['tenant123456789','xyz','abcde',*]";
+        sql = "SELECT * FROM v1 WHERE k3 < TO_DATE('" + createStaticDate() + "') ORDER BY k3 DESC";
+        expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz','abcde',~'2015-01-01 07:59:59.999'] - ['tenant123456789','xyz','abcde',*]";
         assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
         assertOrderByHasBeenOptimizedOut(conn, sql);
 
         // Query with predicate ordered by full row key with date in reverse order
-        sql = "SELECT * FROM v1 WHERE k3 <= TO_DATE('" + createStaticDate() + "') ORDER BY k3";
-        expectedExplainOutput = "CLIENT PARALLEL 1-WAY REVERSE RANGE SCAN OVER T ['tenant123456789','xyz','abcde',~'2015-01-01 08:00:00.000'] - ['tenant123456789','xyz','abcde',*]";
+        sql = "SELECT * FROM v1 WHERE k3 < TO_DATE('" + createStaticDate() + "') ORDER BY k3";
+        expectedExplainOutput = "CLIENT PARALLEL 1-WAY REVERSE RANGE SCAN OVER T ['tenant123456789','xyz','abcde',~'2015-01-01 07:59:59.999'] - ['tenant123456789','xyz','abcde',*]";
         assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
         assertOrderByHasBeenOptimizedOut(conn, sql);
 

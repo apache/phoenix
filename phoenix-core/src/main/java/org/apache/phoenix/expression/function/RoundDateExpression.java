@@ -32,9 +32,6 @@ import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.parse.FunctionParseNode.Argument;
-import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -42,10 +39,13 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDataType.PDataCodec;
-import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.parse.FunctionParseNode.Argument;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
@@ -261,7 +261,6 @@ public class RoundDateExpression extends ScalarFunction {
                 int offset = ByteUtil.isInclusive(op) ? 1 : 0;
                 long value = codec.decodeLong(key, 0, SortOrder.getDefault());
                 byte[] nextKey = new byte[type.getByteSize()];
-                KeyRange range;
                 switch (op) {
                 case EQUAL:
                     // If the value isn't evenly divisible by the div amount, then it
@@ -273,25 +272,18 @@ public class RoundDateExpression extends ScalarFunction {
                         return KeyRange.EMPTY_RANGE;
                     }
                     codec.encodeLong(value + divBy, nextKey, 0);
-                    range = type.getKeyRange(key, true, nextKey, false);
-                    break;
+                    return type.getKeyRange(key, true, nextKey, false);
                 case GREATER:
                 case GREATER_OR_EQUAL:
                     codec.encodeLong((value + divBy - offset)/divBy*divBy, nextKey, 0);
-                    range = type.getKeyRange(nextKey, true, KeyRange.UNBOUND, false);
-                    break;
+                    return type.getKeyRange(nextKey, true, KeyRange.UNBOUND, false);
                 case LESS:
                 case LESS_OR_EQUAL:
                     codec.encodeLong((value + divBy - (1 -offset))/divBy*divBy, nextKey, 0);
-                    range = type.getKeyRange(KeyRange.UNBOUND, false, nextKey, false);
-                    break;
+                    return type.getKeyRange(KeyRange.UNBOUND, false, nextKey, false);
                 default:
                     return childPart.getKeyRange(op, rhs);
                 }
-                if (getColumn().getSortOrder() == SortOrder.DESC) {
-                    range = range.invert();
-                }
-                return range;
             }
 
             @Override

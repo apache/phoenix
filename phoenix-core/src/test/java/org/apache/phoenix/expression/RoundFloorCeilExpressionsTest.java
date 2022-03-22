@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.expression;
 
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -25,7 +24,6 @@ import static org.junit.Assert.fail;
 
 import java.math.BigDecimal;
 import java.sql.Date;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -44,20 +42,14 @@ import org.apache.phoenix.expression.function.RoundDecimalExpression;
 import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.function.TimeUnit;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.DateUtil;
-import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 /**
@@ -68,7 +60,7 @@ import org.junit.Test;
  *
  * @since 3.0.0
  */
-public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
+public class RoundFloorCeilExpressionsTest {
 
     // Decimal Expression Tests
 
@@ -173,40 +165,37 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testRoundDecimalExpressionKeyRangeSimple() throws Exception {
-        KeyPart baseKeyPart = getDecimalKeyPart();
         ScalarFunction roundDecimalExpression = (ScalarFunction)RoundDecimalExpression.create(DUMMY_DECIMAL, 3);
 
         byte[] upperBound = PDecimal.INSTANCE.toBytes(new BigDecimal("1.2385"));
         byte[] lowerBound = PDecimal.INSTANCE.toBytes(new BigDecimal("1.2375"));
         KeyRange expectedKeyRange = KeyRange.getKeyRange(lowerBound, upperBound);
 
-        KeyPart keyPart = roundDecimalExpression.newKeyPart(baseKeyPart);
+        KeyPart keyPart = roundDecimalExpression.newKeyPart(null);
         assertEquals(expectedKeyRange, keyPart.getKeyRange(CompareOp.EQUAL, LiteralExpression.newConstant(new BigDecimal("1.238"), PDecimal.INSTANCE)));
     }
 
     @Test
     public void testFloorDecimalExpressionKeyRangeSimple() throws Exception {
-        KeyPart baseKeyPart = getDecimalKeyPart();
         ScalarFunction floorDecimalExpression = (ScalarFunction)FloorDecimalExpression.create(DUMMY_DECIMAL, 3);
 
         byte[] upperBound = PDecimal.INSTANCE.toBytes(new BigDecimal("1.239"));
         byte[] lowerBound = PDecimal.INSTANCE.toBytes(new BigDecimal("1.238"));
         KeyRange expectedKeyRange = KeyRange.getKeyRange(lowerBound, true, upperBound, false);
 
-        KeyPart keyPart = floorDecimalExpression.newKeyPart(baseKeyPart);
+        KeyPart keyPart = floorDecimalExpression.newKeyPart(null);
         assertEquals(expectedKeyRange, keyPart.getKeyRange(CompareOp.EQUAL, LiteralExpression.newConstant(new BigDecimal("1.238"), PDecimal.INSTANCE)));
     }
 
     @Test
     public void testCeilDecimalExpressionKeyRangeSimple() throws Exception {
-        KeyPart baseKeyPart = getDecimalKeyPart();
         ScalarFunction ceilDecimalExpression = (ScalarFunction)CeilDecimalExpression.create(DUMMY_DECIMAL, 3);
 
         byte[] upperBound = PDecimal.INSTANCE.toBytes(new BigDecimal("1.238"));
         byte[] lowerBound = PDecimal.INSTANCE.toBytes(new BigDecimal("1.237"));
         KeyRange expectedKeyRange = KeyRange.getKeyRange(lowerBound, false, upperBound, true);
 
-        KeyPart keyPart = ceilDecimalExpression.newKeyPart(baseKeyPart);
+        KeyPart keyPart = ceilDecimalExpression.newKeyPart(null);
         assertEquals(expectedKeyRange, keyPart.getKeyRange(CompareOp.EQUAL, LiteralExpression.newConstant(new BigDecimal("1.238"), PDecimal.INSTANCE)));
     }
 
@@ -214,61 +203,27 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testRoundDecimalExpressionKeyRangeCoverage() throws Exception {
-        KeyPart baseKeyPart = getDecimalKeyPart();
         for(int scale : SCALES) {
             ScalarFunction roundDecimalExpression = (ScalarFunction) RoundDecimalExpression.create(DUMMY_DECIMAL, scale);
-            KeyPart keyPart = roundDecimalExpression.newKeyPart(baseKeyPart);
+            KeyPart keyPart = roundDecimalExpression.newKeyPart(null);
             verifyKeyPart(RoundingType.ROUND, scale, keyPart);
         }
     }
 
-    private static KeyPart getDecimalKeyPart() throws SQLException {
-        String tableName = generateUniqueName();
-        try (PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class)) {
-            pconn.createStatement().execute("CREATE TABLE " + tableName + " (k DECIMAL PRIMARY KEY)");
-            final PTable table = pconn.getMetaDataCache().getTableRef(new PTableKey(null, tableName)).getTable();
-            KeyPart baseKeyPart = new KeyPart() {
-    
-                @Override
-                public KeyRange getKeyRange(CompareOp op, Expression rhs) {
-                    return KeyRange.EVERYTHING_RANGE;
-                }
-    
-                @Override
-                public List<Expression> getExtractNodes() {
-                    return Collections.emptyList();
-                }
-    
-                @Override
-                public PColumn getColumn() {
-                    return table.getPKColumns().get(0);
-                }
-    
-                @Override
-                public PTable getTable() {
-                    return table;
-                }
-            };
-            return baseKeyPart;
-        }
-    }
-    
     @Test
     public void testFloorDecimalExpressionKeyRangeCoverage() throws Exception {
-        KeyPart baseKeyPart = getDecimalKeyPart();
         for(int scale : SCALES) {
             ScalarFunction floorDecimalExpression = (ScalarFunction) FloorDecimalExpression.create(DUMMY_DECIMAL, scale);
-            KeyPart keyPart = floorDecimalExpression.newKeyPart(baseKeyPart);
+            KeyPart keyPart = floorDecimalExpression.newKeyPart(null);
             verifyKeyPart(RoundingType.FLOOR, scale, keyPart);
         }
     }
 
     @Test
     public void testCeilDecimalExpressionKeyRangeCoverage() throws Exception {
-        KeyPart baseKeyPart = getDecimalKeyPart();
         for(int scale : SCALES) {
             ScalarFunction ceilDecimalExpression = (ScalarFunction) CeilDecimalExpression.create(DUMMY_DECIMAL, scale);
-            KeyPart keyPart = ceilDecimalExpression.newKeyPart(baseKeyPart);
+            KeyPart keyPart = ceilDecimalExpression.newKeyPart(null);
             verifyKeyPart(RoundingType.CEIL, scale, keyPart);
         }
     }

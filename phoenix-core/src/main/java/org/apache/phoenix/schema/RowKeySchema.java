@@ -21,41 +21,39 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 
 /**
- * 
+ *
  * Schema for the bytes in a RowKey. For the RowKey, we use a null byte
  * to terminate a variable length type, while for KeyValue bytes we
  * write the length of the var char preceding the value. We can't do
  * that for a RowKey because it would affect the sort order.
  *
- * 
+ *
  * @since 0.1
  */
 public class RowKeySchema extends ValueSchema {
     public static final RowKeySchema EMPTY_SCHEMA = new RowKeySchema(0,Collections.<Field>emptyList(), true)
-    ;
-    
+            ;
+
     public RowKeySchema() {
     }
-    
+
     protected RowKeySchema(int minNullable, List<Field> fields, boolean rowKeyOrderOptimizable) {
         super(minNullable, fields, rowKeyOrderOptimizable);
     }
 
     public static class RowKeySchemaBuilder extends ValueSchemaBuilder {
         private boolean rowKeyOrderOptimizable = false;
-        
+
         public RowKeySchemaBuilder(int maxFields) {
             super(maxFields);
             setMaxFields(maxFields);
         }
-        
+
         @Override
         public RowKeySchemaBuilder addField(PDatum datum, boolean isNullable, SortOrder sortOrder) {
             super.addField(datum, isNullable, sortOrder);
@@ -84,7 +82,7 @@ public class RowKeySchema extends ValueSchema {
 
     // "iterator" initialization methods that initialize a bytes ptr with a row key for further navigation
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(
-            value="NP_BOOLEAN_RETURN_NULL", 
+            value="NP_BOOLEAN_RETURN_NULL",
             justification="Designed to return null.")
     public Boolean iterator(byte[] src, int srcOffset, int srcLength, ImmutableBytesWritable ptr, int position,int extraColumnSpan) {
         Boolean hasValue = null;
@@ -102,25 +100,25 @@ public class RowKeySchema extends ValueSchema {
     public Boolean iterator(byte[] src, int srcOffset, int srcLength, ImmutableBytesWritable ptr, int position) {
         return iterator(src, srcOffset,srcLength, ptr, position,0);
     }
-    
+
     public Boolean iterator(ImmutableBytesWritable srcPtr, ImmutableBytesWritable ptr, int position) {
         return iterator(srcPtr.get(), srcPtr.getOffset(), srcPtr.getLength(), ptr, position);
     }
-    
+
     public Boolean iterator(byte[] src, ImmutableBytesWritable ptr, int position) {
         return iterator(src, 0, src.length, ptr, position);
     }
-    
+
     public int iterator(byte[] src, int srcOffset, int srcLength, ImmutableBytesWritable ptr) {
         int maxOffset = srcOffset + srcLength;
         iterator(src, srcOffset, srcLength, ptr, 0);
         return maxOffset;
     }
-    
+
     public int iterator(byte[] src, ImmutableBytesWritable ptr) {
         return iterator(src, 0, src.length, ptr);
     }
-    
+
     public int iterator(ImmutableBytesWritable ptr) {
         return iterator(ptr.get(),ptr.getOffset(),ptr.getLength(), ptr);
     }
@@ -136,13 +134,13 @@ public class RowKeySchema extends ValueSchema {
      * @param maxOffset max possible offset value when iterating
      * @return true if a value was found and ptr was set, false if the value is null and ptr was not
      * set, and null if the value is null and there are no more values
-      */
+     */
     public Boolean next(ImmutableBytesWritable ptr, int position, int maxOffset) {
         return next(ptr, position, maxOffset, false);
     }
 
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(
-            value="NP_BOOLEAN_RETURN_NULL", 
+            value="NP_BOOLEAN_RETURN_NULL",
             justification="Designed to return null.")
     private Boolean next(ImmutableBytesWritable ptr, int position, int maxOffset, boolean isFirst) {
         if (ptr.getOffset() + ptr.getLength() >= maxOffset) {
@@ -175,7 +173,7 @@ public class RowKeySchema extends ValueSchema {
             } else {
                 byte[] buf = ptr.get();
                 int offset = ptr.getOffset();
-                // First byte 
+                // First byte
                 if (offset < maxOffset && buf[offset] != QueryConstants.SEPARATOR_BYTE) {
                     byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, false, field);
                     do {
@@ -205,9 +203,9 @@ public class RowKeySchema extends ValueSchema {
         }
         return readExtraFields(ptr, position + 1, maxOffset, extraSpan);
     }
-    
+
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(
-            value="NP_BOOLEAN_RETURN_NULL", 
+            value="NP_BOOLEAN_RETURN_NULL",
             justification="Designed to return null.")
     public Boolean previous(ImmutableBytesWritable ptr, int position, int minOffset) {
         if (position < 0) {
@@ -262,7 +260,7 @@ public class RowKeySchema extends ValueSchema {
     }
 
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(
-            value="NP_BOOLEAN_RETURN_NULL", 
+            value="NP_BOOLEAN_RETURN_NULL",
             justification="Designed to return null.")
     public Boolean reposition(ImmutableBytesWritable ptr, int oldPosition, int newPosition, int minOffset, int maxOffset) {
         if (newPosition == oldPosition) {
@@ -293,7 +291,7 @@ public class RowKeySchema extends ValueSchema {
                 hasValue = previous(ptr, --oldPosition, minOffset);
             } while (hasValue != null && oldPosition > newPosition);
         }
-        
+
         return hasValue;
     }
 
@@ -308,10 +306,10 @@ public class RowKeySchema extends ValueSchema {
         readExtraFields(ptr, newPosition + 1, maxOffset, extraSpan);
         return returnValue;
     }
-    
+
 
     /**
-     * Positions ptr at the part of the row key for the field at endPosition, 
+     * Positions ptr at the part of the row key for the field at endPosition,
      * starting from the field at position.
      * @param ptr bytes pointer that points to row key being traversed.
      * @param position the starting field position
@@ -356,85 +354,5 @@ public class RowKeySchema extends ValueSchema {
         int finalLength = ptr.getOffset() - initialOffset + ptr.getLength();
         ptr.set(ptr.get(), initialOffset, finalLength);
         return position + i - (Boolean.FALSE.equals(hasValue) ? 1 : 0);
-    }
-
-    public int computeMaxSpan(int pkPos, KeyRange result, ImmutableBytesWritable ptr) {
-        int maxOffset = iterator(result.getLowerRange(), ptr);
-        int lowerSpan = 0;
-        int i = pkPos;
-        while (this.next(ptr, i++, maxOffset) != null) {
-            lowerSpan++;
-        }
-        int upperSpan = 0;
-        i = pkPos;
-        maxOffset = iterator(result.getUpperRange(), ptr);
-        while (this.next(ptr, i++, maxOffset) != null) {
-            upperSpan++;
-        }
-        return Math.max(Math.max(lowerSpan, upperSpan), 1);
-    }
-
-    public int computeMinSpan(int pkPos, KeyRange keyRange, ImmutableBytesWritable ptr) {
-        if (keyRange == KeyRange.EVERYTHING_RANGE) {
-            return 0;
-        }
-        int lowerSpan = Integer.MAX_VALUE;
-        byte[] range = keyRange.getLowerRange();
-        if (range != KeyRange.UNBOUND) {
-            lowerSpan = 0;
-            int maxOffset = iterator(range, ptr);
-            int i = pkPos;
-            while (this.next(ptr, i++, maxOffset) != null) {
-                lowerSpan++;
-            }
-        }
-        int upperSpan = Integer.MAX_VALUE;
-        range = keyRange.getUpperRange();
-        if (range != KeyRange.UNBOUND) {
-            upperSpan = 0;
-            int maxOffset = iterator(range, ptr);
-            int i = pkPos;
-            while (this.next(ptr, i++, maxOffset) != null) {
-                upperSpan++;
-            }
-        }
-        return Math.min(lowerSpan, upperSpan);
-    }
-
-    /**
-     * Clip the left hand portion of the keyRange up to the spansToClip. If keyRange is shorter in
-     * spans than spansToClip, the portion of the range that exists will be returned.
-     * @param pkPos the leading pk position of the keyRange.
-     * @param keyRange the key range to clip
-     * @param spansToClip the number of spans to clip
-     * @param ptr an ImmutableBytesWritable to use for temporary storage.
-     * @return the clipped portion of the keyRange
-     */
-    public KeyRange clipLeft(int pkPos, KeyRange keyRange, int spansToClip, ImmutableBytesWritable ptr) {
-        if (spansToClip < 0) {
-            throw new IllegalArgumentException("Cannot specify a negative spansToClip (" + spansToClip + ")");
-        }
-        if (spansToClip == 0) {
-            return keyRange;
-        }
-        byte[] lowerRange = keyRange.getLowerRange();
-        if (lowerRange != KeyRange.UNBOUND) {
-            ptr.set(lowerRange);
-            this.position(ptr, pkPos, pkPos+spansToClip-1);
-            ptr.set(lowerRange, 0, ptr.getOffset() + ptr.getLength());
-            lowerRange = ByteUtil.copyKeyBytesIfNecessary(ptr);
-        }
-        byte[] upperRange = keyRange.getUpperRange();
-        if (upperRange != KeyRange.UNBOUND) {
-            ptr.set(upperRange);
-            this.position(ptr, pkPos, pkPos+spansToClip-1);
-            ptr.set(upperRange, 0, ptr.getOffset() + ptr.getLength());
-            upperRange = ByteUtil.copyKeyBytesIfNecessary(ptr);
-        }
-        //Have to update the bounds to inclusive
-        //Consider a partial key on pk columns (INT A, INT B, ....)  and a predicate (A,B) > (3,5)
-        //This initial key as a row key would look like  (x0305 - *]
-        //If we were to clip the left to (x03 - *], we would skip values like (3,6)
-        return KeyRange.getKeyRange(lowerRange, true, upperRange, true);
     }
 }
