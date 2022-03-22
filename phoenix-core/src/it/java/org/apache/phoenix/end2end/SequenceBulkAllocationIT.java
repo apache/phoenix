@@ -1119,6 +1119,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
             throws SQLException {
     	
         PreparedStatement ps = conn.prepareStatement("SELECT NEXT ? VALUES FOR  " + sequenceName + " ");
+        ps.getMetaData(); // check for PHOENIX-6665
         ps.setLong(1, numSlotToAllocate);
         ResultSet rs = ps.executeQuery();
         assertTrue(rs.next());
