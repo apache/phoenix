@@ -65,6 +65,11 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices
   }
 
   @Override
+  public void truncateTable(String schemaName, String tableName, boolean isNamespaceMapped) throws SQLException{
+    getDelegate().truncateTable(schemaName, tableName, isNamespaceMapped);
+  }
+
+  @Override
   public ConnectionQueryServices getDelegate() {
     return (ConnectionQueryServices) super.getDelegate();
   }

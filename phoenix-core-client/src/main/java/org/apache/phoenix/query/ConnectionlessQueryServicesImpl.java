@@ -886,6 +886,9 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
   }
 
   @Override
+  public void truncateTable(String schemaName, String tableName, boolean isNamespaceMapped) throws SQLException {}
+
+  @Override
   public PMetaData getMetaDataCache() {
     return metaData;
   }
