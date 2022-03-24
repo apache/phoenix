@@ -2382,8 +2382,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Special case for call during drop table to ensure that the empty column family exists.
             // In this, case we only include the table header row, as until we add schemaBytes and tableBytes
             // as args to this function, we have no way of getting them in this case.
+            // Also used to update table descriptor property values on ALTER TABLE t SET prop=xxx
             // TODO: change to  if (tableMetaData.isEmpty()) once we pass through schemaBytes and tableBytes
-            // Also, could be used to update table descriptor property values on ALTER TABLE t SET prop=xxx
             if ((tableMetaData.isEmpty()) || (tableMetaData.size() == 1 && tableMetaData.get(0).isEmpty())) {
                 if (modifyHTable) {
                     sendHBaseMetaData(tableDescriptors, pollingNeeded);
@@ -2653,6 +2653,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         if (!family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY)
                             .setMessage("Column Family: " + family + ", Property: " + propName)
+                            .setSchemaName(table.getSchemaName().getString())
+                            .setTableName(table.getTableName().getString())
+                            .build()
+                            .buildException();
+                        }
+                        if (propName.equals(TableDescriptorBuilder.NORMALIZATION_ENABLED)
+                                && (Boolean)propValue == true
+                                && table.getPropertyValues().containsKey(PhoenixDatabaseMetaData.SALT_BUCKETS)
+                                && Integer.parseInt(table.getPropertyValues().get(PhoenixDatabaseMetaData.SALT_BUCKETS)) > 0) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_NORMALIZER_ON_SALTED_TABLE)
                             .setSchemaName(table.getSchemaName().getString())
                             .setTableName(table.getTableName().getString())
                             .build()
