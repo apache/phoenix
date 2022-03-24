@@ -1578,4 +1578,99 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testNormalizerCannotBeEnabledForSalted() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+
+        String mtTableName = generateUniqueName();
+        String mtViewName = generateUniqueName();
+        String mtIndexName = generateUniqueName();
+
+        String ddl =
+                "create table  " + tableName + " ( id integer PRIMARY KEY," + " col1 integer,"
+                        + " col2 bigint" + " ) SALT_BUCKETS=4";
+        String indexDdl =
+                "create index IF NOT EXISTS " + indexName + " on " + tableName + " (col2)";
+        String mtDdl =
+                "CREATE TABLE " + mtTableName + " (TenantId UNSIGNED_INT NOT NULL ,"
+                        + " Id UNSIGNED_INT NOT NULL ," + " val VARCHAR, "
+                        + " CONSTRAINT pk PRIMARY KEY(TenantId, Id) "
+                        + " ) MULTI_TENANT=true, SALT_BUCKETS=4";
+        String mtViewDdl =
+                "CREATE VIEW " + mtViewName + "(view_column CHAR(15)) AS " + " SELECT * FROM "
+                        + mtTableName + " WHERE val='L' ";
+        String mtIndexDdl = "CREATE INDEX " + mtIndexName + " on " + mtViewName + " (view_column) ";
+
+        String conflictDdl =
+                "ALTER TABLE " + tableName + " SET " + HTableDescriptor.NORMALIZATION_ENABLED
+                        + "=true";
+
+        String conflictIndexDdl =
+                "ALTER TABLE " + indexName + " SET " + HTableDescriptor.NORMALIZATION_ENABLED
+                        + "=true";
+
+        String conflictMtDdl =
+                "ALTER TABLE " + mtTableName + " SET "
+                        + HTableDescriptor.NORMALIZATION_ENABLED + "=true";
+
+        String conflictMtViewDdl =
+                "ALTER TABLE " + indexName + " SET " + HTableDescriptor.NORMALIZATION_ENABLED
+                        + "=true";
+
+        String conflictMtIndexDdl =
+                "ALTER TABLE " + mtIndexName + " SET "
+                        + HTableDescriptor.NORMALIZATION_ENABLED + "=true";
+
+        String okDdl =
+                "ALTER TABLE " + tableName + " SET " + HTableDescriptor.NORMALIZATION_ENABLED
+                        + "=false";
+
+        Properties props = new Properties();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+                Statement stmt = conn.createStatement()) {
+            stmt.execute(ddl);
+            stmt.execute(indexDdl);
+            stmt.execute(mtDdl);
+            stmt.execute(mtViewDdl);
+            stmt.execute(mtIndexDdl);
+
+            try {
+                stmt.execute(conflictDdl);
+                fail("Should have thrown an exception");
+            } catch (SQLException e) {
+                assertEquals(1147, e.getErrorCode());
+            }
+
+            try {
+                stmt.execute(conflictIndexDdl);
+                fail("Should have thrown an exception");
+            } catch (SQLException e) {
+                assertEquals(1147, e.getErrorCode());
+            }
+
+            try {
+                stmt.execute(conflictMtDdl);
+                fail("Should have thrown an exception");
+            } catch (SQLException e) {
+                assertEquals(1147, e.getErrorCode());
+            }
+
+            try {
+                stmt.execute(conflictMtViewDdl);
+                fail("Should have thrown an exception");
+            } catch (SQLException e) {
+                assertEquals(1147, e.getErrorCode());
+            }
+
+            try {
+                stmt.execute(conflictMtIndexDdl);
+                fail("Should have thrown an exception");
+            } catch (SQLException e) {
+                assertEquals(1147, e.getErrorCode());
+            }
+
+            stmt.execute(okDdl);
+        }
+    }
 }
