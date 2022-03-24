@@ -2223,6 +2223,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         dropTables(Collections.<byte[]>singletonList(tableNameToDelete));
     }
 
+    @Override
+    public void truncateTable(String schemaName, String tableName, boolean isNamespaceMapped) throws SQLException {
+        SQLException sqlE = null;
+        TableName hbaseTableName = SchemaUtil.getPhysicalTableName(SchemaUtil.getTableName(schemaName, tableName).getBytes(), isNamespaceMapped);
+        try {
+            Admin admin = getAdmin();
+            admin.disableTable(hbaseTableName);
+            admin.truncateTable(hbaseTableName, true);
+            assert(admin.isTableEnabled(hbaseTableName));
+        } catch (Exception e) {
+            sqlE = ServerUtil.parseServerException(e);
+        } finally {
+            if (sqlE != null) {
+                throw sqlE;
+            }
+        }
+    }
+
     private void dropTables(final List<byte[]> tableNamesToDelete) throws SQLException {
         SQLException sqlE = null;
         try (Admin admin = getAdmin()) {

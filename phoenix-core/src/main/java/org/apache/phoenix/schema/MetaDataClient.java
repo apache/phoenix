@@ -153,6 +153,7 @@ import java.util.Set;
 import java.util.HashSet;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.parse.TruncateTableStatement;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.HConstants;
@@ -3300,6 +3301,30 @@ public class MetaDataClient {
         PColumn tenantIdCol = iterator.next();
         if ( tenantIdCol.isNullable()) {
             throw new SQLExceptionInfo.Builder(INSUFFICIENT_MULTI_TENANT_COLUMNS).setSchemaName(schemaName).setTableName(tableName).build().buildException();
+        }
+    }
+
+    public MutationState truncateTable(TruncateTableStatement statement) throws SQLException {
+        String schemaName = connection.getSchema() != null && statement.getTableName().getSchemaName() == null
+            ? connection.getSchema() : statement.getTableName().getSchemaName();
+        String tableName = statement.getTableName().getTableName();
+        boolean isNamespaceMapped = SchemaUtil.isNamespaceMappingEnabled(statement.getTableType(), connection.getQueryServices().getProps());
+        boolean wasAutoCommit = connection.getAutoCommit();
+        try {
+            PTable ptable = connection.getTable(
+                new PTableKey(connection.getTenantId(), SchemaUtil.getTableName(schemaName, tableName)));
+        } catch (TableNotFoundException e) {
+            throw e;
+        }
+        try {
+            connection.getQueryServices().truncateTable(schemaName, tableName, isNamespaceMapped);
+            updateCache(schemaName, tableName);
+            return new MutationState(0, 0, connection);
+        } catch (SQLException e) {
+            throw e;
+        }
+        finally {
+            connection.setAutoCommit(wasAutoCommit);
         }
     }
 
