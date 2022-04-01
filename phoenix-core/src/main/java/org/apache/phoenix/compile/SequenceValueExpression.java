@@ -97,12 +97,12 @@ public class SequenceValueExpression extends BaseTerminalExpression {
     @Override
     public String toString() {
         String sequenceQualifiedName =
-                SchemaUtil.getTableName(key.getSchemaName(),key.getSequenceName());
-        if(op == Op.CURRENT_VALUE) {
+                SchemaUtil.getTableName(key.getSchemaName(), key.getSequenceName());
+        if (op == Op.CURRENT_VALUE) {
             return op.getName() + " VALUE " + "FOR " + sequenceQualifiedName;
         } else {
-            return op.getName() + Arrays.toString(getNumToAllocateExpressions().toArray()) +
-                    " VALUE(S) " + "FOR " + sequenceQualifiedName;
+            return op.getName() + Arrays.toString(getNumToAllocateExpressions().toArray())
+                    + " VALUE(S) " + "FOR " + sequenceQualifiedName;
         }
     }
 
