@@ -1613,7 +1613,8 @@ public class WhereOptimizer {
         @Override
         public Iterator<Expression> visitEnter(LikeExpression node) {
             // TODO: can we optimize something that starts with '_' like this: foo LIKE '_a%' ?
-            if (! (node.getChildren().get(1) instanceof LiteralExpression) || node.startsWithWildcard()) {
+            if (!(node.getChildren().get(1) instanceof LiteralExpression)
+                || node.startsWithWildcard()) {
                 return Collections.emptyIterator();
             }
 
@@ -1637,25 +1638,27 @@ public class WhereOptimizer {
             final String literalPrefix = node.getLiteralPrefix();
             List<String> rangeStarts;
 
-            if(node.getLikeType() == LikeType.CASE_INSENSITIVE) {
+            if (node.getLikeType() == LikeType.CASE_INSENSITIVE) {
                 rangeStarts = generateIlikeRangeStarts(literalPrefix);
             } else {
                 rangeStarts = Collections.singletonList(literalPrefix);
             }
 
             List<KeyRange> ranges = new ArrayList<>();
-            for(String startsWith : rangeStarts) {
+            for (String startsWith : rangeStarts) {
                 byte[] key = PVarchar.INSTANCE.toBytes(startsWith, sortOrder);
                 // If the expression is an equality expression against a fixed length column
                 // and the key length doesn't match the column length, the expression can
                 // never be true.
                 // An zero length byte literal is null which can never be compared against as true
 
-                Integer childNodeFixedLength = firstChild.getDataType().isFixedWidth() ? firstChild.getMaxLength() : null;
+                Integer childNodeFixedLength = firstChild.getDataType().isFixedWidth()
+                    ? firstChild.getMaxLength() : null;
                 if (childNodeFixedLength != null && key.length > childNodeFixedLength) {
                     return EMPTY_KEY_SLOTS;
                 }
-                // TODO: is there a case where we'd need to go through the childPart to calculate the key range?
+                // TODO: is there a case where we'd need to
+                //  go through the childPart to calculate the key range?
                 byte[] lowerRange = key;
                 byte[] upperRange = ByteUtil.nextKey(key);
                 Integer columnFixedLength = column.getMaxLength();
@@ -1666,9 +1669,11 @@ public class WhereOptimizer {
                         lowerRange = type.pad(lowerRange, columnFixedLength, SortOrder.ASC);
                         upperRange = type.pad(upperRange, columnFixedLength, SortOrder.ASC);
                     }
-                } else if (column.getSortOrder() == SortOrder.DESC && table.rowKeyOrderOptimizable()) {
-                    // Append a zero byte if descending since a \xFF byte will be appended to the lowerRange
-                    // causing rows to be skipped that should be included. For example, with rows 'ab', 'a',
+                } else if (column.getSortOrder() == SortOrder.DESC
+                    && table.rowKeyOrderOptimizable()) {
+                    // Append a zero byte if descending since a \xFF byte
+                    // will be appended to the lowerRange causing rows to be skipped
+                    // that should be included. For example, with rows 'ab', 'a',
                     // a lowerRange of 'a\xFF' would skip 'ab', while 'a\x00\xFF' would not.
                     lowerRange = Arrays.copyOf(lowerRange, lowerRange.length + 1);
                     lowerRange[lowerRange.length - 1] = QueryConstants.SEPARATOR_BYTE;
@@ -1689,12 +1694,12 @@ public class WhereOptimizer {
         private List<String> generateIlikeRangeStarts(String str) {
             List<String> variants = new ArrayList<>();
             String baseString = str.toLowerCase();
-            for(int i = 0; i < 1 << baseString.length(); i++) {
+            for (int i = 0; i < 1 << baseString.length(); i++) {
                 char[] characters = baseString.toCharArray();
-                for(int j = 0; j < characters.length; j++)
-                {
-                    if(((i >> j) &  1) == 1)
-                        characters[j] = (char) (characters[j]-32);
+                for (int j = 0; j < characters.length; j++) {
+                    if (((i >> j) &  1) == 1) {
+                        characters[j] = (char) (characters[j] - 32);
+                    }
                 }
                 variants.add(String.valueOf(characters));
             }
