@@ -167,6 +167,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String INDEX_FAILURE_THROW_EXCEPTION_ATTRIB = "phoenix.index.failure.throw.exception";
     public static final String INDEX_FAILURE_KILL_SERVER = "phoenix.index.failure.unhandled.killserver";
 
+    public static final String INDEX_CREATE_DEFAULT_STATE = "phoenix.index.create.default.state";
+
     // Index will be partially re-built from index disable time stamp - following overlap time
     @Deprecated
     public static final String INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB =
@@ -228,7 +230,6 @@ public interface QueryServices extends SQLCloseable {
     public static final String METRIC_PUBLISHER_ENABLED = "phoenix.monitoring.metricsPublisher.enabled";
     public static final String METRIC_PUBLISHER_CLASS_NAME = "phoenix.monitoring.metricProvider.className";
     public static final String ALLOWED_LIST_FOR_TABLE_LEVEL_METRICS = "phoenix.monitoring.allowedTableNames.list";
-
 
     // Tag Name to determine the Phoenix Client Type
     public static final String CLIENT_METRICS_TAG = "phoenix.client.metrics.tag";

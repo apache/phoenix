@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.*;
+import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
@@ -435,7 +436,7 @@ public class MetaDataClient {
                     ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() +
                     ") VALUES (?, ?, ?, ?)";
     
-    private static final String UPDATE_INDEX_STATE_TO_ACTIVE =
+    public static final String UPDATE_INDEX_STATE_TO_ACTIVE =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                     TENANT_ID + "," +
                     TABLE_SCHEM + "," +
@@ -1677,15 +1678,17 @@ public class MetaDataClient {
             return new MutationState(0, 0, connection);
         }
 
+        // If we create index in create_disabled state, we will build them later
+        if (table.getIndexState() == PIndexState.CREATE_DISABLE) {
+            return new MutationState(0, 0, connection);
+        }
+
         // If our connection is at a fixed point-in-time, we need to open a new
         // connection so that our new index table is visible.
         if (connection.getSCN() != null) {
             return buildIndexAtTimeStamp(table, statement.getTable());
         }
 
-        String dataTableFullName = SchemaUtil.getTableName(
-                tableRef.getTable().getSchemaName().getString(),
-                tableRef.getTable().getTableName().getString());
         return buildIndex(table, tableRef);
     }
 
@@ -2874,7 +2877,17 @@ public class MetaDataClient {
             Collections.reverse(columnMetadata);
             tableMetaData.addAll(columnMetadata);
             String dataTableName = parent == null || tableType == PTableType.VIEW ? null : parent.getTableName().getString();
-            PIndexState indexState = parent == null || tableType == PTableType.VIEW  ? null : PIndexState.BUILDING;
+            PIndexState defaultCreateState = PIndexState.valueOf(connection.getQueryServices().getConfiguration().
+                            get(INDEX_CREATE_DEFAULT_STATE, QueryServicesOptions.DEFAULT_CREATE_INDEX_STATE));
+            if (defaultCreateState == PIndexState.CREATE_DISABLE) {
+                if  (indexType == IndexType.LOCAL || sharedTable) {
+                    defaultCreateState = PIndexState.BUILDING;
+                }
+            }
+            PIndexState indexState = parent == null || tableType == PTableType.VIEW  ? null : defaultCreateState;
+            if (indexState == null && tableProps.containsKey(INDEX_STATE)) {
+                indexState = PIndexState.fromSerializedValue(tableProps.get(INDEX_STATE).toString());
+            }
             PreparedStatement tableUpsert = connection.prepareStatement(CREATE_TABLE);
             tableUpsert.setString(1, tenantIdStr);
             tableUpsert.setString(2, schemaName);
