@@ -19,6 +19,7 @@ package org.apache.phoenix.mapreduce.transform;
 
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.mapreduce.PhoenixTTLTool;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -826,6 +827,8 @@ public class TransformTool extends Configured implements Tool {
         if (!transformRecord.getTransformStatus().equals(PTable.TransformStatus.PAUSED.name())) {
             throw new IllegalStateException("Only a paused transform can be resumed");
         }
+
+        Transform.updateNewTableState(connection.unwrap(PhoenixConnection.class), transformRecord, PIndexState.ACTIVE);
 
         runTransform(args, cmdLine);
 

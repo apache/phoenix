@@ -151,7 +151,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     
     private static boolean sendIndexMaintainer(PTable index) {
         PIndexState indexState = index.getIndexState();
-        return ! ( PIndexState.DISABLE == indexState || PIndexState.PENDING_ACTIVE == indexState );
+        return ! ( indexState.isDisabled() || PIndexState.PENDING_ACTIVE == indexState );
     }
 
     public static Iterator<PTable> maintainedIndexes(Iterator<PTable> indexes) {
@@ -232,7 +232,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         int nIndexes = indexes.size();
         if (dataTable.getTransformingNewTable() != null) {
-            nIndexes++;
+            // If the transforming new table is in CREATE_DISABLE state, the mutations don't go into the table.
+            boolean disabled = dataTable.getTransformingNewTable().isIndexStateDisabled();
+            if (disabled && nIndexes == 0) {
+                ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+                return;
+            }
+            if (!disabled) {
+                nIndexes++;
+            }
         }
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         DataOutputStream output = new DataOutputStream(stream);
@@ -248,11 +256,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     output.write(protoBytes);
             }
             if (dataTable.getTransformingNewTable() != null) {
-                ServerCachingProtos.TransformMaintainer proto = TransformMaintainer.toProto(
-                        dataTable.getTransformingNewTable().getTransformMaintainer(dataTable, connection));
-                byte[] protoBytes = proto.toByteArray();
-                WritableUtils.writeVInt(output, protoBytes.length);
-                output.write(protoBytes);
+                // We're not serializing the TransformMaintainer if the new transformed table is disabled
+                boolean disabled = dataTable.getTransformingNewTable().isIndexStateDisabled();
+                if (!disabled) {
+                    ServerCachingProtos.TransformMaintainer proto = TransformMaintainer.toProto(
+                            dataTable.getTransformingNewTable().getTransformMaintainer(dataTable, connection));
+                    byte[] protoBytes = proto.toByteArray();
+                    WritableUtils.writeVInt(output, protoBytes.length);
+                    output.write(protoBytes);
+                }
             }
         } catch (IOException e) {
             throw new RuntimeException(e); // Impossible

@@ -663,6 +663,9 @@ public interface PTable extends PMetaDataEntity {
     long getTimeStamp();
     long getSequenceNumber();
     long getIndexDisableTimestamp();
+
+    boolean isIndexStateDisabled();
+
     /**
      * @return table name
      */
@@ -892,7 +895,7 @@ public interface PTable extends PMetaDataEntity {
     int getRowTimestampColPos();
     long getUpdateCacheFrequency();
     boolean isNamespaceMapped();
-    
+
     /**
      * @return The sequence name used to get the unique identifier for views
      * that are automatically partitioned.

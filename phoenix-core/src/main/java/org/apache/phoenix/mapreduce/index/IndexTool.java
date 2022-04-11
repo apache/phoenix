@@ -1011,7 +1011,7 @@ public class IndexTool extends Configured implements Tool {
     }
 
     private void changeDisabledIndexStateToBuiding(Connection connection) throws SQLException {
-        if (pIndexTable != null && pIndexTable.getIndexState() == PIndexState.DISABLE) {
+        if (pIndexTable != null && pIndexTable.getIndexState().isDisabled()) {
             IndexUtil.updateIndexState(connection.unwrap(PhoenixConnection.class),
                     pIndexTable.getName().getString(), PIndexState.BUILDING, null);
         }
