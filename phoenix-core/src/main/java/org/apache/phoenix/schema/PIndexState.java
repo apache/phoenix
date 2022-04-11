@@ -32,7 +32,12 @@ public enum PIndexState {
     // When an index write fails, it is put in this state, and we let the client retry the mutation
     // After retries are exhausted, the client should mark the index as disabled, but if that
     // doesn't happen, then the index is considered disabled if it's been in this state too long
-    PENDING_DISABLE("w");
+    PENDING_DISABLE("w"),
+    //When we create/drop some indexes in one cluster with a replication peer, the peer doesn't immediately have this
+    //index and Hbase throws a replication error when we try to write into indexes that don't have a matching table.
+    //To remediate this issue, we can optionally create indexes in CREATE_DISABLED state and enable them after all
+    //the replication peers have the table. Similar for drop.
+    CREATE_DISABLE("c");
 
     private final String serializedValue;
     private final byte[] serializedBytes;
@@ -54,6 +59,10 @@ public enum PIndexState {
 
     public byte[] toBytes() {
         return nameBytesValue;
+    }
+
+    public boolean isDisabled() {
+        return (this == DISABLE || this == CREATE_DISABLE);
     }
 
     private static final PIndexState[] FROM_VALUE;

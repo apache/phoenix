@@ -343,7 +343,7 @@ public class DeleteCompiler {
         if (!table.getIndexes().isEmpty()) {
             List<PTable> nonDisabledIndexes = Lists.newArrayListWithExpectedSize(table.getIndexes().size());
             for (PTable index : table.getIndexes()) {
-                if (index.getIndexState() != PIndexState.DISABLE && isMaintainedOnClient(index)) {
+                if (!index.getIndexState().isDisabled() && isMaintainedOnClient(index)) {
                     nonDisabledIndexes.add(index);
                 }
             }

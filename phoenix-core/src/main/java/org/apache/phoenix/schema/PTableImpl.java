@@ -28,6 +28,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODING_SCHEME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
@@ -310,6 +311,9 @@ public class PTableImpl implements PTable {
         }
 
         public Builder setState(PIndexState state) {
+            if (state != null) {
+                propertyValues.put(INDEX_STATE, state.getSerializedValue());
+            }
             this.state = state;
             return this;
         }
@@ -1588,7 +1592,12 @@ public class PTableImpl implements PTable {
     public long getIndexDisableTimestamp() {
         return indexDisableTimestamp;
     }
-    
+
+    @Override
+    public boolean isIndexStateDisabled() {
+        return getIndexState()!= null && getIndexState().isDisabled();
+    }
+
     @Override
     public PColumn getPKColumn(String name) throws ColumnNotFoundException {
         List<PColumn> columns = columnsByName.get(name);
@@ -2028,10 +2037,10 @@ public class PTableImpl implements PTable {
             builder.setPhysicalTableNameBytes(ByteStringer.wrap(table.getPhysicalName(true).getBytes()));
         }
         builder.setTableType(ProtobufUtil.toPTableTypeProto(table.getType()));
+        if (table.getIndexState() != null) {
+            builder.setIndexState(table.getIndexState().getSerializedValue());
+        }
         if (table.getType() == PTableType.INDEX) {
-            if (table.getIndexState() != null) {
-                builder.setIndexState(table.getIndexState().getSerializedValue());
-            }
             if (table.getViewIndexId() != null) {
                 builder.setViewIndexId(table.getViewIndexId());
                 builder.setViewIndexIdType(table.getviewIndexIdType().getSqlType());

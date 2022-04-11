@@ -40,6 +40,11 @@ public class DelegateTable implements PTable {
     }
 
     @Override
+    public boolean isIndexStateDisabled() {
+        return delegate.isIndexStateDisabled();
+    }
+
+    @Override
     public long getSequenceNumber() {
         return delegate.getSequenceNumber();
     }

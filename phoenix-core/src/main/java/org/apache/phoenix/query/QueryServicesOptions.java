@@ -43,6 +43,7 @@ import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILL_FILES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.HBASE_CLIENT_SCANNER_TIMEOUT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.IMMUTABLE_ROWS_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.INDEX_POPULATION_SLEEP_TIME;
 import static org.apache.phoenix.query.QueryServices.INDEX_REBUILD_TASK_INITIAL_DELAY;
@@ -105,6 +106,7 @@ import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_SERVER_SIDE_MAS
 
 import java.util.Map.Entry;
 
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
@@ -260,6 +262,9 @@ public class QueryServicesOptions {
     public static final int DEFAULT_STATS_CACHE_THREAD_POOL_SIZE = 4;
 
     public static final boolean DEFAULT_USE_REVERSE_SCAN = true;
+
+    public static final String DEFAULT_CREATE_INDEX_STATE= PIndexState.BUILDING.toString();
+    public static final boolean DEFAULT_DISABLE_ON_DROP = false;
 
     /**
      * Use only first time SYSTEM.SEQUENCE table is created.
@@ -469,6 +474,7 @@ public class QueryServicesOptions {
             .setIfUnset(CLIENT_METRICS_TAG, DEFAULT_CLIENT_METRICS_TAG)
             .setIfUnset(CLIENT_INDEX_ASYNC_THRESHOLD, DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD)
             .setIfUnset(PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, DEFAULT_SERVER_SIDE_MASKING_ENABLED)
+            .setIfUnset(INDEX_CREATE_DEFAULT_STATE, DEFAULT_CREATE_INDEX_STATE)
             ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set

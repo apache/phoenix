@@ -20,6 +20,7 @@ package org.apache.phoenix.schema.transform;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.TableInfo;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -74,9 +75,11 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_STATUS;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
+import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.schema.ColumnMetaDataOps.addColumnMutation;
 import static org.apache.phoenix.schema.MetaDataClient.CREATE_LINK;
+import static org.apache.phoenix.schema.MetaDataClient.UPDATE_INDEX_STATE_TO_ACTIVE;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.schema.PTableType.VIEW;
@@ -126,6 +129,12 @@ public class Transform {
             // TODO: calculate old and new metadata
             transformBuilder.setNewMetadata(newMetadata);
             transformBuilder.setOldMetadata(oldMetadata);
+            PIndexState defaultCreateState = PIndexState.valueOf(connection.getQueryServices().getConfiguration().
+                    get(INDEX_CREATE_DEFAULT_STATE, QueryServicesOptions.DEFAULT_CREATE_INDEX_STATE));
+            if (defaultCreateState == PIndexState.CREATE_DISABLE) {
+                // Create a paused transform. This can be enabled later by calling TransformTool resume
+                transformBuilder.setTransformStatus(PTable.TransformStatus.PAUSED.name());
+            }
             if (Strings.isNullOrEmpty(newPhysicalTableName)) {
                 newPhysicalTableName = generateNewTableName(schema, logicalTableName, sequenceNum);
             }
@@ -149,11 +158,14 @@ public class Transform {
             long sequenceNum, PhoenixConnection connection) throws Exception {
         PName newTableName = PNameFactory.newName(systemTransformParams.getNewPhysicalTableName());
         PName newTableNameWithoutSchema = PNameFactory.newName(SchemaUtil.getTableNameFromFullName(systemTransformParams.getNewPhysicalTableName()));
+        PIndexState defaultCreateState = PIndexState.valueOf(connection.getQueryServices().getConfiguration().
+                get(INDEX_CREATE_DEFAULT_STATE, QueryServicesOptions.DEFAULT_CREATE_INDEX_STATE));
         PTable newTable = new PTableImpl.Builder()
                 .setTableName(newTableNameWithoutSchema)
                 .setParentTableName(table.getParentTableName())
                 .setBaseTableLogicalName(table.getBaseTableLogicalName())
                 .setPhysicalTableName(newTableNameWithoutSchema)
+                .setState(defaultCreateState)
                 .setAllColumns(table.getColumns())
                 .setAppendOnlySchema(table.isAppendOnlySchema())
                 .setAutoPartitionSeqName(table.getAutoPartitionSeqName())
@@ -213,10 +225,14 @@ public class Transform {
                     (view.getSchemaName()==null? null: Bytes.toString(view.getSchemaName())), Bytes.toString(view.getTableName())
                     , newTableName, sequenceNum);
         }
-        // add a monitoring task
-        TransformMonitorTask.addTransformMonitorTask(connection, connection.getQueryServices().getConfiguration(), systemTransformParams,
-                PTable.TaskStatus.CREATED, new Timestamp(EnvironmentEdgeManager.currentTimeMillis()), null);
 
+        if (defaultCreateState != PIndexState.CREATE_DISABLE) {
+            // add a monitoring task
+            TransformMonitorTask.addTransformMonitorTask(connection, connection.getQueryServices().getConfiguration(), systemTransformParams,
+                    PTable.TaskStatus.CREATED, new Timestamp(EnvironmentEdgeManager.currentTimeMillis()), null);
+        } else {
+            LOGGER.info("Transform will not be monitored until it is resumed again.");
+        }
         return newTable;
     }
 
@@ -331,6 +347,26 @@ public class Transform {
             return true;
         }
         return false;
+    }
+
+    public static void updateNewTableState(PhoenixConnection connection, SystemTransformRecord systemTransformRecord,
+                                           PIndexState state)
+            throws SQLException {
+        String schema = SchemaUtil.getSchemaNameFromFullName(systemTransformRecord.getNewPhysicalTableName());
+        String tableName = SchemaUtil.getTableNameFromFullName(systemTransformRecord.getNewPhysicalTableName());
+        try (PreparedStatement tableUpsert = connection.prepareStatement(UPDATE_INDEX_STATE_TO_ACTIVE)){
+            tableUpsert.setString(1, systemTransformRecord.getTenantId() == null ? null :
+                    systemTransformRecord.getTenantId());
+            tableUpsert.setString(2, schema);
+            tableUpsert.setString(3, tableName);
+            tableUpsert.setString(4, state.getSerializedValue());
+            tableUpsert.setLong(5, 0);
+            tableUpsert.setLong(6, 0);
+            tableUpsert.execute();
+        }
+        // Update cache
+        UpgradeUtil.clearCache(connection, connection.getTenantId(), schema, tableName,
+                systemTransformRecord.getLogicalParentName(), MIN_TABLE_TIMESTAMP);
     }
 
     public static void removeTransformRecord(

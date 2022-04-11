@@ -4046,7 +4046,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         metaDataCache.invalidate(new ImmutableBytesPtr(dataTableKey));
                     }
                     if (setRowKeyOrderOptimizableCell || disableTimeStampKVIndex != -1
-                            || currentState == PIndexState.DISABLE || newState == PIndexState.BUILDING) {
+                            || currentState.isDisabled() || newState == PIndexState.BUILDING) {
                         returnTable = doGetTable(tenantId, schemaName, tableName,
                                 HConstants.LATEST_TIMESTAMP, rowLock, request.getClientVersion());
                     }
