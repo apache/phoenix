@@ -93,7 +93,7 @@
 
     <!-- Dependency versions -->
     <hadoop.version>2.7.1</hadoop.version>
-    <jackson.version>2.12.4</jackson.version>
+    <jackson-bom.version>2.12.6.20220326</jackson-bom.version>
     <antlr.version>3.5.2</antlr.version>
     <reload4j.version>1.2.19</reload4j.version>
     <disruptor.version>3.3.6</disruptor.version>
@@ -1051,20 +1051,11 @@
         <version>${snappy.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.fasterxml.jackson.core</groupId>
-        <artifactId>jackson-core</artifactId>
-        <version>${jackson.version}</version>
-        <scope>compile</scope>
-      </dependency>
-      <dependency>
-        <groupId>com.fasterxml.jackson.core</groupId>
-        <artifactId>jackson-annotations</artifactId>
-        <version>${jackson.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.fasterxml.jackson.core</groupId>
-        <artifactId>jackson-databind</artifactId>
-        <version>${jackson.version}</version>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson-bom.version}</version>
+        <scope>import</scope>
+        <type>pom</type>
       </dependency>
       <dependency>
         <groupId>com.google.code.findbugs</groupId>
