@@ -1165,7 +1165,7 @@ public class MetaDataClient {
             String query = "SELECT CURRENT_DATE()," + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
                     + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
                     + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
-            ResultSet rs = connection.createStatement().executeQuery(query);
+            ResultSet rs = connection.prepareStatement(query).executeQuery();
 
             if (rs.next()) {
                 msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
@@ -4395,7 +4395,7 @@ public class MetaDataClient {
         }
         buf.setCharAt(buf.length()-1, ')');
 
-        connection.createStatement().execute(buf.toString());
+        connection.prepareStatement(buf.toString()).execute();
 
         Collections.sort(columnsToDrop,new Comparator<PColumn> () {
             @Override

@@ -442,7 +442,11 @@ public class OrphanViewTool extends Configured implements Tool {
                 COLUMN_NAME + (dst.getTenantId() == null ? " IS NULL" : " = '" + dst.getTenantId() + "'") + " AND " +
                 COLUMN_FAMILY + " = '" + (dst.getSchemaName() == null ? dst.getTableName() : dst.getSchemaName() + "." +
                 dst.getTableName()) + "'";
-        phoenixConnection.createStatement().execute(deleteQuery);
+        try {
+            phoenixConnection.prepareStatement(deleteQuery).execute();
+        } catch (SQLException e) {
+            throw new IOException();
+        }
         phoenixConnection.commit();
     }
 
@@ -497,6 +501,27 @@ public class OrphanViewTool extends Configured implements Tool {
             }
         }
     }
+
+    /*
+    private void forcefullyDropView(PhoenixConnection phoenixConnection,
+                                    Key key) throws Exception {
+        String deleteRowsFromCatalog = "DELETE FROM " + SYSTEM_CATALOG_NAME +
+                " WHERE " + TENANT_ID + (key.getTenantId() == null ? " IS NULL" : " = '" + key.getTenantId() + "'") + " AND " +
+                TABLE_SCHEM + (key.getSchemaName() == null ? " x " : " = '" + key.getSchemaName() + "'") + " AND " +
+                TABLE_NAME + " = '" + key.getTableName() + "'";
+        String deleteRowsFromChildLink = "DELETE FROM " + SYSTEM_CHILD_LINK_NAME +
+                " WHERE " + COLUMN_NAME + (key.getTenantId() == null ? " IS NULL" : " = '" + key.getTenantId() + "'") + " AND " +
+                COLUMN_FAMILY + " = '" + (key.getSchemaName() == null ? key.getTableName() : key.getSchemaName() + "." + key.getTableName()) + "'";
+        try {
+            phoenixConnection.createStatement().execute(deleteRowsFromCatalog);
+            phoenixConnection.createStatement().execute(deleteRowsFromChildLink);
+            phoenixConnection.commit();
+        } catch (SQLException e) {
+            throw new IOException(e);
+        }
+    }
+    */
+
     private void forcefullyDropView(PhoenixConnection phoenixConnection,
                                     Key key) throws Exception {
         String deleteRowsFromCatalog = "DELETE FROM " + SYSTEM_CATALOG_NAME +
@@ -507,9 +532,8 @@ public class OrphanViewTool extends Configured implements Tool {
                 " WHERE " + COLUMN_NAME + (key.getTenantId() == null ? " IS NULL" : " = '" + key.getTenantId() + "'") + " AND " +
                 COLUMN_FAMILY + " = '" + (key.getSchemaName() == null ? key.getTableName() : key.getSchemaName() + "." + key.getTableName()) + "'";
         try {
-            phoenixConnection.createStatement().execute(deleteRowsFromCatalog);
-            phoenixConnection.createStatement().execute(deleteRowsFromChildLink);
-            phoenixConnection.commit();
+            phoenixConnection.prepareStatement(deleteRowsFromCatalog).execute();
+            phoenixConnection.prepareStatement(deleteRowsFromChildLink).execute();
         } catch (SQLException e) {
             throw new IOException(e);
         }

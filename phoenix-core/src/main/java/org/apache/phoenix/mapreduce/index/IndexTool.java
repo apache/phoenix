@@ -608,11 +608,11 @@ public class IndexTool extends Configured implements Tool {
             for (String index : disableIndexes) {
                 quotedIndexes.add("'" + index + "'");
             }
-            try (ResultSet rs = connection.createStatement()
-                    .executeQuery("SELECT MAX(" + ASYNC_REBUILD_TIMESTAMP + "),MAX("+INDEX_DISABLE_TIMESTAMP+") FROM " + SYSTEM_CATALOG_NAME + " ("
+            try (ResultSet rs = connection
+                    .prepareStatement("SELECT MAX(" + ASYNC_REBUILD_TIMESTAMP + "),MAX("+INDEX_DISABLE_TIMESTAMP+") FROM " + SYSTEM_CATALOG_NAME + " ("
                             + ASYNC_REBUILD_TIMESTAMP + " BIGINT) WHERE " + TABLE_SCHEM
                             + (schemaName != null && schemaName.length() > 0 ? "='" + schemaName + "'" : " IS NULL")
-                            + " and " + TABLE_NAME + " IN (" + StringUtils.join(",", quotedIndexes) + ")")) {
+                            + " and " + TABLE_NAME + " IN (" + StringUtils.join(",", quotedIndexes) + ")").executeQuery()) {
                 if (rs.next()) {
                     maxRebuilAsyncDate = rs.getLong(1);
                     maxDisabledTimeStamp = rs.getLong(2);
