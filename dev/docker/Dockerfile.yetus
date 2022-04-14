@@ -40,7 +40,9 @@ RUN mkdir -p /run/user/910/gnupg/ \
     && chown -R 910:910 /var/run/user/910 \
     && chmod -R 700 /var/run/user/910
 #####
-# Update Java 11 packages to 11.0.11 (to avoid Java 11.0.9.1 version Jetty bug)
+# Update Java 11 packages to the latest.
+# We don't have to worry about avoiding the micro versions, because this runs with HBase 2.4,
+# which has a fixed Jetty.
 #####
 RUN apt-get update \
     && apt-get -q install --no-install-recommends -y openjdk-11-jdk-headless openjdk-11-jre-headless openjdk-11-jre
