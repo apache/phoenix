@@ -28,10 +28,11 @@ RUN mkdir -p /run/user/910/gnupg/ \
     && chown -R 910:910 /var/run/user/910 \
     && chmod -R 700 /var/run/user/910
 #####
-# Update Java 11 packages to 11.0.11 (to avoid Java 11.0.9.1 version Jetty bug)
+# Pin the Java 11 packages to the release version to avoid the Java four number version Jetty bug
+# We cannot pin to an updated version, because Ubuntu removes old updates from its repos.
 #####
 RUN apt-get update \
-    && apt-get -q install --no-install-recommends -y openjdk-11-jdk-headless openjdk-11-jre-headless openjdk-11-jre \
+    && apt-get -q install --no-install-recommends --allow-downgrades -y openjdk-11-jdk-headless=11.0.7+10-3ubuntu1 openjdk-11-jre-headless=11.0.7+10-3ubuntu1 openjdk-11-jre=11.0.7+10-3ubuntu1
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 #####
