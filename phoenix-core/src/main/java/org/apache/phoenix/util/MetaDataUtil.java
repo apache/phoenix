@@ -903,11 +903,11 @@ public class MetaDataUtil {
             throws SQLException {
         String schemaName = getViewIndexSequenceSchemaName(name, isNamespaceMapped);
         String sequenceName = getViewIndexSequenceName(name, null, isNamespaceMapped);
-        connection.createStatement().executeUpdate("DELETE FROM "
+        connection.prepareStatement("DELETE FROM "
                 + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
                 + " WHERE " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA
                 + (schemaName.length() > 0 ? "='" + schemaName + "'" : " IS NULL")
-                + " AND " + PhoenixDatabaseMetaData.SEQUENCE_NAME + " = '" + sequenceName + "'" );
+                + " AND " + PhoenixDatabaseMetaData.SEQUENCE_NAME + " = '" + sequenceName + "'" ).executeUpdate();
     }
     
     /**
@@ -1204,7 +1204,7 @@ public class MetaDataUtil {
                 }
                 buf.setCharAt(buf.length() - 1, ')');
             }
-            connection.createStatement().execute(buf.toString());
+            connection.prepareStatement(buf.toString()).execute();
         } finally {
             connection.setAutoCommit(isAutoCommit);
         }

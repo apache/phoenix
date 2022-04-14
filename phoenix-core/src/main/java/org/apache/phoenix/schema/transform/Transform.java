@@ -488,7 +488,11 @@ public class Transform {
         connection.setAutoCommit(false);
         List<TableInfo> viewsToUpdateCache = new ArrayList<>();
         try {
-            connection.createStatement().execute(changeTable);
+            try {
+                connection.prepareStatement(changeTable).execute();
+            } catch (SQLException e) {
+                throw new SQLException("Error during cutover via change table");
+            }
 
             // Update column qualifiers
             PTable pNewTable = PhoenixRuntime.getTable(connection, systemTransformRecord.getNewPhysicalTableName());
@@ -525,7 +529,11 @@ public class Transform {
                         Bytes.toString(view.getTableName()),
                         (columnValues.size() > 0? "," + String.join(",", columnValues):""));
                 LOGGER.info("Cutover changing view via " + changeView);
-                connection.createStatement().execute(changeView);
+                try {
+                    connection.prepareStatement(changeView).execute();
+                } catch (SQLException e) {
+                    throw new SQLException("Error during cutover via change views");
+                }
                 viewsToUpdateCache.add(view);
                 batchSize++;
                 if (batchSize >= maxBatchSize) {
