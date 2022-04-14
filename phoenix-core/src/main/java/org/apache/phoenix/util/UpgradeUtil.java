@@ -420,7 +420,7 @@ public class UpgradeUtil {
                                 + " AND TENANT_ID "+(tenantId == null ? "IS NULL " : "='" + tenantId + "'")
                                 + " and TABLE_NAME='" + indexTableName
                                 + "' AND COLUMN_NAME IS NOT NULL AND KEY_SEQ > "+ numColumnsToSkip +" ORDER BY KEY_SEQ";
-                ResultSet getColumnsRs = globalConnection.createStatement().executeQuery(getColumns);
+                ResultSet getColumnsRs = globalConnection.prepareStatement(getColumns).executeQuery();
                 List<String> indexedColumns = new ArrayList<String>(1);
                 List<String> coveredColumns = new ArrayList<String>(1);
                 
@@ -479,11 +479,12 @@ public class UpgradeUtil {
                     localConnection = new PhoenixConnection(globalConnection, globalConnection.getQueryServices(), props);
                 }
                 try {
-                    (localConnection == null ? globalConnection : localConnection).createStatement().execute(
+                    (localConnection == null ? globalConnection : localConnection).prepareStatement(
                         "DROP INDEX IF EXISTS " + indexTableName + " ON "
-                                + SchemaUtil.getTableName(schemaName, dataTableName));
+                                + SchemaUtil.getTableName(schemaName, dataTableName)).execute();
                     LOGGER.info("Recreating the index " + indexTableName);
-                    (localConnection == null ? globalConnection : localConnection).createStatement().execute(createIndex.toString());
+                    (localConnection == null ? globalConnection : localConnection).prepareStatement(
+                            createIndex.toString()).execute();
                     LOGGER.info("Created the index " + indexTableName);
                 } finally {
                     props.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
@@ -1703,8 +1704,8 @@ public class UpgradeUtil {
                 "AND ROW_KEY_ORDER_OPTIMIZABLE IS NULL\n" +
                 "AND TABLE_TYPE IN ('" + PTableType.TABLE.getSerializedValue() + "','" + otherType.getSerializedValue() + "')\n" +
                 "AND (TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN " + getTableRVC(tableNames);
-        rs = conn.createStatement().executeQuery(query);
-        
+        rs = conn.prepareStatement(query).executeQuery();
+
         while (rs.next()) {
             if (PTableType.TABLE.getSerializedValue().equals(rs.getString(4))) {
                 physicalTables.add(SchemaUtil.getTableName(rs.getString(2), rs.getString(3)));
@@ -1870,7 +1871,7 @@ public class UpgradeUtil {
                 String theTenantId = tableNames.get(i);
                 String theSchemaName = tableNames.get(i+1);
                 String theTableName = tableNames.get(i+2);
-                globalConn.createStatement().execute("UPSERT INTO " + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + 
+                globalConn.prepareStatement("UPSERT INTO " + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME +
                     " (" + PhoenixDatabaseMetaData.TENANT_ID + "," +
                            PhoenixDatabaseMetaData.TABLE_SCHEM + "," +
                            PhoenixDatabaseMetaData.TABLE_NAME + "," +
@@ -1879,7 +1880,7 @@ public class UpgradeUtil {
                            "'" + (theTenantId == null ? StringUtil.EMPTY_STRING : theTenantId) + "'," +
                            "'" + (theSchemaName == null ? StringUtil.EMPTY_STRING : theSchemaName) + "'," +
                            "'" + theTableName + "'," +
-                           "TRUE)");
+                           "TRUE)").execute();
             }
             globalConn.commit();
             for (int i = 0; i < tableNames.size(); i += 3) {
@@ -2009,7 +2010,7 @@ public class UpgradeUtil {
                 "AND COLUMN_FAMILY = '" + physicalName + "'\n" + 
                 "AND LINK_TYPE = " + LinkType.PHYSICAL_TABLE.getSerializedValue() + "\n" +
                 "ORDER BY TENANT_ID";
-        ResultSet rs = globalConn.createStatement().executeQuery(query);
+        ResultSet rs = globalConn.prepareStatement(query).executeQuery();
         String lastTenantId = null;
         Connection conn = globalConn;
         String url = globalConn.getURL();
@@ -2406,7 +2407,7 @@ public class UpgradeUtil {
                 + "," + MAX_VALUE + "," + CYCLE_FLAG + "," + LIMIT_REACHED_FLAG + " FROM "
                 + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE " + PhoenixDatabaseMetaData.TENANT_ID
                 + " IS NULL AND " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + oldSchemaName + "'";
-        connection.createStatement().executeUpdate(upsert);
+        connection.prepareStatement(upsert).executeUpdate();
     }
 
     private static void updateLink(PhoenixConnection conn, String srcTableName,
