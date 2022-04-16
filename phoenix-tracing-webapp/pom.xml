@@ -32,7 +32,7 @@
     <properties>
        <!-- tracing webapp only versions -->
        <servlet.api.version>3.1.0</servlet.api.version>
-       <jetty.version>9.4.43.v20210629</jetty.version>
+       <jetty.version>9.4.44.v20210927</jetty.version>
     </properties>
 
 
