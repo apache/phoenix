@@ -20,6 +20,8 @@ package org.apache.phoenix.jdbc;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQL_COUNTER;
+import static org.apache.phoenix.query.QueryConstants.GENERATE_QUERYID_DEFAULT_ENABLED;
+import static org.apache.phoenix.query.QueryConstants.GENERATE_QUERYID_ENABLED;
 
 import java.io.File;
 import java.io.IOException;
@@ -53,7 +55,6 @@ import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.BaseMutationPlan;
 import org.apache.phoenix.compile.CloseStatementCompiler;
 import org.apache.phoenix.compile.ColumnProjector;
-import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.CreateFunctionCompiler;
 import org.apache.phoenix.compile.CreateIndexCompiler;
 import org.apache.phoenix.compile.CreateSchemaCompiler;
@@ -193,6 +194,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.queryid.QueryIdUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -293,6 +295,10 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     private PhoenixResultSet executeQuery(final CompilableStatement stmt,
         final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger) throws SQLException {
         GLOBAL_SELECT_SQL_COUNTER.increment();
+        if (queryId == null && connection.getQueryServices().getProps()
+                .getBoolean(GENERATE_QUERYID_ENABLED, GENERATE_QUERYID_DEFAULT_ENABLED)) {
+            queryId = QueryIdUtil.GetQueryId(connection.getQueryServices().getProps());
+        }
 
         try {
             return CallRunner.run(
@@ -393,6 +399,10 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             throw new SQLExceptionInfo.Builder(
                 SQLExceptionCode.READ_ONLY_CONNECTION).
                 build().buildException();
+        }
+        if (queryId == null && connection.getQueryServices().getProps()
+                .getBoolean(GENERATE_QUERYID_ENABLED, GENERATE_QUERYID_DEFAULT_ENABLED)) {
+            queryId = QueryIdUtil.GetQueryId(connection.getQueryServices().getProps());
         }
 	    GLOBAL_MUTATION_SQL_COUNTER.increment();
         try {

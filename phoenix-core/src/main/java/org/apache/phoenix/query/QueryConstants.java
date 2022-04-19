@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.query;
 
-
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 
@@ -530,4 +529,12 @@ public interface QueryConstants {
                 + SystemTaskSplitPolicy.class.getName() + "',\n" +
             TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
             STORE_NULLS + "=" + Boolean.TRUE;
+
+    // Constants related to QueryId
+    String GENERATE_QUERYID_ENABLED = "phoenix.queryid.generate.enabled";
+    String GENERATE_QUERYID_IMPLEMENTATION = "phoenix.queryid.generate.implementation";
+    boolean GENERATE_QUERYID_DEFAULT_ENABLED = false;
+    String
+            GENERATE_QUERYID_DEFAUlT_IMPLEMENTATION =
+            "org.apache.phoenix.util.queryid.RandomQueryIdGenerator";
 }
