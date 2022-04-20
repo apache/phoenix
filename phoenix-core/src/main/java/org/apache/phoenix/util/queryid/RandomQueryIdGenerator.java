@@ -28,7 +28,7 @@ public class RandomQueryIdGenerator implements QueryIdHandler {
     RandomQueryIdGenerator() {
     }
 
-    @Override public String GetQueryId(ReadOnlyProps props) {
+    @Override public String getQueryId(ReadOnlyProps props) {
         return UUID.randomUUID().toString();
     }
 }

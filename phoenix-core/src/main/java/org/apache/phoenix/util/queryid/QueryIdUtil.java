@@ -39,7 +39,7 @@ public class QueryIdUtil {
                     queryIdHandler =
                     getHandler(props.get(QueryConstants.GENERATE_QUERYID_IMPLEMENTATION,
                             GENERATE_QUERYID_DEFAUlT_IMPLEMENTATION));
-            queryId = queryIdHandler.GetQueryId(props);
+            queryId = queryIdHandler.getQueryId(props);
         } catch (Exception exception) {
             LOG.error("An exception occurred while getting QueryId", exception);
         }

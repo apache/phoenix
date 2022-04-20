@@ -26,5 +26,5 @@ public interface QueryIdHandler {
      * @param props Connection properties
      * @return QueryId
      */
-    String GetQueryId(ReadOnlyProps props);
+    String getQueryId(ReadOnlyProps props);
 }
