@@ -21,6 +21,9 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HStore;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionContext;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
+import org.apache.hadoop.hbase.regionserver.throttle.NoLimitThroughputController;
 import org.apache.hadoop.hbase.snapshot.SnapshotTestingUtils;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Threads;
@@ -49,6 +52,7 @@ import java.sql.Connection;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -125,8 +129,13 @@ public class MutableIndexExtendedIT extends ParallelStatsDisabledIT {
             HRegion hRegion = regions.get(0);
             hRegion.flush(true);
             HStore store = hRegion.getStore(famBytes);
+            // Trigger major compaction
             store.triggerMajorCompaction();
-            store.compactRecentForTestingAssumingDefaultPolicy(1);
+            Optional<CompactionContext> requestCompaction =
+                store.requestCompaction(org.apache.hadoop.hbase.regionserver.Store.PRIORITY_USER,
+                    CompactionLifeCycleTracker.DUMMY, null);
+            store.compact(requestCompaction.get(), NoLimitThroughputController.INSTANCE, null);
+            assertEquals(1, store.getStorefiles().size());
 
             // we should be able to compact syscat itself as well
             regions =
@@ -135,8 +144,13 @@ public class MutableIndexExtendedIT extends ParallelStatsDisabledIT {
             hRegion = regions.get(0);
             hRegion.flush(true);
             store = hRegion.getStore(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+            // Trigger major compaction
             store.triggerMajorCompaction();
-            store.compactRecentForTestingAssumingDefaultPolicy(1);
+            requestCompaction =
+                store.requestCompaction(org.apache.hadoop.hbase.regionserver.Store.PRIORITY_USER,
+                    CompactionLifeCycleTracker.DUMMY, null);
+            store.compact(requestCompaction.get(), NoLimitThroughputController.INSTANCE, null);
+            assertEquals(1, store.getStorefiles().size());
         }
     }
 

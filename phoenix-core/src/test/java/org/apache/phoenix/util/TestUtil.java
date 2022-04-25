@@ -810,14 +810,23 @@ public class TestUtil {
     public static void majorCompact(HBaseTestingUtility utility, TableName table)
         throws IOException, InterruptedException {
         long compactionRequestedSCN = EnvironmentEdgeManager.currentTimeMillis();
-        Admin admin = utility.getHBaseAdmin();
+        Admin admin = utility.getAdmin();
         admin.majorCompact(table);
         long lastCompactionTimestamp;
         CompactionState state = null;
-        while ((lastCompactionTimestamp = admin.getLastMajorCompactionTimestamp(table))
-            < compactionRequestedSCN
-            || (state = admin.getCompactionState(table)).equals(CompactionState.MAJOR)
-            || admin.getCompactionState(table).equals(CompactionState.MAJOR_AND_MINOR)){
+        CompactionState previousState = null;
+        while ((state = admin.getCompactionState(table)).equals(CompactionState.MAJOR)
+                || state.equals(CompactionState.MAJOR_AND_MINOR)
+                || (lastCompactionTimestamp =
+                        admin.getLastMajorCompactionTimestamp(table)) < compactionRequestedSCN) {
+            // In HBase 2.5 getLastMajorCompactionTimestamp doesn't seem to get updated when the
+            // clock is stopped, so check for the state going to NONE instead
+            if (state.equals(CompactionState.NONE) && (previousState != null
+                    && previousState.equals(CompactionState.MAJOR_AND_MINOR)
+                    || previousState.equals(CompactionState.MAJOR))) {
+                break;
+            }
+            previousState = state;
             Thread.sleep(100);
         }
     }

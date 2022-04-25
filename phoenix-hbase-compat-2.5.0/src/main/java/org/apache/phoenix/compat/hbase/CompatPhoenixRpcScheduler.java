@@ -15,10 +15,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.compat.hbase;
 
-public class HbaseCompatCapabilities {
-    // Currently every supported HBase version has the same capabilities, so there is
-    // nothing in here.
+import java.io.IOException;
+
+import org.apache.hadoop.hbase.ipc.CallRunner;
+import org.apache.hadoop.hbase.ipc.RpcScheduler;
+
+/**
+ * {@link RpcScheduler} that first checks to see if this is an index or metadata update before
+ * passing off the call to the delegate {@link RpcScheduler}.
+ */
+public abstract class CompatPhoenixRpcScheduler extends RpcScheduler {
+    protected RpcScheduler delegate;
+
+    @Override
+    public boolean dispatch(CallRunner task) {
+        try {
+            return compatDispatch(task);
+        } catch (Exception e) {
+            //This never happens with Hbase 2.5
+            throw new RuntimeException(e);
+        }
+    }
+
+    public abstract boolean compatDispatch(CallRunner task)
+            throws IOException, InterruptedException;
 }

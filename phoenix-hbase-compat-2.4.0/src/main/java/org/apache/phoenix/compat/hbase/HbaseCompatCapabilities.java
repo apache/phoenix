@@ -19,8 +19,6 @@
 package org.apache.phoenix.compat.hbase;
 
 public class HbaseCompatCapabilities {
-
-    // Currently each supported HBase version has the same capabilities, so there is
-    // nothing in here. 
-
+    // Currently every supported HBase version has the same capabilities, so there is
+    // nothing in here.
 }

@@ -46,7 +46,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.List;
 import java.util.ArrayList;
-
+import java.util.Arrays;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
@@ -59,6 +59,9 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
     private static final String CREATE_TABLE = "CREATE TABLE %s";
     private static final String CREATE_INDEX = "CREATE %sINDEX %s ON %s";
     private static final String CREATE_VIEW = "CREATE VIEW %s%s AS SELECT * FROM %s%s";
+    private static final List<String> QUOTE_PROPERTIES =
+            //Copying here, because this only exists in Hbase 2.5+
+            Arrays.asList(new String[] {"hbase.store.file-tracker.impl"});
 
     private PTable table;
     private Configuration conf;
@@ -399,7 +402,9 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             String columnFamilyName = QueryConstants.DEFAULT_COLUMN_FAMILY;
 
             String[] colPropKey = key.split("\\.");
-            if (colPropKey.length > 1) {
+            if (QUOTE_PROPERTIES.contains(key)) {
+                key = "\"" + key + "\"";
+            } else if (colPropKey.length > 1) {
                 columnFamilyName = colPropKey[0];
                 key = colPropKey[1];
             }

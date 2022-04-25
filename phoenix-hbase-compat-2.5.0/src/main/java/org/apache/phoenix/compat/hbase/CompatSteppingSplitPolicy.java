@@ -15,10 +15,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.compat.hbase;
 
-public class HbaseCompatCapabilities {
-    // Currently every supported HBase version has the same capabilities, so there is
-    // nothing in here.
+import org.apache.hadoop.hbase.regionserver.SteppingSplitPolicy;
+
+public class CompatSteppingSplitPolicy extends SteppingSplitPolicy {
+
 }

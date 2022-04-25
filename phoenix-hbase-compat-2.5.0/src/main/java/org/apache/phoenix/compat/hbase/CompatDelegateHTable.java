@@ -15,10 +15,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.compat.hbase;
 
-public class HbaseCompatCapabilities {
-    // Currently every supported HBase version has the same capabilities, so there is
-    // nothing in here.
+import java.io.IOException;
+
+import org.apache.hadoop.hbase.client.RegionLocator;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.RowMutations;
+import org.apache.hadoop.hbase.client.Table;
+
+public abstract class CompatDelegateHTable implements Table {
+
+    protected final Table delegate;
+
+    public CompatDelegateHTable(Table delegate) {
+        this.delegate = delegate;
+    }
+
+    @Override
+    public RegionLocator getRegionLocator() throws IOException {
+        return delegate.getRegionLocator();
+    }
+
+    @Override
+    public Result mutateRow(RowMutations rm) throws IOException {
+        return delegate.mutateRow(rm);
+    }
 }
