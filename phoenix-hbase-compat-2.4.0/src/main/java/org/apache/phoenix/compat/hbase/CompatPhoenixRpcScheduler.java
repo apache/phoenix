@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.compat.hbase;
 
+import java.io.IOException;
+
+import org.apache.hadoop.hbase.ipc.CallRunner;
 import org.apache.hadoop.hbase.ipc.RpcScheduler;
 
 /**
@@ -25,4 +28,12 @@ import org.apache.hadoop.hbase.ipc.RpcScheduler;
  */
 public abstract class CompatPhoenixRpcScheduler extends RpcScheduler {
     protected RpcScheduler delegate;
+
+    @Override
+    public boolean dispatch(CallRunner task) throws IOException, InterruptedException {
+        return compatDispatch(task);
+    }
+
+    public abstract boolean compatDispatch(CallRunner task)
+            throws IOException, InterruptedException;
 }
