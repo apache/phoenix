@@ -907,7 +907,8 @@ public class MetaDataUtil {
                 + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
                 + " WHERE " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA
                 + (schemaName.length() > 0 ? "='" + schemaName + "'" : " IS NULL")
-                + " AND " + PhoenixDatabaseMetaData.SEQUENCE_NAME + " = '" + sequenceName + "'" ).executeUpdate();
+                + " AND " + PhoenixDatabaseMetaData.SEQUENCE_NAME + " = '" + sequenceName + "'")
+                .executeUpdate();
     }
     
     /**
