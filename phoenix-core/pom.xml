@@ -40,7 +40,6 @@
      <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>${maven-enforcer-plugin.version}</version>
           <configuration>
             <rules>
               <evaluateBeanshell>
@@ -57,13 +56,7 @@
                   hbasePatch = Integer.parseInt(versionMatcher.group(3));
 
                   hbaseMajor == 2 &amp;&amp; (
-                    ("${hbase.compat.version}".equals("2.1.6")
-                      &amp;&amp; hbaseMinor == 1
-                      &amp;&amp; hbasePatch &gt;=6)
-                    || ("${hbase.compat.version}".equals("2.2.5")
-                      &amp;&amp; hbaseMinor == 2
-                      &amp;&amp; hbasePatch &gt;=5)
-                    || ("${hbase.compat.version}".equals("2.3.0")
+                    ("${hbase.compat.version}".equals("2.3.0")
                       &amp;&amp; hbaseMinor == 3
                       &amp;&amp; hbasePatch &gt;=0)
                     || ("${hbase.compat.version}".equals("2.4.0")
@@ -338,7 +331,6 @@
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-zookeeper</artifactId>
     </dependency>
-
     <dependency>
       <groupId>org.apache.hbase.thirdparty</groupId>
       <artifactId>hbase-shaded-miscellaneous</artifactId>
@@ -546,6 +538,10 @@
       <artifactId>zookeeper</artifactId>
     </dependency>
     <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper-jute</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.thrift</groupId>
       <artifactId>libthrift</artifactId>
     </dependency>
@@ -581,82 +577,4 @@
     </dependency>
 
   </dependencies>
-
-<profiles>
-  <profile>
-    <id>phoenix-hbase-compat-2.3.0</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.3</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.3</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.4.0</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.4.0</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.4.0</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.4.1</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.4</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.4</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.4.1-default</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>!hbase.profile</name>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.4</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-</profiles>
 </project>

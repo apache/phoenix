@@ -18,7 +18,7 @@
 
 package org.apache.phoenix.end2end;
 
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.query.BaseTest;
@@ -28,7 +28,6 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -58,7 +57,7 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
+        props.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }

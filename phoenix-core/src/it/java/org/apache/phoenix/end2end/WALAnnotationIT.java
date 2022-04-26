@@ -29,8 +29,6 @@ import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.wal.WAL;
 import org.apache.hadoop.hbase.wal.WALKey;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatIndexRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
@@ -102,7 +100,6 @@ public class WALAnnotationIT extends BaseTest {
 
     @Test
     public void testSimpleUpsertAndDelete() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         SchemaBuilder builder = new SchemaBuilder(getUrl());
         boolean createGlobalIndex = false;
         String externalSchemaId = upsertAndDeleteHelper(builder, createGlobalIndex);
@@ -111,7 +108,6 @@ public class WALAnnotationIT extends BaseTest {
 
     @Test
     public void testNoAnnotationsIfChangeDetectionDisabled() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(true);
             SchemaBuilder builder = new SchemaBuilder(getUrl());
@@ -153,7 +149,6 @@ public class WALAnnotationIT extends BaseTest {
 
     @Test
     public void testCantSetChangeDetectionOnIndex() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             SchemaBuilder builder = new SchemaBuilder(getUrl());
             builder.withTableDefaults().build();
@@ -174,7 +169,6 @@ public class WALAnnotationIT extends BaseTest {
 
     @Test
     public void testUpsertAndDeleteWithGlobalIndex() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         SchemaBuilder builder = new SchemaBuilder(getUrl());
         boolean createGlobalIndex = true;
         String externalSchemaId = upsertAndDeleteHelper(builder, createGlobalIndex);
@@ -228,7 +222,6 @@ public class WALAnnotationIT extends BaseTest {
 
     @Test
     public void testUpsertSelectClientSide() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         try (Connection conn = getConnection()) {
             SchemaBuilder baseBuilder = new SchemaBuilder(getUrl());
             SchemaBuilder targetBuilder = new SchemaBuilder(getUrl());
@@ -261,7 +254,6 @@ public class WALAnnotationIT extends BaseTest {
 
     @Test
     public void testUpsertSelectServerSide() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         Assume.assumeFalse(isImmutable); //only mutable tables can be processed server-side
         SchemaBuilder targetBuilder = new SchemaBuilder(getUrl());
         try (Connection conn = getConnection()) {
@@ -284,7 +276,6 @@ public class WALAnnotationIT extends BaseTest {
 
     @Test
     public void testGroupedUpsertSelect() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         // because we're inserting to a different table than we're selecting from, this should be
         // processed client-side
         SchemaBuilder baseBuilder = new SchemaBuilder(getUrl());
@@ -312,7 +303,6 @@ public class WALAnnotationIT extends BaseTest {
     }
 
     private void testRangeDeleteHelper(boolean isClientSide) throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         SchemaBuilder builder = new SchemaBuilder(getUrl());
         builder.withTableOptions(getTableOptions()).build();
         try (Connection conn = getConnection()) {
@@ -344,7 +334,6 @@ public class WALAnnotationIT extends BaseTest {
 
     @Test
     public void testGlobalViewUpsert() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         SchemaBuilder builder = new SchemaBuilder(getUrl());
         try (Connection conn = getConnection()) {
             createGlobalViewHelper(builder, conn);
@@ -379,7 +368,6 @@ public class WALAnnotationIT extends BaseTest {
 
     @Test
     public void testTenantViewUpsert() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         Assume.assumeTrue(isMultiTenant);
         boolean createIndex = false;
         tenantViewHelper(createIndex);
@@ -433,7 +421,6 @@ public class WALAnnotationIT extends BaseTest {
 
     @Test
     public void testTenantViewUpsertWithIndex() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         Assume.assumeTrue(isMultiTenant);
         tenantViewHelper(true);
     }
@@ -441,7 +428,6 @@ public class WALAnnotationIT extends BaseTest {
     @Test
     public void testOnDuplicateUpsertWithIndex() throws Exception {
         Assume.assumeFalse(this.isImmutable); // on duplicate is not supported for immutable tables
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         SchemaBuilder builder = new SchemaBuilder(getUrl());
         try (Connection conn = getConnection()) {
             SchemaBuilder.TableOptions tableOptions = getTableOptions();
@@ -540,7 +526,7 @@ public class WALAnnotationIT extends BaseTest {
                                  RegionInfo info, WALKey logKey, WALEdit logEdit) throws IOException {
             TableName tableName = logKey.getTableName();
             Map<String, byte[]> annotationMap =
-                CompatIndexRegionObserver.getAttributeValuesFromWALKey(logKey);
+                IndexRegionObserver.getAttributeValuesFromWALKey(logKey);
             if (annotationMap.size() > 0) {
                 if (!walAnnotations.containsKey(tableName)) {
                     walAnnotations.put(tableName, new ArrayList<Map<String, byte[]>>());

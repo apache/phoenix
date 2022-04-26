@@ -122,6 +122,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
+import org.apache.hadoop.hbase.RegionMetrics;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -2090,7 +2091,49 @@ public abstract class BaseTest {
     protected synchronized static boolean isAnyStoreRefCountLeaked()
             throws IOException {
         if (getUtility() != null) {
-            return CompatUtil.isAnyStoreRefCountLeaked(getUtility().getAdmin());
+            return isAnyStoreRefCountLeaked(getUtility().getAdmin());
+        }
+        return false;
+    }
+
+    /**
+     * HBase 2.3+ has storeRefCount available in RegionMetrics
+     *
+     * @param admin Admin instance
+     * @return true if any region has refCount leakage
+     * @throws IOException if something went wrong while connecting to Admin
+     */
+    public synchronized static boolean isAnyStoreRefCountLeaked(Admin admin)
+            throws IOException {
+        int retries = 5;
+        while (retries > 0) {
+            boolean isStoreRefCountLeaked = isStoreRefCountLeaked(admin);
+            if (!isStoreRefCountLeaked) {
+                return false;
+            }
+            retries--;
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                LOGGER.error("Interrupted while sleeping", e);
+                break;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isStoreRefCountLeaked(Admin admin)
+            throws IOException {
+        for (ServerName serverName : admin.getRegionServers()) {
+            for (RegionMetrics regionMetrics : admin.getRegionMetrics(serverName)) {
+                int regionTotalRefCount = regionMetrics.getStoreRefCount();
+                if (regionTotalRefCount > 0) {
+                    LOGGER.error("Region {} has refCount leak. Total refCount"
+                            + " of all storeFiles combined for the region: {}",
+                        regionMetrics.getNameAsString(), regionTotalRefCount);
+                    return true;
+                }
+            }
         }
         return false;
     }

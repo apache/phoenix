@@ -158,9 +158,6 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         Scan indexScan = prepareIndexScan(expectedIndexMutationMap);
         try (ResultScanner resultScanner = indexHTable.getScanner(indexScan)) {
             for (Result result = resultScanner.next(); (result != null); result = resultScanner.next()) {
-                if (!isRawFilterSupported && !expectedIndexMutationMap.containsKey(result.getRow())) {
-                        continue;
-                }
                 ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
                 List<Mutation> mutationList = prepareActualIndexMutations(result);
                 actualIndexMutationMap.put(result.getRow(), mutationList);

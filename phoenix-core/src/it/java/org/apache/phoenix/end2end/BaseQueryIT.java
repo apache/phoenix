@@ -27,7 +27,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.runner.RunWith;
@@ -154,7 +153,7 @@ public abstract class BaseQueryIT extends ParallelStatsDisabledIT {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : INDEX_DDLS) {
             for (boolean columnEncoded : new boolean[]{false, true}) {
-                testCases.add(new Object[] { indexDDL, columnEncoded, !HbaseCompatCapabilities.isLookbackBeyondDeletesSupported()});
+                testCases.add(new Object[] { indexDDL, columnEncoded, true});
             }
         }
         return testCases;

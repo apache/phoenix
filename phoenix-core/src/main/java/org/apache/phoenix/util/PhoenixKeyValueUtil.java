@@ -178,7 +178,7 @@ public class PhoenixKeyValueUtil {
         long size = 0;
         for (Entry<byte [], List<Cell>> entry : m.getFamilyCellMap().entrySet()) {
             for (Cell c : entry.getValue()) {
-                size += CompatUtil.getCellSerializedSize(c);
+                size += c.getSerializedSize();
             }
         }
         return size;

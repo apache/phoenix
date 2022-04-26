@@ -76,8 +76,6 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatIndexRegionObserver;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner;
@@ -145,8 +143,7 @@ import static org.apache.phoenix.index.PhoenixIndexBuilder.ATOMIC_OP_ATTRIB;
  * Phoenix always does batch mutations.
  * <p>
  */
-public class IndexRegionObserver extends CompatIndexRegionObserver implements RegionCoprocessor,
-    RegionObserver {
+public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
     private static final Logger LOG = LoggerFactory.getLogger(IndexRegionObserver.class);
     private static final OperationStatus IGNORE = new OperationStatus(OperationStatusCode.SUCCESS);
@@ -1243,7 +1240,7 @@ public class IndexRegionObserver extends CompatIndexRegionObserver implements Re
     @Override
     public void preWALAppend(ObserverContext<RegionCoprocessorEnvironment> c, WALKey key,
                              WALEdit edit) {
-        if (HbaseCompatCapabilities.hasPreWALAppend() && shouldWALAppend) {
+        if (shouldWALAppend) {
             BatchMutateContext context = getBatchMutateContext(c);
             WALAnnotationUtil.appendMutationAttributesToWALKey(key, context);
         }
@@ -1639,5 +1636,17 @@ public class IndexRegionObserver extends CompatIndexRegionObserver implements Re
             }
         }
         return Lists.newArrayList(latestColVals.values());
+    }
+
+    public static void appendToWALKey(WALKey key, String attrKey, byte[] attrValue) {
+        key.addExtendedAttribute(attrKey, attrValue);
+    }
+
+    public static byte[] getAttributeValueFromWALKey(WALKey key, String attrKey) {
+        return key.getExtendedAttribute(attrKey);
+    }
+
+    public static Map<String, byte[]> getAttributeValuesFromWALKey(WALKey key) {
+        return new HashMap<String, byte[]>(key.getExtendedAttributes());
     }
 }

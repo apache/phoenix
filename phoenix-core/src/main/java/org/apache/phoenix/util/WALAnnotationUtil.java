@@ -18,7 +18,6 @@ package org.apache.phoenix.util;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.wal.WALKey;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatIndexRegionObserver;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 
@@ -39,7 +38,7 @@ public class WALAnnotationUtil {
                 MutationState.MutationMetadataType.values()) {
                 String metadataTypeKey = metadataType.toString();
                 if (attrMap.containsKey(metadataTypeKey)) {
-                    CompatIndexRegionObserver.appendToWALKey(key, metadataTypeKey,
+                    IndexRegionObserver.appendToWALKey(key, metadataTypeKey,
                         attrMap.get(metadataTypeKey));
                 }
             }

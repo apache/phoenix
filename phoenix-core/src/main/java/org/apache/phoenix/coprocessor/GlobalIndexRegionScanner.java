@@ -39,8 +39,6 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import org.apache.phoenix.filter.PagedFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -163,7 +161,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     protected Map<byte[], NavigableSet<byte[]>> familyMap;
     protected IndexTool.IndexVerifyType verifyType = IndexTool.IndexVerifyType.NONE;
     protected boolean verify = false;
-    protected boolean isRawFilterSupported;
 
     public GlobalIndexRegionScanner(final RegionScanner innerScanner,
                                     final Region region,
@@ -219,7 +216,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         }
         // Create the following objects only for rebuilds by IndexTool
         hTableFactory = IndexWriterUtils.getDefaultDelegateHTableFactory(env);
-        maxLookBackInMills = CompatBaseScannerRegionObserver.getMaxLookbackInMillis(config);
+        maxLookBackInMills = BaseScannerRegionObserver.getMaxLookbackInMillis(config);
         rowCountPerTask = config.getInt(INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY,
                 DEFAULT_INDEX_VERIFY_ROW_COUNTS_PER_TASK);
 
@@ -257,7 +254,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                     new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
             nextStartKey = null;
             minTimestamp = scan.getTimeRange().getMin();
-            isRawFilterSupported = HbaseCompatCapabilities.isRawFilterSupported();
         }
     }
 
@@ -340,7 +336,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
 
     protected static boolean isTimestampBeyondMaxLookBack(long maxLookBackInMills,
             long currentTime, long tsToCheck) {
-        if (!CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(maxLookBackInMills)) {
+        if (!BaseScannerRegionObserver.isMaxLookbackTimeEnabled(maxLookBackInMills)) {
             // By definition, if the max lookback feature is not enabled, then delete markers and rows
             // version can be removed by compaction any time, and thus there is no window in which these mutations are
             // preserved, i.e.,  the max lookback window size is zero. This means all the mutations are effectively
@@ -1142,10 +1138,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         Scan indexScan = new Scan();
         indexScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
         scanRanges.initializeScan(indexScan);
-        if (isRawFilterSupported) {
-            SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
-            indexScan.setFilter(new SkipScanFilter(skipScanFilter, true));
-        }
+        SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
+        indexScan.setFilter(new SkipScanFilter(skipScanFilter, true));
         indexScan.setRaw(true);
         indexScan.readAllVersions();
         indexScan.setCacheBlocks(false);
@@ -1443,11 +1437,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         if (filter instanceof PagedFilter) {
             PagedFilter pageFilter = (PagedFilter) filter;
             Filter delegateFilter = pageFilter.getDelegateFilter();
-            if (!HbaseCompatCapabilities.isRawFilterSupported() &&
-                    (delegateFilter == null || delegateFilter instanceof FirstKeyOnlyFilter)) {
-                scan.setFilter(null);
-                return true;
-            }
             if (delegateFilter instanceof FirstKeyOnlyFilter) {
                 pageFilter.setDelegateFilter(null);
             } else if (delegateFilter != null) {

@@ -54,15 +54,6 @@ public class CompatUtil {
         //Not to be instantiated
     }
 
-    public static int getCellSerializedSize(Cell cell) {
-        return cell.getSerializedSize();
-    }
-
-    public static ListMultimap<String, ? extends Permission> readPermissions(
-            byte[] data, Configuration conf) throws DeserializationException {
-        return PermissionStorage.readPermissions(data, conf);
-    }
-
     public static HFileContext createHFileContext(Configuration conf, Algorithm compression,
             Integer blockSize, DataBlockEncoding encoding, CellComparator comparator) {
 
@@ -75,60 +66,8 @@ public class CompatUtil {
             .build();
     }
 
-    public static HFileContextBuilder withComparator(HFileContextBuilder contextBuilder,
-            CellComparatorImpl cellComparator) {
-        return contextBuilder.withCellComparator(cellComparator);
-    }
-
-    public static StoreFileWriter.Builder withComparator(StoreFileWriter.Builder builder,
-            CellComparatorImpl cellComparator) {
-        return builder;
-    }
-
     public static Scan getScanForTableName(Connection conn, TableName tableName) {
         return MetaTableAccessor.getScanForTableName(conn, tableName);
-    }
-
-    /**
-     * HBase 2.3+ has storeRefCount available in RegionMetrics
-     *
-     * @param admin Admin instance
-     * @return true if any region has refCount leakage
-     * @throws IOException if something went wrong while connecting to Admin
-     */
-    public synchronized static boolean isAnyStoreRefCountLeaked(Admin admin)
-            throws IOException {
-        int retries = 5;
-        while (retries > 0) {
-            boolean isStoreRefCountLeaked = isStoreRefCountLeaked(admin);
-            if (!isStoreRefCountLeaked) {
-                return false;
-            }
-            retries--;
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                LOGGER.error("Interrupted while sleeping", e);
-                break;
-            }
-        }
-        return true;
-    }
-
-    private static boolean isStoreRefCountLeaked(Admin admin)
-            throws IOException {
-        for (ServerName serverName : admin.getRegionServers()) {
-            for (RegionMetrics regionMetrics : admin.getRegionMetrics(serverName)) {
-                int regionTotalRefCount = regionMetrics.getStoreRefCount();
-                if (regionTotalRefCount > 0) {
-                    LOGGER.error("Region {} has refCount leak. Total refCount"
-                            + " of all storeFiles combined for the region: {}",
-                        regionMetrics.getNameAsString(), regionTotalRefCount);
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     public static ChecksumType getChecksumType(Configuration conf) {

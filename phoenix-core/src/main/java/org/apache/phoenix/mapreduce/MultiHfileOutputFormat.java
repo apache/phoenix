@@ -263,15 +263,14 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
                                         .withChecksumType(CompatUtil.getChecksumType(conf))
                                         .withBytesPerCheckSum(CompatUtil.getBytesPerChecksum(conf))
                                         .withBlockSize(blockSize)
-                                        .withDataBlockEncoding(encoding);
-              CompatUtil.withComparator(contextBuilder, CellComparatorImpl.COMPARATOR);
+                                        .withDataBlockEncoding(encoding)
+                                        .withCellComparator(CellComparatorImpl.COMPARATOR);
               HFileContext hFileContext = contextBuilder.build();
 
                 StoreFileWriter.Builder storeFileWriterBuilder =
                         new StoreFileWriter.Builder(conf, new CacheConfig(tempConf), fs)
                                 .withOutputDir(familydir).withBloomType(bloomType)
                                 .withFileContext(hFileContext);
-              CompatUtil.withComparator(storeFileWriterBuilder, CellComparatorImpl.COMPARATOR);
               wl.writer = storeFileWriterBuilder.build();
 
               // join and put it in the writers map .

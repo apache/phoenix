@@ -31,8 +31,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.CounterGroup;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.IndexRepairRegionScanner;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
@@ -94,7 +93,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.junit.Assume.assumeTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
@@ -139,7 +137,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
     public static synchronized void doSetup() throws Exception {
         // below settings are needed to enforce major compaction
         Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
-        props.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0));
+        props.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0));
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
         // to force multiple verification tasks to be spawned so that we can exercise the page splitting logic
         props.put(GlobalIndexRegionScanner.INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY, Long.toString(2));
@@ -686,7 +684,6 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testFromIndexToolForIncrementalVerify() throws Exception {
-        assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         final int NROWS = 4;
         ManualEnvironmentEdge customEdge = new ManualEnvironmentEdge();
         String schemaName = generateUniqueName();

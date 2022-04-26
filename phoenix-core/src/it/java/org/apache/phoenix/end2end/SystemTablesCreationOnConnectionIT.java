@@ -57,6 +57,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryConstants;
@@ -186,8 +187,7 @@ public class SystemTablesCreationOnConnectionIT {
                         testUtil.getHBaseCluster().getMaster() != null;
                 boolean refCountLeaked = false;
                 if (isMasterAvailable) {
-                    refCountLeaked = CompatUtil.isAnyStoreRefCountLeaked(
-                            testUtil.getAdmin());
+                    refCountLeaked = BaseTest.isAnyStoreRefCountLeaked(testUtil.getAdmin());
                 }
                 testUtil.shutdownMiniCluster();
                 testUtil = null;

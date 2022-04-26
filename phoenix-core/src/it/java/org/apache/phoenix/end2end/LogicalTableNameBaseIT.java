@@ -58,7 +58,8 @@ import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.MAX_ROWS;
 import static org.apache.phoenix.query.QueryConstants.NAMESPACE_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -72,7 +73,7 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
     static void initCluster(boolean isNamespaceMapped) throws Exception {
         Map<String, String> props = Maps.newConcurrentMap();
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
-        props.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60*1000)); // An hour
+        props.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60*1000)); // An hour
         if (isNamespaceMapped) {
             props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
         }
