@@ -62,7 +62,6 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.htrace.Span;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
@@ -761,10 +760,8 @@ public class MutationState implements SQLCloseable {
     }
 
     private void annotateMutationsWithMetadata(PTable table, List<Mutation> rowMutations) {
-        //only annotate if the change detection flag is on the table and HBase supports
-        // preWALAppend coprocs server-side
-        if (table == null || !table.isChangeDetectionEnabled()
-            || !HbaseCompatCapabilities.hasPreWALAppend()) {
+        //only annotate if the change detection flag is on the table.
+        if (table == null || !table.isChangeDetectionEnabled()) {
             return;
         }
         //annotate each mutation with enough metadata so that anyone interested can

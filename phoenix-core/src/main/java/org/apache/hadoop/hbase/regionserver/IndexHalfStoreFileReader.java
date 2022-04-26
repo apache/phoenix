@@ -30,12 +30,15 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.fs.HFileSystem;
 import org.apache.hadoop.hbase.io.FSDataInputStreamWrapper;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.Reference;
 import org.apache.hadoop.hbase.io.hfile.CacheConfig;
+import org.apache.hadoop.hbase.io.hfile.HFileInfo;
+import org.apache.hadoop.hbase.io.hfile.ReaderContext;
+import org.apache.hadoop.hbase.io.hfile.ReaderContext.ReaderType;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compat.hbase.CompatStoreFileReader;
 import org.apache.phoenix.index.IndexMaintainer;
 
 /**
@@ -53,7 +56,7 @@ import org.apache.phoenix.index.IndexMaintainer;
  * This file is not splitable. Calls to #midkey() return null.
  */
 
-public class IndexHalfStoreFileReader extends CompatStoreFileReader {
+public class IndexHalfStoreFileReader extends StoreFileReader {
     private final boolean top;
     // This is the key we split around. Its the first possible entry on a row:
     // i.e. empty column and a timestamp of LATEST_TIMESTAMP.
@@ -89,7 +92,12 @@ public class IndexHalfStoreFileReader extends CompatStoreFileReader {
             final byte[][] viewConstants, final RegionInfo regionInfo,
             byte[] regionStartKeyInHFile, byte[] splitKey, boolean primaryReplicaStoreFile,
             AtomicInteger refCount, RegionInfo currentRegion) throws IOException {
-        super(fs, p, in, size, cacheConf, primaryReplicaStoreFile, refCount, conf);
+        super(new ReaderContext(p, in, size, new HFileSystem(fs), primaryReplicaStoreFile,
+            ReaderType.STREAM),
+            new HFileInfo(new ReaderContext(p, in, size, new HFileSystem(fs),
+                    primaryReplicaStoreFile, ReaderType.STREAM), conf),
+            cacheConf, refCount, conf);
+        getHFileReader().getHFileInfo().initMetaAndIndex(getHFileReader());
         this.splitkey = splitKey == null ? r.getSplitKey() : splitKey;
         // Is it top or bottom half?
         this.top = Reference.isTopFileRegion(r.getFileRegion());

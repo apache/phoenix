@@ -21,8 +21,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyMapper;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTableOutput;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
@@ -35,7 +34,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -81,7 +79,7 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
-        props.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+        props.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
             Integer.toString(MAX_LOOKBACK));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
@@ -100,7 +98,6 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
 
     @Test
     public void testScrutinyOnRowsBeyondMaxLookBack() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isLookbackBeyondDeletesSupported());
         setupTables();
         try {
             upsertDataAndScrutinize(dataTableName, dataTableFullName, testClock);
@@ -113,7 +110,6 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
 
     @Test
     public void testScrutinyOnRowsBeyondMaxLookback_viewIndex() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isLookbackBeyondDeletesSupported());
         schema = "S"+generateUniqueName();
         dataTableName = "T"+generateUniqueName();
         dataTableFullName = SchemaUtil.getTableName(schema,dataTableName);
@@ -163,7 +159,6 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
 
     @Test
     public void testScrutinyOnDeletedRowsBeyondMaxLookBack() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isLookbackBeyondDeletesSupported());
         setupTables();
         try {
             upsertDataThenDeleteAndScrutinize(dataTableName, dataTableFullName, testClock);

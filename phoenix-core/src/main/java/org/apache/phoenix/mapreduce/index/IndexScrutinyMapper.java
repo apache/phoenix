@@ -43,7 +43,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.PhoenixJobCounters;
@@ -167,7 +167,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             LOGGER.info("Target table base query: " + targetTableQuery);
             md5 = MessageDigest.getInstance("MD5");
             ttl = getTableTtl();
-            maxLookbackAgeMillis = CompatBaseScannerRegionObserver.getMaxLookbackInMillis(configuration);
+            maxLookbackAgeMillis = BaseScannerRegionObserver.getMaxLookbackInMillis(configuration);
         } catch (SQLException | NoSuchAlgorithmException e) {
             tryClosingResourceSilently(this.outputUpsertStmt);
             tryClosingResourceSilently(this.connection);
@@ -315,7 +315,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
     }
 
     protected boolean isRowOlderThanMaxLookback(Long sourceTS){
-        if (maxLookbackAgeMillis == CompatBaseScannerRegionObserver.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE * 1000){
+        if (maxLookbackAgeMillis == BaseScannerRegionObserver.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE * 1000){
             return false;
         }
         long now =  EnvironmentEdgeManager.currentTimeMillis();

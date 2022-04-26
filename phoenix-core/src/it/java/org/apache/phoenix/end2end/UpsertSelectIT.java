@@ -48,9 +48,8 @@ import java.sql.Timestamp;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.compat.hbase.coprocessor
-        .CompatBaseScannerRegionObserver;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -84,7 +83,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         // An hour - inherited from ParallelStatsDisabledIT
         props.put(
-                CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+                BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
                 Integer.toString(60 * 60));
         // Postpone scans of SYSTEM.TASK indefinitely so as to prevent
         // any addition to GLOBAL_OPEN_PHOENIX_CONNECTIONS

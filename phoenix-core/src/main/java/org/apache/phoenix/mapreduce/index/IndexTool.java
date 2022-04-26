@@ -75,7 +75,6 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -402,11 +401,6 @@ public class IndexTool extends Configured implements Tool {
                 "VerifyType: [" + cmdLine.getOptionValue(VERIFY_OPTION.getOpt()) + "] and " +
                 "DisableLoggingType: ["
                 + cmdLine.getOptionValue(DISABLE_LOGGING_OPTION.getOpt()) + "]");
-        }
-        if ((cmdLine.hasOption(START_TIME_OPTION.getOpt()) || cmdLine.hasOption(RETRY_VERIFY_OPTION.getOpt()))
-            && !HbaseCompatCapabilities.isRawFilterSupported()) {
-            throw new IllegalStateException("Can't do incremental index verification on this " +
-                "version of HBase because raw skip scan filters are not supported.");
         }
         return cmdLine;
     }

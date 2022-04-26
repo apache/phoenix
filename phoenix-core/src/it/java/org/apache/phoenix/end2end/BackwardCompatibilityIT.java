@@ -60,6 +60,7 @@ import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
 import org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.MavenCoordinates;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.SystemTaskSplitPolicy;
@@ -125,7 +126,7 @@ public class BackwardCompatibilityIT {
 
     @After
     public synchronized void cleanUpAfterTest() throws Exception {
-        boolean refCountLeaked = CompatUtil.isAnyStoreRefCountLeaked(hbaseTestUtil.getAdmin());
+        boolean refCountLeaked = BaseTest.isAnyStoreRefCountLeaked(hbaseTestUtil.getAdmin());
         ConnectionFactory.shutdown();
         try {
             DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);

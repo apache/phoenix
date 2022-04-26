@@ -65,6 +65,7 @@ import org.apache.phoenix.hbase.index.covered.ColumnGroup;
 import org.apache.phoenix.hbase.index.covered.CoveredColumn;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnIndexSpecifierBuilder;
 import org.apache.phoenix.hbase.index.util.TestIndexManagementUtil;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ConfigUtil;
 import org.junit.After;
@@ -157,7 +158,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
 
   @After
   public void tearDown() throws Exception {
-    boolean refCountLeaked = CompatUtil.isAnyStoreRefCountLeaked(
+    boolean refCountLeaked = BaseTest.isAnyStoreRefCountLeaked(
         UTIL.getAdmin());
     UTIL.shutdownMiniHBaseCluster();
     UTIL.shutdownMiniDFSCluster();

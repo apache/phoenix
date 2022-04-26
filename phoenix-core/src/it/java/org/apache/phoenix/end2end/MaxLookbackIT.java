@@ -22,8 +22,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -36,7 +35,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -68,23 +66,17 @@ public class MaxLookbackIT extends BaseTest {
     private StringBuilder optionBuilder;
     ManualEnvironmentEdge injectEdge;
     private int ttl;
-    //max lookback isn't supported in HBase 2.1 and 2.2 because of missing coprocessor
-    // interfaces; see HBASE-24321
-    private final static boolean isMaxLookbackSupported =
-            HbaseCompatCapabilities.isMaxLookbackTimeSupported();
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        Assume.assumeTrue(isMaxLookbackSupported);
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
-        props.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
+        props.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     @Before
     public void beforeTest(){
-        Assume.assumeTrue(isMaxLookbackSupported);
         EnvironmentEdgeManager.reset();
         optionBuilder = new StringBuilder();
         this.tableDDLOptions = optionBuilder.toString();
@@ -96,16 +88,13 @@ public class MaxLookbackIT extends BaseTest {
     @After
     public synchronized void afterTest() throws Exception {
         boolean refCountLeaked = isAnyStoreRefCountLeaked();
-        if (!isMaxLookbackSupported) {
-            return;
-        }
+
         EnvironmentEdgeManager.reset();
         assertFalse("refCount leaked", refCountLeaked);
     }
 
     @Test
     public void testTooLowSCNWithMaxLookbackAge() throws Exception {
-        Assume.assumeTrue(isMaxLookbackSupported);
         String dataTableName = generateUniqueName();
         createTable(dataTableName);
         injectEdge.setValue(System.currentTimeMillis());
@@ -131,7 +120,6 @@ public class MaxLookbackIT extends BaseTest {
 
     @Test(timeout=120000L)
     public void testRecentlyDeletedRowsNotCompactedAway() throws Exception {
-        Assume.assumeTrue(isMaxLookbackSupported);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
@@ -199,7 +187,6 @@ public class MaxLookbackIT extends BaseTest {
 
     @Test(timeout=60000L)
     public void testTTLAndMaxLookbackAge() throws Exception {
-        Assume.assumeTrue(isMaxLookbackSupported);
         ttl = 20;
         optionBuilder.append("TTL=" + ttl);
         tableDDLOptions = optionBuilder.toString();
@@ -272,7 +259,6 @@ public class MaxLookbackIT extends BaseTest {
 
     @Test(timeout=60000)
     public void testRecentMaxVersionsNotCompactedAway() throws Exception {
-        Assume.assumeTrue(isMaxLookbackSupported);
         int versions = 2;
         optionBuilder.append("VERSIONS=" + versions);
         tableDDLOptions = optionBuilder.toString();
