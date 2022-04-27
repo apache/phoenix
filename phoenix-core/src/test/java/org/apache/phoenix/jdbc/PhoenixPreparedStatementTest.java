@@ -19,9 +19,11 @@ package org.apache.phoenix.jdbc;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.*;
 import java.util.Properties;
+import java.util.UUID;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
@@ -178,4 +180,43 @@ public class PhoenixPreparedStatementTest extends BaseConnectionlessQueryTest {
         assertEquals(0, phoenixStmt.getQueryTimeoutInMillis());
     }
 
+    @Test
+    public void testQueryIdUsingExecuteQuery() throws Exception {
+        Properties connectionProperties = new Properties();
+        connectionProperties.setProperty(QueryConstants.GENERATE_QUERYID_ENABLED,
+                String.valueOf(true));
+        connectionProperties.setProperty(QueryConstants.GENERATE_QUERYID_IMPLEMENTATION,
+                QueryConstants.GENERATE_QUERYID_DEFAUlT_IMPLEMENTATION);
+        Connection connection = DriverManager.getConnection(getUrl(), connectionProperties);
+        PhoenixPreparedStatement
+                stmt =
+                (PhoenixPreparedStatement) connection.prepareStatement("SELECT * FROM " + ATABLE);
+        stmt.executeQuery();
+        String queryId = stmt.getQueryId();
+        assertTrue(isUUID(queryId));
+    }
+
+    @Test
+    public void testQueryIdUsingExecuteUpdate() throws Exception {
+        Properties connectionProperties = new Properties();
+        connectionProperties.setProperty(QueryConstants.GENERATE_QUERYID_ENABLED,
+                String.valueOf(true));
+        connectionProperties.setProperty(QueryConstants.GENERATE_QUERYID_IMPLEMENTATION,
+                QueryConstants.GENERATE_QUERYID_DEFAUlT_IMPLEMENTATION);
+        Connection connection = DriverManager.getConnection(getUrl(), connectionProperties);
+        PhoenixStatement stmt = (PhoenixStatement) connection.createStatement();
+        stmt.executeUpdate("UPSERT INTO " + ATABLE + " (organization_id, entity_id, a_integer) "
+                + "VALUES ('AAA','BBB',20)");
+        String queryId = stmt.getQueryId();
+        assertTrue(isUUID(queryId));
+    }
+
+    private boolean isUUID(String string) {
+        try {
+            UUID.fromString(string);
+            return true;
+        } catch (Exception ex) {
+            return false;
+        }
+    }
 }

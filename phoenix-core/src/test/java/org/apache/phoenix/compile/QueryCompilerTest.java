@@ -38,39 +38,26 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
 
+import com.google.inject.internal.util.$AbstractMapEntry;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.JoinCompiler.JoinTable;
 import org.apache.phoenix.compile.JoinCompiler.Table;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.execute.AggregatePlan;
-import org.apache.phoenix.execute.ClientAggregatePlan;
-import org.apache.phoenix.execute.ClientScanPlan;
-import org.apache.phoenix.execute.CursorFetchPlan;
-import org.apache.phoenix.execute.HashJoinPlan;
+import org.apache.phoenix.execute.*;
 import org.apache.phoenix.execute.HashJoinPlan.HashSubPlan;
 import org.apache.phoenix.execute.HashJoinPlan.SubPlan;
 import org.apache.phoenix.execute.HashJoinPlan.WhereClauseSubPlan;
-import org.apache.phoenix.execute.LiteralResultIterationPlan;
-import org.apache.phoenix.execute.ScanPlan;
-import org.apache.phoenix.execute.SortMergeJoinPlan;
-import org.apache.phoenix.execute.TupleProjectionPlan;
-import org.apache.phoenix.execute.TupleProjector;
-import org.apache.phoenix.execute.UnionPlan;
-import org.apache.phoenix.execute.UnnestArrayPlan;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -6779,6 +6766,55 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
            assertTrue(subPlans[1] instanceof HashSubPlan);
         } finally {
             conn.close();
+        }
+    }
+
+    @Test public void testQueryIdForScan() throws SQLException {
+        String query = "select * from atable";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String queryId = "test-query";
+        try {
+            PhoenixPreparedStatement
+                    statement =
+                    conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
+            statement.setQueryId(queryId);
+            QueryPlan plan = statement.compileQuery(query);
+            plan.iterator();
+            Scan scan = plan.getContext().getScan();
+            assertEquals(queryId, scan.getId());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testQueryIdForPut() throws SQLException {
+        Properties connectionProperties = new Properties();
+        Connection connection = DriverManager.getConnection(getUrl(), connectionProperties);
+        String queryId = "test-upsert-queryId";
+        PhoenixPreparedStatement
+                stmt =
+                (PhoenixPreparedStatement) connection.prepareStatement(
+                        "UPSERT INTO " + ATABLE + " (organization_id, entity_id, a_integer) "
+                                + "VALUES (?,?,?)");
+        stmt.setQueryId(queryId);
+        stmt.setString(1, "AAA");
+        stmt.setString(2, "BBB");
+        stmt.setInt(3, 1);
+        try {
+            MutationPlan mutationPlan = stmt.compileMutation();
+            MutationState mutationState = mutationPlan.execute();
+            Iterator<Pair<byte[], List<Mutation>>> iterator = mutationState.toMutations();
+            while (iterator.hasNext()) {
+                Pair<byte[], List<Mutation>> entry = iterator.next();
+                List<Mutation> mutations = entry.getSecond();
+                for (Mutation mutation : mutations) {
+                    assertEquals(queryId, mutation.getId());
+                }
+            }
+        } finally {
+            connection.close();
         }
     }
 }
