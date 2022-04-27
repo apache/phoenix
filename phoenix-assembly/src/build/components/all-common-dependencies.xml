@@ -24,6 +24,8 @@
       <outputDirectory>/lib</outputDirectory>
       <includes>
         <include>sqlline:sqlline:jar:jar-with-dependencies</include>
+        <include>org.slf4j:slf4j-reload4j</include>
+        <include>ch.qos.reload4j:reload4j</include>
       </includes>
     </dependencySet>
   </dependencySets>
