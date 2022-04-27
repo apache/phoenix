@@ -41,27 +41,6 @@
         <groupId>org.codehaus.mojo</groupId>
         <executions>
           <execution>
-            <id>client without version</id>
-            <phase>compile</phase>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <configuration>
-              <executable>ln</executable>
-              <workingDirectory>${project.basedir}/../phoenix-client-parent/phoenix-client/target</workingDirectory>
-              <arguments>
-                <argument>-fnsv</argument>
-                <argument>
-                  phoenix-client-${hbase.suffix}-${project.version}.jar
-                </argument>
-                <argument>
-                  <!-- We are overwriting the unshaded client JAR, but we don't care -->
-                  phoenix-client-${hbase.suffix}.jar
-                </argument>
-              </arguments>
-            </configuration>
-          </execution>
-          <execution>
             <id>embedded client without version</id>
             <phase>compile</phase>
             <goals>
@@ -167,10 +146,6 @@
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-server-${hbase.suffix}</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-client-${hbase.suffix}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
