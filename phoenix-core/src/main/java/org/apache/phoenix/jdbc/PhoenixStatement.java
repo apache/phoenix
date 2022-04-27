@@ -257,6 +257,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     private int maxRows;
     private int fetchSize = -1;
     private int queryTimeoutMillis;
+    private String queryId;
     
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
@@ -2261,5 +2262,13 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     "There are Uncommitted mutations, which will be dropped on the execution of this DDL statement.");
             }
         }
+    }
+
+    public String getQueryId() {
+        return queryId;
+    }
+
+    public void setQueryId(String queryId) {
+        this.queryId = queryId;
     }
 }
