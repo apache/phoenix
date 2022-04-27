@@ -243,7 +243,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
  * 
  * @since 0.1
  */
-public class PhoenixStatement implements Statement, SQLCloseable {
+public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable {
 	
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixStatement.class);
     
@@ -335,6 +335,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                             PhoenixResultSet rs = null;
                             try {
                                 PhoenixConnection conn = getConnection();
+                                conn.checkOpen();
 
                                 if (conn.getQueryServices().isUpgradeRequired() && !conn
                                         .isRunningUpgrade()

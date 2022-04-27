@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -208,4 +209,14 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
      */
     public void deleteMutexCell(String tenantId, String schemaName, String tableName,
             String columnName, String familyName) throws SQLException;
+
+    /**
+     * Close all phoenix connections created using this CQS.
+     *
+     * @param reasonBuilder exception builder for building reasons why connection is closed.
+     */
+    default void closeAllConnections(SQLExceptionInfo.Builder reasonBuilder) {
+        throw new UnsupportedOperationException();
+    }
+
 }

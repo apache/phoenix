@@ -141,7 +141,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * 
  * @since 0.1
  */
-public class PhoenixConnection implements Connection, MetaDataMutated, SQLCloseable {
+public class PhoenixConnection implements MetaDataMutated, SQLCloseable, PhoenixMonitoredConnection {
     private final String url;
     private String schema;
     private final ConnectionQueryServices services;
@@ -177,6 +177,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private LogLevel auditLogLevel;
     private Double logSamplingRate;
     private String sourceOfOperation;
+    private volatile SQLException reasonForClose;
     private static final String[] CONNECTION_PROPERTIES;
 
     private final ConcurrentLinkedQueue<PhoenixConnection> childConnections =
@@ -482,6 +483,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     /**
      * Add connection to the internal childConnections queue
+     * This method is thread safe
      * @param connection
      */
     public void addChildConnection(PhoenixConnection connection) {
@@ -706,19 +708,42 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         }
     }
 
-    private void checkOpen() throws SQLException {
+    void checkOpen() throws SQLException {
         if (isClosed) {
-            throw new SQLExceptionInfo.Builder(
-                    SQLExceptionCode.CONNECTION_CLOSED).build()
-                    .buildException();
+            throw reasonForClose != null
+                ? reasonForClose
+                : new SQLExceptionInfo.Builder(SQLExceptionCode.CONNECTION_CLOSED)
+                    .build()
+        
+            .buildException();
         }
     }
 
-    @Override
-    public void close() throws SQLException {
+    /**
+     * Close the Phoenix connection and also store the reason for it getting closed.
+     *
+     * @param reasonForClose The reason for closing the phoenix connection to be set as state
+     *                        in phoenix connection.
+     * @throws SQLException if error happens when closing.
+     * @see #close()
+     */
+    public void close(SQLException reasonForClose) throws SQLException {
         if (isClosed) {
             return;
         }
+        this.reasonForClose = reasonForClose;
+        close();
+    }
+
+    // A connection can be closed by calling thread, or by the high availability (HA) framework.
+    // Making this logic synchronized will enforce a connection is closed only once.
+    //Does this need to be synchronized?
+    @Override
+    synchronized public void close() throws SQLException {
+        if (isClosed) {
+            return;
+        }
+
         try {
             TableMetricsManager.pushMetricsFromConnInstanceMethod(getMutationMetrics());
             clearMetrics();
@@ -727,7 +752,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                     traceScope.close();
                 }
                 closeStatements();
-                SQLCloseables.closeAllQuietly(childConnections);
+                if (childConnections != null) {
+                    SQLCloseables.closeAllQuietly(childConnections);
+                }
+
+
             } finally {
                 services.removeConnection(this);
             }
