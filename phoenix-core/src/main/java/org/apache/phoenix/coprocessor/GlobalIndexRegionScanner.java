@@ -1434,10 +1434,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         if (filter instanceof PagedFilter) {
             PagedFilter pageFilter = (PagedFilter) filter;
             Filter delegateFilter = pageFilter.getDelegateFilter();
-            if (delegateFilter == null || delegateFilter instanceof FirstKeyOnlyFilter) {
-                scan.setFilter(null);
-                return true;
-            }
             if (delegateFilter instanceof FirstKeyOnlyFilter) {
                 pageFilter.setDelegateFilter(null);
             } else if (delegateFilter != null) {
