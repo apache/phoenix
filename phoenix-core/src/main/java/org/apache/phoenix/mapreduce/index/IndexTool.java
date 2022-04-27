@@ -26,10 +26,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.ROW_KEY_SEPARATOR;
 
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -605,21 +602,27 @@ public class IndexTool extends Configured implements Tool {
             for (String index : disableIndexes) {
                 quotedIndexes.add("'" + index + "'");
             }
-            try (ResultSet rs = connection.createStatement()
-                    .executeQuery("SELECT MAX(" + ASYNC_REBUILD_TIMESTAMP + "),MAX("+INDEX_DISABLE_TIMESTAMP+") FROM " + SYSTEM_CATALOG_NAME + " ("
-                            + ASYNC_REBUILD_TIMESTAMP + " BIGINT) WHERE " + TABLE_SCHEM
-                            + (schemaName != null && schemaName.length() > 0 ? "='" + schemaName + "'" : " IS NULL")
-                            + " and " + TABLE_NAME + " IN (" + StringUtils.join(",", quotedIndexes) + ")")) {
-                if (rs.next()) {
-                    maxRebuilAsyncDate = rs.getLong(1);
-                    maxDisabledTimeStamp = rs.getLong(2);
-                }
-                // Do check if table is disabled again after user invoked async rebuilding during the run of the job
-                if (maxRebuilAsyncDate > maxDisabledTimeStamp) {
-                    return maxRebuilAsyncDate;
-                } else {
-                    throw new RuntimeException(
-                            "Inconsistent state we have one or more index tables which are disabled after the async is called!!");
+            try (PreparedStatement stmt = connection.prepareStatement("SELECT MAX("
+                    + ASYNC_REBUILD_TIMESTAMP + "), MAX(" + INDEX_DISABLE_TIMESTAMP
+                    + ") FROM " + SYSTEM_CATALOG_NAME
+                    + " (" + ASYNC_REBUILD_TIMESTAMP + " BIGINT) WHERE " + TABLE_SCHEM
+                    + (schemaName != null && schemaName.length() > 0 ? "='"
+                    + schemaName + "'" : " IS NULL")
+                    + " and " + TABLE_NAME + " IN ("
+                    + StringUtils.join(",", quotedIndexes) + ")")) {
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        maxRebuilAsyncDate = rs.getLong(1);
+                        maxDisabledTimeStamp = rs.getLong(2);
+                    }
+                    // Do check if table is disabled again after user invoked async rebuilding
+                    // during the run of the job
+                    if (maxRebuilAsyncDate > maxDisabledTimeStamp) {
+                        return maxRebuilAsyncDate;
+                    } else {
+                        throw new RuntimeException(
+                                "Inconsistent state we have one or more index tables which are disabled after the async is called!!");
+                    }
                 }
             }
         }
