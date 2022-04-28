@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.monitoring;
 
+import org.apache.hadoop.metrics2.impl.MetricsSystemImpl;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.phoenix.log.LogLevel;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -26,6 +28,8 @@ import static org.apache.phoenix.monitoring.MetricType.RESULT_SET_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.WALL_CLOCK_TIME_MS;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+
+import java.lang.reflect.Field;
 
 @RunWith(MockitoJUnitRunner.class)
 public class MetricUtilTest {
@@ -47,5 +51,18 @@ public class MetricUtilTest {
         MetricsStopWatch metricsStopWatch = MetricUtil.getMetricsStopWatch(false,
                 LogLevel.OFF, WALL_CLOCK_TIME_MS);
         assertFalse(metricsStopWatch.getMetricsEnabled());
+    }
+
+    @Test
+    //Check that MetricsSystemImpl has a String "prefix" field in the Hadoop version we test with
+    public void testInternalMetricsField() throws NoSuchFieldException,
+            SecurityException, IllegalArgumentException, IllegalAccessException {
+        MetricsSystemImpl metrics = (MetricsSystemImpl) DefaultMetricsSystem.instance();
+        Field prefixField = MetricsSystemImpl.class.getDeclaredField("prefix");
+        prefixField.setAccessible(true);
+        String oldValue = (String)prefixField.get(metrics);
+        prefixField.set(metrics, "dummy");
+        prefixField.set(metrics, oldValue);
+        prefixField.setAccessible(false);
     }
 }
