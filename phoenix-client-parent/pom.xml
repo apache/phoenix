@@ -157,7 +157,8 @@
                   <exclude>org/omg/**</exclude>
                   <exclude>org/w3c/dom/**</exclude>
                   <exclude>org/xml/sax/**</exclude>
-  
+                  <!-- Not needed for client, we set this to provided -->
+                  <exclude>org/eclipse/jetty/**</exclude>
                   <!-- Extras compared to Hadoop -->
                   <!-- Hbase classes - Maybe these could be shaded as well ? -->
                   <exclude>org/apache/hbase/**</exclude>
@@ -204,8 +205,8 @@
                 <shadedPattern>${shaded.package}.javax.cache.</shadedPattern>
               </relocation>
               <relocation>
-                <pattern>javax/servlet/</pattern>
-                <shadedPattern>${shaded.package}.javax.servlet.</shadedPattern>
+                <pattern>javax/servlet/jsp/</pattern>
+                <shadedPattern>${shaded.package}.javax.servlet.jsp.</shadedPattern>
               </relocation>
               <relocation>
                 <pattern>javax/ws/</pattern>
