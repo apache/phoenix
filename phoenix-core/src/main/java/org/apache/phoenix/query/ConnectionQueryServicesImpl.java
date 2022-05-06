@@ -157,8 +157,9 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
-import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
+import org.apache.hadoop.hbase.ipc.controller.ServerToServerRpcController;
+import org.apache.hadoop.hbase.ipc.controller.ServerSideRPCControllerFactory;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
@@ -387,7 +388,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final int maxInternalConnectionsAllowed;
     private final boolean shouldThrottleNumConnections;
     public static final byte[] MUTEX_LOCKED = "MUTEX_LOCKED".getBytes(StandardCharsets.UTF_8);
-    private RpcControllerFactory serverSideRPCControllerFactory;
+    private ServerSideRPCControllerFactory serverSideRPCControllerFactory;
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
@@ -443,7 +444,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         //Set the rpcControllerFactory if it is a server side connnection.
         boolean isServerSideConnection = config.getBoolean(QueryUtil.IS_SERVER_CONNECTION, false);
         if (isServerSideConnection) {
-            this.serverSideRPCControllerFactory = RpcControllerFactory.instantiate(config);
+            this.serverSideRPCControllerFactory = new ServerSideRPCControllerFactory(config);
         }
         // set replication required parameter
         ConfigUtil.setReplicationConfigIfAbsent(this.config);
@@ -1814,10 +1815,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @VisibleForTesting
     protected RpcController getController(TableName systemTableName) {
         if (serverSideRPCControllerFactory != null) {
-            HBaseRpcController controller = serverSideRPCControllerFactory.newController();
+            ServerToServerRpcController controller = serverSideRPCControllerFactory.newController();
             controller.setPriority(systemTableName);
-            // TODO: remove haak
-            return (RpcController) controller;
+            return controller;
         } else {
             return new ServerRpcController();
         }

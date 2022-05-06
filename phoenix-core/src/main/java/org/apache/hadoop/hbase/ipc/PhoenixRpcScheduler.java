@@ -40,23 +40,29 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
 
     private int indexPriority;
     private int metadataPriority;
+    private int serverSidePriority;
     private RpcExecutor indexCallExecutor;
     private RpcExecutor metadataCallExecutor;
+    private RpcExecutor serverSideCallExecutor;
     private int port;
     
 
-    public PhoenixRpcScheduler(Configuration conf, RpcScheduler delegate, int indexPriority, int metadataPriority, PriorityFunction priorityFunction, Abortable abortable) {
+    public PhoenixRpcScheduler(Configuration conf, RpcScheduler delegate, int indexPriority, int metadataPriority, int serversidePriority, PriorityFunction priorityFunction, Abortable abortable) {
         // copied from org.apache.hadoop.hbase.ipc.SimpleRpcScheduler in HBase 0.98.4
     	int indexHandlerCount = conf.getInt(QueryServices.INDEX_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_HANDLER_COUNT);
-    	int metadataHandlerCount = conf.getInt(QueryServices.METADATA_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_HANDLER_COUNT);
+        int metadataHandlerCount = conf.getInt(QueryServices.METADATA_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_METADATA_HANDLER_COUNT);
+        int serverSideHandlerCount = conf.getInt(QueryServices.SERVER_SIDE_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_SERVERSIDE_HANDLER_COUNT);
         int maxIndexQueueLength =  conf.getInt(CALLQUEUE_LENGTH_CONF_KEY, indexHandlerCount*DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
         int maxMetadataQueueLength =  conf.getInt(CALLQUEUE_LENGTH_CONF_KEY, metadataHandlerCount*DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
+        int maxServerSideQueueLength =  conf.getInt(CALLQUEUE_LENGTH_CONF_KEY, serverSideHandlerCount*DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
 
         this.indexPriority = indexPriority;
         this.metadataPriority = metadataPriority;
+        this.serverSidePriority = serversidePriority;
         this.delegate = delegate;
         this.indexCallExecutor = new BalancedQueueRpcExecutor("Index", indexHandlerCount, maxIndexQueueLength, priorityFunction,conf,abortable);
         this.metadataCallExecutor = new BalancedQueueRpcExecutor("Metadata", metadataHandlerCount, maxMetadataQueueLength, priorityFunction,conf,abortable);
+        this.serverSideCallExecutor = new BalancedQueueRpcExecutor("ServerSide", serverSideHandlerCount, maxServerSideQueueLength, priorityFunction,conf,abortable);
     }
 
     @Override
@@ -70,6 +76,7 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
         delegate.start();
         indexCallExecutor.start(port);
         metadataCallExecutor.start(port);
+        serverSideCallExecutor.start(port);
     }
 
     @Override
@@ -77,6 +84,7 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
         delegate.stop();
         indexCallExecutor.stop();
         metadataCallExecutor.stop();
+        serverSideCallExecutor.stop();
     }
 
     @Override
@@ -87,6 +95,8 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
             return indexCallExecutor.dispatch(callTask);
         } else if (metadataPriority == priority) {
             return metadataCallExecutor.dispatch(callTask);
+        } else if (serverSidePriority == priority) {
+            return serverSideCallExecutor.dispatch(callTask);
         } else {
             return delegate.dispatch(callTask);
         }
@@ -101,7 +111,10 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
     public int getGeneralQueueLength() {
         // not the best way to calculate, but don't have a better way to hook
         // into metrics at the moment
-        return this.delegate.getGeneralQueueLength() + this.indexCallExecutor.getQueueLength() + this.metadataCallExecutor.getQueueLength();
+        return this.delegate.getGeneralQueueLength()
+                + this.indexCallExecutor.getQueueLength()
+                + this.metadataCallExecutor.getQueueLength()
+                + this.serverSideCallExecutor.getQueueLength();
     }
 
     @Override
@@ -116,7 +129,10 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
 
     @Override
     public int getActiveRpcHandlerCount() {
-        return this.delegate.getActiveRpcHandlerCount() + this.indexCallExecutor.getActiveHandlerCount() + this.metadataCallExecutor.getActiveHandlerCount();
+        return this.delegate.getActiveRpcHandlerCount()
+                + this.indexCallExecutor.getActiveHandlerCount()
+                + this.metadataCallExecutor.getActiveHandlerCount()
+                + this.serverSideCallExecutor.getActiveHandlerCount();
     }
 
     @Override
@@ -137,6 +153,26 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
     @VisibleForTesting
     public void setMetadataExecutorForTesting(RpcExecutor executor) {
         this.metadataCallExecutor = executor;
+    }
+
+    @VisibleForTesting
+    public void setServerSideExecutorForTesting(RpcExecutor executor) {
+        this.serverSideCallExecutor = executor;
+    }
+
+    @VisibleForTesting
+    public RpcExecutor getIndexExecutorForTesting() {
+        return this.indexCallExecutor;
+    }
+
+    @VisibleForTesting
+    public RpcExecutor getMetadataExecutorForTesting() {
+        return this.metadataCallExecutor;
+    }
+
+    @VisibleForTesting
+    public RpcExecutor getServerSideExecutorForTesting() {
+        return this.serverSideCallExecutor;
     }
 
     @Override

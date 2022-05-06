@@ -51,6 +51,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
+import org.apache.hadoop.hbase.ipc.controller.ServerToServerRpcController;
 import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -251,7 +252,7 @@ public class SystemTablesCreationOnConnectionIT {
         assertTrue(cqsi instanceof ConnectionQueryServicesTestImpl);
         ConnectionQueryServicesTestImpl testCQSI = (ConnectionQueryServicesTestImpl)cqsi;
         if (isServerSideConnection) {
-            assertTrue( testCQSI.getController() instanceof HBaseRpcController);
+            assertTrue( testCQSI.getController() instanceof ServerToServerRpcController);
         } else {
             assertTrue( testCQSI.getController() instanceof ServerRpcController);
         }

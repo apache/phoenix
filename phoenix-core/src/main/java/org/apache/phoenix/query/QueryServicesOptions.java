@@ -223,11 +223,13 @@ public class QueryServicesOptions {
      * HConstants#HIGH_QOS is the max we will see to a standard table. We go higher to differentiate
      * and give some room for things in the middle
      */
+    public static final int DEFAULT_SERVER_SIDE_PRIORITY = 500;
     public static final int DEFAULT_INDEX_PRIORITY = 1000;
     public static final int DEFAULT_METADATA_PRIORITY = 2000;
     public static final boolean DEFAULT_ALLOW_LOCAL_INDEX = true;
     public static final int DEFAULT_INDEX_HANDLER_COUNT = 30;
     public static final int DEFAULT_METADATA_HANDLER_COUNT = 30;
+    public static final int DEFAULT_SERVERSIDE_HANDLER_COUNT = 30;
     public static final int DEFAULT_SYSTEM_MAX_VERSIONS = 1;
     public static final boolean DEFAULT_SYSTEM_KEEP_DELETED_CELLS = false;
 
