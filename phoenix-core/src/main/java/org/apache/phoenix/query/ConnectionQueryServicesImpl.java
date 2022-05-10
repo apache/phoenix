@@ -851,7 +851,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         ColumnFamilyDescriptorBuilder columnDescBuilder = ColumnFamilyDescriptorBuilder.newBuilder(family.getFirst());
         if (tableType != PTableType.VIEW) {
             columnDescBuilder.setDataBlockEncoding(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING);
-            columnDescBuilder.setBloomFilterType(BloomType.NONE);
             for (Entry<String,Object> entry : family.getSecond().entrySet()) {
                 String key = entry.getKey();
                 Object value = entry.getValue();
