@@ -388,6 +388,11 @@ public interface QueryServices extends SQLCloseable {
     String SOURCE_OPERATION_ATTRIB = "phoenix.source.operation";
 
     /**
+     * Parameter to skip the system tables existence check to avoid unnecessary calls to Region server
+     * holding the SYSTEM.CATALOG table in batch oriented jobs.
+     */
+    String SKIP_SYSTEM_TABLES_EXISTENCE_CHECK = "phoenix.skip.system.tables.existence.check";
+    /**
      * Get executor service used for parallel scans
      */
     public ThreadPoolExecutor getExecutor();

@@ -82,6 +82,7 @@ import static org.apache.phoenix.query.QueryServices.SCAN_RESULT_CHUNK_SIZE;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK;
 import static org.apache.phoenix.query.QueryServices.SPOOL_DIRECTORY;
 import static org.apache.phoenix.query.QueryServices.STATS_CACHE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServices.STATS_COLLECTION_ENABLED;
@@ -388,6 +389,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_LONG_VIEW_INDEX_ENABLED = false;
 
     public static final boolean DEFAULT_PENDING_MUTATIONS_DDL_THROW = false;
+    public static final boolean DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK = false;
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
@@ -474,6 +476,7 @@ public class QueryServicesOptions {
             .setIfUnset(CLIENT_INDEX_ASYNC_THRESHOLD, DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD)
             .setIfUnset(PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, DEFAULT_SERVER_SIDE_MASKING_ENABLED)
             .setIfUnset(INDEX_CREATE_DEFAULT_STATE, DEFAULT_CREATE_INDEX_STATE)
+            .setIfUnset(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK, DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK)
             ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
