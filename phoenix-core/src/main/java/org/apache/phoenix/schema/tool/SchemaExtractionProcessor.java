@@ -317,8 +317,10 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             String key = entry.getKey();
             String value = entry.getValue();
             defaultProps.put(key, value);
-            if(key.equalsIgnoreCase(HColumnDescriptor.BLOOMFILTER) || key.equalsIgnoreCase(
-                    HColumnDescriptor.COMPRESSION)) {
+            if (key.equalsIgnoreCase(HColumnDescriptor.BLOOMFILTER)) {
+                defaultProps.put(key, "ROW");
+            }
+            if (key.equalsIgnoreCase(HColumnDescriptor.COMPRESSION)) {
                 defaultProps.put(key, "NONE");
             }
             if(key.equalsIgnoreCase(HColumnDescriptor.DATA_BLOCK_ENCODING)) {
