@@ -16,21 +16,12 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.iterate;
+package org.apache.phoenix.query;
 
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.phoenix.cache.ServerCacheClient;
-import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
-import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.monitoring.ScanMetricsHolder;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.TableRef;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -38,7 +29,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
@@ -48,14 +38,12 @@ import static org.junit.Assert.assertTrue;
 
 @Category(ParallelStatsDisabledTest.class)
 @SuppressWarnings("deprecated")
-public class MinimalQueryPlanInvolvedTableResultIteratorIT
-        extends ParallelStatsDisabledIT {
+public class SkipSystemTablesExistenceCheckIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testTableResultIterator() throws Exception {
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL);
         PhoenixConnection phoenixConnection = conn.unwrap(PhoenixConnection.class);
-        phoenixConnection.setTableResultIteratorFactory(new MinimalQueryPlanInvolvedTableResultIteratorFactory());
         String tableName = generateUniqueName();
 
         conn.createStatement().execute("CREATE TABLE " + tableName
@@ -65,8 +53,14 @@ public class MinimalQueryPlanInvolvedTableResultIteratorIT
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (3, 'C')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (4, 'D')");
         conn.commit();
+
         scanTable(conn, tableName);
-        conn.close();
+        Properties props = new Properties();
+        props.setProperty(QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK, "true");
+        ConnectionQueryServicesImpl queryServices = ((ConnectionQueryServicesImpl)phoenixConnection.getQueryServices());
+        queryServices.setInitialized(false);
+        queryServices.init(PHOENIX_JDBC_URL, props);
+        scanTable(conn, tableName);
     }
 
     private void scanTable(Connection conn, String tableName) throws SQLException {
@@ -80,18 +74,5 @@ public class MinimalQueryPlanInvolvedTableResultIteratorIT
             assertTrue("too many results returned", cnt <= 4);
         }
         assertEquals(4, cnt);
-    }
-}
-
-class MinimalQueryPlanInvolvedTableResultIteratorFactory implements TableResultIteratorFactory {
-    @Override
-    public TableResultIterator newIterator(MutationState mutationState, TableRef tableRef, Scan scan,
-                                           ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold,
-                                           QueryPlan plan, ParallelScanGrouper scanGrouper,
-                                           Map<ImmutableBytesPtr, ServerCacheClient.ServerCache> caches)
-            throws SQLException {
-        return new TableResultIterator(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, scanGrouper,
-                tableRef.getTable().getPhysicalName().getBytes(), tableRef.getTable().isTransactional(),
-                tableRef.getTable().getType() == PTableType.INDEX, tableRef.getTable().isImmutableRows());
     }
 }
