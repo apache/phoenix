@@ -264,7 +264,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertNotNull(admin.getDescriptor(TableName.valueOf(tableName)));
         ColumnFamilyDescriptor[] columnFamilies =
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
-        assertEquals(BloomType.NONE, columnFamilies[0].getBloomFilterType());
+        assertEquals(BloomType.ROW, columnFamilies[0].getBloomFilterType());
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
@@ -527,14 +527,14 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
                         + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
                         + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)"
-                        + " ) BLOOMFILTER = 'ROW', SALT_BUCKETS = 4";
+                        + " ) BLOOMFILTER = 'NONE', SALT_BUCKETS = 4";
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
         Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
         ColumnFamilyDescriptor[] columnFamilies =
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
-        assertEquals(BloomType.ROW, columnFamilies[0].getBloomFilterType());
+        assertEquals(BloomType.NONE, columnFamilies[0].getBloomFilterType());
     }
 
     /**

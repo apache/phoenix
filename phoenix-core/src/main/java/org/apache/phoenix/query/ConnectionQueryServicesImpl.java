@@ -149,7 +149,6 @@ import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
-import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.User;
@@ -844,7 +843,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         ColumnFamilyDescriptorBuilder columnDescBuilder = ColumnFamilyDescriptorBuilder.newBuilder(family.getFirst());
         if (tableType != PTableType.VIEW) {
             columnDescBuilder.setDataBlockEncoding(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING);
-            columnDescBuilder.setBloomFilterType(BloomType.NONE);
             for (Entry<String,Object> entry : family.getSecond().entrySet()) {
                 String key = entry.getKey();
                 Object value = entry.getValue();
@@ -4323,7 +4321,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (TableAlreadyExistsException e) {
             // take snapshot first
             takeSnapshotOfSysTable(systemTableToSnapshotMap, e);
-            if(UpgradeUtil.tableHasKeepDeleted(
+            if (UpgradeUtil.tableHasKeepDeleted(
                 metaConnection, PhoenixDatabaseMetaData.SYSTEM_LOG_NAME) ) {
                 try (Statement stmt = metaConnection.createStatement()) {
                     stmt.executeUpdate("ALTER TABLE " +
