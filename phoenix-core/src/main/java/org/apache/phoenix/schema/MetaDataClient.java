@@ -347,7 +347,7 @@ public class MetaDataClient {
                     PHOENIX_TTL_HWM + "," +
                     CHANGE_DETECTION_ENABLED + "," +
                     PHYSICAL_TABLE_NAME + "," +
-                    SCHEMA_VERSION +
+                    SCHEMA_VERSION + "," +
                     STREAMING_TOPIC_NAME +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
                 "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";

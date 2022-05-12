@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -1211,11 +1212,18 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                         + "ID2 VARCHAR(15) NOT NULL,\n" + "CREATED_DATE DATE,\n"
                         + "CREATION_TIME BIGINT,\n" + "LAST_USED DATE,\n"
                         + "CONSTRAINT PK PRIMARY KEY (ID1, ID2)) SCHEMA_VERSION='" + dataTableVersion
-                        + "', STREAMING_TOPIC_NAME='" + topicName + "'";
+                        + "'";
+        if (topicName != null) {
+            ddl += ", STREAMING_TOPIC_NAME='" + topicName + "'";
+        }
         conn.createStatement().execute(ddl);
         PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
         assertEquals(dataTableVersion, table.getSchemaVersion());
-        assertEquals(topicName, table.getStreamingTopicName());
+        if (topicName != null) {
+            assertEquals(topicName, table.getStreamingTopicName());
+        } else {
+            assertNull(table.getStreamingTopicName());
+        }
     }
 
     @Test

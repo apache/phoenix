@@ -689,9 +689,9 @@ public class PTableImpl implements PTable {
             return this;
          }
 
-         public Builder setStreamingTopicName(String topicName) {
-            if (topicName != null) {
-                this.streamingTopicName = topicName;
+         public Builder setStreamingTopicName(String streamingTopicName) {
+            if (streamingTopicName != null) {
+                this.streamingTopicName = streamingTopicName;
             }
             return this;
          }
@@ -2163,9 +2163,15 @@ public class PTableImpl implements PTable {
             builder.setLastDDLTimestamp(table.getLastDDLTimestamp());
         }
         builder.setChangeDetectionEnabled(table.isChangeDetectionEnabled());
-        builder.setSchemaVersion(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getSchemaVersion())));
-        builder.setExternalSchemaId(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getExternalSchemaId())));
-        builder.setStreamingTopicName(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getStreamingTopicName())));
+        if (table.getSchemaVersion() != null) {
+            builder.setSchemaVersion(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getSchemaVersion())));
+        }
+        if (table.getExternalSchemaId() != null) {
+            builder.setExternalSchemaId(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getExternalSchemaId())));
+        }
+        if (table.getStreamingTopicName() != null) {
+            builder.setStreamingTopicName(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getStreamingTopicName())));
+        }
         return builder.build();
     }
 

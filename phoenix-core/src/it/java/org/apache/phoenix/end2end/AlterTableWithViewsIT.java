@@ -1488,7 +1488,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             String newVersion = "V1.1";
             String topicName = "MyTopicName";
             String alterViewSql = "ALTER VIEW " + viewFullName + " SET SCHEMA_VERSION='"
-                + newVersion + "', STREAMING_TABLE_NAME='" + topicName + "'";
+                + newVersion + "', STREAMING_TOPIC_NAME='" + topicName + "'";
             conn.createStatement().execute(alterViewSql);
             PTable view2 = PhoenixRuntime.getTableNoCache(conn, viewFullName);
             assertEquals(newVersion, view2.getSchemaVersion());
