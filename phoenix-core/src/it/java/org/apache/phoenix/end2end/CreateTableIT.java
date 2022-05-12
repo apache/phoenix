@@ -74,7 +74,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class CreateTableIT extends ParallelStatsDisabledIT {
 
@@ -1192,28 +1191,31 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testCreateTableSchemaVersion() throws Exception {
+    public void testCreateTableSchemaVersionAndTopicName() throws Exception {
         Properties props = new Properties();
         final String schemaName = generateUniqueName();
         final String tableName = generateUniqueName();
         final String version = "V1.0";
+        final String topicName = "MyTopicName";
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            testCreateTableSchemaVersionHelper(conn, schemaName, tableName, version);
+            testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, version, topicName);
         }
     }
 
-    public static void testCreateTableSchemaVersionHelper(Connection conn, String schemaName, String tableName,
-                                                          String dataTableVersion)
+    public static void testCreateTableSchemaVersionAndTopicNameHelper(Connection conn, String schemaName, String tableName,
+                                                          String dataTableVersion, String topicName)
             throws Exception {
         final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
         String ddl =
                 "CREATE TABLE " + dataTableFullName + " (\n" + "ID1 VARCHAR(15) NOT NULL,\n"
                         + "ID2 VARCHAR(15) NOT NULL,\n" + "CREATED_DATE DATE,\n"
                         + "CREATION_TIME BIGINT,\n" + "LAST_USED DATE,\n"
-                        + "CONSTRAINT PK PRIMARY KEY (ID1, ID2)) SCHEMA_VERSION='" + dataTableVersion + "'";
+                        + "CONSTRAINT PK PRIMARY KEY (ID1, ID2)) SCHEMA_VERSION='" + dataTableVersion
+                        + "', STREAMING_TOPIC_NAME='" + topicName + "'";
         conn.createStatement().execute(ddl);
         PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
         assertEquals(dataTableVersion, table.getSchemaVersion());
+        assertEquals(topicName, table.getStreamingTopicName());
     }
 
     @Test

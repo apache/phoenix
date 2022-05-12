@@ -394,6 +394,9 @@ public class DelegateTable implements PTable {
         return delegate.getExternalSchemaId();
     }
 
+    @Override
+    public String getStreamingTopicName() { return delegate.getStreamingTopicName(); }
+
     @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }
 
     @Override public Map<String, String> getDefaultPropertyValues() { return delegate.getDefaultPropertyValues(); }

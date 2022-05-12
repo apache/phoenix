@@ -956,6 +956,12 @@ public interface PTable extends PMetaDataEntity {
     String getExternalSchemaId();
 
     /**
+     * @return Optional string to be used for a logical topic name that change detection capture
+     * will use to persist changes for this table or view
+     */
+    String getStreamingTopicName();
+
+    /**
      * Class to help track encoded column qualifier counters per column family.
      */
     public class EncodedCQCounter {

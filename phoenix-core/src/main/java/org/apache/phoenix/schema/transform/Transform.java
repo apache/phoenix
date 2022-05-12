@@ -200,6 +200,7 @@ public class Transform {
                 .setUseStatsForParallelization(table.useStatsForParallelization())
                 .setSchemaVersion(table.getSchemaVersion())
                 .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled())
+                .setStreamingTopicName(table.getStreamingTopicName())
                 // Transformables
                 .setImmutableStorageScheme(
                         (changedProps.getImmutableStorageSchemeProp() != null? changedProps.getImmutableStorageSchemeProp():table.getImmutableStorageScheme()))

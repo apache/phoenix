@@ -210,6 +210,7 @@ public class PTableImpl implements PTable {
     private Map<String, String> propertyValues;
     private String schemaVersion;
     private String externalSchemaId;
+    private String streamingTopicName;
 
     public static class Builder {
         private PTableKey key;
@@ -274,6 +275,7 @@ public class PTableImpl implements PTable {
         private Map<String, String> propertyValues = new HashMap<>();
         private String schemaVersion;
         private String externalSchemaId;
+        private String streamingTopicName;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -687,6 +689,13 @@ public class PTableImpl implements PTable {
             return this;
          }
 
+         public Builder setStreamingTopicName(String topicName) {
+            if (topicName != null) {
+                this.streamingTopicName = topicName;
+            }
+            return this;
+         }
+
         /**
          * Populate derivable attributes of the PTable
          * @return PTableImpl.Builder object
@@ -959,6 +968,7 @@ public class PTableImpl implements PTable {
         this.isChangeDetectionEnabled = builder.isChangeDetectionEnabled;
         this.schemaVersion = builder.schemaVersion;
         this.externalSchemaId = builder.externalSchemaId;
+        this.streamingTopicName = builder.streamingTopicName;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1037,7 +1047,8 @@ public class PTableImpl implements PTable {
                 .setLastDDLTimestamp(table.getLastDDLTimestamp())
                 .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled())
                 .setSchemaVersion(table.getSchemaVersion())
-                .setExternalSchemaId(table.getExternalSchemaId());
+                .setExternalSchemaId(table.getExternalSchemaId())
+                .setStreamingTopicName(table.getStreamingTopicName());
     }
 
     @Override
@@ -1960,6 +1971,11 @@ public class PTableImpl implements PTable {
             externalSchemaId =
                 (String) PVarchar.INSTANCE.toObject(table.getExternalSchemaId().toByteArray());
         }
+        String streamingTopicName = null;
+        if (table.hasStreamingTopicName()) {
+            streamingTopicName =
+                (String) PVarchar.INSTANCE.toObject(table.getStreamingTopicName().toByteArray());
+        }
         try {
             return new PTableImpl.Builder()
                     .setType(tableType)
@@ -2016,6 +2032,7 @@ public class PTableImpl implements PTable {
                     .setIsChangeDetectionEnabled(isChangeDetectionEnabled)
                     .setSchemaVersion(schemaVersion)
                     .setExternalSchemaId(externalSchemaId)
+                    .setStreamingTopicName(streamingTopicName)
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -2148,6 +2165,7 @@ public class PTableImpl implements PTable {
         builder.setChangeDetectionEnabled(table.isChangeDetectionEnabled());
         builder.setSchemaVersion(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getSchemaVersion())));
         builder.setExternalSchemaId(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getExternalSchemaId())));
+        builder.setStreamingTopicName(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getStreamingTopicName())));
         return builder.build();
     }
 
@@ -2283,6 +2301,11 @@ public class PTableImpl implements PTable {
     @Override
     public String getExternalSchemaId() {
         return externalSchemaId;
+    }
+
+    @Override
+    public String getStreamingTopicName() {
+        return streamingTopicName;
     }
 
     private static final class KVColumnFamilyQualifier {

@@ -19,6 +19,7 @@ package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
@@ -347,8 +348,9 @@ public class MetaDataClient {
                     CHANGE_DETECTION_ENABLED + "," +
                     PHYSICAL_TABLE_NAME + "," +
                     SCHEMA_VERSION +
+                    STREAMING_TOPIC_NAME +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
-                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE
             + "\"( " + TABLE_SCHEM + "," + TABLE_NAME + ") VALUES (?,?)";
@@ -2029,6 +2031,7 @@ public class MetaDataClient {
             verifyChangeDetectionTableType(tableType, isChangeDetectionEnabledProp);
 
             String schemaVersion = (String) TableProperty.SCHEMA_VERSION.getValue(tableProps);
+            String streamingTopicName = (String) TableProperty.STREAMING_TOPIC_NAME.getValue(tableProps);
 
             if (parent != null && tableType == PTableType.INDEX) {
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactionProvider != null, transactionProvider);
@@ -2991,6 +2994,12 @@ public class MetaDataClient {
                 tableUpsert.setString(34, schemaVersion);
             }
 
+            if (streamingTopicName == null) {
+                tableUpsert.setNull(35, Types.VARCHAR);
+            } else {
+                tableUpsert.setString(35, streamingTopicName);
+            }
+
             tableUpsert.execute();
 
             if (asyncCreatedDate != null) {
@@ -3137,6 +3146,7 @@ public class MetaDataClient {
                         .setSchemaVersion(schemaVersion)
                         .setExternalSchemaId(result.getTable() != null ?
                         result.getTable().getExternalSchemaId() : null)
+                        .setStreamingTopicName(streamingTopicName)
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
@@ -3594,7 +3604,8 @@ public class MetaDataClient {
                 metaPropertiesEvaluated.isChangeDetectionEnabled(),
                 metaPropertiesEvaluated.getPhysicalTableName(),
                 metaPropertiesEvaluated.getSchemaVersion(),
-                metaPropertiesEvaluated.getColumnEncodedBytes());
+                metaPropertiesEvaluated.getColumnEncodedBytes(),
+                metaPropertiesEvaluated.getStreamingTopicName());
     }
 
     private  long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta, Boolean isTransactional,
@@ -3602,7 +3613,7 @@ public class MetaDataClient {
                                        String schemaVersion, QualifierEncodingScheme columnEncodedBytes) throws SQLException {
         return incrementTableSeqNum(table, expectedType, columnCountDelta, isTransactional, null,
             updateCacheFrequency, null, null, null, null, -1L, null, null, null,phoenixTTL, false, physicalTableName,
-                schemaVersion, columnEncodedBytes);
+                schemaVersion, columnEncodedBytes, null);
     }
 
     private long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta,
@@ -3611,7 +3622,7 @@ public class MetaDataClient {
             Boolean isMultiTenant, Boolean storeNulls, Long guidePostWidth, Boolean appendOnlySchema,
             ImmutableStorageScheme immutableStorageScheme, Boolean useStatsForParallelization,
             Long phoenixTTL, Boolean isChangeDetectionEnabled, String physicalTableName, String schemaVersion,
-                                      QualifierEncodingScheme columnEncodedBytes)
+                                      QualifierEncodingScheme columnEncodedBytes, String streamingTopicName)
             throws SQLException {
         String schemaName = table.getSchemaName().getString();
         String tableName = table.getTableName().getString();
@@ -3678,6 +3689,9 @@ public class MetaDataClient {
         }
         if (!Strings.isNullOrEmpty(schemaVersion)) {
             mutateStringProperty(connection, tenantId, schemaName, tableName, SCHEMA_VERSION, schemaVersion);
+        }
+        if (!Strings.isNullOrEmpty(streamingTopicName)) {
+            mutateStringProperty(connection, tenantId, schemaName, tableName, STREAMING_TOPIC_NAME, streamingTopicName);
         }
         return seqNum;
     }
@@ -5177,6 +5191,8 @@ public class MetaDataClient {
                         metaProperties.setPhysicalTableName((String) value);
                     } else if (propName.equalsIgnoreCase(SCHEMA_VERSION)) {
                         metaProperties.setSchemaVersion((String) value);
+                    } else if (propName.equalsIgnoreCase(STREAMING_TOPIC_NAME)) {
+                        metaProperties.setStreamingTopicName((String) value);
                     }
                 }
                 // if removeTableProps is true only add the property if it is not an HTable or Phoenix Table property
@@ -5377,6 +5393,14 @@ public class MetaDataClient {
             }
         }
 
+        if (!Strings.isNullOrEmpty(metaProperties.getStreamingTopicName())) {
+            if (!metaProperties.getStreamingTopicName().equals(table.getStreamingTopicName())) {
+                metaPropertiesEvaluated.
+                    setStreamingTopicName(metaProperties.getStreamingTopicName());
+                changingPhoenixTableProperty = true;
+            }
+        }
+
         return changingPhoenixTableProperty;
     }
 
@@ -5399,6 +5423,7 @@ public class MetaDataClient {
         private Boolean isChangeDetectionEnabled = null;
         private String physicalTableName = null;
         private String schemaVersion = null;
+        private String streamingTopicName = null;
 
         public Boolean getImmutableRowsProp() {
             return isImmutableRowsProp;
@@ -5541,6 +5566,12 @@ public class MetaDataClient {
         public void setSchemaVersion(String schemaVersion) {
             this.schemaVersion = schemaVersion;
         }
+
+        public String getStreamingTopicName() { return streamingTopicName; }
+
+        public void setStreamingTopicName(String streamingTopicName) {
+            this.streamingTopicName = streamingTopicName;
+        }
     }
 
     private static class MetaPropertiesEvaluated {
@@ -5560,6 +5591,7 @@ public class MetaDataClient {
         private Boolean isChangeDetectionEnabled = null;
         private String physicalTableName = null;
         private String schemaVersion = null;
+        private String streamingTopicName = null;
 
         public Boolean getIsImmutableRows() {
             return isImmutableRows;
@@ -5682,6 +5714,12 @@ public class MetaDataClient {
 
         public void setSchemaVersion(String schemaVersion) {
             this.schemaVersion = schemaVersion;
+        }
+
+        public String getStreamingTopicName() { return streamingTopicName; }
+
+        public void setStreamingTopicName(String streamingTopicName) {
+            this.streamingTopicName = streamingTopicName;
         }
     }
 

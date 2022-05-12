@@ -407,12 +407,17 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         final String tableName = generateUniqueName();
         final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, "V1.0");
-            String version = "V1.1";
-            String alterSql = "ALTER TABLE " + dataTableFullName + " SET SCHEMA_VERSION='" + version + "'";
+            CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, "V1.0", null);
+            final String version = "V1.1";
+            final String alterSql = "ALTER TABLE " + dataTableFullName + " SET SCHEMA_VERSION='" + version + "'";
             conn.createStatement().execute(alterSql);
             PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
             assertEquals(version, table.getSchemaVersion());
+            final String topicName = "MyTopicName";
+            final String alterSql2 = "ALTER TABLE " + dataTableFullName + " SET STREAMING_TOPIC_NAME='" + topicName + "'";
+            conn.createStatement().execute(alterSql2);
+            table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+            assertEquals(topicName, table.getStreamingTopicName());
         }
     }
 
