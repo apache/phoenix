@@ -136,7 +136,7 @@ public class SpillableGroupByCache implements GroupByCache {
 
         // Compute Map initial map
         final Configuration conf = env.getConfiguration();
-        final long maxCacheSizeConf = conf.getLong(GROUPBY_MAX_CACHE_SIZE_ATTRIB, DEFAULT_GROUPBY_MAX_CACHE_MAX);
+        final long maxCacheSizeConf = conf.getLongBytes(GROUPBY_MAX_CACHE_SIZE_ATTRIB, DEFAULT_GROUPBY_MAX_CACHE_MAX);
         final int numSpillFilesConf = conf.getInt(GROUPBY_SPILL_FILES_ATTRIB, DEFAULT_GROUPBY_SPILL_FILES);
 
         final int maxSizeNum = (int)(maxCacheSizeConf / estValueSize);
