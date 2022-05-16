@@ -1,5 +1,6 @@
 package org.apache.hadoop.hbase.ipc.controller;
 
+import com.google.protobuf.RpcController;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
@@ -10,6 +11,10 @@ import org.apache.phoenix.util.SchemaUtil;
 
 import java.util.List;
 
+/**
+ * {@link RpcController} that sets the appropriate priority of server-server RPC calls destined
+ * for Phoenix SYSTEM tables.
+ */
 public class ServerToServerRpcControllerImpl extends ServerRpcController implements
         ServerToServerRpcController {
 
@@ -30,7 +35,7 @@ public class ServerToServerRpcControllerImpl extends ServerRpcController impleme
     public ServerToServerRpcControllerImpl(
             Configuration conf) {
         super();
-        this.priority = PhoenixRpcSchedulerFactory.getMetadataPriority(conf);
+        this.priority = PhoenixRpcSchedulerFactory.getServerSidePriority(conf);
     }
 
     @Override
