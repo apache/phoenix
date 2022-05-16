@@ -153,7 +153,7 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
                         configuration.getInt(
                                 QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB,
                                 QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION),
-                        configuration.getLong(
+                        configuration.getLongBytes(
                                 QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
                                 QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES),
                         region.getTableDescriptor());

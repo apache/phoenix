@@ -676,7 +676,7 @@ public class QueryServicesOptions {
     }
 
     public long getSpillableGroupByMaxCacheSize() {
-        return config.getLong(GROUPBY_MAX_CACHE_SIZE_ATTRIB, DEFAULT_GROUPBY_MAX_CACHE_MAX);
+        return config.getLongBytes(GROUPBY_MAX_CACHE_SIZE_ATTRIB, DEFAULT_GROUPBY_MAX_CACHE_MAX);
     }
 
     public int getSpillableGroupByNumSpillFiles() {

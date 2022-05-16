@@ -130,7 +130,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
         final Configuration conf = context.getConfiguration();
         final FileSystem fs = outputdir.getFileSystem(conf);
      
-        final long maxsize = conf.getLong(HConstants.HREGION_MAX_FILESIZE,
+        final long maxsize = conf.getLongBytes(HConstants.HREGION_MAX_FILESIZE,
             HConstants.DEFAULT_MAX_FILE_SIZE);
         // Invented config.  Add to hbase-*.xml if other than default compression.
         final String defaultCompressionStr = conf.get("hfile.compression",
