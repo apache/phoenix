@@ -169,7 +169,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                         QueryServices.SERVER_ORDERBY_SPOOLING_ENABLED_ATTRIB,
                         QueryServicesOptions.DEFAULT_SERVER_ORDERBY_SPOOLING_ENABLED);
         long thresholdBytes =
-                env.getConfiguration().getLong(QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB,
+                env.getConfiguration().getLongBytes(QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB,
                         QueryServicesOptions.DEFAULT_SERVER_SPOOL_THRESHOLD_BYTES);
         final OrderedResultIterator iterator =
                 deserializeFromScan(scan, innerScanner, spoolingEnabled, thresholdBytes);
