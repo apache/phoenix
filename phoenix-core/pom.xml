@@ -413,27 +413,23 @@
     <!-- Omid dependencies -->
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-client-hbase2.x</artifactId>
+      <artifactId>omid-hbase-client</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-coprocessor-hbase2.x</artifactId>
+      <artifactId>omid-hbase-coprocessor</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-shims-hbase2.x</artifactId>
+      <artifactId>omid-hbase-common</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-common-hbase2.x</artifactId>
+      <artifactId>omid-timestamp-storage</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-timestamp-storage-hbase2.x</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-commit-table-hbase2.x</artifactId>
+      <artifactId>omid-hbase-commit-table</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
@@ -451,12 +447,12 @@
     <!-- Omid test dependencies -->
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-tso-server-hbase2.x</artifactId>
+      <artifactId>omid-tso-server</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-tso-server-hbase2.x</artifactId>
+      <artifactId>omid-tso-server</artifactId>
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
