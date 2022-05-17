@@ -99,7 +99,8 @@ public class GlobalCache extends TenantCacheImpl {
                     long maxTTL = config.getLong(
                             QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB,
                             QueryServicesOptions.DEFAULT_MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS);
-                    long maxSize = config.getLongBytes(QueryServices.MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB,
+                    long maxSize = config.getLongBytes(
+                            QueryServices.MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB,
                             QueryServicesOptions.DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE);
                     metaDataCache = result = CacheBuilder.newBuilder()
                             .maximumWeight(maxSize)
