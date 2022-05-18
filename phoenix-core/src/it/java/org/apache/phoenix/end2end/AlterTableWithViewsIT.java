@@ -1477,19 +1477,25 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
         final String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String oldVersion = "V1.0";
-            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, oldVersion);
+            CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, oldVersion, null);
             String createViewSql = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName +
                     " SCHEMA_VERSION='" + oldVersion + "'";
             conn.createStatement().execute(createViewSql);
             PTable view = PhoenixRuntime.getTableNoCache(conn, viewFullName);
             assertEquals(oldVersion, view.getSchemaVersion());
+            assertNull(view.getStreamingTopicName());
+
             String newVersion = "V1.1";
-            String alterViewSql = "ALTER VIEW " + viewFullName + " SET SCHEMA_VERSION='" + newVersion + "'";
+            String topicName = "MyTopicName";
+            String alterViewSql = "ALTER VIEW " + viewFullName + " SET SCHEMA_VERSION='"
+                + newVersion + "', STREAMING_TOPIC_NAME='" + topicName + "'";
             conn.createStatement().execute(alterViewSql);
             PTable view2 = PhoenixRuntime.getTableNoCache(conn, viewFullName);
             assertEquals(newVersion, view2.getSchemaVersion());
             PTable baseTable = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
             assertEquals(oldVersion, baseTable.getSchemaVersion());
+            assertNull(baseTable.getStreamingTopicName());
+            assertEquals(topicName, view2.getStreamingTopicName());
         }
     }
 

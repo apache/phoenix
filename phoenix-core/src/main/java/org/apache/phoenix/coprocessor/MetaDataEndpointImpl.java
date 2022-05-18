@@ -67,6 +67,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION_BYT
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORAGE_SCHEME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES;
@@ -363,6 +364,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             TABLE_FAMILY_BYTES, SCHEMA_VERSION_BYTES);
     private static final Cell EXTERNAL_SCHEMA_ID_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
         TABLE_FAMILY_BYTES, EXTERNAL_SCHEMA_ID_BYTES);
+    private static final Cell STREAMING_TOPIC_NAME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
+        TABLE_FAMILY_BYTES, STREAMING_TOPIC_NAME_BYTES);
 
     private static final List<Cell> TABLE_KV_COLUMNS = Lists.newArrayList(
             EMPTY_KEYVALUE_KV,
@@ -401,7 +404,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             LAST_DDL_TIMESTAMP_KV,
             CHANGE_DETECTION_ENABLED_KV,
             SCHEMA_VERSION_KV,
-            EXTERNAL_SCHEMA_ID_KV
+            EXTERNAL_SCHEMA_ID_KV,
+            STREAMING_TOPIC_NAME_KV
     );
 
     static {
@@ -447,6 +451,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private static final int SCHEMA_VERSION_INDEX = TABLE_KV_COLUMNS.indexOf(SCHEMA_VERSION_KV);
     private static final int EXTERNAL_SCHEMA_ID_INDEX =
         TABLE_KV_COLUMNS.indexOf(EXTERNAL_SCHEMA_ID_KV);
+    private static final int STREAMING_TOPIC_NAME_INDEX =
+        TABLE_KV_COLUMNS.indexOf(STREAMING_TOPIC_NAME_KV);
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
     private static final KeyValue COLUMN_SIZE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES);
@@ -1397,6 +1403,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             : null;
         builder.setExternalSchemaId(externalSchemaId != null ? externalSchemaId :
             oldTable != null ? oldTable.getExternalSchemaId() : null);
+
+        Cell streamingTopicNameKv = tableKeyValues[STREAMING_TOPIC_NAME_INDEX];
+        String streamingTopicName = streamingTopicNameKv != null ?
+            (String) PVarchar.INSTANCE.toObject(streamingTopicNameKv.getValueArray(),
+                streamingTopicNameKv.getValueOffset(), streamingTopicNameKv.getValueLength())
+            : null;
+        builder.setStreamingTopicName(streamingTopicName != null ? streamingTopicName :
+            oldTable != null ? oldTable.getStreamingTopicName() : null);
 
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?

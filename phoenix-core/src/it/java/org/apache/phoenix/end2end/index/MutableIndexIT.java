@@ -934,7 +934,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
         final String indexFullName = SchemaUtil.getTableName(schemaName, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String version = "V1.0";
-            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, version);
+            CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, version, null);
             String createIndexSql = "CREATE INDEX " + indexName + " ON " + dataTableFullName +
                     " (ID2) INCLUDE (ID1) SCHEMA_VERSION='" + version + "'";
             conn.createStatement().execute(createIndexSql);
