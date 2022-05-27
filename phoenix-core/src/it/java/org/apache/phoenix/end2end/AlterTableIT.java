@@ -247,7 +247,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             String createDdl = "CREATE TABLE " + fullTableName +
                 " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
                 " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
-                "CHANGE_DETECTION_ENABLED=true, SCHEMA_VERSION='OLD'";
+                "CHANGE_DETECTION_ENABLED=true, SCHEMA_VERSION='OLD', SALT_BUCKETS=4";
             conn.createStatement().execute(createDdl);
             PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
             assertEquals("OLD", table.getSchemaVersion());
@@ -257,11 +257,14 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             String alterVersionDdl = "ALTER TABLE " + fullTableName + " SET SCHEMA_VERSION='NEW'";
             conn.createStatement().execute(alterVersionDdl);
 
+            PTable newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            verifySchemaExport(newTable, getUtility().getConfiguration());
+
             String alterDdl = "ALTER TABLE " + fullTableName +
                 " ADD col3 VARCHAR NULL";
 
             conn.createStatement().execute(alterDdl);
-            PTable newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
             verifySchemaExport(newTable, getUtility().getConfiguration());
         }
     }
@@ -325,8 +328,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         //needed in an external schema registry. TODO: fix the base column count anyway
         String baseColumnCountPattern = "(?i)\\s*baseColumnCount:\\s\".*\"";
         expectedSchemaText = expectedSchemaText.replaceAll(baseColumnCountPattern, "");
-        actualSchemaText = expectedSchemaText.replaceAll(baseColumnCountPattern, "");
-
+        actualSchemaText = actualSchemaText.replaceAll(baseColumnCountPattern, "");
         assertEquals(expectedSchemaText, actualSchemaText);
     }
 

@@ -108,6 +108,7 @@ import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ArrayBackedTag;
@@ -1109,11 +1110,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // unless the table is the latest
 
         long timeStamp = keyValue.getTimestamp();
-
         PTableImpl.Builder builder = null;
         if (oldTable != null) {
             builder = PTableImpl.builderFromExisting(oldTable);
-            builder.setColumns(oldTable.getColumns());
+            List<PColumn> columns = oldTable.getColumns();
+            if (oldTable.getBucketNum() != null && oldTable.getBucketNum() > 0) {
+                //if it's salted, skip the salt column -- it will get added back during
+                //the build process
+                columns = columns.stream().skip(1).collect(Collectors.toList());
+            }
+            builder.setColumns(columns);
         } else {
             builder = new PTableImpl.Builder();
         }
@@ -1532,8 +1538,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 long columnTimestamp =
                     columnCellList.get(0).getTimestamp() != HConstants.LATEST_TIMESTAMP ?
                         columnCellList.get(0).getTimestamp() : timeStamp;
+                boolean isSalted = saltBucketNum != null
+                    || (oldTable != null &&
+                    oldTable.getBucketNum() != null && oldTable.getBucketNum() > 0);
                 addColumnToTable(columnCellList, colName, famName, colKeyValues, columns,
-                    saltBucketNum != null, baseColumnCount, isRegularView, columnTimestamp);
+                    isSalted, baseColumnCount, isRegularView, columnTimestamp);
             }
         }
         builder.setEncodedCQCounter(cqCounter);
@@ -1541,14 +1550,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         builder.setIndexes(indexes != null ? indexes : oldTable != null
             ? oldTable.getIndexes() : Collections.<PTable>emptyList());
 
-        if (physicalTables == null) {
+        if (physicalTables == null || physicalTables.size() == 0) {
             builder.setPhysicalNames(oldTable != null ? oldTable.getPhysicalNames()
                 : ImmutableList.<PName>of());
         } else {
             builder.setPhysicalNames(ImmutableList.copyOf(physicalTables));
         }
         if (!setPhysicalName && oldTable != null) {
-            builder.setPhysicalTableName(oldTable.getPhysicalName());
+            builder.setPhysicalTableName(oldTable.getPhysicalName(true));
         }
         builder.setTransformingNewTable(transformingNewTable);
 
