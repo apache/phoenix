@@ -33,20 +33,49 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
  * Collection of utility methods for setting up bulk import jobs.
  */
 public class CsvBulkImportUtil {
+    public static final Character DEFAULT_DELIMITER_CHAR = ',';
+
+    public static final Character DEFAULT_QUOTE_CHAR = '"';
+
+    public static final Character DEFAULT_ESCAPE_CHAR = '\\';
 
     /**
      * Configure a job configuration for a bulk CSV import.
      *
      * @param conf job configuration to be set up
      * @param fieldDelimiter field delimiter character for the CSV input
-     * @param quoteChar quote string for the CSV input
+     * @param quoteChar quote character for the CSV input
      * @param escapeChar escape character for the CSV input
      * @param arrayDelimiter array delimiter character, can be null
-     * @param binaryEncoding 
+     * @param binaryEncoding binary data type, support BASE64 and ASCII
      */
-    public static void initCsvImportJob(Configuration conf, String fieldDelimiter, Character quoteChar,
-            Character escapeChar, String arrayDelimiter, String binaryEncoding) {
-        setStr(conf, CsvToKeyValueMapper.FIELD_DELIMITER_CONFKEY, fieldDelimiter);
+    public static void initCsvImportJob(Configuration conf, char fieldDelimiter,
+                                        Character quoteChar, Character escapeChar,
+                                        String arrayDelimiter, String binaryEncoding) {
+        setChar(conf, CsvToKeyValueMapper.FIELD_DELIMITER_CONFKEY, fieldDelimiter);
+        setCsvConfWithOutDelimiter(conf, quoteChar, escapeChar, arrayDelimiter, binaryEncoding);
+    }
+
+    /**
+     * Configure a job configuration for a bulk CSV import.
+     *
+     * @param conf job configuration to be set up
+     * @param fieldMultipleDelimiter field delimiter string for the CSV input
+     * @param quoteChar quote character for the CSV input
+     * @param escapeChar escape character for the CSV input
+     * @param arrayDelimiter array delimiter character, can be null
+     * @param binaryEncoding binary data type, support BASE64 and ASCII
+     */
+    public static void initCsvImportJob(Configuration conf, String fieldMultipleDelimiter,
+                                        Character quoteChar, Character escapeChar,
+                                        String arrayDelimiter, String binaryEncoding) {
+        setStr(conf, CsvToKeyValueMapper.FIELD_MULTIPLE_DELIMITER_CONFKEY, fieldMultipleDelimiter);
+        setCsvConfWithOutDelimiter(conf, quoteChar, escapeChar, arrayDelimiter, binaryEncoding);
+    }
+
+    private static void setCsvConfWithOutDelimiter(Configuration conf,
+                                                   Character quoteChar, Character escapeChar,
+                                                   String arrayDelimiter, String binaryEncoding) {
         setChar(conf, CsvToKeyValueMapper.QUOTE_CHAR_CONFKEY, quoteChar);
         setChar(conf, CsvToKeyValueMapper.ESCAPE_CHAR_CONFKEY, escapeChar);
         if (arrayDelimiter != null) {
@@ -65,20 +94,22 @@ public class CsvBulkImportUtil {
      */
     public static void configurePreUpsertProcessor(Configuration conf,
             Class<? extends ImportPreUpsertKeyValueProcessor> processorClass) {
-        conf.setClass(PhoenixConfigurationUtil.UPSERT_HOOK_CLASS_CONFKEY, processorClass,
-                ImportPreUpsertKeyValueProcessor.class);
+        conf.setClass(PhoenixConfigurationUtil.UPSERT_HOOK_CLASS_CONFKEY,
+                processorClass, ImportPreUpsertKeyValueProcessor.class);
     }
 
     @VisibleForTesting
     static void setChar(Configuration conf, String confKey, Character charValue) {
-        setStr(conf, confKey, charValue.toString());
+        if (charValue != null) {
+            setStr(conf, confKey, charValue.toString());
+        }
     }
 
     @VisibleForTesting
     static void setStr(Configuration conf, String confKey, String strValue) {
-        if(strValue!=null) {
-            conf.set(confKey, Bytes.toString(Base64.getEncoder().encode(
-                strValue.getBytes(StandardCharsets.UTF_8))));
+        if (strValue != null) {
+            conf.set(confKey, Bytes.toString(Base64.getEncoder()
+                    .encode(strValue.getBytes(StandardCharsets.UTF_8))));
         }
     }
 
@@ -92,13 +123,13 @@ public class CsvBulkImportUtil {
     }
 
     @VisibleForTesting
-    static String getString(Configuration conf, String confKey){
+    static String getString(Configuration conf, String confKey) {
         String strValue = conf.get(confKey);
         if (strValue == null) {
             return null;
         }
         return new String(Base64.getDecoder().decode(strValue.getBytes(StandardCharsets.UTF_8)),
-            StandardCharsets.UTF_8);
+                StandardCharsets.UTF_8);
     }
 
     public static Path getOutputPath(Path outputdir, String tableName) {

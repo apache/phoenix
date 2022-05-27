@@ -37,7 +37,7 @@ public class CsvBulkImportUtilTest {
     public void testInitCsvImportJob() throws IOException {
         Configuration conf = new Configuration();
 
-        String delimiter = "\001";
+        char delimiter = '\001';
         char quote = '\002';
         char escape = '!';
 
@@ -58,6 +58,37 @@ public class CsvBulkImportUtilTest {
                 CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.QUOTE_CHAR_CONFKEY));
         assertEquals(Character.valueOf('!'),
                 CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.ESCAPE_CHAR_CONFKEY));
+        assertNull(deserialized.get(CsvToKeyValueMapper.ARRAY_DELIMITER_CONFKEY));
+
+        tempFile.delete();
+    }
+
+    @Test
+    public void testInitCsvImportJobForMultipleDelimiter() throws IOException {
+        Configuration conf = new Configuration();
+
+        String delimiterStr = "|^";
+        char quote = '\002';
+        char escape = '!';
+
+        CsvBulkImportUtil.initCsvImportJob(conf, delimiterStr, quote, escape, null, null);
+
+        // Serialize and deserialize the config to ensure that there aren't any issues
+        // with non-printable characters as delimiters
+        File tempFile = File.createTempFile("test-config", ".xml");
+        FileOutputStream fileOutputStream = new FileOutputStream(tempFile);
+        conf.writeXml(fileOutputStream);
+        fileOutputStream.close();
+        Configuration deserialized = new Configuration();
+        deserialized.addResource(new FileInputStream(tempFile));
+
+        assertNull(CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.FIELD_DELIMITER_CONFKEY));
+        assertEquals("|^",
+            CsvBulkImportUtil.getString(deserialized, CsvToKeyValueMapper.FIELD_MULTIPLE_DELIMITER_CONFKEY));
+        assertEquals(Character.valueOf('\002'),
+            CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.QUOTE_CHAR_CONFKEY));
+        assertEquals(Character.valueOf('!'),
+            CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.ESCAPE_CHAR_CONFKEY));
         assertNull(deserialized.get(CsvToKeyValueMapper.ARRAY_DELIMITER_CONFKEY));
 
         tempFile.delete();
@@ -96,6 +127,20 @@ public class CsvBulkImportUtilTest {
     public void testGetChar_NotPresent() {
         Configuration conf = new Configuration();
         assertNull(CsvBulkImportUtil.getCharacter(conf, "conf.key"));
+    }
+
+    @Test
+    public void testGetAndSetStr_BasicStr() {
+        Configuration conf = new Configuration();
+        CsvBulkImportUtil.setStr(conf, "conf.key", "|^");
+        assertEquals("|^", CsvBulkImportUtil.getString(conf, "conf.key"));
+    }
+
+    @Test
+    public void testGetAndSetStr_NonPrintable() {
+        Configuration conf = new Configuration();
+        CsvBulkImportUtil.setStr(conf, "conf.key", "\001_ok_\002");
+        assertEquals("\001_ok_\002", CsvBulkImportUtil.getString(conf, "conf.key"));
     }
 
     public static class MockProcessor implements ImportPreUpsertKeyValueProcessor {

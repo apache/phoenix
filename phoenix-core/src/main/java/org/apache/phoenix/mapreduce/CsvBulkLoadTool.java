@@ -20,70 +20,80 @@ package org.apache.phoenix.mapreduce;
 import java.sql.SQLException;
 import java.util.List;
 
-import org.apache.commons.lang3.StringUtils;
-import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
-import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
-import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
 import org.apache.commons.text.StringEscapeUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
 import org.apache.phoenix.util.ColumnInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Parse csv bulk load commands from shell and run bulk load tool.
+ */
 public class CsvBulkLoadTool extends AbstractBulkLoadTool {
     private static final Logger LOGGER = LoggerFactory.getLogger(CsvBulkLoadTool.class);
-    static final Option DELIMITER_OPT = new Option("d", "delimiter", true, "Input delimiter, defaults to comma");
-    static final Option QUOTE_OPT = new Option("q", "quote", true, "Supply a custom phrase delimiter, defaults to double quote character");
-    static final Option ESCAPE_OPT = new Option("e", "escape", true, "Supply a custom escape character, default is a backslash");
-    static final Option ARRAY_DELIMITER_OPT = new Option("a", "array-delimiter", true, "Array element delimiter (optional)");
-    static final Option binaryEncodingOption = new Option("b", "binaryEncoding", true, "Specifies binary encoding");
-
+    static final Option DELIMITER_OPT = new Option("d", "delimiter", true,
+            "Input delimiter, defaults to comma");
+    static final Option MULTIPLE_DELIMITER_OPT = new Option("md", "multiple-delimiter", true,
+            "Input delimiter, support multiple delimiter, it will cover \"delimiter\" if it exist");
+    static final Option QUOTE_OPT = new Option("q", "quote", true,
+            "Supply a custom phrase delimiter, defaults to double quote character");
+    static final Option ESCAPE_OPT = new Option("e", "escape", true,
+            "Supply a custom escape character, default is a backslash");
+    static final Option ARRAY_DELIMITER_OPT = new Option("a", "array-delimiter", true,
+            "Array element delimiter (optional)");
+    static final Option BINARY_ENCODING_OPT = new Option("b", "binaryEncoding", true,
+            "Specifies binary encoding");
     private static final int DEFAULT_DELIMITER_MAX_LEN = 32;
-
-    protected static final String DEFAULT_DELIMITER_STR = ",";
-
-    protected static final Character DEFAULT_QUOTE_CHAR = '"';
-
-    protected static final Character DEFAULT_ESCAPE_CHAR = '\\';
 
     @Override
     protected Options getOptions() {
         Options options = super.getOptions();
         options.addOption(DELIMITER_OPT);
+        options.addOption(MULTIPLE_DELIMITER_OPT);
         options.addOption(QUOTE_OPT);
         options.addOption(ESCAPE_OPT);
         options.addOption(ARRAY_DELIMITER_OPT);
-        options.addOption(binaryEncodingOption);
+        options.addOption(BINARY_ENCODING_OPT);
         return options;
     }
 
     @Override
     protected void configureOptions(CommandLine cmdLine, List<ColumnInfo> importColumns,
-                                         Configuration conf) throws SQLException {
+                                    Configuration conf) throws SQLException {
 
         // we don't parse ZK_QUORUM_OPT here because we need it in order to
         // create the connection we need to build importColumns.
-
-        String delimiterStr = DEFAULT_DELIMITER_STR;
-        if (cmdLine.hasOption(DELIMITER_OPT.getOpt())) {
-            delimiterStr = StringEscapeUtils.unescapeJava(cmdLine.getOptionValue(DELIMITER_OPT.getOpt()));
-            if (StringUtils.isEmpty(delimiterStr)) {
-                throw new IllegalArgumentException("Illegal delimiter string: " + delimiterStr);
-            }
-            if (delimiterStr.length() > DEFAULT_DELIMITER_MAX_LEN) {
+        String delimiterStr = null;
+        char delimiterChar = CsvBulkImportUtil.DEFAULT_DELIMITER_CHAR;
+        if (cmdLine.hasOption(MULTIPLE_DELIMITER_OPT)) {
+            delimiterStr = StringEscapeUtils.unescapeJava(
+                    cmdLine.getOptionValue(MULTIPLE_DELIMITER_OPT.getOpt()));
+            if (delimiterStr != null && delimiterStr.length() > DEFAULT_DELIMITER_MAX_LEN) {
                 LOGGER.warn("Delimiter String length is longer than {},"
-                        + " suggest to use shorter delimiter to improve performance",
-                    DEFAULT_DELIMITER_MAX_LEN);
+                        + "suggest to use a shorter delimiter to improve performance",
+                        DEFAULT_DELIMITER_MAX_LEN);
             }
+        } else if (cmdLine.hasOption(DELIMITER_OPT.getOpt())) {
+            String delimiterCharOptStr =
+                    StringEscapeUtils.unescapeJava(
+                    cmdLine.getOptionValue(DELIMITER_OPT.getOpt()));
+            if (delimiterCharOptStr.length() != 1) {
+                throw new IllegalArgumentException("Illegal delimiter character: "
+                        + delimiterCharOptStr);
+            }
+            delimiterChar = delimiterCharOptStr.charAt(0);
         }
 
-        Character quoteChar = DEFAULT_QUOTE_CHAR;
+        Character quoteChar = CsvBulkImportUtil.DEFAULT_QUOTE_CHAR;
         if (cmdLine.hasOption(QUOTE_OPT.getOpt())) {
             String quoteString = StringEscapeUtils.unescapeJava(cmdLine.getOptionValue(QUOTE_OPT
                     .getOpt()));
-            if(quoteString.length() == 0) {
+            if (quoteString.length() == 0) {
                 quoteChar = null;
             } else if (quoteString.length() != 1) {
                 throw new IllegalArgumentException("Illegal quote character: " + quoteString);
@@ -92,10 +102,10 @@ public class CsvBulkLoadTool extends AbstractBulkLoadTool {
             }
         }
 
-        Character escapeChar = DEFAULT_ESCAPE_CHAR;
+        Character escapeChar = CsvBulkImportUtil.DEFAULT_ESCAPE_CHAR;
         if (cmdLine.hasOption(ESCAPE_OPT.getOpt())) {
-            String escapeString = StringEscapeUtils.unescapeJava(cmdLine.getOptionValue(ESCAPE_OPT.getOpt()));
-            if(escapeString.length() == 0) {
+            String escapeString = cmdLine.getOptionValue(ESCAPE_OPT.getOpt());
+            if (escapeString.length() == 0) {
                 escapeChar = null;
             } else if (escapeString.length() != 1) {
                 throw new IllegalArgumentException("Illegal escape character: " + escapeString);
@@ -103,19 +113,18 @@ public class CsvBulkLoadTool extends AbstractBulkLoadTool {
                 escapeChar = escapeString.charAt(0);
             }
         }
-        
+
         String binaryEncoding = null;
-        if (cmdLine.hasOption(binaryEncodingOption.getOpt())) {
-            binaryEncoding = cmdLine.getOptionValue(binaryEncodingOption.getOpt());
+        if (cmdLine.hasOption(BINARY_ENCODING_OPT.getOpt())) {
+            binaryEncoding = cmdLine.getOptionValue(BINARY_ENCODING_OPT.getOpt());
         }
-        
-        CsvBulkImportUtil.initCsvImportJob(
-                conf,
-                delimiterStr,
-                quoteChar,
-                escapeChar,
-                cmdLine.getOptionValue(ARRAY_DELIMITER_OPT.getOpt()),
-                binaryEncoding);
+        if (delimiterStr != null) {
+            CsvBulkImportUtil.initCsvImportJob(conf, delimiterStr, quoteChar, escapeChar,
+                    cmdLine.getOptionValue(ARRAY_DELIMITER_OPT.getOpt()), binaryEncoding);
+        } else {
+            CsvBulkImportUtil.initCsvImportJob(conf, delimiterChar, quoteChar, escapeChar,
+                    cmdLine.getOptionValue(ARRAY_DELIMITER_OPT.getOpt()), binaryEncoding);
+        }
     }
 
     @Override

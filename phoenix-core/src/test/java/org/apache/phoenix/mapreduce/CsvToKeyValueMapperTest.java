@@ -30,7 +30,7 @@ public class CsvToKeyValueMapperTest {
     @Test
     public void testCsvLineParser() throws IOException {
         CsvToKeyValueMapper.CsvLineParser lineParser =
-                new CsvToKeyValueMapper.CsvLineParser(";", '"', '\\');
+                new CsvToKeyValueMapper.CsvLineParser(';', '"', '\\');
         CSVRecord parsed = lineParser.parse("one;two");
 
         assertEquals("one", parsed.get(0));
@@ -40,9 +40,9 @@ public class CsvToKeyValueMapperTest {
     }
 
     @Test
-    public void testCsvLineParserForStrDelimiter() throws IOException {
+    public void testCsvLineParserForMultipleDelimiter() throws IOException {
         CsvToKeyValueMapper.CsvLineParser lineParser =
-            new CsvToKeyValueMapper.CsvLineParser("[|^", '"', '\\');
+                new CsvToKeyValueMapper.CsvLineParser("[|^", '"', '\\');
         CSVRecord parsed = lineParser.parse("one[|^two");
 
         assertEquals("one", parsed.get(0));
@@ -54,7 +54,7 @@ public class CsvToKeyValueMapperTest {
     @Test
     public void testCsvLineParserWithQuoting() throws IOException {
         CsvToKeyValueMapper.CsvLineParser lineParser =
-                new CsvToKeyValueMapper.CsvLineParser(";", '"', '\\');
+                new CsvToKeyValueMapper.CsvLineParser(';', '"', '\\');
         CSVRecord parsed = lineParser.parse("\"\\\"one\";\"\\;two\\\\\"");
 
         assertEquals("\"one", parsed.get(0));
