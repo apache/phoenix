@@ -39,20 +39,20 @@ public class CsvBulkImportUtil {
      *
      * @param conf job configuration to be set up
      * @param fieldDelimiter field delimiter character for the CSV input
-     * @param quoteChar quote character for the CSV input
+     * @param quoteChar quote string for the CSV input
      * @param escapeChar escape character for the CSV input
      * @param arrayDelimiter array delimiter character, can be null
      * @param binaryEncoding 
      */
-    public static void initCsvImportJob(Configuration conf, char fieldDelimiter, Character quoteChar,
+    public static void initCsvImportJob(Configuration conf, String fieldDelimiter, Character quoteChar,
             Character escapeChar, String arrayDelimiter, String binaryEncoding) {
-        setChar(conf, CsvToKeyValueMapper.FIELD_DELIMITER_CONFKEY, fieldDelimiter);
+        setStr(conf, CsvToKeyValueMapper.FIELD_DELIMITER_CONFKEY, fieldDelimiter);
         setChar(conf, CsvToKeyValueMapper.QUOTE_CHAR_CONFKEY, quoteChar);
         setChar(conf, CsvToKeyValueMapper.ESCAPE_CHAR_CONFKEY, escapeChar);
         if (arrayDelimiter != null) {
             conf.set(CsvToKeyValueMapper.ARRAY_DELIMITER_CONFKEY, arrayDelimiter);
         }
-        if(binaryEncoding!=null){
+        if (binaryEncoding != null) {
             conf.set(QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING, binaryEncoding);
         }
     }
@@ -71,20 +71,34 @@ public class CsvBulkImportUtil {
 
     @VisibleForTesting
     static void setChar(Configuration conf, String confKey, Character charValue) {
-        if(charValue!=null) {
+        setStr(conf, confKey, charValue.toString());
+    }
+
+    @VisibleForTesting
+    static void setStr(Configuration conf, String confKey, String strValue) {
+        if(strValue!=null) {
             conf.set(confKey, Bytes.toString(Base64.getEncoder().encode(
-                    charValue.toString().getBytes(StandardCharsets.UTF_8))));
+                strValue.getBytes(StandardCharsets.UTF_8))));
         }
     }
 
     @VisibleForTesting
     static Character getCharacter(Configuration conf, String confKey) {
+        String strValue = getString(conf, confKey);
+        if (strValue == null) {
+            return null;
+        }
+        return strValue.charAt(0);
+    }
+
+    @VisibleForTesting
+    static String getString(Configuration conf, String confKey){
         String strValue = conf.get(confKey);
         if (strValue == null) {
             return null;
         }
         return new String(Base64.getDecoder().decode(strValue.getBytes(StandardCharsets.UTF_8)),
-            StandardCharsets.UTF_8).charAt(0);
+            StandardCharsets.UTF_8);
     }
 
     public static Path getOutputPath(Path outputdir, String tableName) {

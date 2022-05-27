@@ -67,7 +67,7 @@ public class CsvToKeyValueMapper extends FormatToBytesWritableMapper<CSVRecord> 
         super.setup(context);
         Configuration conf = context.getConfiguration();
         lineParser = new CsvLineParser(
-                CsvBulkImportUtil.getCharacter(conf, FIELD_DELIMITER_CONFKEY),
+                CsvBulkImportUtil.getString(conf, FIELD_DELIMITER_CONFKEY),
                 CsvBulkImportUtil.getCharacter(conf, QUOTE_CHAR_CONFKEY),
                 CsvBulkImportUtil.getCharacter(conf, ESCAPE_CHAR_CONFKEY));
     }
@@ -92,12 +92,13 @@ public class CsvToKeyValueMapper extends FormatToBytesWritableMapper<CSVRecord> 
     static class CsvLineParser implements LineParser<CSVRecord> {
         private final CSVFormat csvFormat;
 
-        CsvLineParser(Character fieldDelimiter, Character quote, Character escape) {
-            this.csvFormat = CSVFormat.DEFAULT
-                    .withIgnoreEmptyLines(true)
-                    .withDelimiter(fieldDelimiter)
-                    .withEscape(escape)
-                    .withQuote(quote);
+        CsvLineParser(String fieldDelimiter, Character quote, Character escape) {
+            this.csvFormat = CSVFormat.Builder.create()
+                .setIgnoreEmptyLines(true)
+                .setDelimiter(fieldDelimiter)
+                .setEscape(escape)
+                .setQuote(quote)
+                .build();
         }
 
         @Override

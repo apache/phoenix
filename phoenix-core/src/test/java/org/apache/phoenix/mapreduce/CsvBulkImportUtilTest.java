@@ -37,7 +37,7 @@ public class CsvBulkImportUtilTest {
     public void testInitCsvImportJob() throws IOException {
         Configuration conf = new Configuration();
 
-        char delimiter = '\001';
+        String delimiter = "\001";
         char quote = '\002';
         char escape = '!';
 
@@ -83,6 +83,13 @@ public class CsvBulkImportUtilTest {
         Configuration conf = new Configuration();
         CsvBulkImportUtil.setChar(conf, "conf.key", '\001');
         assertEquals(Character.valueOf('\001'), CsvBulkImportUtil.getCharacter(conf, "conf.key"));
+    }
+
+    @Test
+    public void testGetAndSetStr() {
+        Configuration conf = new Configuration();
+        CsvBulkImportUtil.setStr(conf, "conf.key", "\001_ok");
+        assertEquals("\001_ok", CsvBulkImportUtil.getString(conf, "conf.key"));
     }
 
     @Test
