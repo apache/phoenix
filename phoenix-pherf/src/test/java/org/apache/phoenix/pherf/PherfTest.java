@@ -46,6 +46,15 @@ public class PherfTest {
     }
 
     @Test
+    public void testSchemaFileOption() {
+        String[] shortOptionArgs = {"-sf",".*user_defined_schema.sql"};
+        Pherf.main(shortOptionArgs);
+
+        String[] longOptionArgs = {"--schemaFile",".*user_defined_schema.sql"};
+        Pherf.main(longOptionArgs);
+    }
+
+    @Test
     public void testDefaultLogPerNRowsArgument() throws Exception {
         String[] args = {"-listFiles"};
         assertEquals(Long.valueOf(PherfConstants.LOG_PER_NROWS),
