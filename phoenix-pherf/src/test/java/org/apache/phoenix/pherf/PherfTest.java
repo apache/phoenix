@@ -47,10 +47,10 @@ public class PherfTest {
 
     @Test
     public void testSchemaFileOption() {
-        String[] shortOptionArgs = {"-sf",".*user_defined_schema.sql"};
+        String[] shortOptionArgs = {"-sf",".*.sql"};
         Pherf.main(shortOptionArgs);
 
-        String[] longOptionArgs = {"--schemaFile",".*user_defined_schema.sql"};
+        String[] longOptionArgs = {"--schemaFile",".*.sql"};
         Pherf.main(longOptionArgs);
     }
 
