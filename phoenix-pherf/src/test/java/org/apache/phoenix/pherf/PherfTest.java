@@ -25,6 +25,7 @@ import org.junit.contrib.java.lang.system.ExpectedSystemExit;
 import java.util.Properties;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 public class PherfTest {
     @Rule
@@ -51,13 +52,11 @@ public class PherfTest {
 
         String[] shortOptionArgs = {"-sf",PherfConstants.SCHEMA_ROOT_PATTERN + extension};
         //Asset that No Exception is thrown, ParseException is thrown in case of invalid option
-        assertEquals(Long.valueOf(PherfConstants.LOG_PER_NROWS),
-                getLogPerNRowsValue(new Pherf(shortOptionArgs).getProperties()));
+        assertNotNull(new Pherf(shortOptionArgs));
 
         String[] longOptionArgs = {"--schemaFile",PherfConstants.SCHEMA_ROOT_PATTERN + extension};
         //Asset that No Exception is thrown, ParseException is thrown in case of invalid option
-        assertEquals(Long.valueOf(PherfConstants.LOG_PER_NROWS),
-                getLogPerNRowsValue(new Pherf(longOptionArgs).getProperties()));
+        assertNotNull(new Pherf(longOptionArgs));
     }
 
     @Test
