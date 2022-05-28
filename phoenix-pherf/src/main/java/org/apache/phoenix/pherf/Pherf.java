@@ -74,7 +74,7 @@ public class Pherf {
                 "Regex or scenario name from the Test Scenario configuration .xml file to use.");
         options.addOption("drop", true, "Regex drop all tables with schema name as PHERF. "
                 + "\nExample drop Event tables: -drop .*(EVENT).* Drop all: -drop .* or -drop all");
-        options.addOption("schemaFile", "schemaFile", true,
+        options.addOption("schemaFile", true,
                 "Regex or file name for the Test phoenix table schema .sql to use.");
         options.addOption("m", "monitor", false, "Launch the stats profilers");
         options.addOption("monitorFrequency", true,
