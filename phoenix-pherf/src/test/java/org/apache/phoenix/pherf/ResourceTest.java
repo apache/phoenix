@@ -21,7 +21,6 @@ package org.apache.phoenix.pherf;
 import org.apache.phoenix.pherf.util.ResourceList;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.junit.Test;
-
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Properties;
