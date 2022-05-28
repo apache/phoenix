@@ -47,19 +47,6 @@ public class PherfTest {
     }
 
     @Test
-    public void testSchemaFileOption() throws Exception{
-        String extension = ".sql";
-
-        String[] shortOptionArgs = {"-sf",PherfConstants.SCHEMA_ROOT_PATTERN + extension};
-        //Asset that No Exception is thrown, ParseException is thrown in case of invalid option
-        assertNotNull(new Pherf(shortOptionArgs));
-
-        String[] longOptionArgs = {"--schemaFile",PherfConstants.SCHEMA_ROOT_PATTERN + extension};
-        //Asset that No Exception is thrown, ParseException is thrown in case of invalid option
-        assertNotNull(new Pherf(longOptionArgs));
-    }
-
-    @Test
     public void testDefaultLogPerNRowsArgument() throws Exception {
         String[] args = {"-listFiles"};
         assertEquals(Long.valueOf(PherfConstants.LOG_PER_NROWS),
