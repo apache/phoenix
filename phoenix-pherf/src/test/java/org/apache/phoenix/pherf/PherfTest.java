@@ -46,12 +46,18 @@ public class PherfTest {
     }
 
     @Test
-    public void testSchemaFileOption() {
-        String[] shortOptionArgs = {"-sf",".*.sql"};
-        Pherf.main(shortOptionArgs);
+    public void testSchemaFileOption() throws Exception{
+        String extension = ".sql";
 
-        String[] longOptionArgs = {"--schemaFile",".*.sql"};
-        Pherf.main(longOptionArgs);
+        String[] shortOptionArgs = {"-sf",PherfConstants.SCHEMA_ROOT_PATTERN + extension};
+        //Asset that No Exception is thrown, ParseException is thrown in case of invalid option
+        assertEquals(Long.valueOf(PherfConstants.LOG_PER_NROWS),
+                getLogPerNRowsValue(new Pherf(shortOptionArgs).getProperties()));
+
+        String[] longOptionArgs = {"--schemaFile",PherfConstants.SCHEMA_ROOT_PATTERN + extension};
+        //Asset that No Exception is thrown, ParseException is thrown in case of invalid option
+        assertEquals(Long.valueOf(PherfConstants.LOG_PER_NROWS),
+                getLogPerNRowsValue(new Pherf(longOptionArgs).getProperties()));
     }
 
     @Test
