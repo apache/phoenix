@@ -25,6 +25,7 @@ import org.junit.contrib.java.lang.system.ExpectedSystemExit;
 import java.util.Properties;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 public class PherfTest {
     @Rule
@@ -43,6 +44,19 @@ public class PherfTest {
         // Makes sure that System.exit(1) is called.
         exit.expectSystemExitWithStatus(1);
         Pherf.main(args);
+    }
+
+    @Test
+    public void testSchemaFileOption() throws Exception{
+        String extension = ".sql";
+
+        String[] shortOptionArgs = {"-schemaFile",PherfConstants.SCHEMA_ROOT_PATTERN + extension};
+        //Asset that No Exception is thrown, ParseException is thrown in case of invalid option
+        assertNotNull(new Pherf(shortOptionArgs));
+
+        String[] longOptionArgs = {"--schemaFile",PherfConstants.SCHEMA_ROOT_PATTERN + extension};
+        //Asset that No Exception is thrown, ParseException is thrown in case of invalid option
+        assertNotNull(new Pherf(longOptionArgs));
     }
 
     @Test
