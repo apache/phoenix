@@ -326,7 +326,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 
         //reconstructing the complete view sometimes messes up the base column count. It's not
         //needed in an external schema registry. TODO: fix the base column count anyway
-        String baseColumnCountPattern = "(?i)\\s*baseColumnCount:\\s\".*\"";
+        String baseColumnCountPattern = "(?i)\\s*baseColumnCount:\\s\\d*";
         expectedSchemaText = expectedSchemaText.replaceAll(baseColumnCountPattern, "");
         actualSchemaText = actualSchemaText.replaceAll(baseColumnCountPattern, "");
         assertEquals(expectedSchemaText, actualSchemaText);
