@@ -18,7 +18,6 @@
 package org.apache.phoenix.query;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 
 import java.sql.SQLException;

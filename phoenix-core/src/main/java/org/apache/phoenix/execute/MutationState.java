@@ -366,10 +366,10 @@ public class MutationState implements SQLCloseable {
     public Table getHTable(PTable table) throws SQLException {
         Table htable = this.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
         if (table.isTransactional() && phoenixTransactionContext.isTransactionRunning()) {
-             // We're only using this table for reading, so we want it wrapped even if it's an index
+            // We're only using this table for reading, so we want it wrapped even if it's an index
             htable = phoenixTransactionContext.getTransactionalTable(htable, table.isImmutableRows() || table.getType() == PTableType.INDEX);
-         }
-         return htable;
+        }
+        return htable;
     }
 
 
