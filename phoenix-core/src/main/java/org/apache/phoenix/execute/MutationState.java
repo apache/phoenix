@@ -372,8 +372,6 @@ public class MutationState implements SQLCloseable {
         return htable;
     }
 
-
-
     public PhoenixConnection getConnection() {
         return connection;
     }
