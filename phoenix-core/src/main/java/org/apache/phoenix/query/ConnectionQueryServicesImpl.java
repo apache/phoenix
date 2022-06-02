@@ -76,10 +76,11 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURING_UPGRADE_MS;
 import static org.apache.phoenix.util.UpgradeUtil.addParentToChildLinks;
 import static org.apache.phoenix.util.UpgradeUtil.addViewIndexToParentLinks;
 import static org.apache.phoenix.util.UpgradeUtil.getSysTableSnapshotName;
-import static org.apache.phoenix.util.UpgradeUtil.moveChildLinks;
+import static org.apache.phoenix.util.UpgradeUtil.moveOrCopyChildLinks;
 import static org.apache.phoenix.util.UpgradeUtil.syncTableAndIndexProperties;
 import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
@@ -4135,8 +4136,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // by this point we would have already taken mutex lock, hence
         // we can proceed with creation of snapshots and add table to
         // snapshot entries in systemTableToSnapshotMap
-        metaConnection = upgradeSystemChildLink(metaConnection, moveChildLinks,
-            systemTableToSnapshotMap);
         metaConnection = upgradeSystemSequence(metaConnection,
             systemTableToSnapshotMap);
         metaConnection = upgradeSystemStats(metaConnection,
@@ -4146,22 +4145,35 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         metaConnection = upgradeSystemFunction(metaConnection);
         metaConnection = upgradeSystemTransform(metaConnection, systemTableToSnapshotMap);
         metaConnection = upgradeSystemLog(metaConnection, systemTableToSnapshotMap);
-        return upgradeSystemMutex(metaConnection);
+        metaConnection = upgradeSystemMutex(metaConnection);
+
+        // As this is where the most time will be spent during an upgrade,
+        // especially when there are large number of views.
+        // Upgrade the SYSTEM.CHILD_LINK towards the end,
+        // so that any failures here can be handled/continued out of band.
+        metaConnection = upgradeSystemChildLink(metaConnection, moveChildLinks,
+                systemTableToSnapshotMap);
+        return metaConnection;
     }
 
     private PhoenixConnection upgradeSystemChildLink(
             PhoenixConnection metaConnection, boolean moveChildLinks,
-            Map<String, String> systemTableToSnapshotMap) throws SQLException {
+            Map<String, String> systemTableToSnapshotMap) throws SQLException, IOException {
         try (Statement statement = metaConnection.createStatement()) {
             statement.executeUpdate(getChildLinkDDL());
         } catch (TableAlreadyExistsException e) {
             takeSnapshotOfSysTable(systemTableToSnapshotMap, e);
         }
         if (moveChildLinks) {
-            moveChildLinks(metaConnection);
+            // Increase the timeouts so that the scan queries during moveOrCopyChildLinks do not timeout on large syscat's
+            Map<String, String> options = new HashMap<>();
+            options.put(HConstants.HBASE_RPC_TIMEOUT_KEY, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+            options.put(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+            moveOrCopyChildLinks(metaConnection, options);
         }
         return metaConnection;
     }
+
 
     private PhoenixConnection upgradeSystemSequence(
             PhoenixConnection metaConnection,

@@ -45,6 +45,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
@@ -54,8 +55,14 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
+import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_BYTES;
+import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURING_UPGRADE_MS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SCAN_PAGE_SIZE;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -89,6 +96,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.KeyValue;
@@ -96,6 +105,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -106,6 +116,10 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
+import org.apache.hadoop.hbase.filter.CompareFilter;
+import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.PageFilter;
+import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -119,6 +133,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
@@ -158,6 +173,8 @@ public class UpgradeUtil {
     private static final Logger LOGGER = LoggerFactory.getLogger(UpgradeUtil.class);
     private static final byte[] SEQ_PREFIX_BYTES = ByteUtil.concat(QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("_SEQ_"));
     public static final byte[] UPGRADE_TO_4_7_COLUMN_NAME = Bytes.toBytes("UPGRADE_TO_4_7");
+    private static final byte[] LINK_ROW = new byte[]{PTable.LinkType.CHILD_TABLE.getSerializedValue()};
+
     /**
      * Attribute for Phoenix's internal purposes only. When this attribute is set on a phoenix connection, then
      * the upgrade code for upgrading the cluster to the new minor release is not triggered. Note that presence 
@@ -352,6 +369,39 @@ public class UpgradeUtil {
             }
         }
     }
+
+    /**
+     * Utility method to get a HBaseConnection with overridden properties
+     * @param options
+     * @return
+     * @throws IOException
+     */
+    private static org.apache.hadoop.hbase.client.Connection getHBaseConnection(Map<String, String> options)
+            throws IOException {
+
+        Configuration conf = HBaseConfiguration.create();
+        conf.set(HConstants.HBASE_RPC_READ_TIMEOUT_KEY, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+        conf.set(HConstants.HBASE_RPC_WRITE_TIMEOUT_KEY, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+        conf.set(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+        if (options != null) {
+            for (Map.Entry<String, String> entry : options.entrySet()) {
+                String k = entry.getKey();
+                String v = entry.getValue();
+                switch (k) {
+                    case HConstants.HBASE_RPC_TIMEOUT_KEY:
+                        conf.set(HConstants.HBASE_RPC_READ_TIMEOUT_KEY, v);
+                        conf.set(HConstants.HBASE_RPC_WRITE_TIMEOUT_KEY, v);
+                        break;
+                    default:
+                        conf.set(k, v);
+                        break;
+                };
+            };
+        }
+        LOGGER.info(String.format("Creating HBase cluster connection to ==> %s", conf.get(HConstants.ZOOKEEPER_QUORUM)));
+        return ConnectionFactory.createConnection(conf);
+    }
+
 
     public static PhoenixConnection upgradeLocalIndexes(PhoenixConnection metaConnection)
             throws SQLException, IOException, org.apache.hadoop.hbase.TableNotFoundException {
@@ -1178,36 +1228,123 @@ public class UpgradeUtil {
             }
         }
     }
-    
+
     /**
-     * Move child links form SYSTEM.CATALOG to SYSTEM.CHILD_LINK
+     * Move or copy child links form SYSTEM.CATALOG to SYSTEM.CHILD_LINK
      * @param oldMetaConnection caller should take care of closing the passed connection appropriately
      * @throws SQLException
      */
-    public static void moveChildLinks(PhoenixConnection oldMetaConnection) throws SQLException {
-        PhoenixConnection metaConnection = null;
-        try {
-            // Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 
-            metaConnection = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP);
-            LOGGER.info("Upgrading metadata to add parent to child links for views");
-            metaConnection.commit();
-            String createChildLink = "UPSERT INTO SYSTEM.CHILD_LINK(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, LINK_TYPE) " +
-                                        "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, LINK_TYPE " + 
-                                        "FROM SYSTEM.CATALOG " + 
-                                        "WHERE LINK_TYPE = 4";
-            metaConnection.createStatement().execute(createChildLink);
-            metaConnection.commit();
-            String deleteChildLink = "DELETE FROM SYSTEM.CATALOG WHERE LINK_TYPE = 4 ";
-            metaConnection.createStatement().execute(deleteChildLink);
-            metaConnection.commit();
-            metaConnection.getQueryServices().clearCache();
-        } finally {
-            if (metaConnection != null) {
-                metaConnection.close();
-            }
+
+    public static void moveOrCopyChildLinks(PhoenixConnection oldMetaConnection, Map<String, String> options) throws IOException {
+        long numberOfCopiedParentChildRows = 0;
+        long numberOfDeletedParentChildRows = 0;
+
+        boolean moveChildLinksDuringUpgradeEnabled =
+                oldMetaConnection.getQueryServices().getProps().getBoolean(
+                        QueryServices.MOVE_CHILD_LINKS_DURING_UPGRADE_ENABLED,
+                        QueryServicesOptions.DEFAULT_MOVE_CHILD_LINKS_DURING_UPGRADE_ENABLED);
+
+        try (org.apache.hadoop.hbase.client.Connection moveChildLinkConnection =  getHBaseConnection(options);
+            Table sysCatalogTable = moveChildLinkConnection.getTable(TableName.valueOf(SYSTEM_CATALOG_NAME))) {
+            boolean pageMore = false;
+            byte[] lastRowKey = null;
+
+            do {
+                Scan scan = new Scan();
+                scan.addFamily(DEFAULT_COLUMN_FAMILY_BYTES);
+                // Push down the filter to hbase to avoid transfer
+                SingleColumnValueFilter childLinkFilter = new SingleColumnValueFilter(
+                        DEFAULT_COLUMN_FAMILY_BYTES,
+                        LINK_TYPE_BYTES, CompareFilter.CompareOp.EQUAL,
+                        new byte[]{ PTable.LinkType.CHILD_TABLE.getSerializedValue()});
+
+                childLinkFilter.setFilterIfMissing(true);
+                // Limit number of records
+                PageFilter pf = new PageFilter(DEFAULT_SCAN_PAGE_SIZE);
+
+                scan.setFilter(new FilterList(FilterList.Operator.MUST_PASS_ALL, pf, childLinkFilter));
+                if (pageMore) {
+                    scan.withStartRow(lastRowKey, false);
+                }
+                // Collect the row keys to process them in batch
+                try (ResultScanner scanner = sysCatalogTable.getScanner(scan)) {
+                    int count = 0;
+                    List<byte[]> rowKeys = new ArrayList<>();
+                    List<Put> puts = new ArrayList<>();
+                    for (Result rr = scanner.next(); rr != null; rr = scanner.next()) {
+                        count++;
+                        lastRowKey = rr.getRow();
+                        byte[] tmpKey = new byte[lastRowKey.length];
+                        System.arraycopy(lastRowKey, 0, tmpKey, 0, tmpKey.length);
+                        long rowTS = rr.rawCells()[0].getTimestamp();
+                        rowKeys.add(tmpKey);
+                        Put put = new Put(tmpKey);
+                        put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, EMPTY_COLUMN_BYTES, rowTS,
+                                EMPTY_COLUMN_VALUE_BYTES);
+                        put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, LINK_TYPE_BYTES, rowTS,
+                                LINK_ROW);
+                        puts.add(put);
+                    }
+
+                    if (puts.size() > 0) {
+                        Object[] putResults = new Object[puts.size()];
+                        try (Table childLinkTable = moveChildLinkConnection.getTable(TableName.valueOf(SYSTEM_CHILD_LINK_NAME))) {
+                            // Process a batch of child links
+                            childLinkTable.batch(puts, putResults);
+                            // if move child links is enabled instead of copy, delete the rows from SYSTEM.CATALOG.
+                            if (moveChildLinksDuringUpgradeEnabled) {
+                                List<Delete> deletes = Lists.newArrayList();
+                                for (int i = 0; i < putResults.length; i++) {
+                                    if (java.util.Objects.nonNull(putResults[i])) {
+                                        deletes.add(new Delete(rowKeys.get(i)));
+                                    }
+                                }
+                                numberOfCopiedParentChildRows += deletes.size();
+
+                                Object[] deleteResults = new Object[deletes.size()];
+                                sysCatalogTable.batch(deletes, deleteResults);
+                                int numDeletes = 0;
+                                for (int i = 0; i < deleteResults.length; i++) {
+                                    if (java.util.Objects.nonNull(deleteResults[i])) {
+                                        numDeletes++;
+                                    }
+                                }
+                                numberOfDeletedParentChildRows += numDeletes;
+
+                            } else {
+                                int numCopied = 0;
+                                for (int i = 0; i < putResults.length; i++) {
+                                    if (java.util.Objects.nonNull(putResults[i])) {
+                                        numCopied++;
+                                    }
+                                }
+                                numberOfCopiedParentChildRows += numCopied;
+                            }
+
+                        } catch (Exception e) {
+                            LOGGER.error(String.format(
+                                    "Failed adding child link batch from %s to %s with Exception :",
+                                    SYSTEM_CATALOG_NAME, SYSTEM_CHILD_LINK_NAME), e);
+                        }
+                    }
+                    pageMore = count != 0;
+                    LOGGER.info(String.format("moveOrCopyChildLinks in progress => numberOfCopiedParentChildRows: %d " +
+                                    "numberOfDeletedParentChildRows: %d",
+                            numberOfCopiedParentChildRows,
+                            numberOfDeletedParentChildRows));
+
+                }
+            } while (pageMore);
+        } catch (IOException ioe) {
+            LOGGER.error(String.format(
+                    "Failed adding child link rows from %s to %s with Exception :",
+                    SYSTEM_CATALOG_NAME, SYSTEM_CHILD_LINK_NAME), ioe);
+            throw ioe;
         }
+        LOGGER.info(String.format("Finished moving/copying child link rows from %s to %s ",
+                SYSTEM_CATALOG_NAME, SYSTEM_CHILD_LINK_NAME));
     }
-    
+
     public static void addViewIndexToParentLinks(PhoenixConnection oldMetaConnection) throws SQLException {
         PhoenixConnection metaConn = null;
         boolean isMetaConnUsingQueryConn = true;
