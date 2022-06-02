@@ -476,7 +476,8 @@ public class QueryServicesOptions {
             .setIfUnset(CLIENT_INDEX_ASYNC_THRESHOLD, DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD)
             .setIfUnset(PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, DEFAULT_SERVER_SIDE_MASKING_ENABLED)
             .setIfUnset(INDEX_CREATE_DEFAULT_STATE, DEFAULT_CREATE_INDEX_STATE)
-            .setIfUnset(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK, DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK)
+            .setIfUnset(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK,
+                DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK)
             ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set

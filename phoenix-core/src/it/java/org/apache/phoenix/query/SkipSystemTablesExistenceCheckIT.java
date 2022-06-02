@@ -57,7 +57,8 @@ public class SkipSystemTablesExistenceCheckIT extends ParallelStatsDisabledIT {
         scanTable(conn, tableName);
         Properties props = new Properties();
         props.setProperty(QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK, "true");
-        ConnectionQueryServicesImpl queryServices = ((ConnectionQueryServicesImpl)phoenixConnection.getQueryServices());
+        ConnectionQueryServicesImpl queryServices =
+            ((ConnectionQueryServicesImpl) phoenixConnection.getQueryServices());
         queryServices.setInitialized(false);
         queryServices.init(PHOENIX_JDBC_URL, props);
         scanTable(conn, tableName);

@@ -3334,8 +3334,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             }
                             return null;
                         }
-                        String skipSystemExistenceCheck = props.getProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK);
-                        if(skipSystemExistenceCheck != null && Boolean.valueOf(skipSystemExistenceCheck)) {
+                        String skipSystemExistenceCheck =
+                            props.getProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK);
+                        if (skipSystemExistenceCheck != null && Boolean
+                            .valueOf(skipSystemExistenceCheck)) {
                             initialized = true;
                             return null;
                         }
