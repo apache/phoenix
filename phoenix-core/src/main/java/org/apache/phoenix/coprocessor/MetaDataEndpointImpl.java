@@ -67,6 +67,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION_BYT
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORAGE_SCHEME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES;
@@ -107,6 +108,7 @@ import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ArrayBackedTag;
@@ -363,6 +365,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             TABLE_FAMILY_BYTES, SCHEMA_VERSION_BYTES);
     private static final Cell EXTERNAL_SCHEMA_ID_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
         TABLE_FAMILY_BYTES, EXTERNAL_SCHEMA_ID_BYTES);
+    private static final Cell STREAMING_TOPIC_NAME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
+        TABLE_FAMILY_BYTES, STREAMING_TOPIC_NAME_BYTES);
 
     private static final List<Cell> TABLE_KV_COLUMNS = Lists.newArrayList(
             EMPTY_KEYVALUE_KV,
@@ -401,7 +405,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             LAST_DDL_TIMESTAMP_KV,
             CHANGE_DETECTION_ENABLED_KV,
             SCHEMA_VERSION_KV,
-            EXTERNAL_SCHEMA_ID_KV
+            EXTERNAL_SCHEMA_ID_KV,
+            STREAMING_TOPIC_NAME_KV
     );
 
     static {
@@ -447,6 +452,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private static final int SCHEMA_VERSION_INDEX = TABLE_KV_COLUMNS.indexOf(SCHEMA_VERSION_KV);
     private static final int EXTERNAL_SCHEMA_ID_INDEX =
         TABLE_KV_COLUMNS.indexOf(EXTERNAL_SCHEMA_ID_KV);
+    private static final int STREAMING_TOPIC_NAME_INDEX =
+        TABLE_KV_COLUMNS.indexOf(STREAMING_TOPIC_NAME_KV);
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
     private static final KeyValue COLUMN_SIZE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES);
@@ -1103,11 +1110,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // unless the table is the latest
 
         long timeStamp = keyValue.getTimestamp();
-
         PTableImpl.Builder builder = null;
         if (oldTable != null) {
             builder = PTableImpl.builderFromExisting(oldTable);
-            builder.setColumns(oldTable.getColumns());
+            List<PColumn> columns = oldTable.getColumns();
+            if (oldTable.getBucketNum() != null && oldTable.getBucketNum() > 0) {
+                //if it's salted, skip the salt column -- it will get added back during
+                //the build process
+                columns = columns.stream().skip(1).collect(Collectors.toList());
+            }
+            builder.setColumns(columns);
         } else {
             builder = new PTableImpl.Builder();
         }
@@ -1398,6 +1410,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         builder.setExternalSchemaId(externalSchemaId != null ? externalSchemaId :
             oldTable != null ? oldTable.getExternalSchemaId() : null);
 
+        Cell streamingTopicNameKv = tableKeyValues[STREAMING_TOPIC_NAME_INDEX];
+        String streamingTopicName = streamingTopicNameKv != null ?
+            (String) PVarchar.INSTANCE.toObject(streamingTopicNameKv.getValueArray(),
+                streamingTopicNameKv.getValueOffset(), streamingTopicNameKv.getValueLength())
+            : null;
+        builder.setStreamingTopicName(streamingTopicName != null ? streamingTopicName :
+            oldTable != null ? oldTable.getStreamingTopicName() : null);
+
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
                 HConstants.EMPTY_BYTE_ARRAY :
@@ -1518,8 +1538,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 long columnTimestamp =
                     columnCellList.get(0).getTimestamp() != HConstants.LATEST_TIMESTAMP ?
                         columnCellList.get(0).getTimestamp() : timeStamp;
+                boolean isSalted = saltBucketNum != null
+                    || (oldTable != null &&
+                    oldTable.getBucketNum() != null && oldTable.getBucketNum() > 0);
                 addColumnToTable(columnCellList, colName, famName, colKeyValues, columns,
-                    saltBucketNum != null, baseColumnCount, isRegularView, columnTimestamp);
+                    isSalted, baseColumnCount, isRegularView, columnTimestamp);
             }
         }
         builder.setEncodedCQCounter(cqCounter);
@@ -1527,14 +1550,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         builder.setIndexes(indexes != null ? indexes : oldTable != null
             ? oldTable.getIndexes() : Collections.<PTable>emptyList());
 
-        if (physicalTables == null) {
+        if (physicalTables == null || physicalTables.size() == 0) {
             builder.setPhysicalNames(oldTable != null ? oldTable.getPhysicalNames()
                 : ImmutableList.<PName>of());
         } else {
             builder.setPhysicalNames(ImmutableList.copyOf(physicalTables));
         }
         if (!setPhysicalName && oldTable != null) {
-            builder.setPhysicalTableName(oldTable.getPhysicalName());
+            builder.setPhysicalTableName(oldTable.getPhysicalName(true));
         }
         builder.setTransformingNewTable(transformingNewTable);
 

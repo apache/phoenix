@@ -380,6 +380,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_HISTOGRAM_LATENCY_RANGES = "phoenix.histogram.latency.ranges";
     // The range of bins for size metrics for histogram.
     public static final String PHOENIX_HISTOGRAM_SIZE_RANGES = "phoenix.histogram.size.ranges";
+    // This config is used to move (copy and delete) the child links from the SYSTEM.CATALOG to SYSTEM.CHILD_LINK table.
+    // As opposed to a copy and async (out of band) delete.
+    public static final String MOVE_CHILD_LINKS_DURING_UPGRADE_ENABLED = "phoenix.move.child_link.during.upgrade";
 
     /**
      * Parameter to indicate the source of operation attribute.

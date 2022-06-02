@@ -826,7 +826,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         final String viewIndexFullName = SchemaUtil.getTableName(schemaName, viewIndexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String version = "V1.0";
-            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, version);
+            CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, version, null);
             String createViewSql = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName +
                     " SCHEMA_VERSION='" + version + "'";
             conn.createStatement().execute(createViewSql);

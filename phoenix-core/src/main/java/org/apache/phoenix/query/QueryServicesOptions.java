@@ -390,6 +390,10 @@ public class QueryServicesOptions {
 
     public static final boolean DEFAULT_PENDING_MUTATIONS_DDL_THROW = false;
     public static final boolean DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK = false;
+    public static final boolean DEFAULT_MOVE_CHILD_LINKS_DURING_UPGRADE_ENABLED = true;
+    public static final int DEFAULT_TIMEOUT_DURING_UPGRADE_MS = 60000 * 30; // 30 mins
+    public static final int DEFAULT_SCAN_PAGE_SIZE = 32768;
+
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {

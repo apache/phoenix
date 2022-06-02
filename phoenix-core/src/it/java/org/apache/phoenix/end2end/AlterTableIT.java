@@ -247,7 +247,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             String createDdl = "CREATE TABLE " + fullTableName +
                 " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
                 " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
-                "CHANGE_DETECTION_ENABLED=true, SCHEMA_VERSION='OLD'";
+                "CHANGE_DETECTION_ENABLED=true, SCHEMA_VERSION='OLD', SALT_BUCKETS=4";
             conn.createStatement().execute(createDdl);
             PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
             assertEquals("OLD", table.getSchemaVersion());
@@ -257,11 +257,14 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             String alterVersionDdl = "ALTER TABLE " + fullTableName + " SET SCHEMA_VERSION='NEW'";
             conn.createStatement().execute(alterVersionDdl);
 
+            PTable newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            verifySchemaExport(newTable, getUtility().getConfiguration());
+
             String alterDdl = "ALTER TABLE " + fullTableName +
                 " ADD col3 VARCHAR NULL";
 
             conn.createStatement().execute(alterDdl);
-            PTable newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
             verifySchemaExport(newTable, getUtility().getConfiguration());
         }
     }
@@ -323,10 +326,9 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 
         //reconstructing the complete view sometimes messes up the base column count. It's not
         //needed in an external schema registry. TODO: fix the base column count anyway
-        String baseColumnCountPattern = "(?i)\\s*baseColumnCount:\\s\".*\"";
+        String baseColumnCountPattern = "(?i)\\s*baseColumnCount:\\s\\d*";
         expectedSchemaText = expectedSchemaText.replaceAll(baseColumnCountPattern, "");
-        actualSchemaText = expectedSchemaText.replaceAll(baseColumnCountPattern, "");
-
+        actualSchemaText = actualSchemaText.replaceAll(baseColumnCountPattern, "");
         assertEquals(expectedSchemaText, actualSchemaText);
     }
 
@@ -407,12 +409,17 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         final String tableName = generateUniqueName();
         final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, "V1.0");
-            String version = "V1.1";
-            String alterSql = "ALTER TABLE " + dataTableFullName + " SET SCHEMA_VERSION='" + version + "'";
+            CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, "V1.0", null);
+            final String version = "V1.1";
+            final String alterSql = "ALTER TABLE " + dataTableFullName + " SET SCHEMA_VERSION='" + version + "'";
             conn.createStatement().execute(alterSql);
             PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
             assertEquals(version, table.getSchemaVersion());
+            final String topicName = "MyTopicName";
+            final String alterSql2 = "ALTER TABLE " + dataTableFullName + " SET STREAMING_TOPIC_NAME='" + topicName + "'";
+            conn.createStatement().execute(alterSql2);
+            table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+            assertEquals(topicName, table.getStreamingTopicName());
         }
     }
 

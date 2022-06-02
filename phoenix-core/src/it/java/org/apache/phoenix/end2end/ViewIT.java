@@ -338,12 +338,15 @@ public class ViewIT extends SplitSystemCatalogIT {
         final String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String version = "V1.0";
-            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, version);
+            String topicName = "MyTopicName";
+            CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName,
+                tableName, version, topicName);
             String createViewSql = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName +
-                    " SCHEMA_VERSION='" + version + "'";
+                    " SCHEMA_VERSION='" + version + "', STREAMING_TOPIC_NAME='" + topicName + "'";
             conn.createStatement().execute(createViewSql);
             PTable view = PhoenixRuntime.getTableNoCache(conn, viewFullName);
             assertEquals(version, view.getSchemaVersion());
+            assertEquals(topicName, view.getStreamingTopicName());
         }
     }
 

@@ -325,8 +325,18 @@ public enum TableProperty {
         @Override public Object getPTableValue(PTable table) {
             return table.getSchemaVersion();
         }
-    }
-    ;
+    },
+
+    STREAMING_TOPIC_NAME(PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, true, true) {
+        @Override
+        public Object getValue(Object value) {
+            return value == null ? null : value.toString();
+        }
+
+        @Override public Object getPTableValue(PTable table) {
+            return table.getStreamingTopicName();
+        }
+    };
 
     private final String propertyName;
     private final SQLExceptionCode colFamSpecifiedException;

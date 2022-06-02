@@ -18,10 +18,13 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURING_UPGRADE_MS;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
@@ -47,7 +50,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -58,6 +63,10 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
@@ -292,7 +301,8 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         return DriverManager.getConnection(getUrl(), props);
     }
 
-    private Connection getConnection(boolean tenantSpecific, String tenantId, boolean isNamespaceMappingEnabled)
+    private Connection getConnection(boolean tenantSpecific, String tenantId,
+            boolean isNamespaceMappingEnabled, boolean copyChildLinksDuringUpgrade)
         throws SQLException {
         if (tenantSpecific) {
             checkNotNull(tenantId);
@@ -302,14 +312,26 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         if (isNamespaceMappingEnabled){
             props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
         }
+        if (copyChildLinksDuringUpgrade){
+            props.setProperty(QueryServices.MOVE_CHILD_LINKS_DURING_UPGRADE_ENABLED, "false");
+        }
         return DriverManager.getConnection(getUrl(), props);
     }
     private Connection getConnection(boolean tenantSpecific, String tenantId) throws SQLException {
-        return getConnection(tenantSpecific, tenantId, false);
+        return getConnection(tenantSpecific, tenantId, false, false);
     }
     
     @Test
     public void testMoveParentChildLinks() throws Exception {
+        testParentChildLinksHelper(false);
+    }
+
+    @Test
+    public void testCopyParentChildLinks() throws Exception {
+        testParentChildLinksHelper(true);
+    }
+
+    private void testParentChildLinksHelper(boolean copyMode) throws Exception {
         String schema = "S_" + generateUniqueName();
         String table1 = "T_" + generateUniqueName();
         String table2 = "T_" + generateUniqueName();
@@ -321,7 +343,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         String viewIndexName2 = "VIDX_" + generateUniqueName();
         try (Connection conn = getConnection(false, null);
                 Connection tenantConn = getConnection(true, "tenant1");
-                Connection metaConn = getConnection(false, null)) {
+                Connection metaConn = getConnection(false, null, false, copyMode)) {
             // create a non multi-tenant and multi-tenant table
             conn.createStatement()
                     .execute("CREATE TABLE IF NOT EXISTS " + tableName + " ("
@@ -346,7 +368,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                     .execute("create index " + viewIndexName2 + " on " + viewName2 + "(col)");
 
             // query all parent -> child links
-            Set<String> expectedChildLinkSet = getChildLinks(conn);
+            Set<String> expectedChildLinkSet = getChildLinks(conn, SYSTEM_CHILD_LINK_NAME);
 
             // delete all the child links
             conn.createStatement().execute("DELETE FROM SYSTEM.CHILD_LINK WHERE LINK_TYPE = "
@@ -357,11 +379,29 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             phxMetaConn.setRunningUpgrade(true);
             // create the parent-> child links in SYSTEM.CATALOG
             UpgradeUtil.addParentToChildLinks(phxMetaConn);
+
+            // Increase the timeouts so that the scan queries during moveOrCopyChildLinks do not timeout on large syscat's
+            Map<String, String> options = new HashMap<>();
+            options.put(HConstants.HBASE_RPC_TIMEOUT_KEY, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+            options.put(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+            String clientPort = getUtility().getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
+
+            String localQuorum = String.format("localhost:%s", clientPort);
+            options.put(QueryServices.ZOOKEEPER_QUORUM_ATTRIB, localQuorum);
+            options.put(QueryServices.ZOOKEEPER_PORT_ATTRIB, clientPort);
+
+
             // move the parent->child links to SYSTEM.CHILD_LINK
-            UpgradeUtil.moveChildLinks(phxMetaConn);
-            Set<String> actualChildLinkSet = getChildLinks(conn);
+            UpgradeUtil.moveOrCopyChildLinks(phxMetaConn, options);
+            Set<String> actualChildLinkSet = getChildLinks(conn, SYSTEM_CHILD_LINK_NAME);
+            Set<String> actualChildLinkInSyscatSet = getChildLinks(conn, SYSTEM_CATALOG_NAME);
 
             assertEquals("Unexpected child links", expectedChildLinkSet, actualChildLinkSet);
+            if (copyMode) {
+                assertEquals("Unexpected child links in catalog", expectedChildLinkSet, actualChildLinkInSyscatSet);
+            } else {
+                assertEquals("Unexpected child links in catalog", new HashSet<String>(), actualChildLinkInSyscatSet);
+            }
         }
     }
 
@@ -417,11 +457,11 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             SchemaUtil.getEmptyColumnFamily(sysStatsTable)).getMaxVersions());
     }
 
-    private Set<String> getChildLinks(Connection conn) throws SQLException {
+    private Set<String> getChildLinks(Connection conn, String tableName) throws SQLException {
         ResultSet rs =
-                conn.createStatement().executeQuery(
-                    "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY FROM SYSTEM.CHILD_LINK WHERE LINK_TYPE = "
-                            + LinkType.CHILD_TABLE.getSerializedValue());
+                conn.createStatement().executeQuery(String.format(
+                    "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY FROM %s WHERE LINK_TYPE = %d",
+                            tableName, LinkType.CHILD_TABLE.getSerializedValue()));
         Set<String> childLinkSet = Sets.newHashSet();
         while (rs.next()) {
             String key =
@@ -444,7 +484,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
     }
 
     private void testMergeViewIndexSequencesHelper(boolean isNamespaceMappingEnabled) throws Exception {
-        PhoenixConnection conn = getConnection(false, null, isNamespaceMappingEnabled).unwrap(PhoenixConnection.class);
+        PhoenixConnection conn = getConnection(false, null, isNamespaceMappingEnabled, false).unwrap(PhoenixConnection.class);
         ConnectionQueryServices cqs = conn.getQueryServices();
         //First delete any sequences that may exist from previous tests
         conn.createStatement().execute("DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE);
