@@ -364,20 +364,12 @@ public class MutationState implements SQLCloseable {
     // would not change as these threads are running. We also clone mutationState to ensure that
     // the transaction context won't change due to a commit when auto commit is true.
     public Table getHTable(PTable table) throws SQLException {
-        return getHTable(table.getPhysicalName().getBytes(), table.isTransactional(), table.isImmutableRows(),
-                table.getType() == PTableType.INDEX);
-    }
-
-
-    public Table getHTable(byte[] tableName, boolean transactionalTable, boolean indexTable,
-                           boolean immutableRowsEnabled) throws SQLException {
-        Table htable = this.getConnection().getQueryServices().getTable(tableName);
-        if (transactionalTable && phoenixTransactionContext.isTransactionRunning()) {
-            // We're only using this table for reading, so we want it wrapped even if it's an index
-            htable = phoenixTransactionContext.getTransactionalTable(htable,
-                    immutableRowsEnabled || indexTable);
-        }
-        return htable;
+        Table htable = this.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
+        if (table.isTransactional() && phoenixTransactionContext.isTransactionRunning()) {
+             // We're only using this table for reading, so we want it wrapped even if it's an index
+            htable = phoenixTransactionContext.getTransactionalTable(htable, table.isImmutableRows() || table.getType() == PTableType.INDEX);
+         }
+         return htable;
     }
 
 

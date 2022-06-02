@@ -143,20 +143,6 @@ public class TableResultIterator implements ResultIterator {
         ScanUtil.setScanAttributesForClient(scan, table, plan.getContext().getConnection());
     }
 
-    public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
-                               long renewLeaseThreshold, ParallelScanGrouper scanGrouper, byte[] tableName,
-                               boolean transactionalTable, boolean indexTable, boolean immutableRowsEnabled)
-            throws SQLException {
-        this.scan = scan;
-        this.plan = null;
-        this.scanMetricsHolder = scanMetricsHolder;
-        htable = mutationState.getHTable(tableName, transactionalTable, indexTable, immutableRowsEnabled);;
-        this.scanIterator = UNINITIALIZED_SCANNER;
-        this.renewLeaseThreshold = renewLeaseThreshold;
-        this.scanGrouper = scanGrouper;
-        this.hashCacheClient = null;
-    }
-
     @Override
     public void close() throws SQLException {
         try {
@@ -193,9 +179,6 @@ public class TableResultIterator implements ResultIterator {
                 try {
                     throw ServerUtil.parseServerException(e);
                 } catch(HashJoinCacheNotFoundException e1) {
-                    if( plan == null) {
-                        throw e;
-                    }
                     if(ScanUtil.isNonAggregateScan(scan) && plan.getContext().getAggregationManager().isEmpty()) {
                         // For non aggregate queries if we get stale region boundary exception we can
                         // continue scanning from the next value of lasted fetched result.
