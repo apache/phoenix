@@ -47,16 +47,18 @@ public class PherfTest {
     }
 
     @Test
-    public void testSchemaFileOption() throws Exception{
+    public void testLongOptions() throws Exception{
         String extension = ".sql";
+        String args = "testArgs";
+        Long numericArg = 15l;
 
-        String[] shortOptionArgs = {"-schemaFile",PherfConstants.SCHEMA_ROOT_PATTERN + extension};
-        //Asset that No Exception is thrown, ParseException is thrown in case of invalid option
-        assertNotNull(new Pherf(shortOptionArgs));
-
-        String[] longOptionArgs = {"--schemaFile",PherfConstants.SCHEMA_ROOT_PATTERN + extension};
+        String[] longOptionArgs = {"--schemaFile",PherfConstants.SCHEMA_ROOT_PATTERN + extension,"--disableSchemaApply","--disableRuntimeResult","--listFiles","--scenarioFile",args,"--scenarioName",args,"--useAverageCompareType"};
         //Asset that No Exception is thrown, ParseException is thrown in case of invalid option
         assertNotNull(new Pherf(longOptionArgs));
+
+        String[] otherLongOptionArgs = {"--drop",args,"--monitorFrequency",args,"--rowCountOverride",numericArg.toString(),"--hint",args,"--log_per_nrows",numericArg.toString(),"--diff","--export","--writerThreadSize",args,"--stats","--label",args,"--compare",args};
+        //Asset that No Exception is thrown, ParseException is thrown in case of invalid option
+        assertNotNull(new Pherf(otherLongOptionArgs));
     }
 
     @Test
