@@ -3335,6 +3335,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             }
                             return null;
                         }
+
                         checkClosed();
                         boolean hConnectionEstablished = false;
                         boolean success = false;
@@ -3343,6 +3344,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             LOGGER.info("An instance of ConnectionQueryServices was created.");
                             openConnection();
                             hConnectionEstablished = true;
+                            String skipSystemExistenceCheck =
+                                props.getProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK);
+                            if (skipSystemExistenceCheck != null &&
+                                Boolean.valueOf(skipSystemExistenceCheck)) {
+                                initialized = true;
+                                success = true;
+                                return null;
+                            }
                             boolean isDoNotUpgradePropSet = UpgradeUtil.isNoUpgradeSet(props);
                             Properties scnProps = PropertiesUtil.deepCopy(props);
                             scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
