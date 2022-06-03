@@ -379,6 +379,11 @@ public interface QueryServices extends SQLCloseable {
     public static final String MAX_IN_LIST_SKIP_SCAN_SIZE = "phoenix.max.inList.skipScan.size";
 
     /**
+     * Parameter to skip the system tables existence check to avoid unnecessary calls to
+     * Region server holding the SYSTEM.CATALOG table in batch oriented jobs.
+     */
+    String SKIP_SYSTEM_TABLES_EXISTENCE_CHECK = "phoenix.skip.system.tables.existence.check";
+    /**
      * Get executor service used for parallel scans
      */
     public ThreadPoolExecutor getExecutor();
