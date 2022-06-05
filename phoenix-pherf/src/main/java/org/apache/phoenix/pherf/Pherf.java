@@ -60,7 +60,7 @@ public class Pherf {
         options.addOption("disableSchemaApply", "disableSchemaApply", false,
                 "Set to disable schema from being applied.");
         options.addOption("disableRuntimeResult", "disableRuntimeResult", false,
-				"Set to disable writing detailed CSV file during query execution. Those will eventually get written at the end of query execution.");
+                "Set to disable writing detailed CSV file during query execution. Those will eventually get written at the end of query execution.");
         options.addOption("z", "zookeeper", true,
                 "HBase Zookeeper address for connection. Default: localhost");
         options.addOption("q", "query", false, "Executes multi-threaded query sets");
@@ -87,7 +87,7 @@ public class Pherf {
                 "Executes all queries with specified hint. Example SMALL");
         options.addOption("log_per_nrows", "log_per_nrows", true,
                 "Default value to display log line after every 'N' row load");
-        options.addOption("diff", "diff",false,
+        options.addOption("diff", "diff", false,
                 "Run pherf in verification mode and diff with exported results");
         options.addOption("export", "export", false,
                 "Exports query results to CSV files in " + PherfConstants.EXPORT_DIR
@@ -101,7 +101,7 @@ public class Pherf {
                 "Update Phoenix Statistics after data is loaded with -l argument");
         options.addOption("label", "label", true,
                 "Label a run. Result file name will be suffixed with specified label");
-		options.addOption("compare", "compare", true, "Specify labeled run(s) to compare");
+        options.addOption("compare", "compare", true, "Specify labeled run(s) to compare");
         options.addOption("useAverageCompareType", "useAverageCompareType", false,
                 "Compare results with Average query time instead of default is Minimum query time.");
         options.addOption("t", "thin", false, "Use the Phoenix Thin Driver");
