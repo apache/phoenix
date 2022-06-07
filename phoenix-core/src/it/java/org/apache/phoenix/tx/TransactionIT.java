@@ -191,12 +191,10 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
-                if (provider.runTests()) {
-                    String tableName = generateUniqueName();
-                    tableNames.add(tableName);
-                    conn.createStatement().execute(
-                            "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'");
-                }
+                String tableName = generateUniqueName();
+                tableNames.add(tableName);
+                conn.createStatement().execute(
+                        "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'");
             }
             if (tableNames.size() < 2) {
                 return;
@@ -231,7 +229,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
-                if (provider.runTests() && provider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.ALLOW_LOCAL_INDEX)) {
+                if (provider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.ALLOW_LOCAL_INDEX)) {
                     String tableName = generateUniqueName();
                     conn.createStatement().execute(
                             "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'");

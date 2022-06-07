@@ -1268,27 +1268,8 @@ public class TestUtil {
     }
 
     public static Collection<Object[]> filterTxParamData(Collection<Object[]> data, int index) {
-        boolean runAllTests = true;
-        boolean runNoTests = true;
-
-        for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
-            runAllTests &= provider.runTests();
-            runNoTests &= !provider.runTests();
-        }
-        if (runNoTests) {
-            return Collections.emptySet();
-        }
-        if (runAllTests) {
-            return data;
-        }
-        List<Object[]> filteredData = Lists.newArrayListWithExpectedSize(data.size());
-        for (Object[] params : data) {
-            String provider = (String) params[index];
-            if (provider == null || TransactionFactory.Provider.valueOf(provider).runTests()) {
-                filteredData.add(params);
-            }
-        }
-        return filteredData;
+    	return data;
+    	//TODO: remove this method altogether
     }
 
     /**

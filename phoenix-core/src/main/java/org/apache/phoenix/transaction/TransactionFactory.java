@@ -22,43 +22,19 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 
 public class TransactionFactory {
 
-    private static final PhoenixTransactionProvider tephraTransactionProvider;
-
-    static{
-        boolean tephraEnabled = true;
-        try {
-            Class.forName("org.apache.tephra.TransactionFailureException");
-        } catch (Throwable e) {
-            tephraEnabled = false;
-        }
-        if (tephraEnabled) {
-            tephraTransactionProvider = TephraTransactionProvider.getInstance();
-        } else {
-            tephraTransactionProvider = NotAvailableTransactionProvider.getInstance();
-        }
-    }
-
     public enum Provider {
-        TEPHRA((byte)1, tephraTransactionProvider,
-            tephraTransactionProvider instanceof TephraTransactionProvider),
-        OMID((byte)2, OmidTransactionProvider.getInstance(), true);
+        OMID((byte)2, OmidTransactionProvider.getInstance());
 
         private final byte code;
         private final PhoenixTransactionProvider provider;
-        private final boolean runTests;
 
-        Provider(byte code, PhoenixTransactionProvider provider, boolean runTests) {
+        Provider(byte code, PhoenixTransactionProvider provider) {
             this.code = code;
             this.provider = provider;
-            this.runTests = runTests;
         }
 
         public static Provider[] available() {
-            if(TEPHRA.getTransactionProvider() instanceof TephraTransactionProvider) {
-                return values();
-            } else {
-                return new Provider[] {OMID};
-            }
+            return new Provider[] {OMID};
         }
 
         public byte getCode() {
@@ -79,10 +55,6 @@ public class TransactionFactory {
         public PhoenixTransactionProvider getTransactionProvider()  {
             return provider;
         }
-
-        public boolean runTests() {
-            return runTests;
-        }
     }
 
     public static PhoenixTransactionProvider getTransactionProvider(Provider provider) {
@@ -94,7 +66,7 @@ public class TransactionFactory {
             return null;
         }
         Provider provider = (clientVersion < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0) 
-                ? Provider.TEPHRA
+                ? Provider.OMID
                 : Provider.fromCode(txState[txState.length-1]);
         return provider.getTransactionProvider();
     }

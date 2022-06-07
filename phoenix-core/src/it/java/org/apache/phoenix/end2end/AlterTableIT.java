@@ -1230,9 +1230,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     
 	@Test
 	public void testCreatingTxnTableFailsIfTxnsDisabled() throws Exception {
-	    if (!TransactionFactory.Provider.getDefault().runTests()) {
-	        return;
-	    }
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(false));
 		try (Connection conn = DriverManager.getConnection(getUrl(), props)) {

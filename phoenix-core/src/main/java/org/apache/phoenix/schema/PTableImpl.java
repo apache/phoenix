@@ -1867,7 +1867,7 @@ public class PTableImpl implements PTable {
             transactionProvider = TransactionFactory.Provider.fromCode(table.getTransactionProvider());
         } else if (table.hasTransactional()) {
             // For backward compatibility prior to transactionProvider field
-            transactionProvider = TransactionFactory.Provider.TEPHRA;
+            transactionProvider = TransactionFactory.Provider.OMID;
         }
         ViewType viewType = null;
         String viewStatement = null;

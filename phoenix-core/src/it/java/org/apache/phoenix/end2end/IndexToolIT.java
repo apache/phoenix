@@ -201,9 +201,8 @@ public class IndexToolIT extends BaseTest {
         boolean[] Booleans = new boolean[] { false, true };
         for (boolean namespaceMapped : Booleans) {
             for (boolean useSnapshot : Booleans) {
-                for (String transactionProvider : new String[] {"TEPHRA", "OMID", null}) {
-                    if(transactionProvider !=null &&
-                            !TransactionFactory.Provider.valueOf(transactionProvider).runTests()) {
+                for (String transactionProvider : new String[] {"OMID", null}) {
+                    if(transactionProvider != null) {
                         continue;
                     }
                     for (boolean mutable : Booleans) {

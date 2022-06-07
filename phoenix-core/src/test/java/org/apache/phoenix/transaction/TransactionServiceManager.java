@@ -27,9 +27,7 @@ public class TransactionServiceManager {
 
     public static PhoenixTransactionService startTransactionService(TransactionFactory.Provider provider, Configuration config, ConnectionInfo connInfo, int port) throws SQLException {
         PhoenixTransactionProvider transactionProvider = provider.getTransactionProvider();
-        if(provider == Provider.TEPHRA) {
-            return TephraTransactionService.startAndInjectTephraTransactionService((TephraTransactionProvider)transactionProvider, config, connInfo, port);
-        } else if (provider == Provider.OMID) {
+        if (provider == Provider.OMID) {
             return OmidTransactionService.startAndInjectOmidTransactionService((OmidTransactionProvider)transactionProvider, config, connInfo, port);
         }
         throw new UnsupportedOperationException("Unknown transaction provider");

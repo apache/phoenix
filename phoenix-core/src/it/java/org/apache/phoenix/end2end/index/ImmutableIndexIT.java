@@ -137,9 +137,7 @@ public class ImmutableIndexIT extends BaseTest {
 		        Arrays.asList(new Object[][] {
     				{ false, false, null, false }, { false, false, null, true },
     				{ false, true, "OMID", false },
-                    { false, true, "TEPHRA", false }, { false, true, "TEPHRA", true },
     				{ true, false, null, false }, { true, false, null, true },
-                    { true, true, "TEPHRA", false }, { true, true, "TEPHRA", true },
                 }), 2);
     }
 

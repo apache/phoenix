@@ -60,7 +60,7 @@ public class NotAvailableTransactionProvider implements PhoenixTransactionProvid
 
     @Override
     public Provider getProvider() {
-        return TransactionFactory.Provider.TEPHRA;
+        return TransactionFactory.Provider.OMID;
     }
 
     @Override
