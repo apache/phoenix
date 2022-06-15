@@ -22,6 +22,7 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
 
@@ -903,12 +904,17 @@ public class MetaDataUtil {
             throws SQLException {
         String schemaName = getViewIndexSequenceSchemaName(name, isNamespaceMapped);
         String sequenceName = getViewIndexSequenceName(name, null, isNamespaceMapped);
-        connection.prepareStatement("DELETE FROM "
-                + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
-                + " WHERE " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA
-                + (schemaName.length() > 0 ? "='" + schemaName + "'" : " IS NULL")
-                + " AND " + PhoenixDatabaseMetaData.SEQUENCE_NAME + " = '" + sequenceName + "'")
-                .executeUpdate();
+        String delSeqQry = "DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + "WHERE"
+                + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " %s " + " AND "
+                + PhoenixDatabaseMetaData.SEQUENCE_NAME + " %s ";
+        delSeqQry = String.format(delSeqQry, StringUtil.getParamOrIsNull(schemaName.length()),
+                StringUtil.getDynParam());
+        try (PreparedStatement stmt = connection.prepareStatement(delSeqQry)) {
+            int colCount = StringUtil.DEF_PAR_POS;
+            if (schemaName.length() > 0) stmt.setString(colCount++,schemaName);
+            stmt.setString(colCount++,sequenceName);
+            stmt.executeUpdate();
+        }
     }
     
     /**

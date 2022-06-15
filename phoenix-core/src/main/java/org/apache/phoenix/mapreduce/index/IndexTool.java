@@ -26,7 +26,11 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.ROW_KEY_SEPARATOR;
 
 import java.io.IOException;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.PreparedStatement;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -97,17 +101,9 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.ColumnInfo;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.EquiDepthStreamHistogram;
+import org.apache.phoenix.util.*;
 import org.apache.phoenix.util.EquiDepthStreamHistogram.Bucket;
-import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TransactionUtil;
+import org.checkerframework.checker.units.qual.A;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -602,15 +598,23 @@ public class IndexTool extends Configured implements Tool {
             for (String index : disableIndexes) {
                 quotedIndexes.add("'" + index + "'");
             }
-            try (PreparedStatement stmt = connection.prepareStatement("SELECT MAX("
-                    + ASYNC_REBUILD_TIMESTAMP + "), MAX(" + INDEX_DISABLE_TIMESTAMP
-                    + ") FROM " + SYSTEM_CATALOG_NAME
+            List<String> dyParamVals = new ArrayList<String>(disableIndexes.size());
+            for (int count = 0; count < disableIndexes.size(); count++) {
+                dyParamVals.add(" ? ");
+            }
+            String aggTsSql = "SELECT MAX(" + ASYNC_REBUILD_TIMESTAMP + "), MAX("
+                    + INDEX_DISABLE_TIMESTAMP + ") FROM " + SYSTEM_CATALOG_NAME
                     + " (" + ASYNC_REBUILD_TIMESTAMP + " BIGINT) WHERE " + TABLE_SCHEM
-                    + (schemaName != null && schemaName.length() > 0 ? "='"
-                    + schemaName + "'" : " IS NULL")
-                    + " and " + TABLE_NAME + " IN ("
-                    + StringUtils.join(",", quotedIndexes) + ")")) {
-                try (ResultSet rs = stmt.executeQuery()) {
+                    + " %s " + " and " + TABLE_NAME + " IN ("
+                    + StringUtils.join(",", dyParamVals) + ")";
+            aggTsSql = String.format(aggTsSql, StringUtil.getParamOrIsNull(schemaName.length()));
+            try (PreparedStatement stAggTs = connection.prepareStatement(aggTsSql)) {
+                int colCount = StringUtil.DEF_PAR_POS;
+                if (schemaName.length() > 0) stAggTs.setString(colCount++, schemaName);
+                for (int count = 0; count < quotedIndexes.size(); count++) {
+                    stAggTs.setString(colCount++,quotedIndexes.get(count));
+                }
+                try (ResultSet rs = stAggTs.executeQuery()) {
                     if (rs.next()) {
                         maxRebuilAsyncDate = rs.getLong(1);
                         maxDisabledTimeStamp = rs.getLong(2);

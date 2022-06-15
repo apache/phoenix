@@ -464,14 +464,19 @@ public class UpgradeUtil {
                 String tenantId = rs.getString(4);
                 boolean multiTenantTable = rs.getBoolean(5);
                 int numColumnsToSkip = 1 + (multiTenantTable ? 1 : 0);
-                String getColumns =
-                        "SELECT COLUMN_NAME, COLUMN_FAMILY FROM SYSTEM.CATALOG  WHERE TABLE_SCHEM "
-                                + (schemaName == null ? "IS NULL " : "='" + schemaName+ "'")
-                                + " AND TENANT_ID "+(tenantId == null ? "IS NULL " : "='" + tenantId + "'")
-                                + " and TABLE_NAME='" + indexTableName
-                                + "' AND COLUMN_NAME IS NOT NULL AND KEY_SEQ > "+ numColumnsToSkip +" ORDER BY KEY_SEQ";
-                try (PreparedStatement pstmt = globalConnection.prepareStatement(getColumns)) {
-                    ResultSet getColumnsRs = pstmt.executeQuery();
+                String getColumns = "SELECT COLUMN_NAME, COLUMN_FAMILY FROM SYSTEM.CATALOG "
+                        + " WHERE TABLE_SCHEM %s AND TENANT_ID %s AND TABLE_NAME = %s "
+                        + " AND COLUMN_NAME IS NOT NULL AND KEY_SEQ > "
+                        + numColumnsToSkip + " ORDER BY KEY_SEQ";
+                getColumns = String.format(getColumns,StringUtil.getParamOrIsNull(schemaName),
+                        StringUtil.getParamOrIsNull(tenantId),StringUtil.getDynParam());
+                try(PreparedStatement pstmt = globalConnection.prepareStatement(getColumns)) {
+                   int colCount = StringUtil.DEF_PAR_POS;
+                   if(schemaName != null) pstmt.setString(colCount++,schemaName);
+                   if(tenantId != null) pstmt.setString(colCount++,tenantId);
+                   pstmt.setString(colCount++,indexTableName);
+                   ResultSet getColumnsRs = pstmt.executeQuery();
+
                     List<String> indexedColumns = new ArrayList<String>(1);
                     List<String> coveredColumns = new ArrayList<String>(1);
 
@@ -2018,18 +2023,20 @@ public class UpgradeUtil {
                 String theTenantId = tableNames.get(i);
                 String theSchemaName = tableNames.get(i+1);
                 String theTableName = tableNames.get(i+2);
-                globalConn.prepareStatement("UPSERT INTO "
-                        + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME
-                        + " (" + PhoenixDatabaseMetaData.TENANT_ID + ","
-                        + PhoenixDatabaseMetaData.TABLE_SCHEM + ","
-                        + PhoenixDatabaseMetaData.TABLE_NAME + ","
-                        + MetaDataEndpointImpl.ROW_KEY_ORDER_OPTIMIZABLE
-                        + " BOOLEAN" + ") VALUES ("
-                        + "'" + (theTenantId == null ? StringUtil.EMPTY_STRING : theTenantId)
-                        + "'," + "'"
-                        + (theSchemaName == null ? StringUtil.EMPTY_STRING : theSchemaName)
-                        + "'," + "'" + theTableName + "'," + "TRUE)")
-                        .execute();
+
+                String upsrtSql = "UPSERT INTO " + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME
+                        + " ( %s, %s, %s, %s BOOLEAN ) VALUES ( %s, %s, %s, TRUE) ";
+                upsrtSql = String.format(upsrtSql, PhoenixDatabaseMetaData.TENANT_ID,
+                        PhoenixDatabaseMetaData.TABLE_SCHEM, PhoenixDatabaseMetaData.TABLE_NAME,
+                        MetaDataEndpointImpl.ROW_KEY_ORDER_OPTIMIZABLE,
+                        StringUtil.getDynParam(),StringUtil.getDynParam(),StringUtil.getDynParam());
+               try(PreparedStatement stUpsrt = globalConn.prepareStatement(upsrtSql)) {
+                   int colCount = StringUtil.DEF_PAR_POS;
+                   stUpsrt.setString(colCount++, StringUtil.getParOrEmptyStr(theTenantId));
+                   stUpsrt.setString(colCount++, StringUtil.getParOrEmptyStr(theSchemaName));
+                   stUpsrt.setString(colCount++, theTableName);
+                   stUpsrt.execute();
+               }
             }
             globalConn.commit();
             for (int i = 0; i < tableNames.size(); i += 3) {

@@ -43,7 +43,10 @@ public class StringUtil {
     public final static char MULTI_CHAR_LIKE = '%';
     private final static String[] LIKE_ESCAPE_SEQS = new String[]{"\\"+SINGLE_CHAR_LIKE, "\\"+MULTI_CHAR_LIKE};
     private final static String[] LIKE_UNESCAPED_SEQS = new String[]{""+SINGLE_CHAR_LIKE, ""+MULTI_CHAR_LIKE};
-    
+    public static final String IS_NULL_EXPR = " IS NULL ";
+    public static final String DYN_PAR_EXPR = " = ? ";
+    public static final int DEF_PAR_POS = 1; // Default parameter position
+
 
     private StringUtil() {
     }
@@ -404,5 +407,25 @@ public class StringUtil {
     public static String escapeBackslash(String input) {
     	// see http://stackoverflow.com/questions/4653831/regex-how-to-escape-backslashes-and-special-characters
     	return input.replaceAll("\\\\","\\\\\\\\");
+    }
+    public static String getParOrEmptyStr(String input) {
+        // Return either "Empty String or inout
+        String str = (input == null) ? StringUtil.EMPTY_STRING : input;
+        return str;
+    }
+    public static String getParamOrIsNull(int inputLen) {
+        // Return either "IS NULL or " = ? " based on input length
+        String str = (inputLen <= 0) ? IS_NULL_EXPR : DYN_PAR_EXPR;
+        return str;
+    }
+    public static String getParamOrIsNull(String input) {
+        // Return either "IS NULL or " = ? " based on input, input String
+        // is not modified
+        String str = (input == null) ? IS_NULL_EXPR : DYN_PAR_EXPR;
+        return str;
+    }
+    public static String getDynParam() {
+        String str = DYN_PAR_EXPR;
+        return str;
     }
 }

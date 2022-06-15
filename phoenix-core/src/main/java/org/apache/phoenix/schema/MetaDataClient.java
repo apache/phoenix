@@ -1165,9 +1165,10 @@ public class MetaDataClient {
         long msSinceLastUpdate = Long.MAX_VALUE;
         if (checkLastStatsUpdateTime) {
             String query = "SELECT CURRENT_DATE()," + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
-                    + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
+                    + " WHERE " + PHYSICAL_NAME + " = ?  AND " + COLUMN_FAMILY
                     + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
             try (PreparedStatement stmt = connection.prepareStatement(query)) {
+                stmt.setString(1,physicalName.getString());
                 ResultSet rs = stmt.executeQuery();
                 if (rs.next()) {
                     msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
