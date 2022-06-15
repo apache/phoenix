@@ -79,7 +79,9 @@ public class OverAllQueryMetrics {
     }
 
     public void startQuery() {
-        queryWatch.start();
+        if (!queryWatch.isRunning()) {
+            queryWatch.start();
+        }
     }
 
     public void endQuery() {
