@@ -24,6 +24,7 @@ import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -424,21 +425,10 @@ public class ServerUtil {
      * @param admin HbaseAdmin Object
      * @param schemaName Phoenix schema name for which we check existence of the HBase namespace
      * @return true if the HBase namespace exists, else returns false
-     * @throws SQLException If there is an exception checking the HBase namespace
+     * @throws IOException If there is an exception checking the HBase namespace
      */
     public static boolean isHBaseNamespaceAvailable(Admin admin, String schemaName) throws IOException{
-        boolean namespaceExists = false;
-        try{
-            String[] hbaseNamespaces = admin.listNamespaces();
-            for(String namespace : hbaseNamespaces){
-                if(namespace.equals(schemaName)){
-                    namespaceExists = true;
-                    break;
-                }
-            }
-        } catch (IOException e) {
-            throw e;
-        }
-        return namespaceExists;
+        String[] hbaseNamespaces = admin.listNamespaces();
+        return Arrays.asList(hbaseNamespaces).contains(schemaName);
     }
 }
