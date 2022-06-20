@@ -38,6 +38,7 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.client.Table;
@@ -416,5 +417,28 @@ public class ServerUtil {
             t = e;
         }
         return t;
+    }
+
+    /**
+     * Returns true if HBase namespace exists, else returns false
+     * @param admin HbaseAdmin Object
+     * @param schemaName Phoenix schema name for which we check existence of the HBase namespace
+     * @return true if the HBase namespace exists, else returns false
+     * @throws SQLException If there is an exception checking the HBase namespace
+     */
+    public static boolean isHBaseNamespaceAvailable(Admin admin, String schemaName) throws IOException{
+        boolean namespaceExists = false;
+        try{
+            String[] hbaseNamespaces = admin.listNamespaces();
+            for(String namespace : hbaseNamespaces){
+                if(namespace.equals(schemaName)){
+                    namespaceExists = true;
+                    break;
+                }
+            }
+        } catch (IOException e) {
+            throw e;
+        }
+        return namespaceExists;
     }
 }

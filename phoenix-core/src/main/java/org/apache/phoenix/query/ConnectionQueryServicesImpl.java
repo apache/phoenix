@@ -1298,14 +1298,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         SQLException sqlE = null;
         boolean createdNamespace = false;
         try (Admin admin = getAdmin()) {
-            NamespaceDescriptor namespaceDescriptor = null;
-            try {
-                namespaceDescriptor = admin.getNamespaceDescriptor(schemaName);
-            } catch (NamespaceNotFoundException ignored) {
-
-            }
-            if (namespaceDescriptor == null) {
-                namespaceDescriptor = NamespaceDescriptor.create(schemaName).build();
+            if (!ServerUtil.isHBaseNamespaceAvailable(admin, schemaName)) {
+                NamespaceDescriptor namespaceDescriptor =
+                    NamespaceDescriptor.create(schemaName).build();
                 admin.createNamespace(namespaceDescriptor);
                 createdNamespace = true;
             }
@@ -5938,13 +5933,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             final String quorum = ZKConfig.getZKQuorumServersString(config);
             final String znode = this.props.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
             LOGGER.debug("Found quorum: " + quorum + ":" + znode);
-            boolean nameSpaceExists = true;
-            try {
-                admin.getNamespaceDescriptor(schemaName);
-            } catch (org.apache.hadoop.hbase.NamespaceNotFoundException e) {
-                nameSpaceExists = false;
-            }
-            if (nameSpaceExists) {
+            if (ServerUtil.isHBaseNamespaceAvailable(admin, schemaName)) {
                 admin.deleteNamespace(schemaName);
             }
         } catch (IOException e) {
