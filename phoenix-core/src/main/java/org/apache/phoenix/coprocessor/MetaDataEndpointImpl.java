@@ -4474,6 +4474,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         try {
             List<Mutation> schemaMutations = ProtobufUtil.getMutations(request);
             schemaName = request.getSchemaName();
+            getCoprocessorHost().preCreateSchema(schemaName);
             Mutation m = MetaDataUtil.getPutOnlyTableHeaderRow(schemaMutations);
 
             byte[] lockKey = m.getRow();
