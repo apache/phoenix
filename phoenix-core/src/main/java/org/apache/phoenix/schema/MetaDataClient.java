@@ -4122,7 +4122,7 @@ public class MetaDataClient {
                 }
 
                 if (EncodedColumnsUtil.usesEncodedColumnNames(table)
-                        && stmtProperties.isEmpty()) {
+                        && stmtProperties.isEmpty() && !acquiredBaseTableMutex) {
                     // For tables that use column encoding acquire a mutex on
                     // the base table as we need to update the encoded column
                     // qualifier counter on the base table. Not applicable to
@@ -4142,7 +4142,7 @@ public class MetaDataClient {
                     // a conflicting type etc
                     boolean acquiredMutex = writeCell(null, physicalSchemaName, physicalTableName,
                         pColumn.toString());
-                    if (!acquiredMutex) {
+                    if (!acquiredMutex && !acquiredColumnMutexSet.contains(pColumn.toString())) {
                         throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
                     }
                     acquiredColumnMutexSet.add(pColumn.toString());

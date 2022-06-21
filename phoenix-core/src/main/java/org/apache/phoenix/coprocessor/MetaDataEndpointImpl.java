@@ -542,6 +542,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         return PNameFactory.newName(keyBuffer, keyOffset, length);
     }
 
+    private static boolean failConcurrentMutateAddColumnOneTimeForTesting = false;
     private RegionCoprocessorEnvironment env;
 
     private PhoenixMetaDataCoprocessorHost phoenixAccessCoprocessorHost;
@@ -554,6 +555,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     // a child view and also block metadata changes that were previously propagated to children
     // before 4.15, so that we can rollback the upgrade to 4.15 if required
     private boolean allowSplittableSystemCatalogRollback;
+
+    private MetricsMetadataSource metricsSource;
+
+    public static void setFailConcurrentMutateAddColumnOneTimeForTesting(boolean fail) {
+        failConcurrentMutateAddColumnOneTimeForTesting = fail;
+    }
 
     /**
      * Stores a reference to the coprocessor environment provided by the
@@ -2780,6 +2787,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
                 invalidateList.add(cacheKey);
                 PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion);
+                if (failConcurrentMutateAddColumnOneTimeForTesting) {
+                    failConcurrentMutateAddColumnOneTimeForTesting = false;
+                    return new MetaDataMutationResult(MutationCode.CONCURRENT_TABLE_MUTATION,
+                            EnvironmentEdgeManager.currentTimeMillis(), table);
+                }
                 if (LOGGER.isDebugEnabled()) {
                     if (table == null) {
                         LOGGER.debug("Table " + Bytes.toStringBinary(key)

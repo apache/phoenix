@@ -54,6 +54,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -749,6 +750,28 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         ddl = "ALTER TABLE " + dataTableFullName + " ADD STRING_ARRAY1 VARCHAR[]";
         conn1.createStatement().execute(ddl);
         conn1.close();
+    }
+
+    @Test
+    public void testAddColumnWithRetry_PostConcurrentFailureOnFirstTime() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String ddl = "CREATE TABLE " + dataTableFullName + " (\n"
+                +"ID VARCHAR(15) PRIMARY KEY,\n"
+                +"COL1 BIGINT) " + tableDDLOptions;
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        conn1.createStatement().execute(ddl);
+        MetaDataEndpointImpl.setFailConcurrentMutateAddColumnOneTimeForTesting(true);
+        ddl = "ALTER TABLE " + dataTableFullName + " ADD STRING VARCHAR, STRING_DATA_TYPES VARCHAR";
+        conn1.createStatement().execute(ddl);
+        ResultSet rs = conn1.getMetaData().getColumns("","",dataTableFullName,null);
+        assertTrue(rs.next());
+        assertEquals("ID", rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("COL1", rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("STRING", rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("STRING_DATA_TYPES", rs.getString(4));
     }
 
     @Test
