@@ -78,17 +78,14 @@ public class UniformDistributionLoadEventGenerator extends BaseLoadEventGenerato
             Operation op = operationList.get(sampleIndex);
             int numTenants = 1;
 
-            if(tenantGroup.getNumTenants() != 0)
-            {
+            if(tenantGroup.getNumTenants() != 0){
                 numTenants = tenantGroup.getNumTenants();
             }
 
             String tenantGroupId = tenantGroup.getId();
             String tenantIdPrefix = Strings
                     .padStart(tenantGroupId, loadProfile.getGroupIdLength(), 'x');
-            // String formattedTenantId = String.format(loadProfile.getTenantIdFormat(),
-            //       tenantIdPrefix.substring(0, loadProfile.getGroupIdLength()), 1);
-
+           
             String formattedTenantId = String.format(loadProfile.getTenantIdFormat(),
                     tenantIdPrefix.substring(0, loadProfile.getGroupIdLength()), RANDOM.nextInt(numTenants));
 
