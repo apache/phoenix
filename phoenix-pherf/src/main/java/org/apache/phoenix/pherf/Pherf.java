@@ -57,52 +57,56 @@ public class Pherf {
     private final PhoenixUtil phoenixUtil = PhoenixUtil.create();
 
     static {
-        options.addOption("disableSchemaApply", false, "Set to disable schema from being applied.");
-		options.addOption("disableRuntimeResult", false,
-				"Set to disable writing detailed CSV file during query execution. Those will eventually get written at the end of query execution.");
+        options.addOption("disableSchemaApply", "disableSchemaApply", false,
+                "Set to disable schema from being applied.");
+        options.addOption("disableRuntimeResult", "disableRuntimeResult", false,
+                "Set to disable writing detailed CSV file during query execution. Those will eventually get written at the end of query execution.");
         options.addOption("z", "zookeeper", true,
                 "HBase Zookeeper address for connection. Default: localhost");
         options.addOption("q", "query", false, "Executes multi-threaded query sets");
-        options.addOption("listFiles", false, "List available resource files");
+        options.addOption("listFiles", "listFiles", false, "List available resource files");
         options.addOption("mt", "multi-tenant", false,
                 "Multi tenanted workloads based on load profiles.");
         options.addOption("l", "load", false,
                 "Pre-loads data according to specified configuration values.");
-        options.addOption("scenarioFile", true,
+        options.addOption("scenarioFile", "scenarioFile", true,
                 "Regex or file name for the Test Scenario configuration .xml file to use.");
-        options.addOption("scenarioName", true,
+        options.addOption("scenarioName", "scenarioName", true,
                 "Regex or scenario name from the Test Scenario configuration .xml file to use.");
-        options.addOption("drop", true, "Regex drop all tables with schema name as PHERF. "
+        options.addOption("drop", "drop", true, "Regex drop all tables with schema name as PHERF. "
                 + "\nExample drop Event tables: -drop .*(EVENT).* Drop all: -drop .* or -drop all");
-        options.addOption("schemaFile", true,
+        options.addOption("schemaFile", "schemaFile", true,
                 "Regex or file name for the Test phoenix table schema .sql to use.");
         options.addOption("m", "monitor", false, "Launch the stats profilers");
-        options.addOption("monitorFrequency", true,
+        options.addOption("monitorFrequency", "monitorFrequency", true,
                 "Override for frequency in Ms for which monitor should log stats. "
                         + "\n See pherf.default.monitorFrequency in pherf.properties");
-        options.addOption("rowCountOverride", true,
+        options.addOption("rowCountOverride", "rowCountOverride", true,
                 "Row count override to use instead of one specified in scenario.");
-        options.addOption("hint", true, "Executes all queries with specified hint. Example SMALL");
-        options.addOption("log_per_nrows", true,
+        options.addOption("hint", "hint", true,
+                "Executes all queries with specified hint. Example SMALL");
+        options.addOption("log_per_nrows", "log_per_nrows", true,
                 "Default value to display log line after every 'N' row load");
-        options.addOption("diff", false,
+        options.addOption("diff", "diff", false,
                 "Run pherf in verification mode and diff with exported results");
-        options.addOption("export", false,
+        options.addOption("export", "export", false,
                 "Exports query results to CSV files in " + PherfConstants.EXPORT_DIR
                         + " directory");
-        options.addOption("writerThreadSize", true,
+        options.addOption("writerThreadSize", "writerThreadSize", true,
                 "Override the default number of writer threads. "
                         + "See pherf.default.dataloader.threadpool in Pherf.properties.");
         options.addOption("h", "help", false, "Get help on using this utility.");
         options.addOption("d", "debug", false, "Put tool in debug mode");
-        options.addOption("stats", false,
+        options.addOption("stats", "stats", false,
                 "Update Phoenix Statistics after data is loaded with -l argument");
-		options.addOption("label", true, "Label a run. Result file name will be suffixed with specified label");
-		options.addOption("compare", true, "Specify labeled run(s) to compare");
-		options.addOption("useAverageCompareType", false, "Compare results with Average query time instead of default is Minimum query time.");
-		    options.addOption("t", "thin", false, "Use the Phoenix Thin Driver");
-		    options.addOption("s", "server", true, "The URL for the Phoenix QueryServer");
-		    options.addOption("b", "batchApi", false, "Use JDBC Batch API for writes");
+        options.addOption("label", "label", true,
+                "Label a run. Result file name will be suffixed with specified label");
+        options.addOption("compare", "compare", true, "Specify labeled run(s) to compare");
+        options.addOption("useAverageCompareType", "useAverageCompareType", false,
+                "Compare results with Average query time instead of default is Minimum query time.");
+        options.addOption("t", "thin", false, "Use the Phoenix Thin Driver");
+        options.addOption("s", "server", true, "The URL for the Phoenix QueryServer");
+        options.addOption("b", "batchApi", false, "Use JDBC Batch API for writes");
     }
 
     private final String zookeeper;
