@@ -4474,7 +4474,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         try {
             List<Mutation> schemaMutations = ProtobufUtil.getMutations(request);
             schemaName = request.getSchemaName();
-            getCoprocessorHost().preCreateSchema(schemaName);
+            //don't do the user permission checks for the SYSTEM schema, because an ordinary
+            //user has to be able to create it if it doesn't already exist when bootstrapping
+            //the system tables
+            if (!schemaName.equals(QueryConstants.SYSTEM_SCHEMA_NAME)) {
+                getCoprocessorHost().preCreateSchema(schemaName);
+            }
             Mutation m = MetaDataUtil.getPutOnlyTableHeaderRow(schemaMutations);
 
             byte[] lockKey = m.getRow();
