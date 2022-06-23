@@ -556,8 +556,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     // before 4.15, so that we can rollback the upgrade to 4.15 if required
     private boolean allowSplittableSystemCatalogRollback;
 
-    private MetricsMetadataSource metricsSource;
-
     public static void setFailConcurrentMutateAddColumnOneTimeForTesting(boolean fail) {
         failConcurrentMutateAddColumnOneTimeForTesting = fail;
     }
