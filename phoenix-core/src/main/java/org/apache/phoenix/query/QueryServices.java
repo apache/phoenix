@@ -390,6 +390,9 @@ public interface QueryServices extends SQLCloseable {
      */
     String SOURCE_OPERATION_ATTRIB = "phoenix.source.operation";
 
+    // The max point keys that can be generated for large in list clause
+    public static final String MAX_IN_LIST_SKIP_SCAN_SIZE = "phoenix.max.inList.skipScan.size";
+
     /**
      * Parameter to skip the system tables existence check to avoid unnecessary calls to
      * Region server holding the SYSTEM.CATALOG table in batch oriented jobs.
