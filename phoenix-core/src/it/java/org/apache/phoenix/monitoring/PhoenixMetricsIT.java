@@ -86,6 +86,7 @@ import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -1113,6 +1114,9 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         props.setProperty(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, Integer.toString(maxConnections));
         Properties props1 = new Properties(props);
         props1.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Integer.toString(-1));
+        Properties props2 = new Properties(props);
+        //Will create IllegalArgumentException while parsing loglevel
+        props2.setProperty(QueryServices.LOG_LEVEL, "notKnown");
 
         GLOBAL_QUERY_SERVICES_COUNTER.getMetric().reset();
         GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().reset();
@@ -1121,13 +1125,17 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         try {
             for (int i = 0; i < attemptedPhoenixConnections; i++) {
                 try {
-                    if (i % 3 == 0) {
+                    if (i == 0) {
+                        connections.add(DriverManager.getConnection(url, props2));
+                    } else if (i % 3 == 0) {
                         connections.add(DriverManager.getConnection(url, props1));
                     } else {
                         connections.add(DriverManager.getConnection(url, props));
                     }
                 } catch (SQLException se) {
-                    if (i % 3 == 0) {
+                    if (i == 0) {
+                        assertEquals(0, se.getErrorCode());
+                    } else if (i % 3 == 0) {
                         assertEquals(SQLExceptionCode.INVALID_SCN.getErrorCode(), se.getErrorCode());
                     } else {
                         assertEquals(SQLExceptionCode.NEW_CONNECTION_THROTTLED.getErrorCode(), se.getErrorCode());

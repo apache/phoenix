@@ -418,6 +418,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                 GLOBAL_FAILED_PHOENIX_CONNECTIONS.increment();
             }
             throw sqlException;
+        } catch (Exception e) {
+            if (!isInternalConnection) {
+                GLOBAL_FAILED_PHOENIX_CONNECTIONS.increment();
+            }
+            throw e;
         }
     }
 
