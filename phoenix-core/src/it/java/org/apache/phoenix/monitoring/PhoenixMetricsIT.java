@@ -1150,6 +1150,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         assertEquals(1, GLOBAL_QUERY_SERVICES_COUNTER.getMetric().getValue());
         assertEquals(1, GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.getMetric().getValue());
         assertEquals(3, GLOBAL_FAILED_PHOENIX_CONNECTIONS.getMetric().getValue());
+        //While initializing CQS we are creating one more metaConnection increasing Attempted_Counter by +1 during 1st conn.
         assertTrue("Not all connections were attempted!",
                 attemptedPhoenixConnections <= GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().getValue());
 
