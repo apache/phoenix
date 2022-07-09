@@ -23,7 +23,9 @@ import java.io.IOException;
 import java.sql.Date;
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -237,7 +239,7 @@ public class RoundDateExpression extends ScalarFunction {
     @Override
     public KeyPart newKeyPart(final KeyPart childPart) {
         return new KeyPart() {
-            private final List<Expression> extractNodes = Collections.<Expression>singletonList(RoundDateExpression.this);
+            private final Set<Expression> extractNodes = new LinkedHashSet<>(Collections.<Expression>singleton(RoundDateExpression.this));
 
             @Override
             public PColumn getColumn() {
@@ -245,7 +247,7 @@ public class RoundDateExpression extends ScalarFunction {
             }
 
             @Override
-            public List<Expression> getExtractNodes() {
+            public Set<Expression> getExtractNodes() {
                 return extractNodes;
             }
 
