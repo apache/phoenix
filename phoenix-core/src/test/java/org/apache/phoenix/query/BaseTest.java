@@ -1681,7 +1681,7 @@ public abstract class BaseTest {
 
         LOGGER.info("Disabled and dropped {} tables in {} ms", tableCount, endTime-startTime);
     }
-    
+
     public static void assertOneOfValuesEqualsResultSet(ResultSet rs, List<List<Object>>... expectedResultsArray) throws SQLException {
         List<List<Object>> results = Lists.newArrayList();
         while (rs.next()) {

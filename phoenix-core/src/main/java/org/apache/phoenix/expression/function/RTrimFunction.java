@@ -20,7 +20,9 @@ package org.apache.phoenix.expression.function;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -176,10 +178,10 @@ public class RTrimFunction extends ScalarFunction {
             }
 
             @Override
-            public List<Expression> getExtractNodes() {
+            public Set<Expression> getExtractNodes() {
                 // We cannot extract the node, as we may have false positives with trailing
                 // non blank characters such as 'foo  bar' where the RHS constant is 'foo'.
-                return Collections.<Expression>emptyList();
+                return Collections.emptySet();
             }
 
             @Override

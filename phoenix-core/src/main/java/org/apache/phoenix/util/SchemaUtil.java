@@ -264,7 +264,7 @@ public class SchemaUtil {
         return name != null && name.length() > 0 && name.charAt(0) == '"' && name.indexOf("\"", 1) == name.length() - 1;
     }
 
-    public static <T> List<T> concat(List<T> l1, List<T> l2) {
+    public static <T> Set<T> concat(Set<T> l1, Set<T> l2) {
         int size1 = l1.size();
         if (size1 == 0) {
             return l2;
@@ -273,7 +273,7 @@ public class SchemaUtil {
         if (size2 == 0) {
             return l1;
         }
-        List<T> l3 = new ArrayList<T>(size1 + size2);
+        Set<T> l3 = new LinkedHashSet<T>(size1 + size2);
         l3.addAll(l1);
         l3.addAll(l2);
         return l3;
