@@ -24,13 +24,12 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
-import org.apache.phoenix.expression.DelegateExpression;
-import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
@@ -77,6 +76,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
+import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -239,8 +239,11 @@ public class WhereOptimizer {
             boolean isInList = false;
             int cnfStartPos = cnf.size();
 
+            // TODO:
+            //  Using keyPart.getExtractNodes() to determine whether the keyPart has a IN List
+            //  is not guaranteed, since the IN LIST slot may not have any extracted nodes.
             if (keyPart.getExtractNodes() != null && keyPart.getExtractNodes().size() > 0
-                    && keyPart.getExtractNodes().get(0) instanceof InListExpression){
+                    && keyPart.getExtractNodes().iterator().next() instanceof InListExpression){
                 isInList = true;
             }
             while (true) {
@@ -385,7 +388,7 @@ public class WhereOptimizer {
             // across a multi-range for a prior slot. The reason is that we have an inexact range after
             // that, so must filter on the remaining conditions (see issue #467).
             if (!stopExtracting) {
-                List<Expression> nodesToExtract = keyPart.getExtractNodes();
+                Set<Expression> nodesToExtract = keyPart.getExtractNodes();
                 extractNodes.addAll(nodesToExtract);
             }
         }
@@ -642,13 +645,13 @@ public class WhereOptimizer {
                 return EMPTY_KEY_SLOTS;
             }
             
-            List<Expression> extractNodes = extractNode == null || slot.getKeyPart().getExtractNodes().isEmpty()
-                  ? Collections.<Expression>emptyList()
-                  : Collections.<Expression>singletonList(extractNode);
+            Set<Expression> extractNodes = extractNode == null || slot.getKeyPart().getExtractNodes().isEmpty()
+                  ? Collections.emptySet()
+                  : new LinkedHashSet<>(Collections.<Expression>singleton(extractNode));
             return new SingleKeySlot(new BaseKeyPart(table, slot.getKeyPart().getColumn(), extractNodes), slot.getPKPosition(), slot.getPKSpan(), keyRanges, slot.getOrderPreserving());
         }
 
-        private KeySlots newKeyParts(KeySlot slot, List<Expression> extractNodes, List<KeyRange> keyRanges) {
+        private KeySlots newKeyParts(KeySlot slot, Set<Expression> extractNodes, List<KeyRange> keyRanges) {
             if (isDegenerate(keyRanges)) {
                 return EMPTY_KEY_SLOTS;
             }
@@ -666,12 +669,12 @@ public class WhereOptimizer {
             for (int i = 0; i < childSlots.size(); i++) {
                 KeySlots slots = childSlots.get(i);
                 KeySlot keySlot = slots.getSlots().iterator().next();
-                List<Expression> childExtractNodes = keySlot.getKeyPart().getExtractNodes();
+                Set<Expression> childExtractNodes = keySlot.getKeyPart().getExtractNodes();
                 // Stop if there was a gap in extraction of RVC elements. This is required if the leading
                 // RVC has not row key columns, as we'll still get childSlots if the RVC has trailing row
                 // key columns. We can't rule the RVC out completely when the childSlots is less the the
                 // RVC length, as a partial, *leading* match is optimizable.
-                if (childExtractNodes.size() != 1 || !childExtractNodes.get(0).equals(rvc.getChildren().get(i))) {
+                if (childExtractNodes.size() != 1 || !childExtractNodes.contains(rvc.getChildren().get(i))) {
                     break;
                 }
                 int pkPosition = keySlot.getPKPosition();
@@ -720,7 +723,7 @@ public class WhereOptimizer {
             if (isDegenerate(slot.getKeyRanges())) {
                 return EMPTY_KEY_SLOTS;
             }
-            final List<Expression> extractNodes = Collections.<Expression>singletonList(node);
+            final Set<Expression> extractNodes = new LinkedHashSet<>(Collections.<Expression>singletonList(node));
             final KeyPart childPart = slot.getKeyPart();
             final ImmutableBytesWritable ptr = context.getTempPtr();
             return new SingleKeySlot(new CoerceKeySlot(
@@ -852,12 +855,14 @@ public class WhereOptimizer {
          * @return
          */
         private KeySlots andKeySlots(AndExpression andExpression, List<KeySlots> childSlots) {
+
             if(childSlots.isEmpty()) {
                 return null;
             }
             // Exit early if it's already been determined that one of the child slots cannot
             // possibly be true.
             boolean partialExtraction = andExpression.getChildren().size() != childSlots.size();
+
             int nChildSlots = childSlots.size();
             for (int i = 0; i < nChildSlots; i++) {
                 KeySlots childSlot = childSlots.get(i);
@@ -890,7 +895,8 @@ public class WhereOptimizer {
             for (int pkPos = initPkPos; pkPos < nPkColumns; pkPos++) {
                 SlotsIterator iterator = new SlotsIterator(childSlots, pkPos);
                 OrderPreserving orderPreserving = null;
-                List<Expression> extractNodes = Lists.newArrayList();
+                Set<KeyPart> visitedKeyParts = Sets.newHashSet();
+                Set<Expression> extractNodes = new LinkedHashSet<>();
                 List<KeyRange> keyRanges = Lists.newArrayList();
                 // This is the information carried forward as we process in PK order.
                 // It's parallel with the list of keyRanges.
@@ -922,7 +928,11 @@ public class WhereOptimizer {
                             if (slot.getOrderPreserving() != null) {
                                 orderPreserving = slot.getOrderPreserving().combine(orderPreserving);
                             }
-                            if (slot.getKeyPart().getExtractNodes() != null) {
+                            // Extract once per iteration, when there are large number
+                            // of OR clauses (for e.g N > 100k).
+                            // The extractNodes.addAll method can get called N times.
+                            if (!visitedKeyParts.contains(slot.getKeyPart()) && slot.getKeyPart().getExtractNodes() != null) {
+                                visitedKeyParts.add(slot.getKeyPart());
                                 extractNodes.addAll(slot.getKeyPart().getExtractNodes());
                             }
                             // Keep a running intersection of the ranges we see. Note that the
@@ -1003,7 +1013,7 @@ public class WhereOptimizer {
                         }
                     }
                     keySlotArray[pkPos] = new KeySlot(
-                            new BaseKeyPart(table, table.getPKColumns().get(pkPos), mayExtractNodes ? extractNodes : Collections.<Expression>emptyList()),
+                            new BaseKeyPart(table, table.getPKColumns().get(pkPos), mayExtractNodes ? extractNodes : Collections.<Expression>emptySet()),
                             pkPos,
                             maxSpan,
                             keyRanges,
@@ -1059,8 +1069,9 @@ public class WhereOptimizer {
                         pkSpan = Math.max(pkSpan, rowKeySchema.computeMaxSpan(pkPos, trimmedResult, ptr));
                     }
                 }
-                List<Expression> extractNodes = mayExtractNodes ? 
-                        keySlotArray[pkPos].getKeyPart().getExtractNodes() : Collections.<Expression>emptyList();
+
+                Set<Expression> extractNodes = mayExtractNodes ?
+                        keySlotArray[pkPos].getKeyPart().getExtractNodes() :  new LinkedHashSet<>();
                 keySlotArray[pkPos] = new KeySlot(
                         new BaseKeyPart(table, table.getPKColumns().get(pkPos), extractNodes),
                         pkPos,
@@ -1480,7 +1491,7 @@ public class WhereOptimizer {
             }
             int initialPos = (table.getBucketNum() ==null ? 0 : 1) + (this.context.getConnection().getTenantId() != null && table.isMultiTenant() ? 1 : 0) + (table.getViewIndexId() == null ? 0 : 1);
             KeySlot theSlot = null;
-            List<Expression> slotExtractNodes = Lists.<Expression>newArrayList();
+            Set<Expression> slotExtractNodes = new LinkedHashSet<>();
             int thePosition = -1;
             boolean partialExtraction = false;
             // TODO: Have separate list for single span versus multi span
@@ -1532,7 +1543,7 @@ public class WhereOptimizer {
             }
             return newKeyParts(
                     theSlot, 
-                    partialExtraction ? slotExtractNodes : Collections.<Expression>singletonList(orExpression), 
+                    partialExtraction ? slotExtractNodes : new LinkedHashSet<>(Collections.<Expression>singletonList(orExpression)),
                     slotRanges.isEmpty() ? EVERYTHING_RANGES : KeyRange.coalesce(slotRanges));
         }
 
@@ -1595,7 +1606,7 @@ public class WhereOptimizer {
         @Override
         public KeySlots visit(RowKeyColumnExpression node) {
             PColumn column = table.getPKColumns().get(node.getPosition());
-            return new SingleKeySlot(new BaseKeyPart(table, column, Collections.<Expression>singletonList(node)), node.getPosition(), 1, EVERYTHING_RANGES);
+            return new SingleKeySlot(new BaseKeyPart(table, column, new LinkedHashSet<>(Collections.<Expression>singletonList(node))), node.getPosition(), 1, EVERYTHING_RANGES);
         }
 
         @Override
@@ -1834,7 +1845,7 @@ public class WhereOptimizer {
                 return keyRanges;
             }
 
-            public final KeySlot concatExtractNodes(List<Expression> extractNodes) {
+            public final KeySlot concatExtractNodes(Set<Expression> extractNodes) {
                 return new KeySlot(
                         new BaseKeyPart(this.getKeyPart().getTable(), this.getKeyPart().getColumn(),
                                     SchemaUtil.concat(this.getKeyPart().getExtractNodes(),extractNodes)),
@@ -1937,16 +1948,16 @@ public class WhereOptimizer {
 
             private final PTable table;
             private final PColumn column;
-            private final List<Expression> nodes;
+            private final Set<Expression> nodes;
 
-            private BaseKeyPart(PTable table, PColumn column, List<Expression> nodes) {
+            private BaseKeyPart(PTable table, PColumn column, Set<Expression> nodes) {
                 this.table = table;
                 this.column = column;
                 this.nodes = nodes;
             }
 
             @Override
-            public List<Expression> getExtractNodes() {
+            public Set<Expression> getExtractNodes() {
                 return nodes;
             }
 
@@ -1966,10 +1977,10 @@ public class WhereOptimizer {
             private final KeyPart childPart;
             private final ImmutableBytesWritable ptr;
             private final CoerceExpression node;
-            private final List<Expression> extractNodes;
+            private final Set<Expression> extractNodes;
 
             public CoerceKeySlot(KeyPart childPart, ImmutableBytesWritable ptr,
-                                 CoerceExpression node, List<Expression> extractNodes) {
+                                 CoerceExpression node, Set<Expression> extractNodes) {
                 this.childPart = childPart;
                 this.ptr = ptr;
                 this.node = node;
@@ -2006,7 +2017,7 @@ public class WhereOptimizer {
             }
 
             @Override
-            public List<Expression> getExtractNodes() {
+            public Set<Expression> getExtractNodes() {
                 return extractNodes;
             }
 
@@ -2024,24 +2035,24 @@ public class WhereOptimizer {
         private class RowValueConstructorKeyPart implements KeyPart {
             private final RowValueConstructorExpression rvc;
             private final PColumn column;
-            private final List<Expression> nodes;
+            private final Set<Expression> nodes;
             private final List<KeySlots> childSlots;
 
             private RowValueConstructorKeyPart(PColumn column, RowValueConstructorExpression rvc, int span, List<KeySlots> childSlots) {
                 this.column = column;
                 if (span == rvc.getChildren().size()) {
                     this.rvc = rvc;
-                    this.nodes = Collections.<Expression>singletonList(rvc);
+                    this.nodes = new LinkedHashSet<>(Collections.singletonList(rvc));
                     this.childSlots = childSlots;
                 } else {
                     this.rvc = new RowValueConstructorExpression(rvc.getChildren().subList(0, span),rvc.isStateless());
-                    this.nodes = Collections.<Expression>emptyList();
+                    this.nodes = new LinkedHashSet<>();
                     this.childSlots = childSlots.subList(0,  span);
                 }
             }
 
             @Override
-            public List<Expression> getExtractNodes() {
+            public Set<Expression> getExtractNodes() {
                 return nodes;
             }
 

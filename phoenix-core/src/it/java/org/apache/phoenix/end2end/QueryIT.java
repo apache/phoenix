@@ -32,10 +32,15 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Collection;
 import java.util.Properties;
+import java.util.Random;
 
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -169,4 +174,41 @@ public class QueryIT extends BaseQueryIT {
         }
     }
 
+    @Test
+    public void testSelectWithLargeORs() throws Exception {
+        String viewName = generateUniqueName();
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        Random rnd = new Random();
+        int numORs = 50000;
+        int numCols = 100;
+
+        try (Connection tenantConnection = DriverManager.getConnection(getUrl(), tenantProps)) {
+            String createViewSQL = String.format("CREATE VIEW IF NOT EXISTS %s(ID1 TIMESTAMP NOT NULL, ID2 VARCHAR(30) NOT NULL, ID3 INTEGER NOT NULL, COL_V0 VARCHAR ", viewName);
+            for (int i = 1; i < numCols;i++) {
+                createViewSQL += String.format(", COL_V%06d VARCHAR ", i);
+            }
+            createViewSQL += " CONSTRAINT pk PRIMARY KEY (ID1 DESC, ID2 DESC, ID3 DESC )) AS SELECT * FROM " + tableName + " WHERE entity_id = 'ECZ' ";
+            tenantConnection.createStatement().execute(createViewSQL);
+
+            StringBuilder whereClause = new StringBuilder("ID1 = ? AND ID2 > ? AND (ID3 = ? ");
+            for (int i = 0; i < numORs;i++) {
+                whereClause.append(" OR ID3 = ?");
+            }
+            whereClause.append(") LIMIT 200");
+            String query = String.format("select * from %s where ", viewName) + whereClause;
+
+            PhoenixPreparedStatement stmtForTimingCheck = tenantConnection.prepareStatement(query.toString()).unwrap(PhoenixPreparedStatement.class);
+            stmtForTimingCheck.setTimestamp(1, new Timestamp(System.currentTimeMillis() + rnd.nextInt(50000)));
+            stmtForTimingCheck.setString(2, RandomStringUtils.randomAlphanumeric(30));
+
+            for (int i = 0; i<numORs+1; i++) {
+                stmtForTimingCheck.setInt(i + 3, rnd.nextInt() );
+            }
+
+            long startResultSetTime = System.currentTimeMillis();
+            ResultSet rs = stmtForTimingCheck.executeQuery(query.toString());
+            assertTrue("Query execution time exceeded limit exceeded 10s", (System.currentTimeMillis() - startResultSetTime) < 10000);
+        }
+    }
 }

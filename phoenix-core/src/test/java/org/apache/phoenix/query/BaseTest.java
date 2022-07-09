@@ -91,6 +91,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -103,6 +104,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -115,6 +117,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nonnull;
 
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -147,6 +150,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTable;
@@ -154,6 +158,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -1694,7 +1699,57 @@ public abstract class BaseTest {
 
         LOGGER.info("Disabled and dropped {} tables in {} ms", tableCount, endTime-startTime);
     }
-    
+
+    protected int setBindVariables(PhoenixPreparedStatement stmt, int startBindIndex, int numBinds, PDataType[] testPKTypes)
+            throws SQLException {
+
+        Random rnd = new Random();
+        int lastBindCol = 0;
+        int numCols = testPKTypes.length;
+        for (int i = 0; i<numBinds; i++) {
+            for (int b=0;b<testPKTypes.length;b++) {
+                int colIndex = startBindIndex + i*numCols+b+1;
+                switch (testPKTypes[b].getSqlType()) {
+                case Types.VARCHAR: {
+                    // pkTypeStr = "VARCHAR(25)";
+                    stmt.setString(colIndex, RandomStringUtils.randomAlphanumeric(25));
+                    break;
+                }
+                case Types.CHAR: {
+                    //pkTypeStr = "CHAR(15)";
+                    stmt.setString(colIndex, RandomStringUtils.randomAlphanumeric(15));
+                    break;
+                }
+                case Types.DECIMAL:
+                    //pkTypeStr = "DECIMAL(8,2)";
+                    stmt.setDouble(colIndex, rnd.nextDouble());
+                    break;
+                case Types.INTEGER:
+                    //pkTypeStr = "INTEGER";
+                    stmt.setInt(colIndex, rnd.nextInt(50000));
+                    break;
+                case Types.BIGINT:
+                    //pkTypeStr = "BIGINT";
+                    stmt.setLong(colIndex, System.currentTimeMillis() + rnd.nextInt(50000));
+                    break;
+                case Types.DATE:
+                    //pkTypeStr = "DATE";
+                    stmt.setDate(colIndex, new Date(System.currentTimeMillis() + rnd.nextInt(50000)));
+                    break;
+                case Types.TIMESTAMP:
+                    //pkTypeStr = "TIMESTAMP";
+                    stmt.setTimestamp(colIndex, new Timestamp(System.currentTimeMillis() + rnd.nextInt(50000)));
+                    break;
+                default:
+                    // pkTypeStr = "VARCHAR(25)";
+                    stmt.setString(colIndex, RandomStringUtils.randomAlphanumeric(25));
+                }
+                lastBindCol = colIndex;
+            }
+        }
+        return lastBindCol;
+    }
+
     public static void assertOneOfValuesEqualsResultSet(ResultSet rs, List<List<Object>>... expectedResultsArray) throws SQLException {
         List<List<Object>> results = Lists.newArrayList();
         while (rs.next()) {

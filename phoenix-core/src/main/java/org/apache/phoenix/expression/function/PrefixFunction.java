@@ -20,7 +20,10 @@ package org.apache.phoenix.expression.function;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Expression;
@@ -54,9 +57,9 @@ abstract public class PrefixFunction extends ScalarFunction {
     }
 
     private class PrefixKeyPart implements KeyPart {
-        private final List<Expression> extractNodes = extractNode() ?
-                Collections.<Expression>singletonList(PrefixFunction.this)
-                : Collections.<Expression>emptyList();
+        private final Set<Expression> extractNodes = extractNode() ?
+                new LinkedHashSet<>(Collections.<Expression>singleton(PrefixFunction.this))
+                : Collections.emptySet();
         private final KeyPart childPart;
 
         PrefixKeyPart(KeyPart childPart) {
@@ -69,7 +72,7 @@ abstract public class PrefixFunction extends ScalarFunction {
         }
 
         @Override
-        public List<Expression> getExtractNodes() {
+        public Set<Expression> getExtractNodes() {
             return extractNodes;
         }
 
