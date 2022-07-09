@@ -25,13 +25,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
-import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
@@ -40,13 +38,31 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Random;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.ExpressionCompiler;
+import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.WhereOptimizer;
+import org.apache.phoenix.expression.AndExpression;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.parse.ColumnParseNode;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.AmbiguousColumnException;
+import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.PColumnFamily;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
@@ -59,13 +75,15 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.thirdparty.com.google.common.base.Function;
-import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
@@ -79,6 +97,67 @@ import org.junit.runners.Parameterized;
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class InListIT extends ParallelStatsDisabledIT {
+
+    private static class TestWhereExpressionCompiler extends ExpressionCompiler {
+        private boolean disambiguateWithFamily;
+
+        public TestWhereExpressionCompiler(StatementContext context) {
+            super(context);
+        }
+
+        @Override
+        public Expression visit(ColumnParseNode node) throws SQLException {
+            ColumnRef ref = resolveColumn(node);
+            TableRef tableRef = ref.getTableRef();
+            Expression newColumnExpression = ref.newColumnExpression(node.isTableNameCaseSensitive(), node.isCaseSensitive());
+            if (tableRef.equals(context.getCurrentTable()) && !SchemaUtil.isPKColumn(ref.getColumn())) {
+                byte[] cq = tableRef.getTable().getImmutableStorageScheme() == PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS
+                    ? QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES : ref.getColumn().getColumnQualifierBytes();
+                // track the where condition columns. Later we need to ensure the Scan in HRS scans these column CFs
+                context.addWhereConditionColumn(ref.getColumn().getFamilyName().getBytes(), cq);
+            }
+            return newColumnExpression;
+        }
+
+        @Override
+        protected ColumnRef resolveColumn(ColumnParseNode node) throws SQLException {
+            ColumnRef ref = super.resolveColumn(node);
+            if (disambiguateWithFamily) {
+                return ref;
+            }
+            PTable table = ref.getTable();
+            // Track if we need to compare KeyValue during filter evaluation
+            // using column family. If the column qualifier is enough, we
+            // just use that.
+            if (!SchemaUtil.isPKColumn(ref.getColumn())) {
+                if (!EncodedColumnsUtil.usesEncodedColumnNames(table)
+                    || ref.getColumn().isDynamic()) {
+                    try {
+                        table.getColumnForColumnName(ref.getColumn().getName().getString());
+                    } catch (AmbiguousColumnException e) {
+                        disambiguateWithFamily = true;
+                    }
+                } else {
+                    for (PColumnFamily columnFamily : table.getColumnFamilies()) {
+                        if (columnFamily.getName().equals(ref.getColumn().getFamilyName())) {
+                            continue;
+                        }
+                        try {
+                            table.getColumnForColumnQualifier(columnFamily.getName().getBytes(),
+                                ref.getColumn().getColumnQualifierBytes());
+                            // If we find the same qualifier name with different columnFamily,
+                            // then set disambiguateWithFamily to true
+                            disambiguateWithFamily = true;
+                            break;
+                        } catch (ColumnNotFoundException ignore) {
+                        }
+                    }
+                }
+            }
+            return ref;
+        }
+    }
+
     private static boolean isInitialized = false;
     private static String tableName = generateUniqueName();
     private static String tableName2 = generateUniqueName();
@@ -1857,6 +1936,40 @@ public class InListIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testWithLargeORs() throws Exception {
+
+        SortOrder[][] sortOrders = new SortOrder[][] {
+            {SortOrder.ASC, SortOrder.ASC, SortOrder.ASC},
+            {SortOrder.ASC, SortOrder.ASC, SortOrder.DESC},
+            {SortOrder.ASC, SortOrder.DESC, SortOrder.ASC},
+            {SortOrder.ASC, SortOrder.DESC, SortOrder.DESC},
+            {SortOrder.DESC, SortOrder.ASC, SortOrder.ASC},
+            {SortOrder.DESC, SortOrder.ASC, SortOrder.DESC},
+            {SortOrder.DESC, SortOrder.DESC, SortOrder.ASC},
+            {SortOrder.DESC, SortOrder.DESC, SortOrder.DESC}
+        };
+
+        String tableName = generateUniqueName();
+        String viewName = String.format("Z_%s", tableName);
+        PDataType[] testTSVarVarPKTypes = new PDataType[] { PTimestamp.INSTANCE, PVarchar.INSTANCE, PInteger.INSTANCE};
+        String baseTableName = String.format("TEST_ENTITY.%s", tableName);
+        int tenantId = 1;
+        int numTestCases = 1;
+        for (int index=0;index<sortOrders.length;index++) {
+            // Test Case 1: PK1 = Timestamp, PK2 = Varchar, PK3 = Integer
+            String view1Name = String.format("TEST_ENTITY.%s%d",
+                viewName, index*numTestCases+1);
+            String partition1 = String.format("Z%d", index*numTestCases+1);
+            createTenantView(tenantId,
+                baseTableName, view1Name, partition1,
+                testTSVarVarPKTypes[0], sortOrders[index][0],
+                testTSVarVarPKTypes[1], sortOrders[index][1],
+                testTSVarVarPKTypes[2], sortOrders[index][2]);
+            testTSVarIntAndLargeORs(tenantId, view1Name, sortOrders[index]);
+        }
+    }
+
+    @Test
     public void testInListExpressionWithVariableLengthColumnsRanges() throws Exception {
         Properties props = new Properties();
         final String schemaName = generateUniqueName();
@@ -1903,14 +2016,15 @@ public class InListIT extends ParallelStatsDisabledIT {
         };
 
         PDataType[] testTSVarVarPKTypes = new PDataType[] { PTimestamp.INSTANCE, PVarchar.INSTANCE, PVarchar.INSTANCE};
-        String baseTableName = String.format("TEST_ENTITY.CUSTOM_T%d", 1);
+        String baseTableName = generateUniqueName();
+        String viewName = String.format("Z_%s", baseTableName);
         int tenantId = 1;
         int numTestCases = 3;
 
         for (int index=0;index<sortOrders.length;index++) {
 
             // Test Case 1: PK1 = Timestamp, PK2 = Varchar, PK3 = Varchar
-            String view1Name = String.format("TEST_ENTITY.Z%d", index*numTestCases+1);
+            String view1Name = String.format("TEST_ENTITY.%s%d", viewName, index*numTestCases+1);
             String partition1 = String.format("Z%d", index*numTestCases+1);
             createTenantView(tenantId,
                     baseTableName, view1Name, partition1,
@@ -1918,10 +2032,9 @@ public class InListIT extends ParallelStatsDisabledIT {
                     testTSVarVarPKTypes[1], sortOrders[index][1],
                     testTSVarVarPKTypes[2], sortOrders[index][2]);
             testTSVarVarPKs(tenantId, view1Name, sortOrders[index]);
-            dropTenantViewData(tenantId, view1Name);
 
             // Test Case 2: PK1 = Varchar, PK2 = Varchar, PK3 = Varchar
-            String view2Name = String.format("TEST_ENTITY.Z%d", index*numTestCases+2);
+            String view2Name = String.format("TEST_ENTITY.%s%d", viewName, index*numTestCases+2);
             String partition2 = String.format("Z%d", index*numTestCases+2);
             PDataType[] testVarVarVarPKTypes = new PDataType[] { PVarchar.INSTANCE, PVarchar.INSTANCE, PVarchar.INSTANCE};
             createTenantView(tenantId,
@@ -1930,11 +2043,10 @@ public class InListIT extends ParallelStatsDisabledIT {
                     testVarVarVarPKTypes[1], sortOrders[index][1],
                     testVarVarVarPKTypes[2], sortOrders[index][2]);
             testVarVarVarPKs(tenantId, view2Name, sortOrders[index]);
-            dropTenantViewData(tenantId, view2Name);
 
 
             // Test Case 3: PK1 = Bigint, PK2 = Decimal, PK3 = Bigint
-            String view3Name = String.format("TEST_ENTITY.Z%d", index*numTestCases+3);
+            String view3Name = String.format("TEST_ENTITY.%s%d", viewName, index*numTestCases+3);
             String partition3 = String.format("Z%d", index*numTestCases+3);
             PDataType[] testIntDecIntPKTypes = new PDataType[] { PLong.INSTANCE, PDecimal.INSTANCE, PLong.INSTANCE};
             createTenantView(tenantId,
@@ -1943,8 +2055,6 @@ public class InListIT extends ParallelStatsDisabledIT {
                     testIntDecIntPKTypes[1], sortOrders[index][1],
                     testIntDecIntPKTypes[2], sortOrders[index][2]);
             testIntDecIntPK(tenantId, view3Name, sortOrders[index]);
-            dropTenantViewData(tenantId, view3Name);
-
         }
     }
 
@@ -2110,8 +2220,6 @@ public class InListIT extends ParallelStatsDisabledIT {
     private void assertExpectedWithMaxInList(int tenantId,  String testType, PDataType[] testPKTypes, String testSQL, SortOrder[] sortOrder, Set<String> expected) throws SQLException {
         String context = "sql: " + testSQL + ", type: " + testType + ", sort-order: " + Arrays.stream(sortOrder).map(s -> s.name()).collect(Collectors.joining(","));
         int numInLists = 25;
-        int numInListCols = 3;
-        Random rnd = new Random();
         boolean expectSkipScan = checkMaxSkipScanCardinality ? Arrays.stream(sortOrder).allMatch(Predicate.isEqual(SortOrder.ASC)) : true;
 
         StringBuilder query = new StringBuilder(testSQL);
@@ -2124,54 +2232,8 @@ public class InListIT extends ParallelStatsDisabledIT {
         try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
             PhoenixPreparedStatement stmt = tenantConnection.prepareStatement(query.toString()).unwrap(PhoenixPreparedStatement.class);
             // perform the query
-            for (int i = 0; i<numInLists; i++) {
-                for (int b=0;b<testPKTypes.length;b++) {
-                    int colIndex = i*numInListCols+b+1;
-                    switch (testPKTypes[b].getSqlType()) {
-                    case Types.VARCHAR: {
-                        // pkTypeStr = "VARCHAR(25)";
-                        int begin = rnd.nextInt(34);
-                        int remaining = "1234567890abcdefghijklmnopqrstuvwxyz".length() - begin;
-                        int end = begin + (remaining > 25 ? 25 : remaining);
-                        stmt.setString(colIndex, "1234567890abcdefghijklmnopqrstuvwxyz".substring(begin, end));
-                        break;
-                    }
-                    case Types.CHAR: {
-                        //pkTypeStr = "CHAR(15)";
-                        int begin = rnd.nextInt(34);
-                        int remaining = "1234567890abcdefghijklmnopqrstuvwxyz".length() - begin;
-                        int end = begin + (remaining > 15 ? 15 : remaining);
-                        stmt.setString(colIndex,
-                                "1234567890abcdefghijklmnopqrstuvwxyz".substring(begin, end));
-                        break;
-                    }
-                    case Types.DECIMAL:
-                        //pkTypeStr = "DECIMAL(8,2)";
-                        stmt.setDouble(colIndex, rnd.nextDouble());
-                        break;
-                    case Types.INTEGER:
-                        //pkTypeStr = "INTEGER";
-                        stmt.setInt(colIndex, rnd.nextInt(50000));
-                        break;
-                    case Types.BIGINT:
-                        //pkTypeStr = "BIGINT";
-                        stmt.setLong(colIndex, System.currentTimeMillis() + rnd.nextInt(50000));
-                        break;
-                    case Types.DATE:
-                        //pkTypeStr = "DATE";
-                        stmt.setDate(colIndex, new Date(System.currentTimeMillis() + rnd.nextInt(50000)));
-                        break;
-                    case Types.TIMESTAMP:
-                        //pkTypeStr = "TIMESTAMP";
-                        stmt.setTimestamp(colIndex, new Timestamp(System.currentTimeMillis() + rnd.nextInt(50000)));
-                        break;
-                    default:
-                        //pkTypeStr = "VARCHAR(25)";
-                        stmt.setString(colIndex, "1234567890abcdefghijklmnopqrstuvwxyz".substring(rnd.nextInt(34)).substring(0) );
-                    }
-
-                }
-            }
+            int lastBoundCol = 0;
+            setBindVariables(stmt, lastBoundCol, numInLists, testPKTypes);
             QueryPlan plan = stmt.compileQuery(query.toString());
             if (expectSkipScan) {
                 assertTrue(plan.getExplainPlan().toString().contains("CLIENT PARALLEL 1-WAY POINT LOOKUP ON"));
@@ -2186,6 +2248,83 @@ public class InListIT extends ParallelStatsDisabledIT {
                 assertTrue(context, expected.contains(actual));
             }
             assertFalse(context, rs.next());
+
+        }
+    }
+
+    // Test Case 1: PK1 = Timestamp, PK2 = Varchar, PK3 = Integer
+    private void testTSVarIntAndLargeORs(int tenantId, String viewName, SortOrder[] sortOrder) throws SQLException {
+        String testName = "testLargeORs";
+        String testLargeORs = String.format("SELECT ROW_ID FROM %s ", viewName);
+
+        Set<String> expecteds1 = Collections.<String>emptySet();
+
+        PDataType[] testPKTypes = new PDataType[] { PTimestamp.INSTANCE, PVarchar.INSTANCE, PInteger.INSTANCE};
+        assertExpectedWithMaxInListAndLargeORs(tenantId, testName, testPKTypes, testLargeORs, sortOrder, expecteds1);
+
+    }
+
+    public void assertExpectedWithMaxInListAndLargeORs(int tenantId,  String testType, PDataType[] testPKTypes, String testSQL, SortOrder[] sortOrder, Set<String> expected) throws SQLException {
+
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        int numINs = 25;
+        int expectedExtractedNodes = Arrays.asList(new SortOrder[] {sortOrder[0], sortOrder[1]}).stream().allMatch(Predicate.isEqual(SortOrder.ASC)) ? 3 : checkMaxSkipScanCardinality ? 1 : 2;
+
+        // Test for increasing orders of ORs (5,50,500,5000,50000)
+        for (int o = 0; o < 5;o++) {
+            int numORs = (int) (5.0 * Math.pow(10.0,(double) o));
+            String context = "ORs:" + numORs + ", sql: " + testSQL + ", type: " + testType + ", sort-order: " + Arrays.stream(sortOrder).map(s -> s.name()).collect(Collectors.joining(","));
+            String tenantConnectionUrl = String.format("%s;%s=%s%06d", getUrl(), TENANT_ID_ATTRIB, TENANT_PREFIX, tenantId);
+            try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl, tenantProps)) {
+                // Generate the where clause
+                StringBuilder whereClause = new StringBuilder("(ID1,ID2) IN ((?,?)");
+                for (int i = 0; i < numINs; i++) {
+                    whereClause.append(",(?,?)");
+                }
+                whereClause.append(") AND (ID3 = ? ");
+                for (int i = 0; i < numORs; i++) {
+                    whereClause.append(" OR ID3 = ?");
+                }
+                whereClause.append(") LIMIT 200");
+                // Full SQL
+                String query = testSQL + " WHERE " + whereClause;
+
+                PhoenixPreparedStatement stmtForExtractNodesCheck =
+                    tenantConnection.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
+                int lastBoundCol = 0;
+                lastBoundCol = setBindVariables(stmtForExtractNodesCheck, lastBoundCol,
+                    numINs + 1,
+                    new PDataType[] {testPKTypes[0], testPKTypes[1]});
+                lastBoundCol = setBindVariables(stmtForExtractNodesCheck, lastBoundCol,
+                    numORs + 1,  new PDataType[] {testPKTypes[2]});
+
+                // Get the column resolver
+                SelectStatement selectStatement = new SQLParser(query).parseQuery();
+                ColumnResolver resolver = FromCompiler.getResolverForQuery(selectStatement,
+                    tenantConnection.unwrap(PhoenixConnection.class));
+
+                // Where clause with INs and ORs
+                ParseNode whereNode = selectStatement.getWhere();
+                Expression whereExpression = whereNode.accept(new TestWhereExpressionCompiler(
+                    new StatementContext(stmtForExtractNodesCheck, resolver)));
+
+                // Tenant view where clause
+                ParseNode viewWhere = SQLParser.parseCondition("KP = 'ECZ'");
+                Expression viewWhereExpression = viewWhere.accept(new TestWhereExpressionCompiler(
+                    new StatementContext(stmtForExtractNodesCheck, resolver)));
+
+                // Build the test expression
+                Expression testExpression = AndExpression.create(
+                    Lists.newArrayList(whereExpression, viewWhereExpression));
+
+                // Test
+                Set<Expression> extractedNodes = Sets.<Expression>newHashSet();
+                WhereOptimizer.pushKeyExpressionsToScan(new StatementContext(stmtForExtractNodesCheck, resolver),
+                    Collections.emptySet(), testExpression, extractedNodes, Optional.<byte[]>absent());
+                assertTrue(String.format("Unexpected results expected = %d, actual = %d extracted nodes",
+                        expectedExtractedNodes, extractedNodes.size()),
+                    extractedNodes.size() == expectedExtractedNodes);
+            }
 
         }
     }
