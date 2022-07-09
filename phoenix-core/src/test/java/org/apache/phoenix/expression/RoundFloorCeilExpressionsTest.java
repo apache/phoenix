@@ -30,7 +30,9 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -235,8 +237,8 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
                 }
     
                 @Override
-                public List<Expression> getExtractNodes() {
-                    return Collections.emptyList();
+                public Set<Expression> getExtractNodes() {
+                    return Collections.emptySet();
                 }
     
                 @Override

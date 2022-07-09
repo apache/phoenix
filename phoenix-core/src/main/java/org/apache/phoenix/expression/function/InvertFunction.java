@@ -19,6 +19,7 @@ package org.apache.phoenix.expression.function;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -135,7 +136,7 @@ public class InvertFunction extends ScalarFunction {
         }
 
         @Override
-        public List<Expression> getExtractNodes() {
+        public Set<Expression> getExtractNodes() {
             return childPart.getExtractNodes();
         }
 
