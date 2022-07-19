@@ -380,13 +380,19 @@
                   org.apache.omid:omid-timestamp-storage-hbase2.x
                 </ignoredUnusedDeclaredDependency>
                 <ignoredUnusedDeclaredDependency>
-                  org.slf4j:slf4j-reload4j
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  ch.qos.reload4j:reload4j
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
                   org.apache.hbase:hbase-testing-util
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-api
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-core
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-slf4j-impl
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-1.2-api
                 </ignoredUnusedDeclaredDependency>
               </ignoredUnusedDeclaredDependencies>
               <ignoredUsedUndeclaredDependencies>
