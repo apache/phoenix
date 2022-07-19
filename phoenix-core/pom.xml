@@ -569,6 +569,26 @@
 
     <!-- Other test dependencies -->
     <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-api</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-core</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-slf4j-impl</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-1.2-api</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <scope>test</scope>
@@ -584,105 +604,4 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
-<profiles>
-  <profile>
-    <id>phoenix-hbase-compat-2.3.0</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.3</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.3</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>ch.qos.reload4j</groupId>
-        <artifactId>reload4j</artifactId>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-reload4j</artifactId>
-        <scope>test</scope>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.4.0</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.4.0</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.4.0</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>ch.qos.reload4j</groupId>
-        <artifactId>reload4j</artifactId>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-reload4j</artifactId>
-        <scope>test</scope>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.4.1</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.4</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.4</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>ch.qos.reload4j</groupId>
-        <artifactId>reload4j</artifactId>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-reload4j</artifactId>
-        <scope>test</scope>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.4.1-default</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>!hbase.profile</name>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.4</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>ch.qos.reload4j</groupId>
-        <artifactId>reload4j</artifactId>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-reload4j</artifactId>
-        <scope>test</scope>
-      </dependency>
-    </dependencies>
-  </profile>
-</profiles>
 </project>
