@@ -120,6 +120,12 @@ public class CompatUtil {
             throws IOException {
         for (ServerName serverName : admin.getRegionServers()) {
             for (RegionMetrics regionMetrics : admin.getRegionMetrics(serverName)) {
+                if (regionMetrics.getNameAsString().
+                    contains(TableName.META_TABLE_NAME.getNameAsString())) {
+                    // Just because something is trying to read from hbase:meta in the background
+                    // doesn't mean we leaked a scanner, so skip this
+                    continue;
+                }
                 int regionTotalRefCount = regionMetrics.getStoreRefCount();
                 if (regionTotalRefCount > 0) {
                     LOGGER.error("Region {} has refCount leak. Total refCount"
