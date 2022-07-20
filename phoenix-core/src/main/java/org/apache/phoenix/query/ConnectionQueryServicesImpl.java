@@ -1805,8 +1805,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
         /**
-         * If configured to use the metadata handler pool for server side connections,
-         * use the {@link org.apache.hadoop.hbase.ipc.controller.MetadataRpcController}
+         * If configured to use the server-server metadata handler pool for server side connections,
+         * use the {@link org.apache.hadoop.hbase.ipc.controller.ServerToServerRpcController}
          * else use the ordinary handler pool {@link ServerRpcController}
          *
          * return the rpcController to use
