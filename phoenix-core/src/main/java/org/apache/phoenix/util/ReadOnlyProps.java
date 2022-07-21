@@ -278,10 +278,11 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
      * @throws NumberFormatException - when the value is invalid
      */
     public long getLongBytes(String name, long defaultValue) {
-      String valueString = get(name);
-      if (valueString == null)
-          return defaultValue;
-      return StringUtils.TraditionalBinaryPrefix.string2long(valueString);
+        String valueString = get(name);
+        if (valueString == null) {
+            return defaultValue;
+        }
+        return StringUtils.TraditionalBinaryPrefix.string2long(valueString);
     }
 
     /** 
