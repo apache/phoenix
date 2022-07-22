@@ -2879,10 +2879,14 @@ public class MetaDataClient {
             String dataTableName = parent == null || tableType == PTableType.VIEW ? null : parent.getTableName().getString();
             PIndexState defaultCreateState;
             String defaultCreateStateString = connection.getClientInfo(INDEX_CREATE_DEFAULT_STATE);
-            if (defaultCreateStateString == null) defaultCreateState = PIndexState.valueOf(connection.getQueryServices().getConfiguration().
-                    get(INDEX_CREATE_DEFAULT_STATE, QueryServicesOptions.DEFAULT_CREATE_INDEX_STATE));
-            else
+            if (defaultCreateStateString == null)  {
+                defaultCreateState = PIndexState.valueOf(connection.getQueryServices().getConfiguration().
+                                    get(INDEX_CREATE_DEFAULT_STATE, QueryServicesOptions.DEFAULT_CREATE_INDEX_STATE));
+            }
+            else {
                 defaultCreateState = PIndexState.valueOf(defaultCreateStateString);
+            }
+
             if (defaultCreateState == PIndexState.CREATE_DISABLE) {
                 if  (indexType == IndexType.LOCAL || sharedTable) {
                     defaultCreateState = PIndexState.BUILDING;
