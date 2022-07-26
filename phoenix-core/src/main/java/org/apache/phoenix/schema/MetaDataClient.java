@@ -450,11 +450,11 @@ public class MetaDataClient {
 
     /*
      * Custom sql to add a column to SYSTEM.CATALOG table during upgrade.
-     * We can't use the regular INSERT_COLUMN_ALTER_TABLE sql because the COLUMN_QUALIFIER column
+     * We can't use the regular ColumnMetaDataOps.UPSERT_COLUMN sql because the COLUMN_QUALIFIER column
      * was added in 4.10. And so if upgrading from let's say 4.7, we won't be able to
      * find the COLUMN_QUALIFIER column which the INSERT_COLUMN_ALTER_TABLE sql expects.
      */
-    private static final String ALTER_SYSCATALOG_TABLE_UPGRADE =
+    public static final String ALTER_SYSCATALOG_TABLE_UPGRADE =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                     TENANT_ID + "," +
                     TABLE_SCHEM + "," +
