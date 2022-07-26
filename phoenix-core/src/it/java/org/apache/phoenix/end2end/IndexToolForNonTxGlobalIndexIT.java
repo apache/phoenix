@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
@@ -85,6 +86,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
@@ -1606,12 +1608,16 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         return output;
     }
 
-    public static class FastFailRegionObserver implements RegionObserver {
+    public static class FastFailRegionObserver implements RegionObserver, RegionCoprocessor {
         @Override
         public RegionScanner postScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
                                         final Scan scan,
                                                final RegionScanner s) throws IOException {
             throw new DoNotRetryIOException("I'm just a coproc that's designed to fail fast");
+        }
+        @Override
+        public Optional<RegionObserver> getRegionObserver() {
+            return Optional.of(this);
         }
     }
 }
