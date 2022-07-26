@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -36,7 +38,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -86,6 +87,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
@@ -1573,12 +1575,16 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         return output;
     }
 
-    public static class FastFailRegionObserver extends BaseRegionObserver {
+    public static class FastFailRegionObserver implements RegionObserver, RegionCoprocessor {
         @Override
         public RegionScanner postScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
                                         final Scan scan,
                                                final RegionScanner s) throws IOException {
             throw new DoNotRetryIOException("I'm just a coproc that's designed to fail fast");
+        }
+        @Override
+        public Optional<RegionObserver> getRegionObserver() {
+            return Optional.of(this);
         }
     }
 }
