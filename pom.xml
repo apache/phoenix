@@ -88,7 +88,7 @@
     <hbase-2.2.runtime.version>2.2.7</hbase-2.2.runtime.version>
     <hbase-2.3.runtime.version>2.3.7</hbase-2.3.runtime.version>
     <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
-    <hbase-2.4.runtime.version>2.4.10</hbase-2.4.runtime.version>
+    <hbase-2.4.runtime.version>2.4.13</hbase-2.4.runtime.version>
 
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
