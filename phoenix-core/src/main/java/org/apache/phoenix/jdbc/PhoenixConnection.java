@@ -67,6 +67,7 @@ import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.htrace.Sampler;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.call.CallRunner;
+import org.apache.phoenix.exception.FailoverSQLException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.CommitException;
@@ -746,7 +747,11 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
 
         try {
             TableMetricsManager.pushMetricsFromConnInstanceMethod(getMutationMetrics());
-            clearMetrics();
+            if(!(reasonForClose instanceof FailoverSQLException)) {
+                // If the reason for close is because of failover, the metrics will be kept for
+                // consolidation by the wrapper PhoenixFailoverConnection object.
+                clearMetrics();
+            }
             try {
                 if (traceScope != null) {
                     traceScope.close();

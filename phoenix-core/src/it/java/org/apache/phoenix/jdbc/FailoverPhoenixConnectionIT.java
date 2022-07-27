@@ -17,7 +17,15 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.hadoop.hbase.HConstants.HBASE_CLIENT_META_OPERATION_TIMEOUT;
+import static org.apache.hadoop.hbase.HConstants.HBASE_CLIENT_RETRIES_NUMBER;
+import static org.apache.hadoop.hbase.HConstants.HBASE_RPC_TIMEOUT_KEY;
+import static org.apache.hadoop.hbase.HConstants.REPLICATION_SOURCE_SHIPEDITS_TIMEOUT;
 import static org.apache.hadoop.hbase.HConstants.ZK_SESSION_TIMEOUT;
+import static org.apache.hadoop.hbase.HConstants.ZK_SYNC_BLOCKING_TIMEOUT_MS;
+import static org.apache.hadoop.hbase.ipc.RpcClient.SOCKET_TIMEOUT_CONNECT;
+import static org.apache.hadoop.hbase.ipc.RpcClient.SOCKET_TIMEOUT_READ;
+import static org.apache.hadoop.hbase.ipc.RpcClient.SOCKET_TIMEOUT_WRITE;
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION;
 import static org.apache.phoenix.jdbc.FailoverPhoenixConnection.FAILOVER_TIMEOUT_MS_ATTR;
@@ -84,8 +92,6 @@ public class FailoverPhoenixConnectionIT {
 
     @Rule
     public final TestName testName = new TestName();
-    @Rule
-    public final Timeout globalTimeout= new Timeout(300, TimeUnit.SECONDS);
 
     /** Client properties to create a connection per test. */
     private Properties clientProperties;
@@ -118,9 +124,19 @@ public class FailoverPhoenixConnectionIT {
         clientProperties.setProperty(FAILOVER_TIMEOUT_MS_ATTR, "30000");
         clientProperties.setProperty(PHOENIX_HA_ZK_RETRY_MAX_KEY, "3");
         clientProperties.setProperty(PHOENIX_HA_ZK_RETRY_MAX_SLEEP_MS_KEY, "1000");
+        clientProperties.setProperty(ZK_SYNC_BLOCKING_TIMEOUT_MS,"1000");
         clientProperties.setProperty(ZK_SESSION_TIMEOUT, "3000");
         clientProperties.setProperty(PHOENIX_HA_TRANSITION_TIMEOUT_MS_KEY, "3000");
         clientProperties.setProperty("zookeeper.recovery.retry.maxsleeptime", "1000");
+        clientProperties.setProperty("zookeeper.recovery.retry","1");
+        clientProperties.setProperty(HBASE_CLIENT_RETRIES_NUMBER,"4");
+        clientProperties.setProperty(HBASE_RPC_TIMEOUT_KEY,"2000");
+        clientProperties.setProperty(HBASE_CLIENT_META_OPERATION_TIMEOUT,"2000");
+        clientProperties.setProperty(SOCKET_TIMEOUT_CONNECT,"2000");
+        clientProperties.setProperty(SOCKET_TIMEOUT_READ,"2000");
+        clientProperties.setProperty(SOCKET_TIMEOUT_WRITE,"2000");
+        clientProperties.setProperty(REPLICATION_SOURCE_SHIPEDITS_TIMEOUT,"5000");
+
 
         // Make first cluster ACTIVE
         CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
@@ -149,7 +165,7 @@ public class FailoverPhoenixConnectionIT {
     /**
      * Test Phoenix connection creation and basic operations with HBase cluster pair.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testOperationUsingConnection() throws Exception {
         try (Connection conn = createFailoverConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
@@ -159,7 +175,7 @@ public class FailoverPhoenixConnectionIT {
     /**
      * Test close() once more should not fail, as the second close should be a no-op.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testCloseConnectionOnceMore() throws Exception {
         Connection conn = createFailoverConnection();
         doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
@@ -170,7 +186,7 @@ public class FailoverPhoenixConnectionIT {
     /**
      * Tests that new Phoenix connections are not created during failover.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testConnectionCreationFailsIfNoActiveCluster() throws Exception {
         try (Connection conn = createFailoverConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
@@ -190,7 +206,7 @@ public class FailoverPhoenixConnectionIT {
     /**
      * Tests new Phoenix connections are created if one cluster is OFFLINE and the other ACTIVE.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testConnectionOneOfflineOneActive() throws Exception {
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.OFFLINE, ClusterRole.ACTIVE);
 
@@ -206,7 +222,7 @@ public class FailoverPhoenixConnectionIT {
      *
      * @see #testFailoverCanFinishWhenOneZKDownWithCQS
      */
-    @Test
+    @Test(timeout = 300000)
     public void testFailoverCanFinishWhenOneZKDown() throws Exception {
         doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
             // Because cluster1 is down, any version record will only be updated in cluster2.
@@ -236,7 +252,7 @@ public class FailoverPhoenixConnectionIT {
      *
      * @see #testFailoverCanFinishWhenOneZKDown
      */
-    @Test
+    @Test(timeout = 300000)
     public void testFailoverCanFinishWhenOneZKDownWithCQS() throws Exception {
         doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
             // Try to make a connection to current ACTIVE cluster, which should fail.
@@ -267,7 +283,7 @@ public class FailoverPhoenixConnectionIT {
      * After failover, client can connect to this HA group (against the new ACTIVE cluster2).
      * After restarts and fails back, client can connect to this HA group (against cluster 1).
      */
-    @Test
+    @Test(timeout = 300000)
     public void testConnectionWhenActiveZKRestarts() throws Exception {
         doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
             try {
@@ -314,7 +330,7 @@ public class FailoverPhoenixConnectionIT {
      * After failover, client can not connect to this HA group (ACTIVE cluster  2 is down).
      * After cluster 2 (ACTIVE) restarts, client can connect to this HA group.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testConnectionWhenStandbyZKRestarts() throws Exception {
         doTestWhenOneZKDown(CLUSTERS.getHBaseCluster2(), () -> {
             try (Connection conn = createFailoverConnection()) {
@@ -346,7 +362,7 @@ public class FailoverPhoenixConnectionIT {
      * When STANDBY ZK cluster2 first restarts, client still can not connect to this HA group.
      * After failover, client can connect to this HA group because cluster 2 is ACTIVE and healthy.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testConnectionWhenTwoZKRestarts() throws Exception {
       doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
           doTestWhenOneZKDown(CLUSTERS.getHBaseCluster2(), () -> {
@@ -380,7 +396,7 @@ public class FailoverPhoenixConnectionIT {
     /**
      * Tests that new Phoenix connections are not created if both clusters are OFFLINE.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testConnectionCreationFailsIfBothClustersOffline() throws Exception {
         CLUSTERS.transitClusterRole(haGroup, ClusterRole.OFFLINE, ClusterRole.OFFLINE);
 
@@ -396,7 +412,7 @@ public class FailoverPhoenixConnectionIT {
     /**
      * Tests that existing wrapped Phoenix connection is closed in the Failover event.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testWrappedConnectionClosedAfterStandby() throws Exception {
         Connection conn = createFailoverConnection();
         doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
@@ -414,7 +430,7 @@ public class FailoverPhoenixConnectionIT {
     /**
      * Tests that existing Phoenix statement is closed when cluster transits into STANDBY.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testStatementClosedAfterStandby() throws Exception {
         Connection conn = createFailoverConnection();
         Statement stmt = conn.createStatement();
@@ -434,7 +450,7 @@ public class FailoverPhoenixConnectionIT {
      * The reason is that, high availability group has its own CQSI which tracks only those Phoenix
      * connections that are wrapped by failover connections.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testNonHAConnectionNotClosedAfterFailover() throws Exception {
         String firstUrl = String.format("jdbc:phoenix:%s", CLUSTERS.getUrl1());
         // This is a vanilla Phoenix connection without using high availability (HA) feature.
@@ -457,7 +473,7 @@ public class FailoverPhoenixConnectionIT {
     /**
      * Tests that one HA group cluster role transit will not affect connections in other HA groups.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testOtherHAGroupConnectionUnchanged() throws Exception {
         Connection conn = createFailoverConnection();
         PhoenixConnection wrappedConn = ((FailoverPhoenixConnection) conn).getWrappedConnection();
@@ -489,7 +505,7 @@ public class FailoverPhoenixConnectionIT {
      *
      * @see #testFailoverTwice which fails over back to the first cluster
      */
-    @Test
+    @Test(timeout = 300000)
     public void testFailoverCanFinishWhenOneConnectionGotStuckClosing() throws Exception {
         Connection conn = createFailoverConnection();
         doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
@@ -549,7 +565,7 @@ public class FailoverPhoenixConnectionIT {
      *
      * Test with many connections.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testAllWrappedConnectionsClosedAfterStandby() throws Exception {
         short numberOfConnections = 10;
         List<Connection> connectionList = new ArrayList<>(numberOfConnections);
@@ -572,7 +588,7 @@ public class FailoverPhoenixConnectionIT {
      *
      * Test with many connections.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testAllWrappedConnectionsClosedAfterStandbyAsync() throws Exception {
         short numberOfThreads = 10;
         // Test thread waits for half of connections to be created before triggering a failover
@@ -622,7 +638,7 @@ public class FailoverPhoenixConnectionIT {
      * This tests with many connections, as {@link #testAllWrappedConnectionsClosedAfterStandby()}.
      * The difference is that, the ACTIVE cluster first shuts down and after the standby cluster is set to active
      */
-    @Test
+    @Test(timeout = 300000)
     public void testAllWrappedConnectionsClosedAfterStandbyAndZKDownAsync() throws Exception {
         final short numberOfThreads = 10;
         ExecutorService executor = Executors.newFixedThreadPool(numberOfThreads);
@@ -666,7 +682,7 @@ public class FailoverPhoenixConnectionIT {
      * that case, retrying the business logic will request a new JDBC connection. This connection
      * will connect to the new ACTIVE cluster, if any.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testNewPhoenixConnectionAfterFailover() throws Exception {
         try (Connection conn = createFailoverConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
@@ -686,7 +702,7 @@ public class FailoverPhoenixConnectionIT {
      * @see #testConnectionCreationFailsIfNoActiveCluster
      * @see #testFailoverCanFinishWhenOneConnectionGotStuckClosing
      */
-    @Test
+    @Test(timeout = 300000)
     public void testFailoverTwice() throws Exception {
         try (Connection conn = createFailoverConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
@@ -716,7 +732,7 @@ public class FailoverPhoenixConnectionIT {
     /**
      * Test that we can failover Phoenix connection explicitly.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testFailoverConnectionExplicitly() throws Exception {
         Connection conn = createFailoverConnection();
         doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
@@ -738,7 +754,7 @@ public class FailoverPhoenixConnectionIT {
     /**
      * Test that it times out to failover explicitly when two clusters are STANDBY.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testFailoverConnectionExplicitlyTimeout() throws Exception {
         Connection conn = createFailoverConnection();
         doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
@@ -757,7 +773,7 @@ public class FailoverPhoenixConnectionIT {
     /**
      * Test tenant specific connection creation and basic operations.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testTenantSpecificPhoenixConnection() throws Exception {
         tableName = tableName + "Tenant";
         CLUSTERS.createTenantSpecificTable(tableName);
@@ -779,7 +795,7 @@ public class FailoverPhoenixConnectionIT {
     /**
      * Test failover automatically happens with {@link FailoverPolicy.FailoverToActivePolicy}.
      */
-    @Test
+    @Test(timeout = 300000)
     public void testStatementWithActiveFailoverPolicy() throws Exception {
         clientProperties.setProperty(FailoverPolicy.PHOENIX_HA_FAILOVER_POLICY_ATTR, "active");
 
@@ -799,7 +815,7 @@ public class FailoverPhoenixConnectionIT {
         doTestBasicOperationsWithStatement(conn, stmt2, tableName);
     }
 
-    @Test
+    @Test(timeout = 300000)
     public void testFailoverMetrics() throws Exception {
         Connection conn = createFailoverConnection();
         // paranoid; let us just reset
@@ -843,9 +859,8 @@ public class FailoverPhoenixConnectionIT {
                 PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(conn);
         assertFalse(mutation.isEmpty());
         assertTrue(mutation.containsKey(tableName));
-        // TODO: Uncomment following code after client side Metrics changes are merged into 4.16 branch
-        // Long upsertMetric = mutation.get(tableName).get(MetricType.UPSERT_MUTATION_SQL_COUNTER);
-        // assertEquals(expectedUpsert, upsertMetric.longValue());
+        Long upsertMetric = mutation.get(tableName).get(MetricType.UPSERT_MUTATION_SQL_COUNTER);
+        assertEquals(expectedUpsert, upsertMetric.longValue());
         assertTrue(PhoenixRuntime.getReadMetricInfoForMutationsSinceLastReset(conn).isEmpty());
     }
 
