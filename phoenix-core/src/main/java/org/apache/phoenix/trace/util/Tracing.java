@@ -56,8 +56,11 @@ public class Tracing {
      *            thread name
      * @return The callable provided, wrapped if tracing, 'callable' if not.
      */
-    public static <V> Callable<V> wrap(Callable<V> callable, String description) {
-        return new TraceUtil.TraceCallable<V>(callable, description);
+    public static <V> Callable<V> wrap(Callable<V> callable, String description, Span parentSpan) {
+        if(parentSpan.getSpanContext().isValid()){
+            return new TraceUtil.TraceCallable<V>(callable, description, parentSpan);
+        }
+        return callable;
     }
 
 

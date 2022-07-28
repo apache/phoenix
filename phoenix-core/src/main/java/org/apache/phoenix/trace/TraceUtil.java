@@ -20,6 +20,7 @@ package org.apache.phoenix.trace;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 
@@ -44,9 +45,10 @@ public final class TraceUtil {
   public static class TraceCallable<V> implements Callable<V> {
     private final Callable<V> impl;
     private final String description;
+    private final Span parentSpan;
 
     public TraceCallable(Callable<V> impl,
-        String description) {
+        String description, Span parentSpan) {
       this.impl = impl;
       if (description == null){
         this.description = Thread.currentThread().getName();
@@ -54,11 +56,14 @@ public final class TraceUtil {
       else {
         this.description = description;
       }
+      this.parentSpan = parentSpan;
     }
 
     @Override
     public V call() throws Exception {
-      Span span = getGlobalTracer().spanBuilder(description).startSpan();
+      Span span =
+          getGlobalTracer().spanBuilder(description).setParent(Context.current().with(parentSpan))
+              .startSpan();
       try (Scope scope = span.makeCurrent()) {
         return impl.call();
       } finally {

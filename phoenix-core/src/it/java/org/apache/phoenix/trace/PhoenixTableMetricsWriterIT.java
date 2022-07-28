@@ -26,16 +26,38 @@ import java.util.Collection;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
+import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import io.opentelemetry.api.trace.Span;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 /**
  * Test that the logging sink stores the expected metrics/stats
  */
 public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
+
+    private final InMemorySpanExporter testExporter = InMemorySpanExporter.create();
+    private OpenTelemetry openTelemetry = null;
+
+    @Before
+    public void setup() {
+        GlobalOpenTelemetry.resetForTest();
+        SdkTracerProvider sdkTracerProvider = SdkTracerProvider.builder()
+            .addSpanProcessor(SimpleSpanProcessor.create(testExporter))
+            .build();
+        openTelemetry = OpenTelemetrySdk.builder()
+            .setTracerProvider(sdkTracerProvider)
+            .buildAndRegisterGlobal();
+    }
 
     /**
      * IT should create the target table if it hasn't been created yet, but not fail if the table
@@ -102,6 +124,14 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
         assertEquals(endTime, spanInfo.end);
         assertEquals("Wrong number of tags", 0, spanInfo.tagCount);
         assertEquals("Wrong number of annotations", 1, spanInfo.annotationCount);
+    }
+
+    @After
+    public void tearDown(){
+        if(testExporter != null){
+            testExporter.close();
+        }
+        GlobalOpenTelemetry.resetForTest();
     }
 
 }

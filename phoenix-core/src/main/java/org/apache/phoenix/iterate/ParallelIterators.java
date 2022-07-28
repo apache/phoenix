@@ -27,6 +27,8 @@ import java.util.Queue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
@@ -36,6 +38,7 @@ import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
+import org.apache.phoenix.trace.TraceUtil;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.LogUtil;
@@ -81,6 +84,8 @@ public class ParallelIterators extends BaseResultIterators {
     @Override
     protected void submitWork(final List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
             final Queue<PeekingResultIterator> allIterators, int estFlattenedSize, final boolean isReverse, ParallelScanGrouper scanGrouper) throws SQLException {
+        Span parentSpan = TraceUtil.getGlobalTracer().spanBuilder("Parallel scans for table: " + tableRef.getTable().getPhysicalName().getString()).startSpan();
+        try(Scope scope = parentSpan.makeCurrent()){
         // Pre-populate nestedFutures lists so that we can shuffle the scans
         // and add the future to the right nested list. By shuffling the scans
         // we get better utilization of the cluster since our thread executor
@@ -108,7 +113,6 @@ public class ParallelIterators extends BaseResultIterators {
         context.getOverallQueryMetrics().updateNumParallelScans(numScans);
         GLOBAL_NUM_PARALLEL_SCANS.update(numScans);
         final long renewLeaseThreshold = context.getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
-        //TODO: Parent Span creation using Span.current() and create children with description  "Parallel scanner for table: " + tableRef.getTable().getPhysicalName().getString()
         for (final ScanLocator scanLocation : scanLocations) {
             final Scan scan = scanLocation.getScan();
             final ScanMetricsHolder scanMetricsHolder = ScanMetricsHolder.getInstance(readMetrics, physicalTableName,
@@ -119,7 +123,7 @@ public class ParallelIterators extends BaseResultIterators {
                         mutationState, tableRef, scan, scanMetricsHolder, renewLeaseThreshold, plan,
                         scanGrouper, caches);
             context.getConnection().addIteratorForLeaseRenewal(tableResultItr);
-            Future<PeekingResultIterator> future = executor.submit(new JobCallable<PeekingResultIterator>() {
+            Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
                 
                 @Override
                 public PeekingResultIterator call() throws Exception {
@@ -164,10 +168,14 @@ public class ParallelIterators extends BaseResultIterators {
                 public TaskExecutionMetricsHolder getTaskExecutionMetric() {
                     return taskMetrics;
                 }
-            });
+            }, "Parallel scanner for table: " + tableRef.getTable().getPhysicalName().getString(), parentSpan));
             // Add our future in the right place so that we can concatenate the
             // results of the inner futures versus merge sorting across all of them.
             nestedFutures.get(scanLocation.getOuterListIndex()).set(scanLocation.getInnerListIndex(), new Pair<Scan,Future<PeekingResultIterator>>(scan,future));
+        }
+
+        } finally {
+            parentSpan.end();
         }
     }
 

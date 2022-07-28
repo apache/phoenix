@@ -120,7 +120,7 @@
     <jsr305.version>2.0.1</jsr305.version>
     <snappy.version>0.3</snappy.version>
     <commons-codec.version>1.7</commons-codec.version>
-    <opentelemetry.version>1.3.0</opentelemetry.version>
+    <opentelemetry.version>1.15.0</opentelemetry.version>
     <opentelemetry-instrumentation.version>1.3.0</opentelemetry-instrumentation.version>
     <collections.version>3.2.2</collections.version>
     <jodatime.version>2.10.5</jodatime.version>

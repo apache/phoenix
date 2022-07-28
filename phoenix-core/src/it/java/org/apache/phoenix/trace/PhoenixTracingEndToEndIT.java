@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.trace;
 
+import static org.apache.phoenix.util.PhoenixRuntime.ANNOTATION_ATTRIB_PREFIX;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
@@ -30,15 +31,32 @@ import java.sql.Statement;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.baggage.Baggage;
+import io.opentelemetry.api.baggage.BaggageBuilder;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
+import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.data.SpanData;
+import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -49,13 +67,29 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 /**
  * Test that the logging sink stores the expected metrics/stats
  */
-@Ignore("Will need to revisit for new HDFS/HBase/HTrace, broken on 5.x")
 public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixTracingEndToEndIT.class);
     private static final int MAX_RETRIES = 10;
     private String enabledForLoggingTable;
     private String enableForLoggingIndex;
+
+    private static InMemorySpanExporter testExporter = InMemorySpanExporter.create();
+
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        GlobalOpenTelemetry.resetForTest();
+        SdkTracerProvider sdkTracerProvider = SdkTracerProvider.builder()
+            .addSpanProcessor(SimpleSpanProcessor.create(testExporter))
+            .build();
+        OpenTelemetry openTelemetry = OpenTelemetrySdk.builder()
+            .setTracerProvider(sdkTracerProvider)
+            .buildAndRegisterGlobal();
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(
+            CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
 
     @Before
     public void setupMetrics() throws Exception {
@@ -67,7 +101,10 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
      * Simple test that we can correctly write spans to the phoenix table
      * @throws Exception on failure
      */
-    @Test
+    @Ignore
+    // this is to test traces are being in stored in phoenix table
+    // in this PR we are not making changes to support phoenix as a
+    // store for traces
     public void testWriteSpans() throws Exception {
 
         LOGGER.info("testWriteSpans TableName: " + tracingTableName);
@@ -125,16 +162,12 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
      */
     @Test
     public void testClientServerIndexingTracing() throws Exception {
-
+        testExporter.reset();
         LOGGER.info("testClientServerIndexingTracing TableName: " + tracingTableName);
-        // one call for client side, one call for server side
-        latch = new CountDownLatch(2);
-        testTraceWriter.start();
 
         // separate connection so we don't create extra traces
         Connection conn = getConnectionWithoutTracing();
         createTestTable(conn, true);
-
         // trace the requests we send
         Connection traceable = getTracingConnection();
         LOGGER.debug("Doing dummy the writes to the tracked table");
@@ -151,9 +184,6 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         stmt.execute();
         traceable.commit();
 
-        // wait for the latch to countdown, as the metrics system is time-based
-        LOGGER.debug("Waiting for latch to complete!");
-        latch.await(200, TimeUnit.SECONDS);// should be way more than GC pauses
 
         // read the traces back out
 
@@ -171,18 +201,8 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
          *    i.III. waiting for latch
          * where '*' is a generically named thread (e.g phoenix-1-thread-X)
          */
-        boolean indexingCompleted = checkStoredTraces(conn, new TraceChecker() {
-            @Override
-            public boolean foundTrace(TraceHolder trace, SpanInfo span) {
-                String traceInfo = trace.toString();
-                // skip logging traces that are just traces about tracing
-                if (traceInfo.contains(tracingTableName)) {
-                    return false;
-                }
-                return traceInfo.contains("Completing index");
-            }
-        });
-
+        List<SpanData> spans = testExporter.getFinishedSpanItems();
+        boolean indexingCompleted = checkStoredTraces(spans, "Completing post index");
         assertTrue("Never found indexing updates", indexingCompleted);
     }
 
@@ -204,16 +224,12 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
     @Test
     public void testScanTracing() throws Exception {
-
+        testExporter.reset();
         LOGGER.info("testScanTracing TableName: " + tracingTableName);
 
         // separate connections to minimize amount of traces that are generated
         Connection traceable = getTracingConnection();
         Connection conn = getConnectionWithoutTracing();
-
-        // one call for client side, one call for server side
-        latch = new CountDownLatch(2);
-        testTraceWriter.start();
 
         // create a dummy table
         createTestTable(conn, false);
@@ -241,23 +257,19 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         assertTrue("Didn't get first result", results.next());
         assertTrue("Didn't get second result", results.next());
         results.close();
-
-        assertTrue("Get expected updates to trace table", latch.await(200, TimeUnit.SECONDS));
+        
         // don't trace reads either
-        boolean tracingComplete = checkStoredTraces(conn, new TraceChecker(){
-
-            @Override
-            public boolean foundTrace(TraceHolder currentTrace) {
-                String traceInfo = currentTrace.toString();
-                return traceInfo.contains("Parallel scanner");
-            }
-        });
+        boolean tracingComplete = checkStoredTraces(testExporter.getFinishedSpanItems(), "Parallel scanner");
+        assertTrue("No spans found for current table: " + enabledForLoggingTable,
+            testExporter.getFinishedSpanItems().stream().filter(spanData -> spanData.getName()
+                    .contains("Parallel scans for table: " + enabledForLoggingTable))
+                .collect(Collectors.toList()).size() > 0);
         assertTrue("Didn't find the parallel scanner in the tracing", tracingComplete);
     }
 
     @Test
     public void testScanTracingOnServer() throws Exception {
-
+        testExporter.reset();
         LOGGER.info("testScanTracingOnServer TableName: " + tracingTableName);
 
         // separate connections to minimize amount of traces that are generated
@@ -285,31 +297,43 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         stmt.setLong(2, 2);
         stmt.execute();
         conn.commit();
-
+        testExporter.reset();
         // do a scan of the table
-        String read = "SELECT COUNT(*) FROM " + enabledForLoggingTable;
-        ResultSet results = traceable.createStatement().executeQuery(read);
-        assertTrue("Didn't get count result", results.next());
-        // make sure we got the expected count
-        assertEquals("Didn't get the expected number of row", 2, results.getInt(1));
-        results.close();
-
-        assertTrue("Didn't get expected updates to trace table", latch.await(60, TimeUnit.SECONDS));
-
+        Span selectSpan =
+            TraceUtil.getGlobalTracer().spanBuilder("select span for " + enabledForLoggingTable)
+                .startSpan();
+        try (Scope scope = selectSpan.makeCurrent()) {
+            String read = "SELECT COUNT(*) FROM " + enabledForLoggingTable;
+            ResultSet results = traceable.createStatement().executeQuery(read);
+            assertTrue("Didn't get count result", results.next());
+            // make sure we got the expected count
+            assertEquals("Didn't get the expected number of row", 2, results.getInt(1));
+            results.close();
+        } finally {
+            selectSpan.end();
+        }
+        Optional<SpanData> optionalSpanData = testExporter.getFinishedSpanItems().stream()
+            .filter(spanData -> spanData.getName().contains(enabledForLoggingTable)).findFirst();
+        Set<String> parentSpansSet = testExporter.getFinishedSpanItems().stream()
+            .filter(spanData -> spanData.getName().contains(enabledForLoggingTable))
+            .collect(Collectors.toList()).stream().map(spanData -> spanData.getTraceId())
+            .collect(Collectors.toSet());
+        List<SpanData> spanDataList = null;
+        if (optionalSpanData.isPresent()) {
+            spanDataList = testExporter.getFinishedSpanItems().stream()
+                .filter(spanData -> parentSpansSet.contains(spanData.getTraceId()))
+                .collect(Collectors.toList());
+        }
+        assertNotNull("Span exist for current table: " + enabledForLoggingTable, spanDataList);
         // don't trace reads either
-        boolean found = checkStoredTraces(conn, new TraceChecker() {
-            @Override
-            public boolean foundTrace(TraceHolder trace) {
-                String traceInfo = trace.toString();
-                return traceInfo.contains(BaseScannerRegionObserver.SCANNER_OPENED_TRACE_INFO);
-            }
-        });
+        boolean found = checkStoredTraces(testExporter.getFinishedSpanItems(),
+            BaseScannerRegionObserver.SCANNER_OPENED_TRACE_INFO);
         assertTrue("Didn't find the parallel scanner in the tracing", found);
     }
 
     @Test
     public void testCustomAnnotationTracing() throws Exception {
-
+        testExporter.reset();
         LOGGER.info("testCustomAnnotationTracing TableName: " + tracingTableName);
 
     	final String customAnnotationKey = "myannot";
@@ -319,9 +343,6 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         Connection traceable = getTracingConnection(ImmutableMap.of(customAnnotationKey, customAnnotationValue), tenantId);
         Connection conn = getConnectionWithoutTracing();
 
-        // one call for client side, one call for server side
-        latch = new CountDownLatch(2);
-        testTraceWriter.start();
 
         // create a dummy table
         createTestTable(conn, false);
@@ -344,16 +365,24 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         conn.rollback();
 
         // do a scan of the table
-        String read = "SELECT * FROM " + enabledForLoggingTable;
-        ResultSet results = traceable.createStatement().executeQuery(read);
-        assertTrue("Didn't get first result", results.next());
-        assertTrue("Didn't get second result", results.next());
-        results.close();
+        Span span = TraceUtil.getGlobalTracer().spanBuilder("select span").setAttribute(ANNOTATION_ATTRIB_PREFIX + customAnnotationKey, customAnnotationValue).startSpan();
+        try(Scope scope = span.makeCurrent()){
+            String read = "SELECT * FROM " + enabledForLoggingTable;
+            ResultSet results = traceable.createStatement().executeQuery(read);
+            assertTrue("Didn't get first result", results.next());
+            assertTrue("Didn't get second result", results.next());
+            results.close();
+        } finally {
+            span.end();
+        }
+        List<SpanData> completedSpans = testExporter.getFinishedSpanItems();
+        Optional<SpanData> optionalSpanData = completedSpans.stream().filter(spanData -> spanData.getName().contains("select span")).findFirst();
+        assertTrue(optionalSpanData.isPresent());
+        SpanData spanData = optionalSpanData.get();
+        Attributes attributes =  spanData.getAttributes();
 
-        assertTrue("Get expected updates to trace table", latch.await(200, TimeUnit.SECONDS));
-
-        assertAnnotationPresent(customAnnotationKey, customAnnotationValue, conn);
-        assertAnnotationPresent(TENANT_ID_ATTRIB, tenantId, conn);
+        assertNotNull("Attribute value for key:" + ANNOTATION_ATTRIB_PREFIX + customAnnotationKey, attributes.get(AttributeKey.stringKey(ANNOTATION_ATTRIB_PREFIX + customAnnotationKey)));
+        assertTrue(attributes.get(AttributeKey.stringKey(ANNOTATION_ATTRIB_PREFIX + customAnnotationKey)).equals(customAnnotationValue));
         // CurrentSCN is also added as an annotation. Not tested here because it screws up test setup.
     }
 
@@ -537,6 +566,10 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         });
 
         assertTrue("Didn't find the custom annotation in the tracing", tracingComplete);
+    }
+
+    private boolean checkStoredTraces(List<SpanData> spans, String spanString) {
+        return spans.stream().filter(spanData -> spanData.getName().contains(spanString)).findFirst().isPresent();
     }
 
     private boolean checkStoredTraces(Connection conn, TraceChecker checker) throws Exception {
