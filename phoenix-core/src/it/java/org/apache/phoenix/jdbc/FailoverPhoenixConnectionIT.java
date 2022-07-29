@@ -18,6 +18,7 @@
 package org.apache.phoenix.jdbc;
 
 import static org.apache.hadoop.hbase.HConstants.HBASE_CLIENT_META_OPERATION_TIMEOUT;
+import static org.apache.hadoop.hbase.HConstants.HBASE_CLIENT_PAUSE;
 import static org.apache.hadoop.hbase.HConstants.HBASE_CLIENT_RETRIES_NUMBER;
 import static org.apache.hadoop.hbase.HConstants.HBASE_RPC_TIMEOUT_KEY;
 import static org.apache.hadoop.hbase.HConstants.REPLICATION_SOURCE_SHIPEDITS_TIMEOUT;
@@ -62,6 +63,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.FailoverSQLException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
@@ -129,13 +131,16 @@ public class FailoverPhoenixConnectionIT {
         clientProperties.setProperty(PHOENIX_HA_TRANSITION_TIMEOUT_MS_KEY, "3000");
         clientProperties.setProperty("zookeeper.recovery.retry.maxsleeptime", "1000");
         clientProperties.setProperty("zookeeper.recovery.retry","1");
+        clientProperties.setProperty("zookeeper.recovery.retry.intervalmill","10");
         clientProperties.setProperty(HBASE_CLIENT_RETRIES_NUMBER,"4");
+        clientProperties.setProperty(HBASE_CLIENT_PAUSE,"2000"); //bad server elapses in 2sec
         clientProperties.setProperty(HBASE_RPC_TIMEOUT_KEY,"2000");
         clientProperties.setProperty(HBASE_CLIENT_META_OPERATION_TIMEOUT,"2000");
         clientProperties.setProperty(SOCKET_TIMEOUT_CONNECT,"2000");
         clientProperties.setProperty(SOCKET_TIMEOUT_READ,"2000");
         clientProperties.setProperty(SOCKET_TIMEOUT_WRITE,"2000");
         clientProperties.setProperty(REPLICATION_SOURCE_SHIPEDITS_TIMEOUT,"5000");
+        clientProperties.setProperty(HConstants.THREAD_WAKE_FREQUENCY, "100");
 
 
         // Make first cluster ACTIVE
