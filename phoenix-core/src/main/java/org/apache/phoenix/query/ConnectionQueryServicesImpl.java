@@ -534,12 +534,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public Table getTableIfExists(byte[] tableName) throws SQLException {
         try (Admin admin = getAdmin()) {
-            if (!admin.tableExists(TableName.valueOf(tableName))) {
+            if (!AdminUtilWithFallback.tableExists(admin, TableName.valueOf(tableName))) {
                 throw new TableNotFoundException(
                     SchemaUtil.getSchemaNameFromFullName(tableName),
                     SchemaUtil.getTableNameFromFullName(tableName));
             }
-        } catch (IOException e) {
+        } catch (IOException | InterruptedException e) {
             throw new SQLException(e);
         }
         return getTable(tableName);
@@ -1367,7 +1367,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         // if the NS does not exist, we will error as expected, or
                         // if the NS does exist and tables are already mapped, the check will exit gracefully
                     }
-                    if (admin.tableExists(SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, false))) {
+                    if (AdminUtilWithFallback.tableExists(admin,
+                        SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, false))) {
                         // SYSTEM.CATALOG exists, so at this point, we have 3 cases:
                         // 1) If server-side namespace mapping is disabled, drop the SYSTEM namespace if it was created
                         //    above and throw Inconsistent namespace mapping exception
@@ -1391,7 +1392,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         // Thrown so we can force an upgrade which will just migrate SYSTEM tables to the SYSTEM namespace
                         throw new UpgradeRequiredException(MIN_SYSTEM_TABLE_TIMESTAMP);
                     }
-                } else if (admin.tableExists(SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, true))) {
+                } else if (AdminUtilWithFallback.tableExists(admin,
+                    SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, true))) {
                     // If SYSTEM:CATALOG exists, but client-side namespace mapping for SYSTEM tables is disabled, throw an exception
                     throw new SQLExceptionInfo.Builder(
                       SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES)
@@ -4646,7 +4648,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName();
             metatable = getTable(mappedSystemTable);
             if (tableNames.contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME)) {
-                if (!admin.tableExists(TableName.valueOf(mappedSystemTable))) {
+                if (!AdminUtilWithFallback.tableExists(admin,
+                    TableName.valueOf(mappedSystemTable))) {
                     LOGGER.info("Migrating SYSTEM.CATALOG table to SYSTEM namespace.");
                     // Actual migration of SYSCAT table
                     UpgradeUtil.mapTableToNamespace(admin, metatable,
