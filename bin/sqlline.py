@@ -120,7 +120,7 @@ java_cmd = java + ' $PHOENIX_OPTS ' + \
     phoenix_utils.slf4j_backend_jar + os.pathsep + \
     phoenix_utils.logging_jar + os.pathsep + \
     phoenix_utils.phoenix_client_embedded_jar + \
-    '" -Dlog4j.configuration=file:' + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
+    '" -Dlog4j2.configurationFile=file:' + os.path.join(phoenix_utils.current_dir, "log4j2.properties") + \
     disable_jna + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver" + \
     " -u jdbc:phoenix:" + phoenix_utils.shell_quote([zookeeper]) + \

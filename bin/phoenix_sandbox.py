@@ -38,13 +38,13 @@ if not os.path.exists(cp_file_path):
                 + "phoenix-core/target, please rebuild the project first\n")
     sys.exit(1)
 
-logging_config = os.path.join(base_dir, 'bin', 'sandbox-log4j.properties')
+logging_config = os.path.join(base_dir, 'bin', 'sandbox-log4j2.properties')
 
 cp_components = [phoenix_target_dir + "/*"]
 with open(cp_file_path, 'r') as cp_file:
     cp_components.append(cp_file.read())
 
-java_cmd = ("java $PHOENIX_OPTS -Dlog4j.configuration=file:%s " +
+java_cmd = ("java $PHOENIX_OPTS -Dlog4j2.configurationFile=file:%s " +
                 "-cp %s org.apache.phoenix.Sandbox") % (
                             logging_config, ":".join(cp_components))
 
