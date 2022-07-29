@@ -44,16 +44,10 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.TableNotFoundException;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
-import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.SystemExitRule;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -65,6 +59,8 @@ import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
+
+import javax.swing.plaf.synth.Region;
 
 public class ConnectionQueryServicesImplTest {
     private static final PhoenixIOException PHOENIX_IO_EXCEPTION =
@@ -162,7 +158,7 @@ public class ConnectionQueryServicesImplTest {
 
     @Test
     public void testGetNextRegionStartKey() {
-        HRegionInfo mockHRegionInfo = org.mockito.Mockito.mock(HRegionInfo.class);
+        RegionInfo mockHRegionInfo = org.mockito.Mockito.mock(RegionInfo.class);
         HRegionLocation mockRegionLocation = org.mockito.Mockito.mock(HRegionLocation.class);
         ConnectionQueryServicesImpl mockCqsi = org.mockito.Mockito.mock(ConnectionQueryServicesImpl.class,
                 org.mockito.Mockito.CALLS_REAL_METHODS);
@@ -172,7 +168,7 @@ public class ConnectionQueryServicesImplTest {
         byte[] notCorruptedEndKey = "0x3000".getBytes();
         byte[] notCorruptedNewKey = "0x3001".getBytes();
         byte[] mockTableName = "dummyTable".getBytes();
-        when(mockRegionLocation.getRegionInfo()).thenReturn(mockHRegionInfo);
+        when(mockRegionLocation.getRegion()).thenReturn(mockHRegionInfo);
         when(mockHRegionInfo.getRegionName()).thenReturn(mockTableName);
 
         // comparing the current regionInfo endKey is equal to the previous endKey

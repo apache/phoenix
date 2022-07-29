@@ -52,7 +52,7 @@ public class MaxTimestampFilter extends FilterBase {
   }
 
   @Override
-  public ReturnCode filterKeyValue(Cell v) {
+  public ReturnCode filterCell(Cell v) {
     long timestamp = v.getTimestamp();
     if (timestamp > ts) {
       return ReturnCode.SEEK_NEXT_USING_HINT;

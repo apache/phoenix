@@ -201,7 +201,7 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
     }
     
     @Override
-    public ReturnCode filterKeyValue(Cell cell) {
+    public ReturnCode filterCell(Cell cell) {
         if (Boolean.TRUE.equals(this.matchedColumn)) {
           // We already found and matched the single column, all keys now pass
           return ReturnCode.INCLUDE_AND_NEXT_COL;

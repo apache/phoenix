@@ -56,12 +56,7 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
@@ -652,11 +647,11 @@ public class IndexToolIT extends BaseTest {
             TableName hDataName = TableName.valueOf(
                     SchemaUtil.getPhysicalHBaseTableName(schemaName, dataTableName, namespaceMapped)
                     .getBytes());
-            HTableDescriptor dataTD = admin.getTableDescriptor(hDataName);
+            TableDescriptor dataTD = admin.getDescriptor(hDataName);
             admin.disableTable(hDataName);
             admin.deleteTable(hDataName);
             admin.createTable(dataTD, splitPoints);
-            assertEquals(targetNumRegions, admin.getTableRegions(hDataName).size());
+            assertEquals(targetNumRegions, admin.getRegions(hDataName).size());
 
             // insert data where index column values start with a, b, c, d
             int idCounter = 1;
@@ -686,7 +681,7 @@ public class IndexToolIT extends BaseTest {
             TableName hIndexName = TableName.valueOf(
                 SchemaUtil.getPhysicalHBaseTableName(schemaName, indexTableName, namespaceMapped)
                 .getBytes());
-            assertEquals(targetNumRegions, admin.getTableRegions(hIndexName).size());
+            assertEquals(targetNumRegions, admin.getRegions(hIndexName).size());
             List<Cell> values = new ArrayList<>();
             // every index region should have been written to, if the index table was properly split uniformly
             for (HRegion region : getUtility().getHBaseCluster().getRegions(hIndexName)) {

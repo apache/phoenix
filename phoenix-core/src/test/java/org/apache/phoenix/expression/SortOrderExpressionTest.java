@@ -28,6 +28,7 @@ import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.TimeZone;
 
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.function.ByteBasedRegexpReplaceFunction;
@@ -271,7 +272,7 @@ public class SortOrderExpressionTest {
         PDataType[] numberDataTypes = new PDataType[]{ PInteger.INSTANCE, PLong.INSTANCE, PDecimal.INSTANCE, PUnsignedInt.INSTANCE, PUnsignedLong.INSTANCE};
         for (PDataType lhsDataType : numberDataTypes) {
             for (PDataType rhsDataType : numberDataTypes) {
-                runCompareTest(CompareOp.GREATER, true, 10, lhsDataType, 2, rhsDataType);
+                runCompareTest(CompareOperator.GREATER, true, 10, lhsDataType, 2, rhsDataType);
             }
         }
     }
@@ -281,14 +282,14 @@ public class SortOrderExpressionTest {
         PDataType[] textDataTypes = new PDataType[]{ PChar.INSTANCE, PVarchar.INSTANCE};
         for (PDataType lhsDataType : textDataTypes) {
             for (PDataType rhsDataType : textDataTypes) {
-                runCompareTest(CompareOp.GREATER, true, "xxx", lhsDataType, "bbb", rhsDataType);
+                runCompareTest(CompareOperator.GREATER, true, "xxx", lhsDataType, "bbb", rhsDataType);
             }
         }
     }
     
     @Test
     public void compareBooleans() throws Exception {
-        runCompareTest(CompareOp.GREATER, true, true, PBoolean.INSTANCE, false, PBoolean.INSTANCE);
+        runCompareTest(CompareOperator.GREATER, true, true, PBoolean.INSTANCE, false, PBoolean.INSTANCE);
     }
     
     @Test
@@ -300,7 +301,7 @@ public class SortOrderExpressionTest {
         evaluateAndAssertResult(new StringConcatExpression(args), "blah10");        
     }
     
-    private void runCompareTest(CompareOp op, boolean expectedResult, Object lhsValue, PDataType lhsDataType, Object rhsValue, PDataType rhsDataType) throws Exception {
+    private void runCompareTest(CompareOperator op, boolean expectedResult, Object lhsValue, PDataType lhsDataType, Object rhsValue, PDataType rhsDataType) throws Exception {
         List<Expression> args;
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 

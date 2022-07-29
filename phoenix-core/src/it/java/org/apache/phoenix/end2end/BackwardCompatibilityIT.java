@@ -417,7 +417,7 @@ public class BackwardCompatibilityIT {
         executeQueryWithClientVersion(compatibleClientVersion, ADD_VIEW_INDEX, zkQuorum);
         org.apache.hadoop.hbase.client.Connection conn = hbaseTestUtil.getConnection();
         try (Admin admin = conn.getAdmin()) {
-            HTableDescriptor tableDescriptor = admin.getTableDescriptor(
+            TableDescriptor tableDescriptor = admin.getDescriptor(
                     TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
             //The oldest client we test is 5.1.0, which already adds SystemCatalogRegionObserver
             assertTrue("Coprocessor " + SystemCatalogRegionObserver.class.getName()
@@ -428,7 +428,7 @@ public class BackwardCompatibilityIT {
             executeQueriesWithCurrentVersion(QUERY_VIEW_INDEX, url, NONE);
             assertExpectedOutput(QUERY_VIEW_INDEX);
 
-            tableDescriptor = admin.getTableDescriptor(
+            tableDescriptor = admin.getDescriptor(
                     TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
             assertTrue("Coprocessor " + SystemCatalogRegionObserver.class.getName()
                     + " has been added with compatible client version: "

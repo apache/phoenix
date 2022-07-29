@@ -315,7 +315,7 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
 
     private void moveRegionAndWait(MiniHBaseCluster miniHBaseCluster,HRegion destRegion, HRegionServer destRegionServer) throws IOException, InterruptedException {
         HMaster master = miniHBaseCluster.getMaster();
-        getUtility().getHBaseAdmin().move(
+        getUtility().getAdmin().move(
                 destRegion.getRegionInfo().getEncodedNameAsBytes(),
                 Bytes.toBytes(destRegionServer.getServerName().getServerName()));
         while (true) {

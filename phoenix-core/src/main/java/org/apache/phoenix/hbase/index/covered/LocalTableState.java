@@ -189,7 +189,7 @@ public class LocalTableState implements TableState {
     private static boolean insertingData(Mutation m) {
         for (Collection<Cell> cells : m.getFamilyCellMap().values()) {
             for (Cell cell : cells) {
-                if (KeyValue.Type.codeToType(cell.getTypeByte()) != KeyValue.Type.Put) {
+                if (cell.getType() != Cell.Type.Put) {
                     return false;
                 }
             }

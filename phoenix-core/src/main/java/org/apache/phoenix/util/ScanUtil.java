@@ -202,7 +202,7 @@ public class ScanUtil {
                 // true, readType should be set PREAD. For non-small scan,
                 // setting setSmall(false) is redundant and degrades perf
                 // without HBASE-25644 fix.
-                newScan.setSmall(true);
+                newScan.setReadType(Scan.ReadType.PREAD);
             }
             return newScan;
         } catch (IOException e) {
@@ -243,8 +243,8 @@ public class ScanUtil {
         } else {
             mayHaveRows = true;
         }
-        scan.setStartRow(startKey);
-        scan.setStopRow(stopKey);
+        scan.withStartRow(startKey);
+        scan.withStopRow(stopKey);
         if (offset > 0 && useSkipScan) {
             byte[] temp = null;
             if (startKey.length != 0) {
@@ -709,8 +709,8 @@ public class ScanUtil {
         if (isReversed(scan) && !scan.isReversed()) {
             byte[] newStartRow = getReversedRow(scan.getStartRow());
             byte[] newStopRow = getReversedRow(scan.getStopRow());
-            scan.setStartRow(newStopRow);
-            scan.setStopRow(newStartRow);
+            scan.withStartRow(newStopRow);
+            scan.withStopRow(newStartRow);
             scan.setReversed(true);
         }
     }
@@ -723,10 +723,10 @@ public class ScanUtil {
         byte[] prefix = scan.getStartRow().length == 0 ? new byte[scan.getStopRow().length]: scan.getStartRow();
         int prefixLength = scan.getStartRow().length == 0? scan.getStopRow().length: scan.getStartRow().length;
         if(scan.getAttribute(SCAN_START_ROW_SUFFIX)!=null) {
-            scan.setStartRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_START_ROW_SUFFIX), 0, prefix, prefixLength));
+            scan.withStartRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_START_ROW_SUFFIX), 0, prefix, prefixLength));
         }
         if(scan.getAttribute(SCAN_STOP_ROW_SUFFIX)!=null) {
-            scan.setStopRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_STOP_ROW_SUFFIX), 0, prefix, prefixLength));
+            scan.withStopRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_STOP_ROW_SUFFIX), 0, prefix, prefixLength));
         }
     }
 
@@ -749,8 +749,8 @@ public class ScanUtil {
     public static void setLocalIndexAttributes(Scan newScan, int keyOffset, byte[] regionStartKey, byte[] regionEndKey, byte[] startRowSuffix, byte[] stopRowSuffix) {
         if(ScanUtil.isLocalIndex(newScan)) {
              newScan.setAttribute(SCAN_ACTUAL_START_ROW, regionStartKey);
-             newScan.setStartRow(regionStartKey);
-             newScan.setStopRow(regionEndKey);
+             newScan.withStartRow(regionStartKey);
+             newScan.withStopRow(regionEndKey);
              if (keyOffset > 0 ) {
                  newScan.setAttribute(SCAN_START_ROW_SUFFIX, ScanRanges.stripPrefix(startRowSuffix, keyOffset));
              } else {

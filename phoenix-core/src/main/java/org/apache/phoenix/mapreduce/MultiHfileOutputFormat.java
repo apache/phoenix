@@ -38,11 +38,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellComparatorImpl;
-import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
@@ -161,7 +157,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
                 // phoenix-2216: start : extract table name from the rowkey
                 String tableName = row.getTableName();
                 byte [] rowKey = row.getRowkey().get();
-                int length = (CellUtil.estimatedSerializedSizeOf(kv)) - Bytes.SIZEOF_INT;
+                int length = (PrivateCellUtil.estimatedSerializedSizeOf(kv)) - Bytes.SIZEOF_INT;
                 byte [] family = CellUtil.cloneFamily(kv);
                 byte[] tableAndFamily = join(tableName, Bytes.toString(family));
                 WriterLength wl = this.writers.get(tableAndFamily);
@@ -195,7 +191,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
 
                 // we now have the proper WAL writer. full steam ahead
                 if (cell.getTimestamp() == HConstants.LATEST_TIMESTAMP) {
-                    CellUtil.setTimestamp(cell, this.now);
+                    PrivateCellUtil.setTimestamp(cell, this.now);
                 }
                 wl.writer.append(kv);
                 wl.written += length;

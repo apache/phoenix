@@ -32,11 +32,8 @@ import java.util.NavigableMap;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.KeyValue.Type;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
@@ -209,7 +206,10 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
 
         // update ts and value
         Put put = new Put(ROW);
-        put.addImmutable(FAM, INDEXED_QUALIFIER, 2, VALUE_2);
+        put.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY)
+                        .setFamily(FAM)
+                        .setQualifier(INDEXED_QUALIFIER)
+                        .setTimestamp(2).setValue(VALUE_2).build());
         MultiMutation mutation = new MultiMutation(new ImmutableBytesPtr(ROW));
         mutation.addAll(put);
 
@@ -221,10 +221,10 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
         Collection<Pair<Mutation, byte[]>> indexUpdates =
                 indexBuilder.getIndexUpdate(mutation, mockIndexMetaData, cachedLocalTable);
         assertEquals(2, indexUpdates.size());
-        assertContains(indexUpdates, 2, ROW, KeyValue.Type.DeleteFamily, FAM,
+        assertContains(indexUpdates, 2, ROW, Cell.Type.DeleteFamily, FAM,
             new byte[0] /* qual not needed */, 2);
         assertContains(indexUpdates, ColumnTracker.NO_NEWER_PRIMARY_TABLE_ENTRY_TIMESTAMP, ROW,
-            KeyValue.Type.Put, FAM, QueryConstants.EMPTY_COLUMN_BYTES, 2);
+                Cell.Type.Put, FAM, QueryConstants.EMPTY_COLUMN_BYTES, 2);
     }
 
     /**
@@ -250,13 +250,22 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
         // rebuilder replays mutations starting from t=2
         MultiMutation mutation = new MultiMutation(new ImmutableBytesPtr(ROW));
         Put put = new Put(ROW);
-        put.addImmutable(FAM, INDEXED_QUALIFIER, 4, VALUE_4);
+        put.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY)
+                        .setFamily(FAM)
+                        .setQualifier(INDEXED_QUALIFIER)
+                        .setTimestamp(4).setValue(VALUE_4).build());
         mutation.addAll(put);
         put = new Put(ROW);
-        put.addImmutable(FAM, INDEXED_QUALIFIER, 3, VALUE_3);
+        put.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY)
+                        .setFamily(FAM)
+                        .setQualifier(INDEXED_QUALIFIER)
+                        .setTimestamp(3).setValue(VALUE_3).build());
         mutation.addAll(put);
         put = new Put(ROW);
-        put.addImmutable(FAM, INDEXED_QUALIFIER, 2, VALUE_2);
+        put.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY)
+                        .setFamily(FAM)
+                        .setQualifier(INDEXED_QUALIFIER)
+                        .setTimestamp(2).setValue(VALUE_2).build());
         mutation.addAll(put);
 
         Collection<Pair<Mutation, byte[]>> indexUpdates = Lists.newArrayList();
@@ -275,18 +284,18 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
         // rows for VALUE_2, VALUE_3)
         assertEquals(6, indexUpdates.size());
 
-        assertContains(indexUpdates, 2, ROW, KeyValue.Type.DeleteFamily, FAM,
+        assertContains(indexUpdates, 2, ROW, Cell.Type.DeleteFamily, FAM,
             new byte[0] /* qual not needed */, 2);
         assertContains(indexUpdates, ColumnTracker.NO_NEWER_PRIMARY_TABLE_ENTRY_TIMESTAMP, ROW,
-            KeyValue.Type.Put, FAM, QueryConstants.EMPTY_COLUMN_BYTES, 2);
-        assertContains(indexUpdates, 3, ROW, KeyValue.Type.DeleteFamily, FAM,
+                Cell.Type.Put, FAM, QueryConstants.EMPTY_COLUMN_BYTES, 2);
+        assertContains(indexUpdates, 3, ROW, Cell.Type.DeleteFamily, FAM,
             new byte[0] /* qual not needed */, 3);
         assertContains(indexUpdates, ColumnTracker.NO_NEWER_PRIMARY_TABLE_ENTRY_TIMESTAMP, ROW,
-            KeyValue.Type.Put, FAM, QueryConstants.EMPTY_COLUMN_BYTES, 3);
-        assertContains(indexUpdates, 4, ROW, KeyValue.Type.DeleteFamily, FAM,
+                Cell.Type.Put, FAM, QueryConstants.EMPTY_COLUMN_BYTES, 3);
+        assertContains(indexUpdates, 4, ROW, Cell.Type.DeleteFamily, FAM,
             new byte[0] /* qual not needed */, 4);
         assertContains(indexUpdates, ColumnTracker.NO_NEWER_PRIMARY_TABLE_ENTRY_TIMESTAMP, ROW,
-            KeyValue.Type.Put, FAM, QueryConstants.EMPTY_COLUMN_BYTES, 4);
+                Cell.Type.Put, FAM, QueryConstants.EMPTY_COLUMN_BYTES, 4);
     }
 
     /**
@@ -318,7 +327,7 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
 
     // Assert that the given collection of indexUpdates contains the given cell
     private void assertContains(Collection<Pair<Mutation, byte[]>> indexUpdates,
-            final long mutationTs, final byte[] row, final Type cellType, final byte[] fam,
+            final long mutationTs, final byte[] row, final Cell.Type cellType, final byte[] fam,
             final byte[] qual, final long cellTs) {
         Predicate<Pair<Mutation, byte[]>> hasCellPredicate =
                 new Predicate<Pair<Mutation, byte[]>>() {
@@ -326,11 +335,11 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
                     public boolean apply(Pair<Mutation, byte[]> input) {
                         assertEquals(TEST_TABLE_INDEX_STRING, Bytes.toString(input.getSecond()));
                         Mutation mutation = input.getFirst();
-                        if (mutationTs == mutation.getTimeStamp()) {
+                        if (mutationTs == mutation.getTimestamp()) {
                             NavigableMap<byte[], List<Cell>> familyCellMap =
                                     mutation.getFamilyCellMap();
                             Cell updateCell = familyCellMap.get(fam).get(0);
-                            if (cellType == KeyValue.Type.codeToType(updateCell.getTypeByte())
+                            if (cellType == updateCell.getType()
                                     && Bytes.compareTo(fam, CellUtil.cloneFamily(updateCell)) == 0
                                     && Bytes.compareTo(qual,
                                         CellUtil.cloneQualifier(updateCell)) == 0
@@ -359,7 +368,14 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
         MultiMutation mutation = new MultiMutation(new ImmutableBytesPtr(ROW));
         for (int i = versions - 1; i >= 0; i--) {
             Put put = new Put(ROW);
-            put.addImmutable(FAM, INDEXED_QUALIFIER, i, Bytes.toBytes(i));
+            try {
+                put.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY)
+                        .setFamily(FAM)
+                        .setQualifier(INDEXED_QUALIFIER)
+                        .setTimestamp(i).setValue(Bytes.toBytes(i)).build());
+            } catch (IOException e) {
+
+            }
             mutation.addAll(put);
         }
         return mutation;

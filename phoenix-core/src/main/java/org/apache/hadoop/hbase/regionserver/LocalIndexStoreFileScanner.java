@@ -86,9 +86,8 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
                 new KeyValue(changedKey, 0, changedKey.length, next.getFamilyArray(),
                     next.getFamilyOffset(), next.getFamilyLength(), next.getQualifierArray(),
                     next.getQualifierOffset(), next.getQualifierLength(),
-                    next.getTimestamp(), Type.codeToType(next.getTypeByte()),
-                    next.getValueArray(), next.getValueOffset(), next.getValueLength(),
-                    next.getTagsArray(), next.getTagsOffset(), next.getTagsLength());
+                    next.getTimestamp(), Type.codeToType(next.getType().getCode()),
+                    next.getValueArray(), next.getValueOffset(), next.getValueLength());
         return changedKv;
     }
 

@@ -398,8 +398,8 @@ public class MetaDataUtil {
         }
         byte[] rowArray = new byte[cell.getRowLength()];
         System.arraycopy(cell.getRowArray(), cell.getRowOffset(), rowArray, 0, cell.getRowLength());
-        Put put = new Put(rowArray, delete.getTimeStamp());
-        put.addColumn(family, qualifier, delete.getTimeStamp(), value);
+        Put put = new Put(rowArray, delete.getTimestamp());
+        put.addColumn(family, qualifier, delete.getTimestamp(), value);
         return put;
     }
 
@@ -636,7 +636,7 @@ public class MetaDataUtil {
         Collection<List<Cell>> kvs = m.getFamilyCellMap().values();
         // Empty if Mutation is a Delete
         // TODO: confirm that Delete timestamp is reset like Put
-        return kvs.isEmpty() ? m.getTimeStamp() : kvs.iterator().next().get(0).getTimestamp();
+        return kvs.isEmpty() ? m.getTimestamp() : kvs.iterator().next().get(0).getTimestamp();
     }    
 
     public static byte[] getParentLinkKey(String tenantId, String schemaName, String tableName, String indexName) {
@@ -965,12 +965,12 @@ public class MetaDataUtil {
 	public static Scan newTableRowsScan(byte[] startKey, byte[] stopKey, long startTimeStamp, long stopTimeStamp) {
 		Scan scan = new Scan();
 		ScanUtil.setTimeRange(scan, startTimeStamp, stopTimeStamp);
-		scan.setStartRow(startKey);
+		scan.withStartRow(startKey);
 		if (stopKey == null) {
 			stopKey = ByteUtil.concat(startKey, QueryConstants.SEPARATOR_BYTE_ARRAY);
 			ByteUtil.nextKey(stopKey, stopKey.length);
 		}
-		scan.setStopRow(stopKey);
+		scan.withStopRow(stopKey);
 		return scan;
 	}
 
@@ -1061,7 +1061,7 @@ public class MetaDataUtil {
     public static String getJdbcUrl(RegionCoprocessorEnvironment env) {
         String zkQuorum = env.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
         String zkClientPort = env.getConfiguration().get(HConstants.ZOOKEEPER_CLIENT_PORT,
-            Integer.toString(HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT));
+            Integer.toString(HConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT));
         String zkParentNode = env.getConfiguration().get(HConstants.ZOOKEEPER_ZNODE_PARENT,
             HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
         return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum

@@ -263,7 +263,7 @@ public class PhoenixTxIndexMutationGenerator {
                     public int compare(Cell o1, Cell o2) {
                         int c = Longs.compare(o1.getTimestamp(), o2.getTimestamp());
                         if (c != 0) return c;
-                        c = o1.getTypeByte() - o2.getTypeByte();
+                        c = o1.getType().getCode() - o2.getType().getCode();
                         if (c != 0) return c;
                         c = Bytes.compareTo(o1.getFamilyArray(), o1.getFamilyOffset(), o1.getFamilyLength(), o1.getFamilyArray(), o1.getFamilyOffset(), o1.getFamilyLength());
                         if (c != 0) return c;
@@ -330,8 +330,8 @@ public class PhoenixTxIndexMutationGenerator {
         if (services != null && indexMetaData.hasLocalIndexes()) {
             try {
                 HRegionLocation tableRegionLocation = services.getTableRegionLocation(tableName, state.getCurrentRowKey());
-                regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
-                regionEndKey = tableRegionLocation.getRegionInfo().getEndKey();
+                regionStartKey = tableRegionLocation.getRegion().getStartKey();
+                regionEndKey = tableRegionLocation.getRegion().getEndKey();
             } catch (SQLException e) {
                 throw new IOException(e);
             }
@@ -356,8 +356,8 @@ public class PhoenixTxIndexMutationGenerator {
         if (services != null && indexMetaData.hasLocalIndexes()) {
             try {
                 HRegionLocation tableRegionLocation = services.getTableRegionLocation(tableName, state.getCurrentRowKey());
-                regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
-                regionEndKey = tableRegionLocation.getRegionInfo().getEndKey();
+                regionStartKey = tableRegionLocation.getRegion().getStartKey();
+                regionEndKey = tableRegionLocation.getRegion().getEndKey();
             } catch (SQLException e) {
                 throw new IOException(e);
             }
@@ -430,16 +430,16 @@ public class PhoenixTxIndexMutationGenerator {
 
         private void applyMutation() {
             for (Cell cell : pendingUpdates) {
-                if (cell.getTypeByte() == KeyValue.Type.Delete.getCode() || cell.getTypeByte() == KeyValue.Type.DeleteColumn.getCode()) {
+                if (cell.getType() == Cell.Type.Delete || cell.getType() == Cell.Type.DeleteColumn) {
                     ColumnReference ref = new ColumnReference(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(), cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength());
                     valueMap.remove(ref);
-                } else if (cell.getTypeByte() == KeyValue.Type.DeleteFamily.getCode() || cell.getTypeByte() == KeyValue.Type.DeleteFamilyVersion.getCode()) {
+                } else if (cell.getType() == Cell.Type.DeleteFamily || cell.getType() == Cell.Type.DeleteFamilyVersion) {
                     for (ColumnReference ref : indexedColumns) {
                         if (ref.matchesFamily(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength())) {
                             valueMap.remove(ref);
                         }
                     }
-                } else if (cell.getTypeByte() == KeyValue.Type.Put.getCode()){
+                } else if (cell.getType() == Cell.Type.Put){
                     ColumnReference ref = new ColumnReference(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(), cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength());
                     if (indexedColumns.contains(ref)) {
                         ImmutableBytesWritable ptr = new ImmutableBytesWritable();

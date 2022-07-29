@@ -127,6 +127,7 @@ public class PagedFilter extends FilterBase implements Writable {
     }
 
     @Override
+    @Deprecated
     public boolean filterRowKey(Cell cell) throws IOException {
         if (state == State.TIME_TO_STOP) {
             if (rowKeyAtStop == null) {
@@ -210,6 +211,7 @@ public class PagedFilter extends FilterBase implements Writable {
     }
 
     @Override
+    @Deprecated
     public ReturnCode filterKeyValue(Cell v) throws IOException {
         if (delegate != null) {
             return delegate.filterKeyValue(v);

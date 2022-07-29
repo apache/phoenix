@@ -1270,10 +1270,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int nDeleteCF = 0;
         int nDeleteVersionCF = 0;
         for (Cell kv : pendingUpdates) {
-        	if (kv.getTypeByte() == KeyValue.Type.DeleteFamilyVersion.getCode()) {
+        	if (kv.getType() == Cell.Type.DeleteFamilyVersion) {
                 nDeleteVersionCF++;
             }
-        	else if (kv.getTypeByte() == KeyValue.Type.DeleteFamily.getCode()
+        	else if (kv.getType() == Cell.Type.DeleteFamily
         			// Since we don't include the index rows in the change set for txn tables, we need to detect row deletes that have transformed by TransactionProcessor
         	        || TransactionUtil.isDeleteFamily(kv)) {
         	    nDeleteCF++;
@@ -1321,7 +1321,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         	Cell newValue = newState.get(ref);
         	if (newValue != null) { // Indexed column has potentially changed
         	    ImmutableBytesWritable oldValue = oldState.getLatestValue(ref, ts);
-                boolean newValueSetAsNull = (newValue.getTypeByte() == Type.DeleteColumn.getCode() || newValue.getTypeByte() == Type.Delete.getCode() || CellUtil.matchingValue(newValue, HConstants.EMPTY_BYTE_ARRAY));
+                boolean newValueSetAsNull = (newValue.getType() == Cell.Type.DeleteColumn ||
+                        newValue.getType() == Cell.Type.Delete ||
+                        CellUtil.matchingValue(newValue, HConstants.EMPTY_BYTE_ARRAY));
         		boolean oldValueSetAsNull = oldValue == null || oldValue.getLength() == 0;
         		//If the new column value has to be set as null and the older value is null too,
         		//then just skip to the next indexed column.
@@ -1382,7 +1384,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         Set<ColumnReference> dataTableColRefs = coveredColumnsMap.keySet();
         // Delete columns for missing key values
         for (Cell kv : pendingUpdates) {
-            if (kv.getTypeByte() != KeyValue.Type.Put.getCode()) {
+            if (kv.getType() != Cell.Type.Put) {
                 ColumnReference ref =
                         new ColumnReference(kv.getFamilyArray(), kv.getFamilyOffset(),
                                 kv.getFamilyLength(), kv.getQualifierArray(),
@@ -1394,7 +1396,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     }
                     ColumnReference indexColumn = coveredColumnsMap.get(ref);
                     // If point delete for data table, then use point delete for index as well
-                    if (kv.getTypeByte() == KeyValue.Type.Delete.getCode()) { 
+                    if (kv.getType() == Cell.Type.Delete) {
                         delete.addColumn(indexColumn.getFamily(), indexColumn.getQualifier(), ts);
                     } else {
                         delete.addColumns(indexColumn.getFamily(), indexColumn.getQualifier(), ts);
@@ -1801,9 +1803,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         Set<ColumnReference> dataTableColRefs = coveredColumnsMap.keySet();
         size += WritableUtils.getVIntSize(dataTableColRefs.size());
         for (ColumnReference ref : dataTableColRefs) {
-            size += WritableUtils.getVIntSize(ref.getFamilyWritable().getSize());
+            size += WritableUtils.getVIntSize(ref.getFamilyWritable().getLength());
             size += ref.getFamily().length;
-            size += WritableUtils.getVIntSize(ref.getQualifierWritable().getSize());
+            size += WritableUtils.getVIntSize(ref.getQualifierWritable().getLength());
             size += ref.getQualifier().length;
         }
         size += indexTableName.length + WritableUtils.getVIntSize(indexTableName.length);

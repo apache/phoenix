@@ -48,7 +48,10 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.ipc.controller.ServerToServerRpcController;
@@ -556,9 +559,9 @@ public class SystemTablesCreationOnConnectionIT {
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
         startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
         try (Connection ignored = DriverManager.getConnection(getJdbcUrl());
-             HBaseAdmin admin = testUtil.getHBaseAdmin()) {
-            HTableDescriptor htd = admin.getTableDescriptor(SYSTEM_MUTEX_HBASE_TABLE_NAME);
-            HColumnDescriptor hColDesc = htd.getFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES);
+             Admin admin = testUtil.getAdmin()) {
+            TableDescriptor htd = admin.getDescriptor(SYSTEM_MUTEX_HBASE_TABLE_NAME);
+            ColumnFamilyDescriptor hColDesc = htd.getColumnFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES);
             assertEquals("Did not find the correct TTL for SYSTEM.MUTEX", TTL_FOR_MUTEX,
                     hColDesc.getTimeToLive());
         }
@@ -645,9 +648,9 @@ public class SystemTablesCreationOnConnectionIT {
                 getJdbcUrl(), new Properties()).connect(getJdbcUrl(), new Properties())) {
             // do nothing
         }
-        HTableDescriptor descriptor = testUtil.getHBaseAdmin()
-                .getTableDescriptor(TableName.valueOf(PHOENIX_SYSTEM_CATALOG));
-        return descriptor.getFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES).getMaxVersions();
+        TableDescriptor descriptor = testUtil.getAdmin()
+                .getDescriptor(TableName.valueOf(PHOENIX_SYSTEM_CATALOG));
+        return descriptor.getColumnFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES).getMaxVersions();
     }
 
     /**

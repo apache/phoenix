@@ -129,7 +129,7 @@ public class FailForUnsupportedHBaseVersionsIT {
                     "testDoesNotStartRegionServerForUnsupportedCompressionAndVersion"));
             byte[] family = Bytes.toBytes("f");
             
-            descBuilder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(family));
+            descBuilder.setColumnFamily(ColumnFamilyDescriptorBuilder.of(family));
             TableDescriptor desc=descBuilder.build();
             // enable indexing to a non-existant index table
             String indexTableName = "INDEX_TABLE";

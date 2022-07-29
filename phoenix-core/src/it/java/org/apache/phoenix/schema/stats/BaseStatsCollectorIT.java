@@ -45,16 +45,11 @@ import java.util.Random;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.*;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Job;
@@ -225,7 +220,7 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
         try {
             int status = tool.run(cmdArgs);
             assertEquals("MR Job should complete successfully", 0, status);
-            HBaseAdmin hBaseAdmin = utility.getHBaseAdmin();
+            Admin hBaseAdmin = utility.getAdmin();
             assertEquals("Snapshot should be automatically deleted when UpdateStatisticsTool has completed",
                     0, hBaseAdmin.listSnapshots(tool.getSnapshotName()).size());
         } catch (Exception e) {

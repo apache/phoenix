@@ -66,7 +66,7 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
      * to be called with deleted or partial row keys.
      */
     @Override
-    public ReturnCode filterKeyValue(Cell v) {
+    public ReturnCode filterCell(Cell v) {
         if (evaluate) {
             inputTuple.setKey(v.getRowArray(), v.getRowOffset(), v.getRowLength());
             this.keepRow = Boolean.TRUE.equals(evaluate(inputTuple));

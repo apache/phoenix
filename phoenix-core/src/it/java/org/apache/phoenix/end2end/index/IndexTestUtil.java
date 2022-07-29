@@ -42,14 +42,7 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.GenericTestUtils;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
+import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -234,8 +227,8 @@ public class IndexTestUtil {
 
     public static boolean isCoprocPresent(TableDescriptor descriptor, String expectedCoprocName) {
         boolean foundCoproc = false;
-        for (String coprocName : descriptor.getCoprocessors()){
-            if (coprocName.equals(expectedCoprocName)){
+        for (CoprocessorDescriptor coprocDesc : descriptor.getCoprocessorDescriptors()){
+            if (coprocDesc.getClassName().equals(expectedCoprocName)){
                 foundCoproc = true;
                 break;
             }

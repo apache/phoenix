@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end.transform;
 
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.phoenix.coprocessor.tasks.TransformMonitorTask;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -310,11 +311,11 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
             for (String prefix : idPrefixes) {
                 splitPoints[--numSplits] = Bytes.toBytes(prefix);
             }
-            HTableDescriptor dataTD = admin.getTableDescriptor(dataTN);
+            TableDescriptor dataTD = admin.getDescriptor(dataTN);
             admin.disableTable(dataTN);
             admin.deleteTable(dataTN);
             admin.createTable(dataTD, splitPoints);
-            assertEquals(targetNumRegions, admin.getTableRegions(dataTN).size());
+            assertEquals(targetNumRegions, admin.getRegions(dataTN).size());
 
             // insert data
             int idCounter = 1;
@@ -347,7 +348,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
             runTransformTool(args.toArray(new String[0]), 0);
 
             SingleCellIndexIT.assertMetadata(conn, PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS, PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, newDataTN.getNameAsString());
-            assertEquals(targetNumRegions, admin.getTableRegions(newDataTN).size());
+            assertEquals(targetNumRegions, admin.getRegions(newDataTN).size());
             assertEquals(getRowCount(conn, dataTableFullName), getRowCount(conn, dataTableFullName + "_1"));
         }
     }

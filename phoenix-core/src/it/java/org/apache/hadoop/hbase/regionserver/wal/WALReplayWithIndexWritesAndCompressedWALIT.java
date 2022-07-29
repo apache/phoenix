@@ -265,11 +265,11 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
   private TableDescriptor createBasic3FamilyHTD(final String tableName) {
     TableDescriptorBuilder tableBuilder = TableDescriptorBuilder.newBuilder(TableName.valueOf(tableName));
     ColumnFamilyDescriptor  a = ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("a"));
-    tableBuilder.addColumnFamily(a);
+    tableBuilder.setColumnFamily(a);
     ColumnFamilyDescriptor b = ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("b"));
-    tableBuilder.addColumnFamily(b);
+    tableBuilder.setColumnFamily(b);
     ColumnFamilyDescriptor c = ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("c"));
-    tableBuilder.addColumnFamily(c);
+    tableBuilder.setColumnFamily(c);
     return tableBuilder.build();
   }
 

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.util;
 
+import static java.sql.DatabaseMetaData.procedureColumnIn;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
@@ -57,26 +58,11 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellScanner;
-import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
-import org.apache.hadoop.hbase.client.CompactionState;
-import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.*;
+import org.apache.hadoop.hbase.client.*;
 
-import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;
@@ -342,7 +328,7 @@ public class TestUtil {
         return BigDecimal.valueOf(sum).divide(BigDecimal.valueOf(count), PDataType.DEFAULT_MATH_CONTEXT);
     }
 
-    public static Expression constantComparison(CompareOp op, PColumn c, Object o) {
+    public static Expression constantComparison(CompareOperator op, PColumn c, Object o) {
         return new ComparisonExpression(Arrays.<Expression>asList(new KeyValueColumnExpression(c), LiteralExpression.newConstant(o)), op);
     }
 
@@ -354,7 +340,7 @@ public class TestUtil {
         return new RowKeyColumnExpression(c, new RowKeyValueAccessor(columns, columns.indexOf(c)));
     }
 
-    public static Expression constantComparison(CompareOp op, Expression e, Object o) {
+    public static Expression constantComparison(CompareOperator op, Expression e, Object o) {
         return new ComparisonExpression(Arrays.asList(e, LiteralExpression.newConstant(o)), op);
     }
 
@@ -388,7 +374,7 @@ public class TestUtil {
         return new SubstrFunction(Arrays.asList(e, LiteralExpression.newConstant(offset), LiteralExpression.newConstant(null)));
     }
 
-    public static Expression columnComparison(CompareOp op, Expression c1, Expression c2) {
+    public static Expression columnComparison(CompareOperator op, Expression c1, Expression c2) {
         return new ComparisonExpression(Arrays.<Expression>asList(c1, c2), op);
     }
 
@@ -878,8 +864,8 @@ public class TestUtil {
             while (!compactionDone) {
                 Thread.sleep(6000L);
                 Scan scan = new Scan();
-                scan.setStartRow(markerRowKey);
-                scan.setStopRow(Bytes.add(markerRowKey, new byte[]{0}));
+                scan.withStartRow(markerRowKey);
+                scan.withStopRow(Bytes.add(markerRowKey, new byte[]{0}));
                 scan.setRaw(true);
         
                 try (Table htableForRawScan = services.getTable(Bytes.toBytes(tableName))) {
@@ -946,7 +932,7 @@ public class TestUtil {
         Scan s = new Scan();
         s.setRaw(isRaw);
         ;
-        s.setMaxVersions();
+        s.readAllVersions();
         int rows = 0;
         try (ResultScanner scanner = table.getScanner(s)) {
             Result result = null;
@@ -966,7 +952,7 @@ public class TestUtil {
         Scan s = new Scan();
         s.setRaw(isRaw);
         ;
-        s.setMaxVersions();
+        s.readAllVersions();
 
         CellCount cellCount = new CellCount();
         try (ResultScanner scanner = table.getScanner(s)) {
@@ -1009,10 +995,10 @@ public class TestUtil {
             System.out.println("************ dumping index status for " + indexName + " **************");
             Scan s = new Scan();
             s.setRaw(true);
-            s.setMaxVersions();
+            s.readAllVersions();
             byte[] startRow = SchemaUtil.getTableKeyFromFullName(indexName);
-            s.setStartRow(startRow);
-            s.setStopRow(ByteUtil.nextKey(ByteUtil.concat(startRow, QueryConstants.SEPARATOR_BYTE_ARRAY)));
+            s.withStartRow(startRow);
+            s.withStopRow(ByteUtil.nextKey(ByteUtil.concat(startRow, QueryConstants.SEPARATOR_BYTE_ARRAY)));
             try (ResultScanner scanner = table.getScanner(s)) {
                 Result result = null;
                 while ((result = scanner.next()) != null) {
@@ -1185,9 +1171,11 @@ public class TestUtil {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         TableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
         TableDescriptorBuilder descriptorBuilder = null;
-		if (!descriptor.getCoprocessors().contains(coprocessorClass.getName())) {
+		if (!descriptor.getCoprocessorDescriptors().stream().map(CoprocessorDescriptor::getClassName)
+                .collect(Collectors.toList()).contains(coprocessorClass.getName())) {
 		    descriptorBuilder=TableDescriptorBuilder.newBuilder(descriptor);
-		    descriptorBuilder.addCoprocessor(coprocessorClass.getName(), null, priority, null);
+		    descriptorBuilder.setCoprocessor(
+                    CoprocessorDescriptorBuilder.newBuilder(coprocessorClass.getName()).setPriority(priority).build());
 		}else{
 			return;
 		}
@@ -1213,7 +1201,8 @@ public class TestUtil {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         TableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
         TableDescriptorBuilder descriptorBuilder = null;
-        if (descriptor.getCoprocessors().contains(coprocessorClass.getName())) {
+        if (descriptor.getCoprocessorDescriptors().stream().map(CoprocessorDescriptor::getClassName)
+                .collect(Collectors.toList()).contains(coprocessorClass.getName())) {
             descriptorBuilder=TableDescriptorBuilder.newBuilder(descriptor);
             descriptorBuilder.removeCoprocessor(coprocessorClass.getName());
         }else{
@@ -1237,7 +1226,7 @@ public class TestUtil {
         }
     }
 
-    public static boolean compare(CompareOp op, ImmutableBytesWritable lhsOutPtr, ImmutableBytesWritable rhsOutPtr) {
+    public static boolean compare(CompareOperator op, ImmutableBytesWritable lhsOutPtr, ImmutableBytesWritable rhsOutPtr) {
         int compareResult = Bytes.compareTo(lhsOutPtr.get(), lhsOutPtr.getOffset(), lhsOutPtr.getLength(), rhsOutPtr.get(), rhsOutPtr.getOffset(), rhsOutPtr.getLength());
         return ByteUtil.compare(op, compareResult);
     }

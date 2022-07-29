@@ -203,8 +203,8 @@ public class ScanRanges {
     }
     
     public void initializeScan(Scan scan) {
-        scan.setStartRow(scanRange.getLowerRange());
-        scan.setStopRow(scanRange.getUpperRange());
+        scan.withStartRow(scanRange.getLowerRange());
+        scan.withStopRow(scanRange.getUpperRange());
     }
     
     public static byte[] prefixKey(byte[] key, int keyOffset, byte[] prefixKey, int prefixKeyOffset) {
@@ -401,8 +401,8 @@ public class ScanRanges {
             return null; 
         }
         newScan.setAttribute(SCAN_ACTUAL_START_ROW, scanStartKey);
-        newScan.setStartRow(scanStartKey);
-        newScan.setStopRow(scanStopKey);
+        newScan.withStartRow(scanStartKey);
+        newScan.withStopRow(scanStopKey);
         return newScan;
     }
 

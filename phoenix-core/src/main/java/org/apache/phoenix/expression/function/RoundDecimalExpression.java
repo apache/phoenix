@@ -26,6 +26,7 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
@@ -193,12 +194,12 @@ public class RoundDecimalExpression extends ScalarFunction {
             }
 
             @Override
-            public KeyRange getKeyRange(CompareFilter.CompareOp op, Expression rhs) {
+            public KeyRange getKeyRange(CompareOperator op, Expression rhs) {
                 final BigDecimal rhsDecimal = (BigDecimal) PDecimal.INSTANCE.toObject(evaluateExpression(rhs));
                 
                 // equality requires an exact match. if rounding would cut off more precision
                 // than needed for a match, it's impossible for there to be any matches
-                if(op == CompareFilter.CompareOp.EQUAL && !hasEnoughPrecisionToProduce(rhsDecimal)) {
+                if(op == CompareOperator.EQUAL && !hasEnoughPrecisionToProduce(rhsDecimal)) {
                     return KeyRange.EMPTY_RANGE;
                 }
                 
@@ -255,7 +256,7 @@ public class RoundDecimalExpression extends ScalarFunction {
              * @param op  the operator to preserve comparison with in the event of lost precision
              * @return  the rounded decimal
              */
-            private BigDecimal roundAndPreserveOperator(BigDecimal decimal, CompareFilter.CompareOp op) {
+            private BigDecimal roundAndPreserveOperator(BigDecimal decimal, CompareOperator op) {
                 final BigDecimal rounded = roundToScale(decimal);
                 
                 // if we lost information, make sure that the rounding didn't break the operator

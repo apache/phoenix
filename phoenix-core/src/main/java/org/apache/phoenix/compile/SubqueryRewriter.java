@@ -22,6 +22,7 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -793,7 +794,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
 
         @Override
         public ParseNode visitLeave(ComparisonParseNode node, List<ParseNode> l) throws SQLException {
-            if (node.getFilterOp() != CompareFilter.CompareOp.EQUAL)
+            if (node.getFilterOp() != CompareOperator.EQUAL)
                 return leaveBooleanNode(node, l);
             
             columnResolveVisitor.reset();

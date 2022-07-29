@@ -30,8 +30,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
@@ -334,11 +334,7 @@ public class ByteUtil {
     }
 
     public static int vintFromBytes(byte[] buffer, int offset) {
-        try {
-            return (int)Bytes.readVLong(buffer, offset);
-        } catch (IOException e) { // Impossible
-            throw new RuntimeException(e);
-        }
+        return (int)Bytes.readAsVLong(buffer, offset);
     }
 
     /**
@@ -550,7 +546,7 @@ public class ByteUtil {
         return count;
     }
 
-    public static boolean isInclusive(CompareOp op) {
+    public static boolean isInclusive(CompareOperator op) {
         switch (op) {
             case LESS:
             case GREATER:
@@ -564,7 +560,7 @@ public class ByteUtil {
               throw new RuntimeException("Unknown Compare op " + op.name());
         }
     }
-    public static boolean compare(CompareOp op, int compareResult) {
+    public static boolean compare(CompareOperator op, int compareResult) {
         switch (op) {
             case LESS:
               return compareResult < 0;
@@ -593,7 +589,7 @@ public class ByteUtil {
         return ptr.copyBytes();
     }
     
-    public static KeyRange getKeyRange(byte[] key, CompareOp op, PDataType type) {
+    public static KeyRange getKeyRange(byte[] key, CompareOperator op, PDataType type) {
         switch (op) {
         case EQUAL:
             return type.getKeyRange(key, true, key, true);

@@ -77,7 +77,7 @@ public class DistinctPrefixFilterTest extends TestCase {
 
     private void assertInclude(byte[] next, Filter f) throws IOException {
         Cell c = new KeyValue(next, ByteUtil.EMPTY_BYTE_ARRAY, ByteUtil.EMPTY_BYTE_ARRAY, 0, ByteUtil.EMPTY_BYTE_ARRAY);
-        assertTrue(f.filterKeyValue(c) == ReturnCode.INCLUDE);
+        assertTrue(f.filterCell(c) == ReturnCode.INCLUDE);
         assertFalse(f.filterAllRemaining());
     }
 
@@ -91,7 +91,7 @@ public class DistinctPrefixFilterTest extends TestCase {
 
     private void assertSeekAndHint(byte[] next, Filter f, byte[] rowHint, boolean filterAll) throws IOException {
         Cell c = new KeyValue(next, ByteUtil.EMPTY_BYTE_ARRAY, ByteUtil.EMPTY_BYTE_ARRAY, 0, ByteUtil.EMPTY_BYTE_ARRAY);
-        assertTrue(f.filterKeyValue(c) == ReturnCode.SEEK_NEXT_USING_HINT);
+        assertTrue(f.filterCell(c) == ReturnCode.SEEK_NEXT_USING_HINT);
         Cell h = f.getNextCellHint(c);
         byte[] hintBytes = rowHint;
         assertTrue(Bytes.equals(hintBytes, 0, hintBytes.length, h.getRowArray(), h.getRowOffset(), h.getRowLength()));

@@ -22,9 +22,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
 
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Get;
@@ -120,7 +118,8 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
     //Cell is nonsense but we should auto pass because the table name's not System.Catalog
     WAL.Entry entry = new WAL.Entry(new WALKeyImpl(REGION,
         TableName.valueOf(TestUtil.ENTITY_HISTORY_TABLE_NAME), System.currentTimeMillis()), new WALEdit());
-    entry.getEdit().add(CellUtil.createCell(Bytes.toBytes("foo")));
+    entry.getEdit().add(
+            ExtendedCellBuilderFactory.create(CellBuilderType.DEEP_COPY).setRow(Bytes.toBytes("foo")).build());
     SystemCatalogWALEntryFilter filter = new SystemCatalogWALEntryFilter();
     Assert.assertEquals(1, filter.filter(entry).getEdit().size());
   }
@@ -286,7 +285,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
     boolean isChildLinkForTenantId = row.contains(tenantId)
       && CellUtil.matchingQualifier(cell,
       PhoenixDatabaseMetaData.LINK_TYPE_BYTES);
-    boolean isDeleteMarkerForLinkRow = row.contains(tenantId) && CellUtil.isDeleteFamily(cell);
+    boolean isDeleteMarkerForLinkRow = row.contains(tenantId) && cell.getType() == Cell.Type.DeleteFamily;
     return isTenantIdLeading || isChildLinkForTenantId || isDeleteMarkerForLinkRow;
   }
 
@@ -321,7 +320,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
     int tenantCount = 0;
     int nonTenantCount = 0;
     for (Cell cell : entry.getEdit().getCells()) {
-      if (CellUtil.isDeleteFamily(cell)) {
+      if (cell.getType() == Cell.Type.DeleteFamily) {
         if (isTenantOwnedCell(cell, TENANT_ID)) {
           tenantCount = tenantCount + 1;
         } else {

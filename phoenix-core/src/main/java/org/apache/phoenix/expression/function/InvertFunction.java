@@ -20,6 +20,7 @@ package org.apache.phoenix.expression.function;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.KeyPart;
@@ -112,7 +113,7 @@ public class InvertFunction extends ScalarFunction {
         }
 
         @Override
-        public KeyRange getKeyRange(CompareOp op, Expression rhs) {
+        public KeyRange getKeyRange(CompareOperator op, Expression rhs) {
             KeyRange range = childPart.getKeyRange(op, rhs);
             byte[] lower = range.getLowerRange();
             if (!range.lowerUnbound()) {

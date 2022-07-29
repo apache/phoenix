@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.apache.hadoop.hbase.client.*;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.hbase.index.AbstractValueGetter;
@@ -56,12 +57,6 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.RegionLocator;
-import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
@@ -1103,7 +1098,7 @@ public class IndexTool extends Configured implements Tool {
             }
             // drop table and recreate with appropriate splits
             TableName hIndexName = TableName.valueOf(pIndexTable.getPhysicalName().getBytes());
-            HTableDescriptor descriptor = admin.getTableDescriptor(hIndexName);
+            TableDescriptor descriptor = admin.getDescriptor(hIndexName);
             admin.disableTable(hIndexName);
             admin.deleteTable(hIndexName);
             admin.createTable(descriptor, splitPoints);

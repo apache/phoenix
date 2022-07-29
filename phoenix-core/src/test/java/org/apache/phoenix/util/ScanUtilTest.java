@@ -20,9 +20,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.junit.Assert.assertArrayEquals;
 
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -504,9 +502,15 @@ public class ScanUtilTest {
                 long seqId42 = 1042L;
 
                 List<Cell> cellList = Lists.newArrayList();
-                Cell cell42 = CellUtil.createCell(Bytes.toBytes(row),
-                        emptyColumnFamilyName, emptyColumnName,
-                        timestamp42, type42.getCode(), Bytes.toBytes(value42), seqId42);
+                Cell cell42 = ExtendedCellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                        .setRow(Bytes.toBytes(row))
+                        .setFamily(emptyColumnFamilyName)
+                        .setQualifier(emptyColumnName)
+                        .setTimestamp(timestamp42)
+                        .setType(type42.getCode())
+                        .setValue(Bytes.toBytes(value42))
+                        .setSequenceId(seqId42)
+                        .build();
                 // Add cell to the cell list
                 cellList.add(cell42);
 
@@ -515,9 +519,15 @@ public class ScanUtilTest {
                 KeyValue.Type type43 = KeyValue.Type.Put;
                 String value43 = "test.value.43";
                 long seqId43 = 1043L;
-                Cell cell43 = CellUtil.createCell(Bytes.toBytes(row),
-                        emptyColumnFamilyName, Bytes.toBytes(columnName),
-                        timestamp43, type43.getCode(), Bytes.toBytes(value43), seqId43);
+                Cell cell43 = ExtendedCellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                        .setRow(Bytes.toBytes(row))
+                        .setFamily(emptyColumnFamilyName)
+                        .setQualifier(Bytes.toBytes(columnName))
+                        .setTimestamp(timestamp43)
+                        .setType(type43.getCode())
+                        .setValue(Bytes.toBytes(value43))
+                        .setSequenceId(seqId43)
+                        .build();
                 // Add cell to the cell list
                 cellList.add(cell43);
 

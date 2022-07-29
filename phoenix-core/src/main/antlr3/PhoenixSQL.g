@@ -177,8 +177,8 @@ package org.apache.phoenix.parse;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import java.lang.Boolean;
 import java.math.BigDecimal;
 import java.util.Arrays;
@@ -844,7 +844,7 @@ limit returns [LimitNode ret]
 offset returns [OffsetNode ret]
 	: b=bind_expression (ROW | ROWS)? {  try { $ret = factory.offset(b); } catch (SQLException e) { throw new RuntimeException(e); } }
     | l=int_or_long_literal (ROW | ROWS)? { try { $ret = factory.offset(l); } catch (SQLException e) { throw new RuntimeException(e); } }
-    | LPAREN lhs=one_or_more_expressions RPAREN EQ LPAREN rhs=one_or_more_expressions RPAREN { try { $ret = factory.offset(factory.comparison(CompareOp.EQUAL,factory.rowValueConstructor(lhs),factory.rowValueConstructor(rhs)));  } catch (SQLException e) { throw new RuntimeException(e); } }
+    | LPAREN lhs=one_or_more_expressions RPAREN EQ LPAREN rhs=one_or_more_expressions RPAREN { try { $ret = factory.offset(factory.comparison(CompareOperator.EQUAL,factory.rowValueConstructor(lhs),factory.rowValueConstructor(rhs)));  } catch (SQLException e) { throw new RuntimeException(e); } }
     ;
 
 sampling_rate returns [LiteralParseNode ret]
@@ -950,13 +950,13 @@ not_expression returns [ParseNode ret]
     |   n=NOT? LPAREN e=expression RPAREN { $ret = n == null ? e : factory.not(e); }
     ;
 
-comparison_op returns [CompareOp ret]
-	: EQ { $ret = CompareOp.EQUAL; }
-	| LT { $ret = CompareOp.LESS; }
-	| GT { $ret = CompareOp.GREATER; }
-	| LT EQ { $ret = CompareOp.LESS_OR_EQUAL; }
-	| GT EQ { $ret = CompareOp.GREATER_OR_EQUAL; }
-	| (NOEQ1 | NOEQ2) { $ret = CompareOp.NOT_EQUAL; }
+comparison_op returns [CompareOperator ret]
+	: EQ { $ret = CompareOperator.EQUAL; }
+	| LT { $ret = CompareOperator.LESS; }
+	| GT { $ret = CompareOperator.GREATER; }
+	| LT EQ { $ret = CompareOperator.LESS_OR_EQUAL; }
+	| GT EQ { $ret = CompareOperator.GREATER_OR_EQUAL; }
+	| (NOEQ1 | NOEQ2) { $ret = CompareOperator.NOT_EQUAL; }
 	;
 	
 boolean_expression returns [ParseNode ret]

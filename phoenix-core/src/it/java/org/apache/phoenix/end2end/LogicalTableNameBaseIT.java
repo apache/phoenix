@@ -108,7 +108,7 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
                 .getAdmin()) {
 
             admin.snapshot(snapshotName, TableName.valueOf(fullTableHName));
-            admin.cloneSnapshot(Bytes.toBytes(snapshotName), TableName.valueOf(fullNewTableHName));
+            admin.cloneSnapshot(snapshotName, TableName.valueOf(fullNewTableHName));
             admin.deleteSnapshot(snapshotName);
             LogicalTableNameIT.renameAndDropPhysicalTable(conn, null, schemaName, tableName,
                     newTableName, isNamespaceEnabled);
@@ -134,7 +134,7 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
         try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
             String snapshotName = new StringBuilder(fullTableName).append("-Snapshot").toString();
             admin.snapshot(snapshotName, TableName.valueOf(fullTableName));
-            admin.cloneSnapshot(Bytes.toBytes(snapshotName), TableName.valueOf(fullNewTableName));
+            admin.cloneSnapshot(snapshotName, TableName.valueOf(fullNewTableName));
             admin.deleteSnapshot(snapshotName);
             try (Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableName))) {
                 Put put = new Put(ByteUtil.concat(Bytes.toBytes("PK3")));
@@ -187,7 +187,7 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
                 .getAdmin()) {
             String snapshotName = new StringBuilder(indexName).append("-Snapshot").toString();
             admin.snapshot(snapshotName, TableName.valueOf(fullIndexTableHbaseName));
-            admin.cloneSnapshot(Bytes.toBytes(snapshotName), TableName.valueOf(fullNewTableName));
+            admin.cloneSnapshot(snapshotName, TableName.valueOf(fullNewTableName));
             admin.deleteSnapshot(snapshotName);
             try (Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableName))) {
                 Put
@@ -246,7 +246,7 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
                 .getAdmin()) {
             String snapshotName = new StringBuilder(fullTableName).append("-Snapshot").toString();
             admin.snapshot(snapshotName, TableName.valueOf(fullTableHbaseName));
-            admin.cloneSnapshot(Bytes.toBytes(snapshotName), TableName.valueOf(fullNewTableName));
+            admin.cloneSnapshot(snapshotName, TableName.valueOf(fullNewTableName));
             admin.deleteSnapshot(snapshotName);
             try (Table htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(fullNewTableName))) {
                 Put put = new Put(ByteUtil.concat(Bytes.toBytes("PK3")));

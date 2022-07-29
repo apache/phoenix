@@ -123,11 +123,6 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
     }
 
     @Override
-    public HTableDescriptor getTableDescriptor() throws IOException {
-        return tTable.getTableDescriptor();
-    }
-
-    @Override
     public boolean exists(Get get) throws IOException {
        return tTable.exists(tx, get);
     }
@@ -170,11 +165,6 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
     }
 
     @Override
-    public boolean[] existsAll(List<Get> gets) throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
     public void batch(List<? extends Row> actions, Object[] results)
             throws IOException, InterruptedException {
         tTable.batch(tx, actions, addShadowCells);
@@ -187,31 +177,6 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
     public <R> void batchCallback(List<? extends Row> actions,
             Object[] results, Callback<R> callback) throws IOException,
             InterruptedException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean checkAndPut(byte[] row, byte[] family, byte[] qualifier,
-            byte[] value, Put put) throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean checkAndPut(byte[] row, byte[] family, byte[] qualifier,
-            CompareOp compareOp, byte[] value, Put put) throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier,
-            byte[] value, Delete delete) throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier,
-            CompareOp compareOp, byte[] value, Delete delete)
-            throws IOException {
         throw new UnsupportedOperationException();
     }
 
@@ -274,82 +239,12 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
     }
 
     @Override
-    public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier,
-            CompareOp compareOp, byte[] value, RowMutations mutation)
-            throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public int getOperationTimeout() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public int getRpcTimeout() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void setOperationTimeout(int arg0) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void setRpcTimeout(int arg0) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public int getWriteRpcTimeout() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void setWriteRpcTimeout(int writeRpcTimeout) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public int getReadRpcTimeout() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void setReadRpcTimeout(int readRpcTimeout) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
     public TableDescriptor getDescriptor() throws IOException {
         throw new UnsupportedOperationException();
     }
 
     @Override
     public boolean[] exists(List<Get> gets) throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean checkAndPut(byte[] row, byte[] family, byte[] qualifier, CompareOperator op, byte[] value, Put put)
-            throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier, CompareOperator op, byte[] value,
-            Delete delete) throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public CheckAndMutateBuilder checkAndMutate(byte[] row, byte[] family) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier, CompareOperator op, byte[] value,
-            RowMutations mutation) throws IOException {
         throw new UnsupportedOperationException();
     }
 

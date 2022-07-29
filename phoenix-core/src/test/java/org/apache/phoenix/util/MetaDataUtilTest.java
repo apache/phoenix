@@ -332,7 +332,7 @@ public class MetaDataUtilTest {
       assertNotNull(p);
       assertFalse("Mutation is empty!", p.isEmpty());
       assertArrayEquals(tableHeaderRowKey, p.getRow());
-      assertEquals(clientTimestamp, p.getTimeStamp());
+      assertEquals(clientTimestamp, p.getTimestamp());
       assertTrue(p.cellScanner().advance());
       List<Cell> cells = p.get(TABLE_FAMILY_BYTES, LAST_DDL_TIMESTAMP_BYTES);
       assertNotNull(cells);
@@ -342,17 +342,5 @@ public class MetaDataUtilTest {
       assertEquals(serverTimestamp, PLong.INSTANCE.getCodec().decodeLong(CellUtil.cloneValue(c),
           0, SortOrder.ASC));
     }
-
-    private static byte[] concatTags(byte[] tags, Cell cell) {
-        int cellTagsLen = cell.getTagsLength();
-        if (cellTagsLen == 0) {
-            return tags;
-        }
-        byte[] b = new byte[tags.length + cellTagsLen];
-        int pos = Bytes.putBytes(b, 0, tags, 0, tags.length);
-        Bytes.putBytes(b, pos, cell.getTagsArray(), cell.getTagsOffset(), cellTagsLen);
-        return b;
-    }
-
 }
 

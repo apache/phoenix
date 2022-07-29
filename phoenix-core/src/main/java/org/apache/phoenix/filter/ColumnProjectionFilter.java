@@ -186,7 +186,7 @@ public class ColumnProjectionFilter extends FilterBase implements Writable {
     }
     
     @Override
-    public ReturnCode filterKeyValue(Cell ignored) throws IOException {
+    public ReturnCode filterCell(Cell ignored) throws IOException {
       return ReturnCode.INCLUDE_AND_NEXT_COL;
     }
 

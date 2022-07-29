@@ -139,7 +139,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
     }
 
     @Override
-    public ReturnCode filterKeyValue(Cell kv) {
+    public ReturnCode filterCell(Cell kv) {
         ReturnCode code = navigate(kv.getRowArray(), kv.getRowOffset() + offset,kv.getRowLength()- offset,Terminate.AFTER);
         if (code == ReturnCode.SEEK_NEXT_USING_HINT) {
             setNextCellHint(kv);

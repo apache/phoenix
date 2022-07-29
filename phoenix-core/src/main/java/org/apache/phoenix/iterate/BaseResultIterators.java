@@ -211,7 +211,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             // a physical table and we want to make sure we catch all KeyValues that may be
             // dynamic or part of an updatable view.
             familyMap.clear();
-            scan.setMaxVersions();
+            scan.readAllVersions();
             scan.setFilter(null); // Remove any filter
             scan.setRaw(true); // Traverse (and subsequently clone) all KeyValues
             // Pass over PTable so we can re-write rows according to the row key schema
@@ -719,11 +719,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             } else {
                 if (Bytes.compareTo(scan.getStartRow(), regionInfo.getStartKey()) <= 0) {
                     newScan.setAttribute(SCAN_ACTUAL_START_ROW, regionInfo.getStartKey());
-                    newScan.setStartRow(regionInfo.getStartKey());
+                    newScan.withStartRow(regionInfo.getStartKey());
                 }
                 if (scan.getStopRow().length == 0 || (regionInfo.getEndKey().length != 0
                         && Bytes.compareTo(scan.getStopRow(), regionInfo.getEndKey()) > 0)) {
-                    newScan.setStopRow(regionInfo.getEndKey());
+                    newScan.withStopRow(regionInfo.getEndKey());
                 }
             }
             scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
@@ -1028,7 +1028,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 stream = new ByteArrayInputStream(guidePosts.get(), guidePosts.getOffset(), guidePosts.getLength());
                 input = new DataInputStream(stream);
                 decoder = new PrefixByteDecoder(gps.getMaxLength());
-                firstRegionStartKey = new ImmutableBytesWritable(regionLocations.get(regionIndex).getRegionInfo().getStartKey());
+                firstRegionStartKey = new ImmutableBytesWritable(regionLocations.get(regionIndex).getRegion().getStartKey());
                 try {
                     int c;
                     // Continue walking guideposts until we get past the currentKey
@@ -1056,7 +1056,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     intersectWithGuidePosts = false;
                 }
             }
-            byte[] endRegionKey = regionLocations.get(stopIndex).getRegionInfo().getEndKey();
+            byte[] endRegionKey = regionLocations.get(stopIndex).getRegion().getEndKey();
             byte[] currentKeyBytes = currentKey.copyBytes();
             intersectWithGuidePosts &= guideIndex < gpsSize;
             // Merge bisect with guideposts for all but the last region

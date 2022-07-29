@@ -282,7 +282,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
           QueryServicesOptions.DEFAULT_SMALL_SCAN_THRESHOLD);
 
         if (statement.getHint().hasHint(Hint.SMALL) || (scanRanges.isPointLookup() && scanRanges.getPointLookupCount() < smallScanThreshold)) {
-            scan.setSmall(true);
+            scan.setReadType(Scan.ReadType.PREAD);
         }
         
 

@@ -319,7 +319,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
                     // we skip those KVs that are not belongs to loca index
                     continue;
                 }
-                outputStream.writeByte(cell.getTypeByte());
+                outputStream.writeByte(cell.getType().getCode());
                 WritableUtils.writeVLong(outputStream,cell.getTimestamp());
                 WritableUtils.writeVInt(outputStream, i);
                 WritableUtils.writeVInt(outputStream, cell.getValueLength());

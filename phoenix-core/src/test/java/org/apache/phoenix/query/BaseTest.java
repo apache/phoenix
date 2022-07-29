@@ -1578,7 +1578,7 @@ public abstract class BaseTest {
         if (driver == null) return;
         Admin admin = driver.getConnectionQueryServices(null, null).getAdmin();
         try {
-            TableDescriptor[] tables = admin.listTables();
+            List<TableDescriptor> tables = admin.listTableDescriptors();
             for (TableDescriptor table : tables) {
                 String schemaName = SchemaUtil.getSchemaNameFromFullName(table.getTableName().getName());
                 if (!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) {
@@ -1933,7 +1933,7 @@ public abstract class BaseTest {
     /**
      * Returns true if the region contains atleast one of the metadata rows we are interested in
      */
-    protected static boolean regionContainsMetadataRows(HRegionInfo regionInfo,
+    protected static boolean regionContainsMetadataRows(RegionInfo regionInfo,
             List<byte[]> metadataRowKeys) {
         for (byte[] rowKey : metadataRowKeys) {
             if (regionInfo.containsRow(rowKey)) {
@@ -1962,19 +1962,19 @@ public abstract class BaseTest {
         }
         List<RegionInfo> regionInfoList = admin.getRegions(fullTableName);
         assertEquals(splitPoints.size(), regionInfoList.size());
-        HashMap<ServerName, List<HRegionInfo>> serverToRegionsList = Maps.newHashMapWithExpectedSize(NUM_SLAVES_BASE);
+        HashMap<ServerName, List<RegionInfo>> serverToRegionsList = Maps.newHashMapWithExpectedSize(NUM_SLAVES_BASE);
         Deque<ServerName> availableRegionServers = new ArrayDeque<ServerName>(NUM_SLAVES_BASE);
         for (int i=0; i<NUM_SLAVES_BASE; ++i) {
             availableRegionServers.push(util.getHBaseCluster().getRegionServer(i).getServerName());
         }
-        List<HRegionInfo> tableRegions =
-                admin.getTableRegions(fullTableName);
-        for (HRegionInfo hRegionInfo : tableRegions) {
+        List<RegionInfo> tableRegions =
+                admin.getRegions(fullTableName);
+        for (RegionInfo hRegionInfo : tableRegions) {
             // filter on regions we are interested in
             if (regionContainsMetadataRows(hRegionInfo, splitPoints)) {
                 ServerName serverName = am.getRegionStates().getRegionServerOfRegion(hRegionInfo);
                 if (!serverToRegionsList.containsKey(serverName)) {
-                    serverToRegionsList.put(serverName, new ArrayList<HRegionInfo>());
+                    serverToRegionsList.put(serverName, new ArrayList<RegionInfo>());
                 }
                 serverToRegionsList.get(serverName).add(hRegionInfo);
                 availableRegionServers.remove(serverName);
@@ -1982,8 +1982,8 @@ public abstract class BaseTest {
         }
         assertFalse("No region servers available to move regions on to ",
                 availableRegionServers.isEmpty());
-        for (Entry<ServerName, List<HRegionInfo>> entry : serverToRegionsList.entrySet()) {
-            List<HRegionInfo> regions = entry.getValue();
+        for (Entry<ServerName, List<RegionInfo>> entry : serverToRegionsList.entrySet()) {
+            List<RegionInfo> regions = entry.getValue();
             if (regions.size()>1) {
                 for (int i=1; i< regions.size(); ++i) {
                     moveRegion(regions.get(i), entry.getKey(), availableRegionServers.pop());
@@ -1993,12 +1993,12 @@ public abstract class BaseTest {
 
         // verify each region is on its own region server
         tableRegions =
-                admin.getTableRegions(fullTableName);
+                admin.getRegions(fullTableName);
         Set<ServerName> serverNames = Sets.newHashSet();
-        for (HRegionInfo hRegionInfo : tableRegions) {
+        for (RegionInfo regionInfo : tableRegions) {
             // filter on regions we are interested in
-            if (regionContainsMetadataRows(hRegionInfo, splitPoints)) {
-                ServerName serverName = am.getRegionStates().getRegionServerOfRegion(hRegionInfo);
+            if (regionContainsMetadataRows(regionInfo, splitPoints)) {
+                ServerName serverName = am.getRegionStates().getRegionServerOfRegion(regionInfo);
                 if (!serverNames.contains(serverName)) {
                     serverNames.add(serverName);
                 }
@@ -2038,7 +2038,7 @@ public abstract class BaseTest {
     /**
      * Ensures each region of SYSTEM.CATALOG is on a different region server
      */
-    private static void moveRegion(HRegionInfo regionInfo, ServerName srcServerName, ServerName dstServerName) throws Exception  {
+    private static void moveRegion(RegionInfo regionInfo, ServerName srcServerName, ServerName dstServerName) throws Exception  {
         Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         HBaseTestingUtility util = getUtility();
         MiniHBaseCluster cluster = util.getHBaseCluster();

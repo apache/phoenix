@@ -112,7 +112,7 @@ public class DataTableLocalIndexRegionScanner extends DelegateRegionScanner {
                 Put put = null;
                 Delete del = null;
                 for (Cell cell : list) {
-                    if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
+                    if (cell.getType() == Cell.Type.Put) {
                         if (put == null) {
                             put = new Put(CellUtil.cloneRow(cell));
                             mutationList.add(put);

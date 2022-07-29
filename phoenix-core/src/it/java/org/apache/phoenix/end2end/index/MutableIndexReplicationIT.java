@@ -49,6 +49,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
+import org.apache.hadoop.hbase.replication.ReplicationPeerConfigBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.zookeeper.MiniZooKeeperCluster;
 import org.apache.hadoop.hbase.zookeeper.ZKWatcher;
@@ -136,7 +137,7 @@ public class MutableIndexReplicationIT extends BaseTest {
         // than default
         conf1 = utility1.getConfiguration();
         zkw1 = new ZKWatcher(conf1, "cluster1", null, true);
-        admin=ConnectionFactory.createConnection(conf1).getAdmin();
+        admin = ConnectionFactory.createConnection(conf1).getAdmin();
         LOGGER.info("Setup first Zk");
 
         // Base conf2 on conf1 so it gets the right zk cluster, and general cluster configs
@@ -153,8 +154,9 @@ public class MutableIndexReplicationIT extends BaseTest {
         LOGGER.info("Setup second Zk");
         utility1.startMiniCluster(2);
         utility2.startMiniCluster(2);
-      //replicate from cluster 1 -> cluster 2, but not back again
-        admin.addReplicationPeer("1", new ReplicationPeerConfig().setClusterKey(utility2.getClusterKey()));
+        //replicate from cluster 1 -> cluster 2, but not back again
+        admin.addReplicationPeer("1",
+                ReplicationPeerConfig.newBuilder().setClusterKey(utility2.getClusterKey()).build());
     }
 
     private static void setupDriver() throws Exception {
@@ -209,7 +211,7 @@ public class MutableIndexReplicationIT extends BaseTest {
             assertEquals(1, cols.length);
             // add the replication scope to the column
             ColumnFamilyDescriptor col = ColumnFamilyDescriptorBuilder.newBuilder(cols[0].getName()).setScope(HConstants.REPLICATION_SCOPE_GLOBAL).build();
-            desc=TableDescriptorBuilder.newBuilder(desc).removeColumnFamily(cols[0].getName()).addColumnFamily(col).build();
+            desc=TableDescriptorBuilder.newBuilder(desc).removeColumnFamily(cols[0].getName()).setColumnFamily(col).build();
             //disable/modify/enable table so it has replication enabled
             admin.disableTable(desc.getTableName());
             admin.modifyTable(desc);

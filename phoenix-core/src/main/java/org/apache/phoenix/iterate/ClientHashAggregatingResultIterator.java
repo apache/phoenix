@@ -185,7 +185,7 @@ public class ClientHashAggregatingResultIterator
             key = getGroupingKey(result, key);
             Aggregator[] rowAggregators = hash.get(key);
             if (rowAggregators == null) {
-                keySize += key.getSize();
+                keySize += key.getLength();
                 long hashSize = SizedUtil.sizeOfMap(hash.size() + 1, SizedUtil.IMMUTABLE_BYTES_WRITABLE_SIZE, aggSize) + keySize;
                 if (hashSize > memoryChunk.getSize() + CLIENT_HASH_AGG_MEMORY_CHUNK_SIZE) {
                     // This will throw InsufficientMemoryException if necessary

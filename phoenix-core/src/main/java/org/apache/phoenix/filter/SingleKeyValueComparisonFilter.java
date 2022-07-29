@@ -72,7 +72,7 @@ public abstract class SingleKeyValueComparisonFilter extends BooleanExpressionFi
     }
 
     @Override
-    public ReturnCode filterKeyValue(Cell keyValue) {
+    public ReturnCode filterCell(Cell keyValue) {
         if (this.matchedColumn) {
           // We already found and matched the single column, all keys now pass
           return ReturnCode.INCLUDE_AND_NEXT_COL;

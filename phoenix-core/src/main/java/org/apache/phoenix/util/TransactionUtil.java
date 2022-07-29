@@ -22,10 +22,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -64,11 +61,25 @@ public class TransactionUtil {
     }
     
     private static Cell newDeleteFamilyMarker(byte[] row, byte[] family, long timestamp) {
-        return CellUtil.createCell(row, family, FAMILY_DELETE_MARKER, timestamp, KeyValue.Type.Put.getCode(), HConstants.EMPTY_BYTE_ARRAY);
+        return ExtendedCellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                .setRow(row)
+                .setFamily(family)
+                .setQualifier(FAMILY_DELETE_MARKER)
+                .setTimestamp(timestamp)
+                .setType(Cell.Type.Put)
+                .setValue(HConstants.EMPTY_BYTE_ARRAY)
+                .build();
     }
     
     private static Cell newDeleteColumnMarker(byte[] row, byte[] family, byte[] qualifier, long timestamp) {
-        return CellUtil.createCell(row, family, qualifier, timestamp, KeyValue.Type.Put.getCode(), HConstants.EMPTY_BYTE_ARRAY);
+        return ExtendedCellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                .setRow(row)
+                .setFamily(family)
+                .setQualifier(qualifier)
+                .setTimestamp(timestamp)
+                .setType(Cell.Type.Put)
+                .setValue(HConstants.EMPTY_BYTE_ARRAY)
+                .build();
     }
 
     public static long convertToNanoseconds(long serverTimeStamp) {
@@ -120,7 +131,7 @@ public class TransactionUtil {
                 byte[] family = entry.getKey();
                 List<Cell> familyCells = entry.getValue();
                 if (familyCells.size() == 1) {
-                    if (CellUtil.isDeleteFamily(familyCells.get(0))) {
+                    if (familyCells.get(0).getType() == Cell.Type.DeleteFamily) {
                         if (deleteMarker == null) {
                             deleteMarker = new Put(mutation.getRow());
                         }
@@ -131,7 +142,7 @@ public class TransactionUtil {
                     }
                 } else {
                     for (Cell cell : familyCells) {
-                        if (CellUtil.isDeleteColumns(cell)) {
+                        if (cell.getType() == Cell.Type.DeleteColumn) {
                             if (deleteMarker == null) {
                                 deleteMarker = new Put(mutation.getRow());
                             }

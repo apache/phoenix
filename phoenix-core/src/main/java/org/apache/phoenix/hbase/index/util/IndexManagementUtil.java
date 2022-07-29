@@ -183,7 +183,7 @@ public class IndexManagementUtil {
                 s.addFamily(ref.getFamily());
             }
         }
-        s.setMaxVersions();
+        s.readAllVersions();
         return s;
     }
 
@@ -266,7 +266,7 @@ public class IndexManagementUtil {
               for (Batch batch : batches) {
                   Mutation mWithSameTS;
                   Cell firstCell = batch.getKvs().get(0);
-                  if (KeyValue.Type.codeToType(firstCell.getTypeByte()) == KeyValue.Type.Put) {
+                  if (firstCell.getType() == Cell.Type.Put) {
                       mWithSameTS = new Put(row);
                   } else {
                       mWithSameTS = new Delete(row);

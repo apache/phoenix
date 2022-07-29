@@ -166,7 +166,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         if (tableType != PTableType.VIEW) {
             TableDescriptorBuilder tableDescBuilder = TableDescriptorBuilder.newBuilder(physicalTableName);
             for (byte[] familyName : familySet) {
-                tableDescBuilder.addColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(familyName).build());
+                tableDescBuilder.setColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(familyName).build());
             }
             final TableDescriptor htd = tableDescBuilder.build();
             for (MasterObserver observer : getAccessControllers()) {
