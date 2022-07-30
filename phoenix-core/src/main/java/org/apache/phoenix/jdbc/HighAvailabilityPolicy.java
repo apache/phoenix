@@ -87,6 +87,7 @@ enum HighAvailabilityPolicy {
         private void transitActive(HighAvailabilityGroup haGroup, String zkUrl)
                 throws SQLException {
             // Invalidate CQS cache if any that has been closed but has not been cleared
+            LOG.info("invalidating cqs cache for zkUrl: " + zkUrl);
             PhoenixDriver.INSTANCE.invalidateCache(zkUrl, haGroup.getProperties());
         }
     },

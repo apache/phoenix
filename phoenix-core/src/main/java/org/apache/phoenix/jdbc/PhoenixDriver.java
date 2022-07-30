@@ -22,10 +22,12 @@ import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -303,6 +305,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                 .normalize(getQueryServices().getProps(), properties);
         LOGGER.info("Invalidating the CQS from cache for connInfo={}", connInfo);
         connectionQueryServicesCache.invalidate(connInfo);
+        LOGGER.debug(connectionQueryServicesCache.asMap().keySet().stream().map(Objects::toString).collect(Collectors.joining(",")));
     }
 
 
