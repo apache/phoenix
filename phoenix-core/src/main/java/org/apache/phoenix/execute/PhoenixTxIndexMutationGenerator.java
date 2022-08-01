@@ -280,7 +280,7 @@ public class PhoenixTxIndexMutationGenerator {
                     long writePtr;
                     Cell cell = cells.get(i);
                     do {
-                        hasPuts |= cell.getTypeByte() == KeyValue.Type.Put.getCode();
+                        hasPuts |= cell.getType() == Cell.Type.Put;
                         writePtr = cell.getTimestamp();
                         ListIterator<Cell> it = singleTimeCells.listIterator();
                         do {

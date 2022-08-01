@@ -259,7 +259,7 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
             scan = new Scan();
             primaryTable.close();
             primaryTable = hbaseConn.getTable(TableName.valueOf(DATA_TABLE_NAME));
-            ((ClusterConnection)hbaseConn).clearRegionCache();
+            ((ClusterConnection)hbaseConn).clearRegionLocationCache();
             resultScanner = primaryTable.getScanner(scan);
             count = 0;
             for (Result result : resultScanner) {

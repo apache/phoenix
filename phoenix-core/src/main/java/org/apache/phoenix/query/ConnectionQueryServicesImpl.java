@@ -1087,7 +1087,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (isTransactional) {
                     if (!newDesc.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
                         builder.setCoprocessor(
-                                CoprocessorDescriptorBuilder.newBuilder(GroupedAggregateRegionObserver.class.getName())
+                                CoprocessorDescriptorBuilder.newBuilder(PhoenixTransactionalIndexer.class.getName())
                                         .setPriority(priority).build());
                     }
                     // For alter table, remove non transactional index coprocessor

@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -222,7 +223,7 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
             assertEquals("MR Job should complete successfully", 0, status);
             Admin hBaseAdmin = utility.getAdmin();
             assertEquals("Snapshot should be automatically deleted when UpdateStatisticsTool has completed",
-                    0, hBaseAdmin.listSnapshots(tool.getSnapshotName()).size());
+                    0, hBaseAdmin.listSnapshots(Pattern.compile(tool.getSnapshotName())).size());
         } catch (Exception e) {
             fail("Exception when running UpdateStatisticsTool for " + tableName + " Exception: " + e);
         } finally {

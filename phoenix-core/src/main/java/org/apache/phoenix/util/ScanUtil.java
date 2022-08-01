@@ -197,7 +197,7 @@ public class ScanUtil {
             newScan.setFamilyMap(clonedMap);
             // Carry over the reversed attribute
             newScan.setReversed(scan.isReversed());
-            if (scan.isSmall()) {
+            if (scan.getReadType() == Scan.ReadType.PREAD) {
                 // HBASE-25644 : Only if Scan#setSmall(boolean) is called with
                 // true, readType should be set PREAD. For non-small scan,
                 // setting setSmall(false) is redundant and degrades perf
