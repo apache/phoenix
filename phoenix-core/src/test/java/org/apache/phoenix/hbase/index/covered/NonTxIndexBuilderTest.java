@@ -207,7 +207,9 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
         // update ts and value
         Put put = new Put(ROW);
         put.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY)
+                        .setRow(put.getRow())
                         .setFamily(FAM)
+                        .setType(Cell.Type.Put)
                         .setQualifier(INDEXED_QUALIFIER)
                         .setTimestamp(2).setValue(VALUE_2).build());
         MultiMutation mutation = new MultiMutation(new ImmutableBytesPtr(ROW));
@@ -251,19 +253,25 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
         MultiMutation mutation = new MultiMutation(new ImmutableBytesPtr(ROW));
         Put put = new Put(ROW);
         put.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY)
+                        .setRow(put.getRow())
                         .setFamily(FAM)
+                        .setType(Cell.Type.Put)
                         .setQualifier(INDEXED_QUALIFIER)
                         .setTimestamp(4).setValue(VALUE_4).build());
         mutation.addAll(put);
         put = new Put(ROW);
         put.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY)
+                        .setRow(put.getRow())
                         .setFamily(FAM)
+                        .setType(Cell.Type.Put)
                         .setQualifier(INDEXED_QUALIFIER)
                         .setTimestamp(3).setValue(VALUE_3).build());
         mutation.addAll(put);
         put = new Put(ROW);
         put.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY)
+                        .setRow(put.getRow())
                         .setFamily(FAM)
+                        .setType(Cell.Type.Put)
                         .setQualifier(INDEXED_QUALIFIER)
                         .setTimestamp(2).setValue(VALUE_2).build());
         mutation.addAll(put);
@@ -369,10 +377,14 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
         for (int i = versions - 1; i >= 0; i--) {
             Put put = new Put(ROW);
             try {
-                put.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY)
+                put.add(CellBuilderFactory
+                        .create(CellBuilderType.SHALLOW_COPY)
+                        .setRow(put.getRow())
                         .setFamily(FAM)
+                        .setType(Cell.Type.Put)
                         .setQualifier(INDEXED_QUALIFIER)
-                        .setTimestamp(i).setValue(Bytes.toBytes(i)).build());
+                        .setTimestamp(i)
+                        .setValue(Bytes.toBytes(i)).build());
             } catch (IOException e) {
 
             }
