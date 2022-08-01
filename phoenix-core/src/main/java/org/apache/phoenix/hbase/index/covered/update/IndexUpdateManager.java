@@ -52,7 +52,6 @@ public class IndexUpdateManager {
     @Override
     public int compare(Mutation o1, Mutation o2) {
       // always sort rows first
-
       int compare = Row.COMPARATOR.compare(o1, o2);
       if (compare != 0) {
         return compare;

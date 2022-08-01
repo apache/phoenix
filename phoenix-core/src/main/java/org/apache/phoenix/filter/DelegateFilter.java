@@ -39,6 +39,11 @@ public class DelegateFilter extends FilterBase {
     }
 
     @Override
+    public boolean filterRowKey(byte[] buffer, int offset, int length) throws IOException {
+        return delegate.filterRowKey(buffer, offset, length);
+    }
+
+    @Override
     public boolean filterRowKey(Cell cell) throws IOException {
         return delegate.filterRowKey(cell);
     }
@@ -46,6 +51,11 @@ public class DelegateFilter extends FilterBase {
     @Override
     public boolean filterAllRemaining() throws IOException {
         return delegate.filterAllRemaining();
+    }
+
+    @Override
+    public ReturnCode filterKeyValue(Cell v) throws IOException {
+        return delegate.filterKeyValue(v);
     }
 
     @Override

@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.util;
 
-import static java.sql.DatabaseMetaData.procedureColumnIn;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
@@ -60,9 +59,28 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Collectors;
 
-import org.apache.hadoop.hbase.*;
-import org.apache.hadoop.hbase.client.*;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.CompareOperator;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.CompactionState;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptor;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
+import org.apache.hadoop.hbase.client.Delete;
 
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;

@@ -190,6 +190,12 @@ public class ColumnProjectionFilter extends FilterBase implements Writable {
       return ReturnCode.INCLUDE_AND_NEXT_COL;
     }
 
+    @Override
+    @Deprecated
+    public ReturnCode filterKeyValue(Cell ignored) throws IOException {
+        return ReturnCode.INCLUDE_AND_NEXT_COL;
+    }
+
     public void addTrackedColumn(ImmutableBytesPtr cf, ImmutableBytesPtr cq) {
         NavigableSet<ImmutableBytesPtr> columns = columnsTracker.get(cf);
 

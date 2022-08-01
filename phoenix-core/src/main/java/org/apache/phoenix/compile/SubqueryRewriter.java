@@ -23,7 +23,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.function.DistinctValueAggregateFunction;

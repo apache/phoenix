@@ -17,9 +17,8 @@
  */
 package org.apache.phoenix.mapreduce.transform;
 
-import org.apache.hadoop.hbase.*;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.phoenix.mapreduce.PhoenixTTLTool;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -29,9 +28,12 @@ import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.filter.CompareFilter;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;

@@ -52,6 +52,11 @@ public class MaxTimestampFilter extends FilterBase {
   }
 
   @Override
+  public ReturnCode filterKeyValue(Cell v) {
+    return this.filterCell(v);
+  }
+
+  @Override
   public ReturnCode filterCell(Cell v) {
     long timestamp = v.getTimestamp();
     if (timestamp > ts) {

@@ -30,7 +30,6 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;

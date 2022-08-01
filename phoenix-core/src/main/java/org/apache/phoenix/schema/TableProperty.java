@@ -29,7 +29,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DE
 import java.sql.SQLException;
 import java.util.Map;
 
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.phoenix.exception.SQLExceptionCode;

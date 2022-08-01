@@ -49,9 +49,8 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
-
-import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;

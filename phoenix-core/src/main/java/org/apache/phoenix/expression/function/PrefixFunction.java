@@ -23,7 +23,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.query.KeyRange;

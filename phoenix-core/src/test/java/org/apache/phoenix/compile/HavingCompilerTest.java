@@ -34,7 +34,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.expression.Expression;

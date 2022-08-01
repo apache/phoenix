@@ -27,7 +27,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.KeyPart;

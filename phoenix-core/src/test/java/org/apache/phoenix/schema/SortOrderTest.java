@@ -25,7 +25,6 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.junit.Test;

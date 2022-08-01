@@ -44,10 +44,16 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.*;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.TableNotFoundException;
-import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.SystemExitRule;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -59,8 +65,6 @@ import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
-
-import javax.swing.plaf.synth.Region;
 
 public class ConnectionQueryServicesImplTest {
     private static final PhoenixIOException PHOENIX_IO_EXCEPTION =

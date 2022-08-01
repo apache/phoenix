@@ -103,6 +103,11 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
   }
 
   @Override
+  public ReturnCode filterKeyValue(Cell next) {
+    return this.filterCell(next);
+  }
+
+  @Override
   public ReturnCode filterCell(Cell next) {
     KeyValue nextKV = PhoenixKeyValueUtil.maybeCopyCell(next);
     switch (next.getType()) {

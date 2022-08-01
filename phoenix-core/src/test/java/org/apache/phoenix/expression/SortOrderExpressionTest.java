@@ -29,7 +29,6 @@ import java.util.List;
 import java.util.TimeZone;
 
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.function.ByteBasedRegexpReplaceFunction;
 import org.apache.phoenix.expression.function.ByteBasedRegexpSubstrFunction;

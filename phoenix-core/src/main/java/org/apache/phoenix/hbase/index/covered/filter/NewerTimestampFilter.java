@@ -35,6 +35,11 @@ public class NewerTimestampFilter extends FilterBase {
   }
 
   @Override
+  public ReturnCode filterKeyValue(Cell ignored) {
+    return this.filterCell(ignored);
+  }
+
+  @Override
   public ReturnCode filterCell(Cell ignored) {
     return ignored.getTimestamp() > timestamp ? ReturnCode.SKIP : ReturnCode.INCLUDE;
   }

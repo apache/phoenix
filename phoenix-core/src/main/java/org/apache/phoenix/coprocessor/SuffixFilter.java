@@ -47,7 +47,13 @@ public class SuffixFilter extends FilterBase {
     public ReturnCode filterCell(Cell ignored) throws IOException {
       return ReturnCode.INCLUDE;
     }
-    
+
+    @Override
+    @Deprecated
+    public ReturnCode filterKeyValue(Cell ignored) throws IOException {
+        return ReturnCode.INCLUDE;
+    }
+
     @Override
     @Deprecated
     public boolean filterRowKey(byte[] buffer, int offset, int length) {

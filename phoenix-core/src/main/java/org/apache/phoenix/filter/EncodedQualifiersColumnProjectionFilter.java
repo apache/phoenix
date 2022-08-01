@@ -147,7 +147,12 @@ public class EncodedQualifiersColumnProjectionFilter extends FilterBase implemen
         }
         return sb.toString();
     }
-    
+
+    @Override
+    public ReturnCode filterKeyValue(Cell ignored) throws IOException {
+        return ReturnCode.INCLUDE_AND_NEXT_COL;
+    }
+
     @Override
     public ReturnCode filterCell(Cell ignored) throws IOException {
       return ReturnCode.INCLUDE_AND_NEXT_COL;
