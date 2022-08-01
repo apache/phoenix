@@ -20,11 +20,11 @@ package org.apache.phoenix.schema;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 
 import java.sql.SQLException;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
@@ -154,7 +154,8 @@ public class PMetaDataImpl implements PMetaData {
         for (PTable index : table.getIndexes()) {
             metaData.put(index.getKey(), tableRefFactory.makePTableRef(index, this.timeKeeper.getCurrentTime(), resolvedTime));
         }
-        if (table.getPhysicalName(true) != null && !table.getPhysicalName(true).getString().equals(table.getTableName().getString())) {
+        if (table.getPhysicalName(true) != null &&
+                !Strings.isNullOrEmpty(table.getPhysicalName(true).getString()) && !table.getPhysicalName(true).getString().equals(table.getTableName().getString())) {
             String physicalTableName =  table.getPhysicalName(true).getString().replace(
                     QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR);
             String physicalTableFullName = SchemaUtil.getTableName(table.getSchemaName() != null ? table.getSchemaName().getString() : null, physicalTableName);
@@ -195,7 +196,7 @@ public class PMetaDataImpl implements PMetaData {
                         PTableImpl.Builder parentTableBuilder =
                                 PTableImpl.builderWithColumns(parentTableRef.getTable(),
                                         getColumnsToClone(parentTableRef.getTable()))
-                                .setIndexes(newIndexes == null ? Collections.emptyList() : newIndexes);
+                                .setIndexes(newIndexes);
                         if (tableTimeStamp != HConstants.LATEST_TIMESTAMP) {
                             parentTableBuilder.setTimeStamp(tableTimeStamp);
                         }

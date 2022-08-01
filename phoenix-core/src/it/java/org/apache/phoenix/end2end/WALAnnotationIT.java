@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionInfo;
@@ -30,23 +29,19 @@ import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.wal.WAL;
 import org.apache.hadoop.hbase.wal.WALKey;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatIndexRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -77,7 +72,7 @@ import static org.junit.Assert.fail;
 
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
-public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
+public class WALAnnotationIT extends BaseTest {
     private final boolean isImmutable;
     private final boolean isMultiTenant;
 
@@ -105,18 +100,14 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testSimpleUpsertAndDelete() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         SchemaBuilder builder = new SchemaBuilder(getUrl());
         boolean createGlobalIndex = false;
-        long ddlTimestamp = upsertAndDeleteHelper(builder, createGlobalIndex);
-        assertAnnotation(2, builder.getPhysicalTableName(false), null,
-            builder.getTableOptions().getSchemaName(),
-            builder.getDataOptions().getTableName(), PTableType.TABLE, ddlTimestamp);
+        String externalSchemaId = upsertAndDeleteHelper(builder, createGlobalIndex);
+        assertAnnotation(2, builder.getPhysicalTableName(false), externalSchemaId);
     }
 
     @Test
     public void testNoAnnotationsIfChangeDetectionDisabled() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(true);
             SchemaBuilder builder = new SchemaBuilder(getUrl());
@@ -158,7 +149,6 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testCantSetChangeDetectionOnIndex() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             SchemaBuilder builder = new SchemaBuilder(getUrl());
             builder.withTableDefaults().build();
@@ -179,21 +169,18 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testUpsertAndDeleteWithGlobalIndex() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         SchemaBuilder builder = new SchemaBuilder(getUrl());
         boolean createGlobalIndex = true;
-        long ddlTimestamp = upsertAndDeleteHelper(builder, createGlobalIndex);
-        assertAnnotation(2, builder.getPhysicalTableName(false), null,
-            builder.getTableOptions().getSchemaName(),
-            builder.getDataOptions().getTableName(), PTableType.TABLE, ddlTimestamp);
+        String externalSchemaId = upsertAndDeleteHelper(builder, createGlobalIndex);
+        assertAnnotation(2, builder.getPhysicalTableName(false), externalSchemaId);
         assertAnnotation(0, builder.getPhysicalTableIndexName(false),
-            null, null, null, null, ddlTimestamp);
+            externalSchemaId);
     }
 
     // Note that local secondary indexes aren't supported because they go in the same WALEdit as the
     // "base" table data they index.
 
-    private long upsertAndDeleteHelper(SchemaBuilder builder, boolean createGlobalIndex) throws Exception {
+    private String upsertAndDeleteHelper(SchemaBuilder builder, boolean createGlobalIndex) throws Exception {
         try (Connection conn = getConnection()) {
             SchemaBuilder.TableOptions tableOptions = getTableOptions();
 
@@ -208,7 +195,7 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute(upsertSql);
             conn.commit();
             PTable table = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTableName());
-            assertEquals("Change Detection Enabled is false!", true, table.isChangeDetectionEnabled());
+            assertTrue("Change Detection Enabled is false!", table.isChangeDetectionEnabled());
             // Deleting by entire PK gets executed as more like an UPSERT VALUES than an UPSERT
             // SELECT (i.e, it generates the Mutations and then pushes them to server, rather than
             // running a select query and deleting the mutations returned)
@@ -220,7 +207,7 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
             // last had columns added or removed. It is NOT the timestamp of a particular mutation
             // We need it in the annotation to match up with schema object in an external schema
             // repo.
-            return table.getLastDDLTimestamp();
+            return table.getExternalSchemaId();
         }
     }
 
@@ -235,7 +222,6 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testUpsertSelectClientSide() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         try (Connection conn = getConnection()) {
             SchemaBuilder baseBuilder = new SchemaBuilder(getUrl());
             SchemaBuilder targetBuilder = new SchemaBuilder(getUrl());
@@ -260,21 +246,14 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
                                                 int expectedAnnotations) throws SQLException, IOException {
         PTable baseTable = PhoenixRuntime.getTableNoCache(conn,
             baseBuilder.getEntityTableName());
-        assertAnnotation(expectedAnnotations, baseBuilder.getPhysicalTableName(false), null,
-            baseBuilder.getTableOptions().getSchemaName(),
-            baseBuilder.getDataOptions().getTableName(),
-            PTableType.TABLE,
-            baseTable.getLastDDLTimestamp());
+        assertAnnotation(expectedAnnotations, baseBuilder.getPhysicalTableName(false), baseTable.getExternalSchemaId());
         PTable targetTable = PhoenixRuntime.getTableNoCache(conn,
             targetBuilder.getEntityTableName());
-        assertAnnotation(expectedAnnotations, targetBuilder.getPhysicalTableName(false), null,
-            targetBuilder.getTableOptions().getSchemaName(), targetBuilder.getDataOptions().getTableName(),
-            PTableType.TABLE, targetTable.getLastDDLTimestamp());
+        assertAnnotation(expectedAnnotations, targetBuilder.getPhysicalTableName(false), targetTable.getExternalSchemaId());
     }
 
     @Test
     public void testUpsertSelectServerSide() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         Assume.assumeFalse(isImmutable); //only mutable tables can be processed server-side
         SchemaBuilder targetBuilder = new SchemaBuilder(getUrl());
         try (Connection conn = getConnection()) {
@@ -289,17 +268,14 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
                 " (OID, KP, COL1, COL2, COL3) SELECT * FROM " + targetBuilder.getEntityTableName();
             conn.createStatement().execute(sql);
             PTable table = PhoenixRuntime.getTableNoCache(conn, targetBuilder.getEntityTableName());
-            assertAnnotation(1, targetBuilder.getPhysicalTableName(false), null,
-                targetBuilder.getTableOptions().getSchemaName(),
-                targetBuilder.getDataOptions().getTableName(),
-                PTableType.TABLE, table.getLastDDLTimestamp());
+            assertAnnotation(1, targetBuilder.getPhysicalTableName(false),
+                table.getExternalSchemaId());
         }
 
     }
 
     @Test
     public void testGroupedUpsertSelect() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         // because we're inserting to a different table than we're selecting from, this should be
         // processed client-side
         SchemaBuilder baseBuilder = new SchemaBuilder(getUrl());
@@ -327,7 +303,6 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     private void testRangeDeleteHelper(boolean isClientSide) throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         SchemaBuilder builder = new SchemaBuilder(getUrl());
         builder.withTableOptions(getTableOptions()).build();
         try (Connection conn = getConnection()) {
@@ -346,9 +321,7 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute(sql);
             conn.commit();
             PTable table = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTableName());
-            assertAnnotation(2, table.getPhysicalName().getString(), null,
-                table.getSchemaName().getString(),
-                table.getTableName().getString(), PTableType.TABLE, table.getLastDDLTimestamp());
+            assertAnnotation(2, table.getPhysicalName().getString(), table.getExternalSchemaId());
         }
 
     }
@@ -361,7 +334,6 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testGlobalViewUpsert() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         SchemaBuilder builder = new SchemaBuilder(getUrl());
         try (Connection conn = getConnection()) {
             createGlobalViewHelper(builder, conn);
@@ -375,9 +347,7 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute(deleteSql);
             conn.commit();
             PTable view = PhoenixRuntime.getTableNoCache(conn, builder.getEntityGlobalViewName());
-            assertAnnotation(2, view.getPhysicalName().getString(), null,
-                view.getSchemaName().getString(),
-                view.getTableName().getString(), PTableType.VIEW, view.getLastDDLTimestamp());
+            assertAnnotation(2, view.getPhysicalName().getString(), view.getExternalSchemaId());
         }
 
     }
@@ -398,7 +368,6 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testTenantViewUpsert() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         Assume.assumeTrue(isMultiTenant);
         boolean createIndex = false;
         tenantViewHelper(createIndex);
@@ -434,13 +403,11 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
             conn.createStatement().execute(deleteSql);
             conn.commit();
             PTable view = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTenantViewName());
-            assertAnnotation(2, view.getPhysicalName().getString(), tenant,
-                view.getSchemaName().getString(),
-                view.getTableName().getString(), PTableType.VIEW, view.getLastDDLTimestamp());
+            assertAnnotation(2, view.getPhysicalName().getString(), view.getExternalSchemaId());
             if (createIndex) {
                 assertAnnotation(0,
                     MetaDataUtil.getViewIndexPhysicalName(builder.getEntityTableName()),
-                    tenant, null, null, null, view.getLastDDLTimestamp());
+                    view.getExternalSchemaId());
             }
         }
 
@@ -454,9 +421,39 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testTenantViewUpsertWithIndex() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.hasPreWALAppend());
         Assume.assumeTrue(isMultiTenant);
         tenantViewHelper(true);
+    }
+
+    @Test
+    public void testOnDuplicateUpsertWithIndex() throws Exception {
+        Assume.assumeFalse(this.isImmutable); // on duplicate is not supported for immutable tables
+        SchemaBuilder builder = new SchemaBuilder(getUrl());
+        try (Connection conn = getConnection()) {
+            SchemaBuilder.TableOptions tableOptions = getTableOptions();
+            builder.withTableOptions(tableOptions).withTableIndexDefaults().build();
+            PTable table = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTableName());
+            assertTrue("Change Detection Enabled is false!", table.isChangeDetectionEnabled());
+            Long ddlTimestamp = table.getLastDDLTimestamp();
+            String upsertSql = "UPSERT INTO " + builder.getEntityTableName() + " VALUES" +
+                " ('a', 'b', 'c', 'd')";
+            conn.createStatement().execute(upsertSql);
+            conn.commit();
+            List<String> columns = builder.getTableOptions().getTableColumns();
+            assertTrue(columns.size() >= 2);
+            String col1 = columns.get(0);
+            String col2 = columns.get(1);
+            // col1 = col1 || col1, col2 = null
+            String onDupClause = String.format("%s = %s || %s, %s = null", col1, col1, col1, col2);
+            // this will result in one Put and one Delete (because of null) mutation
+            upsertSql = "UPSERT INTO " + builder.getEntityTableName() + " VALUES" +
+                " ('a', 'b', 'c', 'd') ON DUPLICATE KEY UPDATE " + onDupClause;
+            conn.createStatement().execute(upsertSql);
+            conn.commit();
+            assertAnnotation(2, builder.getPhysicalTableName(false), table.getExternalSchemaId());
+            assertAnnotation(0, builder.getPhysicalTableIndexName(false),
+                table.getExternalSchemaId());
+        }
     }
 
     private List<Map<String, byte[]>> getEntriesForTable(TableName tableName) throws IOException {
@@ -477,29 +474,16 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
         observer.clearAnnotations();
     }
 
-    private void assertAnnotation(int numOccurrences, String physicalTableName, String tenant,
-                                  String schemaName,
-                                  String logicalTableName,
-                                  PTableType tableType, long ddlTimestamp) throws IOException {
+    private void assertAnnotation(int numOccurrences, String physicalTableName,
+        String externalSchemaId) throws IOException {
         int foundCount = 0;
         int notFoundCount = 0;
         List<Map<String, byte[]>> entries =
             getEntriesForTable(TableName.valueOf(physicalTableName));
         for (Map<String, byte[]> m : entries) {
-            byte[] tenantBytes = m.get(MutationState.MutationMetadataType.TENANT_ID.toString());
-            byte[] schemaBytes = m.get(MutationState.MutationMetadataType.SCHEMA_NAME.toString());
-            byte[] logicalTableBytes =
-                m.get(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString());
-            byte[] tableTypeBytes = m.get(MutationState.MutationMetadataType.TABLE_TYPE.toString());
-            byte[] timestampBytes = m.get(MutationState.MutationMetadataType.TIMESTAMP.toString());
-            assertNotNull(timestampBytes);
-            long timestamp = Bytes.toLong(timestampBytes);
-            if (Objects.equals(tenant, Bytes.toString(tenantBytes)) &&
-                Objects.equals(schemaName, Bytes.toString(schemaBytes)) &&
-                Objects.equals(logicalTableName, Bytes.toString(logicalTableBytes)) &&
-                Objects.equals(tableType.toString(), Bytes.toString(tableTypeBytes)) &&
-                Objects.equals(ddlTimestamp, timestamp)
-                && timestamp < HConstants.LATEST_TIMESTAMP) {
+            byte[] externalSchemaIdBytes = m.get(MutationState.MutationMetadataType.EXTERNAL_SCHEMA_ID.toString());
+            assertNotNull(externalSchemaIdBytes);
+            if (Objects.equals(externalSchemaId, Bytes.toString(externalSchemaIdBytes))) {
                 foundCount++;
             } else {
                 notFoundCount++;
@@ -542,7 +526,7 @@ public class WALAnnotationIT extends BaseUniqueNamesOwnClusterIT {
                                  RegionInfo info, WALKey logKey, WALEdit logEdit) throws IOException {
             TableName tableName = logKey.getTableName();
             Map<String, byte[]> annotationMap =
-                CompatIndexRegionObserver.getAttributeValuesFromWALKey(logKey);
+                IndexRegionObserver.getAttributeValuesFromWALKey(logKey);
             if (annotationMap.size() > 0) {
                 if (!walAnnotations.containsKey(tableName)) {
                     walAnnotations.put(tableName, new ArrayList<Map<String, byte[]>>());

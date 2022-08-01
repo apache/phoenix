@@ -38,7 +38,7 @@ pipeline {
         DOCKERFILE_REL = "${SRC_REL}/dev/docker/Dockerfile.yetus"
         YETUS_DRIVER_REL = "${SRC_REL}/dev/jenkins_precommit_github_yetus.sh"
         // Branch or tag name.  Yetus release tags are 'rel/X.Y.Z'
-        YETUS_VERSION = 'rel/0.12.0'
+        YETUS_VERSION = 'rel/0.13.0'
         PLUGINS= 'all,-findbugs,-gitlab'
         //GENERAL_CHECK_PLUGINS = 'all,-compile,-javac,-javadoc,-jira,-shadedjars,-unit'
         //JDK_SPECIFIC_PLUGINS = 'compile,github,htmlout,javac,javadoc,maven,mvninstall,shadedjars,unit'
@@ -77,7 +77,7 @@ pipeline {
                     environment {
                         // customized per parallel stage
                         //PLUGINS = "${GENERAL_CHECK_PLUGINS}"
-                        SET_JAVA_HOME = '/usr/lib/jvm/java-8'
+                        SET_JAVA_HOME = '/usr/lib/jvm/java-8-openjdk-amd64'
                         WORKDIR_REL = "${WORKDIR_REL_GENERAL_CHECK}"
                         // identical for all parallel stages
                         WORKDIR = "${WORKSPACE}/${WORKDIR_REL}"

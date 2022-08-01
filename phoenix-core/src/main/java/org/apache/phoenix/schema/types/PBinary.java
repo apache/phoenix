@@ -36,11 +36,12 @@ public class PBinary extends PBinaryBase {
     }
 
     @Override
-    public void coerceBytes(ImmutableBytesWritable ptr, Object o, PDataType actualType, Integer actualMaxLength,
-            Integer actualScale, SortOrder actualModifier, Integer desiredMaxLength, Integer desiredScale,
-            SortOrder expectedModifier) {
-        PVarbinary.INSTANCE.coerceBytes(ptr, o, actualType, actualMaxLength, actualScale, actualModifier, desiredMaxLength, desiredScale, expectedModifier);
-        if (null != desiredMaxLength && null != expectedModifier) {
+    public void coerceBytes(ImmutableBytesWritable ptr, Object o, PDataType actualType,
+            Integer actualMaxLength, Integer actualScale, SortOrder actualModifier,
+            Integer desiredMaxLength, Integer desiredScale, SortOrder expectedModifier) {
+        PVarbinary.INSTANCE.coerceBytes(ptr, o, actualType, actualMaxLength, actualScale,
+                actualModifier, desiredMaxLength, desiredScale, expectedModifier);
+        if (ptr.getLength() > 0 && null != desiredMaxLength && null != expectedModifier) {
             pad(ptr, desiredMaxLength, expectedModifier);
         }
     }

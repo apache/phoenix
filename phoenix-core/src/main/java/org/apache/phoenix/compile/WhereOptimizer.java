@@ -29,6 +29,10 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
+import org.apache.phoenix.expression.DelegateExpression;
+import org.apache.phoenix.schema.ValueSchema;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -114,16 +118,19 @@ public class WhereOptimizer {
         PName tenantId = context.getConnection().getTenantId();
         byte[] tenantIdBytes = null;
         PTable table = context.getCurrentTable().getTable();
-    	Integer nBuckets = table.getBucketNum();
-    	boolean isSalted = nBuckets != null;
-    	RowKeySchema schema = table.getRowKeySchema();
-    	boolean isMultiTenant = tenantId != null && table.isMultiTenant();
-    	boolean isSharedIndex = table.getViewIndexId() != null;
-    	ImmutableBytesWritable ptr = context.getTempPtr();
-    	
-    	if (isMultiTenant) {
+        Integer nBuckets = table.getBucketNum();
+        boolean isSalted = nBuckets != null;
+        RowKeySchema schema = table.getRowKeySchema();
+        boolean isMultiTenant = tenantId != null && table.isMultiTenant();
+        boolean isSharedIndex = table.getViewIndexId() != null;
+        ImmutableBytesWritable ptr = context.getTempPtr();
+        int maxInListSkipScanSize = context.getConnection().getQueryServices().getConfiguration()
+                .getInt(QueryServices.MAX_IN_LIST_SKIP_SCAN_SIZE,
+                        QueryServicesOptions.DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE);
+
+        if (isMultiTenant) {
             tenantIdBytes = ScanUtil.getTenantIdBytes(schema, isSalted, tenantId, isSharedIndex);
-    	}
+        }
 
         if (whereClause == null && (tenantId == null || !table.isMultiTenant()) && table.getViewIndexId() == null && !minOffset.isPresent()) {
             context.setScanRanges(ScanRanges.EVERYTHING);
@@ -198,6 +205,9 @@ public class WhereOptimizer {
         boolean hasMultiRanges = false;
         boolean hasRangeKey = false;
         boolean useSkipScan = false;
+        boolean checkMaxSkipScanCardinality = false;
+        int inListSkipScanCardinality = 1;
+
 
         // Concat byte arrays of literals to form scan start key
         while (iterator.hasNext()) {
@@ -226,12 +236,19 @@ public class WhereOptimizer {
             boolean stopExtracting = false;
             // Iterate through all spans of this slot
             boolean areAllSingleKey = KeyRange.areAllSingleKey(keyRanges);
+            boolean isInList = false;
+            int cnfStartPos = cnf.size();
+
+            if (keyPart.getExtractNodes() != null && keyPart.getExtractNodes().size() > 0
+                    && keyPart.getExtractNodes().get(0) instanceof InListExpression){
+                isInList = true;
+            }
             while (true) {
                 SortOrder sortOrder =
                         schema.getField(slot.getPKPosition() + slotOffset).getSortOrder();
                 if (prevSortOrder == null)  {
                     prevSortOrder = sortOrder;
-                } else if (prevSortOrder != sortOrder) {
+                } else if (prevSortOrder != sortOrder || (prevSortOrder == SortOrder.DESC && isInList)) {
                     //Consider the Universe of keys to be [0,7]+ on the leading column A
                     // and [0,7]+ on trailing column B, with a padbyte of 0 for ASC and 7 for DESC
                     //if our key range for ASC keys is leading [2,*] and trailing [3,*],
@@ -269,6 +286,9 @@ public class WhereOptimizer {
                     pkPos = slot.getPKPosition() + slotOffset;
                     clipLeftSpan = 0;
                     prevSortOrder = sortOrder;
+                    // If we had an IN clause with mixed sort ordering then we need to check the possibility of
+                    // skip scan key generation explosion.
+                    checkMaxSkipScanCardinality |= isInList;
                     // since we have to clip the portion with the same sort order, we can no longer
                     // extract the nodes from the where clause
                     // for eg. for the schema A VARCHAR DESC, B VARCHAR ASC and query
@@ -295,12 +315,33 @@ public class WhereOptimizer {
             } else {
                 if (schema.getField(
                        slot.getPKPosition() + slotOffset - 1).getSortOrder() == SortOrder.DESC) {
-                    keyRanges = invertKeyRanges(keyRanges);
+                   keyRanges = invertKeyRanges(keyRanges);
                 }
                 pkPos = slot.getPKPosition() + slotOffset;
                 slotSpanArray[cnf.size()] = clipLeftSpan-1;
                 cnf.add(keyRanges);
             }
+
+            // Do not use the skipScanFilter when there is a large IN clause (for e.g > 50k elements)
+            // Since the generation of point keys for skip scan filter will blow up the memory usage.
+            // See ScanRanges.getPointKeys(...) where using the various slot key ranges
+            // to generate point keys will lead to combinatorial explosion.
+            // The following check will ensure the cardinality of generated point keys
+            // is below the configured max (maxInListSkipScanSize).
+            // We shall force a range scan if the configured max is exceeded.
+            // cnfStartPos => is the start slot of this IN list
+            if (checkMaxSkipScanCardinality) {
+                for (int i = cnfStartPos; i < cnf.size(); i++) {
+                    inListSkipScanCardinality *= cnf.get(i).size();
+                }
+                // If the maxInListSkipScanSize <= 0 then the feature (to force range scan) is turned off
+                if (maxInListSkipScanSize > 0) {
+                    forcedRangeScan = inListSkipScanCardinality > maxInListSkipScanSize ? true : false;
+                }
+                // Reset the check flag for the next IN list clause
+                checkMaxSkipScanCardinality = false;
+            }
+
             // TODO: when stats are available, we may want to use a skip scan if the
             // cardinality of this slot is low.
             /**
@@ -361,8 +402,10 @@ public class WhereOptimizer {
         }
     }
     
-    private static KeyRange getTrailingRange(RowKeySchema rowKeySchema, int pkPos, KeyRange range, KeyRange clippedResult, ImmutableBytesWritable ptr) {
-        int separatorLength = rowKeySchema.getField(pkPos).getDataType().isFixedWidth() ? 0 : 1;
+    private static KeyRange getTrailingRange(RowKeySchema rowKeySchema, int clippedPkPos, KeyRange range, KeyRange clippedResult, ImmutableBytesWritable ptr) {
+        // We are interested in the clipped part's Seperator. Since we combined first part, we need to
+        // remove its separator from the trailing parts' start
+        int clippedSepLength= rowKeySchema.getField(clippedPkPos).getDataType().isFixedWidth() ? 0 : 1;
         byte[] lowerRange = KeyRange.UNBOUND;
         boolean lowerInclusive = false;
         // Lower range of trailing part of RVC must be true, so we can form a new range to intersect going forward
@@ -370,7 +413,7 @@ public class WhereOptimizer {
                 && range.getLowerRange().length > clippedResult.getLowerRange().length
                 && Bytes.startsWith(range.getLowerRange(), clippedResult.getLowerRange())) {
             lowerRange = range.getLowerRange();
-            int offset = clippedResult.getLowerRange().length + separatorLength;
+            int offset = clippedResult.getLowerRange().length + clippedSepLength;
             ptr.set(lowerRange, offset, lowerRange.length - offset);
             lowerRange = ptr.copyBytes();
             lowerInclusive = range.isLowerInclusive();
@@ -381,7 +424,7 @@ public class WhereOptimizer {
                 && range.getUpperRange().length > clippedResult.getUpperRange().length
                 && Bytes.startsWith(range.getUpperRange(), clippedResult.getUpperRange())) {
             upperRange = range.getUpperRange();
-            int offset = clippedResult.getUpperRange().length + separatorLength;
+            int offset = clippedResult.getUpperRange().length + clippedSepLength;
             ptr.set(upperRange, offset, upperRange.length - offset);
             upperRange = ptr.copyBytes();
             upperInclusive = range.isUpperInclusive();
@@ -1307,7 +1350,7 @@ public class WhereOptimizer {
                 // code doesn't work correctly for WhereOptimizerTest.testMultiSlotTrailingIntersect()
                 if (result.isSingleKey() && !(range.isSingleKey() && otherRange.isSingleKey())) {
                     int trailingPkPos = pkPos + Math.min(minSpan, otherMinSpan);
-                    KeyRange trailingRange = getTrailingRange(rowKeySchema, trailingPkPos, minSpan > otherMinSpan ? range : otherRange, result, ptr);
+                    KeyRange trailingRange = getTrailingRange(rowKeySchema, pkPos, minSpan > otherMinSpan ? range : otherRange, result, ptr);
                     trailingRanges[trailingPkPos] = trailingRanges[trailingPkPos].intersect(trailingRange);
                 } else {
                     // Add back clipped part of range 
@@ -2194,10 +2237,11 @@ public class WhereOptimizer {
                     // for the non-equality cases return actual sort order
                     //This work around should work
                     // but a more general approach can be taken.
-                    if(rvcElementOp == CompareOp.EQUAL ||
-                            rvcElementOp == CompareOp.NOT_EQUAL){
-                        return SortOrder.ASC;
-                    }
+                    //This optimization causes PHOENIX-6662 (when desc pk used with in clause)
+//                    if(rvcElementOp == CompareOp.EQUAL ||
+//                            rvcElementOp == CompareOp.NOT_EQUAL){
+//                        return SortOrder.ASC;
+//                    }
                     return childPart.getColumn().getSortOrder();
                 }
 

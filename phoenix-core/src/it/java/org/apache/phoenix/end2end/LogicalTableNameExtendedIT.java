@@ -22,6 +22,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
@@ -29,6 +30,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -53,6 +55,9 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
     }
 
     public LogicalTableNameExtendedIT()  {
+        StringBuilder optionBuilder = new StringBuilder();
+        optionBuilder.append(" ,IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN");
+        this.dataTableDdl = optionBuilder.toString();
         propsNamespace.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
     }
 
@@ -87,7 +92,7 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
         conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
         // Create tables and change physical index table
         test_IndexTableChange(conn, conn2, schemaName, tableName, indexName,
-                IndexRegionObserver.UNVERIFIED_BYTES, true);
+                QueryConstants.UNVERIFIED_BYTES, true);
         // Now change physical data table
         createAndPointToNewPhysicalTable(conn, fullTableHName, true);
         try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
@@ -145,7 +150,7 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
                         htable.put(put);
                     }
 
-                    IndexToolIT.runIndexTool(true, false, schemaName, tableName, indexName);
+                    IndexToolIT.runIndexTool(false, schemaName, tableName, indexName);
                     rs = conn.createStatement().executeQuery("SELECT * FROM " +  fullIndexName + " WHERE \":PK1\"='PK30'");
                     assertEquals(true, rs.next());
 
@@ -189,6 +194,38 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
                 // Drop column, check is that there are no exceptions
                 conn.createStatement().execute("ALTER TABLE " + fullTableName + " DROP COLUMN NEW_COLUMN_1");
             }
+        }
+    }
+
+    @Test
+    public void testHint() throws Exception {
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        String indexName2 = "IDX2_" + generateUniqueName();
+        try (Connection conn = getConnection(propsNamespace)) {
+            conn.setAutoCommit(true);
+            createTable(conn, tableName);
+            createIndexOnTable(conn, tableName, indexName);
+            createIndexOnTable(conn, tableName, indexName2);
+            populateTable(conn, tableName, 1, 2);
+
+            // Test hint
+            String tableSelect = "SELECT V1,V2,V3 FROM " + tableName;
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + tableSelect);
+            assertEquals(true, QueryUtil.getExplainPlan(rs).contains(indexName));
+            try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
+                    .getAdmin()) {
+                String snapshotName = new StringBuilder(indexName2).append("-Snapshot").toString();
+                admin.snapshot(snapshotName, TableName.valueOf(indexName2));
+                String newName = "NEW_" + indexName2;
+                admin.cloneSnapshot(snapshotName, TableName.valueOf(newName));
+                renameAndDropPhysicalTable(conn, "NULL", null, indexName2, newName, true);
+            }
+            String indexSelect = "SELECT /*+ INDEX(" + tableName + " " + indexName2 + ")*/ V1,V2,V3 FROM " + tableName;
+            rs = conn.createStatement().executeQuery("EXPLAIN " + indexSelect);
+            assertEquals(true, QueryUtil.getExplainPlan(rs).contains(indexName2));
+            rs = conn.createStatement().executeQuery(indexSelect);
+            assertEquals(true, rs.next());
         }
     }
 
@@ -239,12 +276,16 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
         String schemaName = "S_" + generateUniqueName();
         String tableName = "TBL_" + generateUniqueName();
         String viewName = "VW1_" + generateUniqueName();
+        String viewName2 = "VW2_" + generateUniqueName();
         String viewIndexName1 = "VWIDX1_" + generateUniqueName();
         String viewIndexName2 = "VWIDX2_" + generateUniqueName();
+        String view2IndexName1 = "VW2IDX1_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         String fullViewName = SchemaUtil.getTableName(schemaName, viewName);
+        String fullViewName2 = SchemaUtil.getTableName(schemaName, viewName2);
         String fullViewIndex1Name = SchemaUtil.getTableName(schemaName, viewIndexName1);
         String fullViewIndex2Name = SchemaUtil.getTableName(schemaName, viewIndexName2);
+        String fullView2Index1Name = SchemaUtil.getTableName(schemaName, view2IndexName1);
         String fullTableHName = schemaName + ":" + tableName;
         try (Connection conn = getConnection(propsNamespace)) {
             conn.setAutoCommit(true);
@@ -266,6 +307,17 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
 
             validateIndex(conn, fullViewIndex1Name, true, expected);
             rs = conn.createStatement().executeQuery("SELECT * FROM " + fullViewIndex2Name + " WHERE \"0:VIEW_COL1\"='VIEW_COL1_10'");
+            assertEquals(true, rs.next());
+            assertEquals("VIEW_COL1_10", rs.getString(1));
+            assertEquals("PK10", rs.getString(2));
+            assertEquals("VIEW_COL2_10", rs.getString(3));
+            assertEquals(false, rs.next());
+
+            conn.createStatement().execute("CREATE VIEW " + fullViewName2 + "  (VIEW_COL1 VARCHAR, VIEW_COL2 VARCHAR) AS SELECT * FROM "
+            + fullTableName);
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + view2IndexName1 + " ON " + fullViewName2 + " (VIEW_COL1) include (VIEW_COL2)");
+            populateView(conn, fullViewName2, 20, 1);
+            rs = conn.createStatement().executeQuery("SELECT * FROM " + fullView2Index1Name + " WHERE \"0:VIEW_COL1\"='VIEW_COL1_10'");
             assertEquals(true, rs.next());
             assertEquals("VIEW_COL1_10", rs.getString(1));
             assertEquals("PK10", rs.getString(2));

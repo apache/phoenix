@@ -102,7 +102,9 @@ if [ -n "${keys}" ]; then
     mkdir -p "${working_dir}/.gpg"
     chmod -R 700 "${working_dir}/.gpg"
   fi
-
+  gpgconf --homedir "${working_dir}/.gpg" --create-socketdir || true
+  #shellcheck disable=SC2086
+  echo "socketdir is $(gpgconf --homedir ${working_dir}/.gpg --list-dirs socketdir)"
   echo "installing project KEYS"
   curl -L --fail -o "${working_dir}/KEYS" "${keys}"
   if ! gpg --homedir "${working_dir}/.gpg" --import "${working_dir}/KEYS" ; then

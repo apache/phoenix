@@ -18,7 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
@@ -27,16 +27,18 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SchemaAlreadyExistsException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class CreateSchemaIT extends ParallelStatsDisabledIT {
 
     @Test
@@ -55,9 +57,9 @@ public class CreateSchemaIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
                 Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
             conn.createStatement().execute(ddl1);
-            assertNotNull(admin.getNamespaceDescriptor(schemaName1));
+            assertTrue(ServerUtil.isHBaseNamespaceAvailable(admin, schemaName1));
             conn.createStatement().execute(ddl2);
-            assertNotNull(admin.getNamespaceDescriptor(schemaName2.toUpperCase()));
+            assertTrue(ServerUtil.isHBaseNamespaceAvailable(admin, schemaName2.toUpperCase()));
         }
         // Try creating it again and verify that it throws SchemaAlreadyExistsException
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -95,8 +97,10 @@ public class CreateSchemaIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("CREATE SCHEMA \""
                     + SchemaUtil.HBASE_NAMESPACE.toUpperCase() + "\"");
 
-            assertNotNull(admin.getNamespaceDescriptor(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE.toUpperCase()));
-            assertNotNull(admin.getNamespaceDescriptor(SchemaUtil.HBASE_NAMESPACE.toUpperCase()));
+            assertTrue(ServerUtil.isHBaseNamespaceAvailable(admin,
+                SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE.toUpperCase()));
+            assertTrue(ServerUtil.isHBaseNamespaceAvailable(admin,
+                SchemaUtil.HBASE_NAMESPACE.toUpperCase()));
         }
     }
 }

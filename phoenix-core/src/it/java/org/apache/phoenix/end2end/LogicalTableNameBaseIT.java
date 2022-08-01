@@ -35,6 +35,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -57,13 +58,14 @@ import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.MAX_ROWS;
 import static org.apache.phoenix.query.QueryConstants.NAMESPACE_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 
-public class LogicalTableNameBaseIT extends BaseTest {
+public abstract class LogicalTableNameBaseIT extends BaseTest {
     protected String dataTableDdl = "";
     public static final String NEW_TABLE_PREFIX = "NEW_TBL_";
     private Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -71,7 +73,7 @@ public class LogicalTableNameBaseIT extends BaseTest {
     static void initCluster(boolean isNamespaceMapped) throws Exception {
         Map<String, String> props = Maps.newConcurrentMap();
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
-        props.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60*1000)); // An hour
+        props.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60*1000)); // An hour
         if (isNamespaceMapped) {
             props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
         }
@@ -529,15 +531,14 @@ public class LogicalTableNameBaseIT extends BaseTest {
 
     public static void renameAndDropPhysicalTable(Connection conn, String tenantId, String schema, String tableName, String physicalName, boolean isNamespaceEnabled) throws Exception {
         String
-                changeName =
-                String.format(
-                        "UPSERT INTO SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, PHYSICAL_TABLE_NAME) VALUES (%s, '%s', '%s', NULL, NULL, '%s')",
-                        tenantId, schema, tableName, physicalName);
+                changeName = String.format(
+                "UPSERT INTO SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, PHYSICAL_TABLE_NAME) VALUES (%s, %s, '%s', NULL, NULL, '%s')",
+                tenantId, schema==null ? null : ("'" + schema + "'"), tableName, physicalName);
         conn.createStatement().execute(changeName);
         conn.commit();
 
         String fullTableName = SchemaUtil.getTableName(schema, tableName);
-        if (isNamespaceEnabled) {
+        if (isNamespaceEnabled && !(Strings.isNullOrEmpty(schema) || NULL_STRING.equals(schema))) {
             fullTableName = schema + NAMESPACE_SEPARATOR + tableName;
         }
         Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();

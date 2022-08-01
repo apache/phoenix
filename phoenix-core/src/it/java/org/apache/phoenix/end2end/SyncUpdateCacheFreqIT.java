@@ -45,7 +45,7 @@ import java.util.Set;
 import static org.apache.phoenix.util.UpgradeUtil.UPSERT_UPDATE_CACHE_FREQUENCY;
 import static org.junit.Assert.assertEquals;
 
-
+//FIXME this class no @Category, and will not be run by maven
 public class SyncUpdateCacheFreqIT extends BaseTest {
 
     private static final String SCHEMA_NAME = "SCHEMA2";

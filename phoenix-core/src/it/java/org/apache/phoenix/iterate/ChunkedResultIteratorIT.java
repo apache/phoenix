@@ -30,6 +30,7 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
@@ -38,8 +39,12 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableRef;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-@SuppressWarnings("deprecated") public class ChunkedResultIteratorIT
+
+@Category(ParallelStatsDisabledTest.class)
+@SuppressWarnings("deprecated")
+public class ChunkedResultIteratorIT
         extends ParallelStatsDisabledIT {
 
     @Test

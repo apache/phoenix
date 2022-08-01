@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -28,6 +29,7 @@ import java.util.Properties;
 
 import static org.junit.Assert.assertTrue;
 
+@Category(ParallelStatsDisabledTest.class)
 public class ShowCreateTableIT extends ParallelStatsDisabledIT {
     @Test
     public void testShowCreateTableBasic() throws Exception {

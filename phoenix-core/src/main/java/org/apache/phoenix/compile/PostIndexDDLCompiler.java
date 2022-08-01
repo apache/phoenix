@@ -32,6 +32,8 @@ import org.apache.phoenix.util.StringUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
+import static org.apache.phoenix.util.IndexUtil.INDEX_COLUMN_NAME_SEP;
+
 
 /**
  * Class that compiles plan to generate initial data values after a DDL command for
@@ -43,12 +45,18 @@ public class PostIndexDDLCompiler {
     private List<String> indexColumnNames;
     private List<String> dataColumnNames;
     private String selectQuery;
-    
+    private boolean forTransform = false;
+
     public PostIndexDDLCompiler(PhoenixConnection connection, TableRef dataTableRef) {
         this.connection = connection;
         this.dataTableRef = dataTableRef;
         indexColumnNames = Lists.newArrayList();
         dataColumnNames = Lists.newArrayList();
+    }
+
+    public PostIndexDDLCompiler(PhoenixConnection connection, TableRef dataTableRef, boolean forTransform) {
+        this(connection, dataTableRef);
+        this.forTransform = forTransform;
     }
 
     public MutationPlan compile(final PTable indexTable) throws SQLException {
@@ -69,7 +77,8 @@ public class PostIndexDDLCompiler {
             PColumn col = indexPKColumns.get(i);
             String indexColName = col.getName().getString();
             // need to escape backslash as this used in the SELECT statement
-            String dataColName = StringUtil.escapeBackslash(col.getExpressionStr());
+            String dataColName = col.getExpressionStr() == null ? col.getName().getString()
+                    : StringUtil.escapeBackslash(col.getExpressionStr());
             dataColumns.append(dataColName).append(",");
             indexColumns.append('"').append(indexColName).append("\",");
             indexColumnNames.add(indexColName);
@@ -81,10 +90,16 @@ public class PostIndexDDLCompiler {
             for (PColumn col : family.getColumns()) {
                 if (col.getViewConstant() == null) {
                     String indexColName = col.getName().getString();
-                    String dataFamilyName = IndexUtil.getDataColumnFamilyName(indexColName);
+                    // Transforming tables also behave like indexes but they don't have index_col_name_sep. So we use family name directly.
+                    String dataFamilyName = indexColName.indexOf(INDEX_COLUMN_NAME_SEP)!=-1 ? IndexUtil.getDataColumnFamilyName(indexColName) :
+                            col.getFamilyName().getString();
                     String dataColumnName = IndexUtil.getDataColumnName(indexColName);
                     if (!dataFamilyName.equals("")) {
                         dataColumns.append('"').append(dataFamilyName).append("\".");
+                        if (forTransform) {
+                            // transforming table columns have the same family name
+                            indexColumns.append('"').append(dataFamilyName).append("\".");
+                        }
                     }
                     dataColumns.append('"').append(dataColumnName).append("\",");
                     indexColumns.append('"').append(indexColName).append("\",");

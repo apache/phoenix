@@ -51,13 +51,13 @@ import static org.apache.phoenix.util.ScanUtil.addEmptyColumnToScan;
  * index table.
  */
 public class ServerBuildIndexCompiler {
-    private final PhoenixConnection connection;
-    private final String tableName;
-    private PTable dataTable;
-    private QueryPlan plan;
+    protected final PhoenixConnection connection;
+    protected final String tableName;
+    protected PTable dataTable;
+    protected QueryPlan plan;
 
-    private class RowCountMutationPlan extends BaseMutationPlan {
-        private RowCountMutationPlan(StatementContext context, PhoenixStatement.Operation operation) {
+    protected class RowCountMutationPlan extends BaseMutationPlan {
+        protected RowCountMutationPlan(StatementContext context, PhoenixStatement.Operation operation) {
             super(context, operation);
         }
         @Override
@@ -132,7 +132,7 @@ public class ServerBuildIndexCompiler {
                                 .get(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
                 if (rebuildPageRowSize != null) {
                     scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGE_ROWS,
-                        Bytes.toBytes(Long.valueOf(rebuildPageRowSize)));
+                        Bytes.toBytes(Long.parseLong(rebuildPageRowSize)));
                 }
                 BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
                 addEmptyColumnToScan(scan, indexMaintainer.getDataEmptyKeyValueCF(), indexMaintainer.getEmptyKeyValueQualifier());

@@ -200,7 +200,8 @@ public class AggregatePlan extends BaseQueryPlan {
                             true,
                             this.orderBy == OrderBy.REV_ROW_KEY_ORDER_BY);
             long threshold =
-                    services.getProps().getLong(QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
+                    services.getProps()
+                            .getLongBytes(QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
                             QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
             boolean spoolingEnabled =
                     services.getProps().getBoolean(
@@ -321,7 +322,7 @@ public class AggregatePlan extends BaseQueryPlan {
             }
         } else {
             long thresholdBytes =
-                    context.getConnection().getQueryServices().getProps().getLong(
+                    context.getConnection().getQueryServices().getProps().getLongBytes(
                         QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
                         QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
             boolean spoolingEnabled =

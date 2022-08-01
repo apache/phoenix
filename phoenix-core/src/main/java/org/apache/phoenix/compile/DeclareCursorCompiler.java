@@ -45,10 +45,14 @@ public class DeclareCursorCompiler {
     private final Operation operation;
     private QueryPlan queryPlan;
 
-    public DeclareCursorCompiler(PhoenixStatement statement, Operation operation, QueryPlan queryPlan) {
+    public DeclareCursorCompiler(PhoenixStatement statement, Operation operation, QueryPlan queryPlan) throws SQLException {
         this.statement = statement;
         this.operation = operation;
-        this.queryPlan = queryPlan;
+        // See PHOENIX-5072
+        // We optimize the plan inside the CursorFetchPlan here at the first place.
+        // Later when the next optimize is called, the original CursorFetchPlan will be selected as there won't be any better plans.
+        this.queryPlan = statement.getConnection().getQueryServices().getOptimizer()
+                .optimize(statement, queryPlan);
     }
 
     public MutationPlan compile(final DeclareCursorStatement declare) throws SQLException {

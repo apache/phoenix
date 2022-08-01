@@ -43,16 +43,10 @@
     <module>phoenix-hbase-compat-2.4.1</module>
     <module>phoenix-hbase-compat-2.4.0</module>
     <module>phoenix-hbase-compat-2.3.0</module>
-    <module>phoenix-hbase-compat-2.2.5</module>
-    <module>phoenix-hbase-compat-2.1.6</module>
     <module>phoenix-core</module>
     <module>phoenix-pherf</module>
-    <module>phoenix-client-parent</module>
-    <module>phoenix-client-parent/phoenix-client</module>
-    <module>phoenix-client-parent/phoenix-client-embedded</module>
-    <module>phoenix-server</module>
-    <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
+    <!-- shaded artifact and assembly modules are added in shade-and-assembly profile -->
   </modules>
 
   <repositories>
@@ -82,17 +76,15 @@
     <hadoop.version>3.1.4</hadoop.version>
     <hbase.thirdparty.version>2.2.1</hbase.thirdparty.version>
 
-    <phoenix.thirdparty.version>1.1.0</phoenix.thirdparty.version>
+    <phoenix.thirdparty.version>2.0.0</phoenix.thirdparty.version>
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
 
     <!-- This is used by the release script only -->
-    <hbase.profile.list>2.1 2.2 2.3 2.4.0 2.4</hbase.profile.list>
+    <hbase.profile.list>2.3 2.4.0 2.4</hbase.profile.list>
     <!-- The default hbase versions to build with (override with hbase.version) -->
-    <hbase-2.1.runtime.version>2.1.10</hbase-2.1.runtime.version>
-    <hbase-2.2.runtime.version>2.2.6</hbase-2.2.runtime.version>
-    <hbase-2.3.runtime.version>2.3.5</hbase-2.3.runtime.version>
+    <hbase-2.3.runtime.version>2.3.7</hbase-2.3.runtime.version>
     <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
-    <hbase-2.4.runtime.version>2.4.4</hbase-2.4.runtime.version>
+    <hbase-2.4.runtime.version>2.4.10</hbase-2.4.runtime.version>
 
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
@@ -101,16 +93,18 @@
     <top.dir>${project.basedir}/..</top.dir>
 
     <!-- Dependency versions -->
-    <jackson.version>2.10.3</jackson.version>
+    <jackson-bom.version>2.12.6.20220326</jackson-bom.version>
     <antlr.version>3.5.2</antlr.version>
-    <log4j.version>1.2.17</log4j.version>
+    <!-- Only used for tests with HBase 2.1-2.4 -->
+    <reload4j.version>1.2.19</reload4j.version>
+    <log4j2.version>2.17.2</log4j2.version>
     <disruptor.version>3.3.6</disruptor.version>
-    <slf4j.version>1.7.25</slf4j.version>
+    <slf4j.version>1.7.36</slf4j.version>
     <!-- com.google repo will be used except on Aarch64 platform. -->
     <protobuf.group>com.google.protobuf</protobuf.group>
     <protobuf-java.version>2.5.0</protobuf-java.version>
     <protoc.version>2.5.0</protoc.version>
-    <commons-io.version>2.5</commons-io.version>
+    <commons-io.version>2.11.0</commons-io.version>
     <commons-lang.version>3.8</commons-lang.version>
     <commons-csv.version>1.0</commons-csv.version>
     <sqlline.version>1.9.0</sqlline.version>
@@ -130,13 +124,15 @@
     <stream.version>2.9.5</stream.version>
     <i18n-util.version>1.0.4</i18n-util.version>
     <guice.version>4.0</guice.version>
-    <zookeeper.version>3.4.14</zookeeper.version>
-    <curator.version>4.0.0</curator.version>
+    <zookeeper.version>3.5.7</zookeeper.version>
+    <curator.version>4.2.0</curator.version>
     <jcodings.version>1.0.55</jcodings.version>
     <thrift.version>0.9.3-1</thrift.version>
+    <jetty.version>9.4.46.v20220331</jetty.version>
+    <javax.servlet-api.version>3.1.0</javax.servlet-api.version>
     <!-- Test Dependencies -->
     <mockito.version>1.10.19</mockito.version>
-    <junit.version>4.13</junit.version>
+    <junit.version>4.13.1</junit.version>
     <hamcrest.version>1.3</hamcrest.version>
 
     <!-- Plugin versions -->
@@ -148,10 +144,10 @@
     <maven-antlr-eclipse-plugin.version>${antlr.version}</maven-antlr-eclipse-plugin.version>
     <maven-project-info-reports-plugin.version>3.1.1</maven-project-info-reports-plugin.version>
     <!-- Override property in ASF parent -->
-    <surefire.version>2.22.2</surefire.version>
-    <spotbugs-maven-plugin.version>4.1.3</spotbugs-maven-plugin.version>
-    <spotbugs.version>4.1.3</spotbugs.version>
-    <jacoco-maven-plugin.version>0.8.5</jacoco-maven-plugin.version>
+    <surefire.version>3.0.0-M5</surefire.version>
+    <spotbugs-maven-plugin.version>4.4.1</spotbugs-maven-plugin.version>
+    <spotbugs.version>4.4.1</spotbugs.version>
+    <jacoco-maven-plugin.version>0.8.7</jacoco-maven-plugin.version>
 
     <!-- Plugin options -->
     <numForkedUT>8</numForkedUT>
@@ -168,7 +164,7 @@
     <jacoco.instruction.coverage.percentage>0.700</jacoco.instruction.coverage.percentage>
     <jacoco.branch.coverage.percentage>0.600</jacoco.branch.coverage.percentage>
 
-    <maven-owasp-plugin.version>5.3.2</maven-owasp-plugin.version>
+    <maven-owasp-plugin.version>6.5.3</maven-owasp-plugin.version>
     <protobuf.plugin.version>0.6.1</protobuf.plugin.version>
     <os.maven.version>1.5.0.Final</os.maven.version>
   </properties>
@@ -221,6 +217,7 @@
           <configuration>
             <effort>Max</effort>
             <maxHeap>2048</maxHeap>
+            <excludeFilterFile>${top.dir}/src/main/config/spotbugs/spotbugs-exclude.xml</excludeFilterFile>
           </configuration>
         </plugin>
         <!--This plugin's configuration is used to store Eclipse m2e settings 
@@ -314,16 +311,26 @@
             <forkCount>${numForkedIT}</forkCount>
             <runOrder>alphabetical</runOrder>
             <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-            <shutdown>kill</shutdown>
+            <forkedProcessExitTimeoutInSeconds>180</forkedProcessExitTimeoutInSeconds>
+            <shutdown>exit</shutdown>
             <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
             <trimStackTrace>false</trimStackTrace>
+            <!-- https://www.orpiske.net/2021/04/test-woes-with-maven-failsafe-3-0-0-m5 -->
+            <useModulePath>false</useModulePath>
+            <classpathDependencyExcludes>
+              <classpathDependencyExclude>org.apache.tephra:tephra-api</classpathDependencyExclude>
+              <classpathDependencyExclude>org.apache.tephra:tephra-core-shaded</classpathDependencyExclude>
+              <classpathDependencyExclude>org.apache.tephra:tephra-core</classpathDependencyExclude>
+              <classpathDependencyExclude>org.apache.tephra:tephra-hbase-compat-${tephra.hbase.compat.version}</classpathDependencyExclude>
+              <classpathDependencyExclude>org.apache.thrift:libthrift</classpathDependencyExclude>
+            </classpathDependencyExcludes>
           </configuration>
           <executions>
             <execution>
               <id>ParallelStatsEnabledTest</id>
               <configuration>
                 <reuseForks>true</reuseForks>
-                <argLine>@{jacocoArgLine} -Xmx2000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 </argLine>
+                <argLine>@{jacocoArgLine} -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
               </configuration>
               <goals>
@@ -335,7 +342,7 @@
               <id>ParallelStatsDisabledTest</id>
               <configuration>
                 <reuseForks>true</reuseForks>
-                <argLine>@{jacocoArgLine} -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 </argLine>
+                <argLine>@{jacocoArgLine} -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
               </configuration>
               <goals>
@@ -347,7 +354,7 @@
               <id>NeedTheirOwnClusterTests</id>
               <configuration>
                  <reuseForks>false</reuseForks>
-                 <argLine>@{jacocoArgLine} -enableassertions -Xmx2000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
+                 <argLine>@{jacocoArgLine} -enableassertions -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
               </configuration>
               <goals>
@@ -374,10 +381,19 @@
                   org.apache.omid:omid-timestamp-storage-hbase2.x
                 </ignoredUnusedDeclaredDependency>
                 <ignoredUnusedDeclaredDependency>
-                  org.slf4j:slf4j-log4j12
+                  org.apache.hbase:hbase-testing-util
                 </ignoredUnusedDeclaredDependency>
                 <ignoredUnusedDeclaredDependency>
-                  org.apache.hbase:hbase-testing-util
+                  org.apache.logging.log4j:log4j-api
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-core
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-slf4j-impl
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-1.2-api
                 </ignoredUnusedDeclaredDependency>
               </ignoredUnusedDeclaredDependencies>
               <ignoredUsedUndeclaredDependencies>
@@ -554,11 +570,18 @@
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
-          <argLine>@{jacocoArgLine} -enableassertions -Xmx2250m -XX:MaxPermSize=128m
+          <argLine>@{jacocoArgLine} -enableassertions -Xmx2250m
             -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-          <shutdown>kill</shutdown>
+          <shutdown>exit</shutdown>
           <trimStackTrace>false</trimStackTrace>
+          <classpathDependencyExcludes>
+              <classpathDependencyExclude>org.apache.tephra:tephra-api</classpathDependencyExclude>
+              <classpathDependencyExclude>org.apache.tephra:tephra-core-shaded</classpathDependencyExclude>
+              <classpathDependencyExclude>org.apache.tephra:tephra-core</classpathDependencyExclude>
+              <classpathDependencyExclude>org.apache.tephra:tephra-hbase-compat-${tephra.hbase.compat.version}</classpathDependencyExclude>
+              <classpathDependencyExclude>org.apache.thrift:libthrift</classpathDependencyExclude>
+          </classpathDependencyExcludes>
         </configuration>
       </plugin>
       <!-- All projects create a test jar -->
@@ -601,6 +624,9 @@
             <!-- Argparse is bundled to work around system Python version
                  issues, compatibile with ALv2 -->
             <exclude>bin/argparse-1.4.0/argparse.py</exclude>
+            <!-- tmp files -->
+            <exclude>dev/work/**</exclude>
+            <exclude>dev/artifacts/**</exclude>
           </excludes>
         </configuration>
       </plugin>
@@ -620,31 +646,6 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-core</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-client-hbase-2.1</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-client-hbase-2.2</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-client-hbase-2.3</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-client-hbase-2.4.0</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-client-hbase-2.4</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -759,6 +760,16 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-mapreduce-client-core</artifactId>
         <version>${hadoop.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
@@ -786,6 +797,16 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-hdfs</artifactId>
         <version>${hadoop.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
@@ -802,6 +823,14 @@
           <exclusion>
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
         </exclusions>
         <version>${hadoop.version}</version>
@@ -826,6 +855,16 @@
         <artifactId>hadoop-minikdc</artifactId>
         <version>${hadoop.version}</version>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
@@ -873,6 +912,16 @@
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-common</artifactId>
         <version>${hbase.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -903,12 +952,30 @@
             <groupId>xom</groupId>
             <artifactId>xom</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-mapreduce</artifactId>
         <version>${hbase.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -924,6 +991,12 @@
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-zookeeper</artifactId>
         <version>${hbase.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
 
       <dependency>
@@ -949,6 +1022,14 @@
             <groupId>org.jruby</groupId>
             <artifactId>jruby-complete</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -957,6 +1038,12 @@
         <version>${hbase.version}</version>
         <type>test-jar</type>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -964,6 +1051,16 @@
         <version>${hbase.version}</version>
         <type>test-jar</type>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
 
       <!-- Transaction dependencies -->
@@ -1141,6 +1238,14 @@
             <groupId>commons-daemon</groupId>
             <artifactId>commons-daemon</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1187,6 +1292,14 @@
           <exclusion>
             <groupId>commons-daemon</groupId>
             <artifactId>commons-daemon</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1253,6 +1366,14 @@
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1303,6 +1424,16 @@
         <artifactId>hbase-testing-util</artifactId>
         <version>${hbase.version}</version>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
 
       <!-- Other dependencies -->
@@ -1310,6 +1441,16 @@
         <groupId>org.apache.zookeeper</groupId>
         <artifactId>zookeeper</artifactId>
         <version>${zookeeper.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.zookeeper</groupId>
@@ -1347,19 +1488,11 @@
         <version>${snappy.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.fasterxml.jackson.core</groupId>
-        <artifactId>jackson-core</artifactId>
-        <version>${jackson.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.fasterxml.jackson.core</groupId>
-        <artifactId>jackson-annotations</artifactId>
-        <version>${jackson.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.fasterxml.jackson.core</groupId>
-        <artifactId>jackson-databind</artifactId>
-        <version>${jackson.version}</version>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson-bom.version}</version>
+        <scope>import</scope>
+        <type>pom</type>
       </dependency>
       <dependency>
         <groupId>com.google.protobuf</groupId>
@@ -1485,17 +1618,35 @@
       </dependency>
 
        <!-- Runtime dependencies -->
-       <dependency>
-         <groupId>log4j</groupId>
-         <artifactId>log4j</artifactId>
-         <version>${log4j.version}</version>
-         <scope>runtime</scope>
+      <dependency>
+        <groupId>ch.qos.reload4j</groupId>
+        <artifactId>reload4j</artifactId>
+        <version>${reload4j.version}</version>
       </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-log4j12</artifactId>
+        <artifactId>slf4j-reload4j</artifactId>
         <version>${slf4j.version}</version>
-        <scope>runtime</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-api</artifactId>
+        <version>${log4j2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-core</artifactId>
+        <version>${log4j2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-slf4j-impl</artifactId>
+        <version>${log4j2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-1.2-api</artifactId>
+        <version>${log4j2.version}</version>
       </dependency>
       <dependency>
         <groupId>sqlline</groupId>
@@ -1507,6 +1658,20 @@
   </dependencyManagement>
 
   <profiles>
+    <profile>
+      <id>shade-and-assembly</id>
+      <activation>
+        <property>
+          <name>!PhoenixPatchProcess</name>
+        </property>
+      </activation>
+      <modules>
+        <module>phoenix-client-parent</module>
+        <module>phoenix-client-parent/phoenix-client-embedded</module>
+        <module>phoenix-server</module>
+        <module>phoenix-assembly</module>
+      </modules>
+    </profile>
     <!-- this profile should be activated for release builds -->
     <profile>
       <id>release</id>
@@ -1523,36 +1688,6 @@
                 </goals>
               </execution>
             </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-    <profile>
-      <id>exclude-tephra</id>
-      <activation>
-        <property>
-          <name>without.tephra</name>
-        </property>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-failsafe-plugin</artifactId>
-            <configuration>
-              <classpathDependencyExcludes>
-                org.apache.tephra:tephra-api,org.apache.tephra:tephra-core,org.apache.thrift:libthrift
-              </classpathDependencyExcludes>
-            </configuration>
-          </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-surefire-plugin</artifactId>
-            <configuration>
-              <classpathDependencyExcludes>
-                org.apache.tephra:tephra-api,org.apache.tephra:tephra-core,org.apache.thrift:libthrift
-              </classpathDependencyExcludes>
-            </configuration>
           </plugin>
         </plugins>
       </build>
@@ -1574,44 +1709,7 @@
         <hbase.compat.version>2.4.1</hbase.compat.version>
         <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
         <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
-        <zookeeper.version>3.5.7</zookeeper.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
-      </properties>
-    </profile>
-    <profile>
-      <!-- PHOENIX-5993 may work with the public HBase artifacts, as the test don't trip over
-      anything but it should be rebuilt like 2.2+ -->
-      <id>phoenix-hbase-compat-2.1.6</id>
-      <activation>
-        <activeByDefault>true</activeByDefault>
-        <property>
-          <name>hbase.profile</name>
-          <value>2.1</value>
-        </property>
-      </activation>
-      <properties>
-        <hbase.profile>2.1</hbase.profile>
-        <hbase.compat.version>2.1.6</hbase.compat.version>
-        <hbase.version>${hbase-2.1.runtime.version}</hbase.version>
-        <hadoop.version>3.0.3</hadoop.version>
-        <tephra.hbase.compat.version>2.1</tephra.hbase.compat.version>
-      </properties>
-    </profile>
-    <profile>
-      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
-      <id>phoenix-hbase-compat-2.2.5</id>
-      <activation>
-        <property>
-          <name>hbase.profile</name>
-          <value>2.2</value>
-        </property>
-      </activation>
-      <properties>
-        <hbase.profile>2.2</hbase.profile>
-        <hbase.compat.version>2.2.5</hbase.compat.version>
-        <hbase.version>${hbase-2.2.runtime.version}</hbase.version>
-        <hadoop.version>3.1.3</hadoop.version>
-        <tephra.hbase.compat.version>2.2</tephra.hbase.compat.version>
       </properties>
     </profile>
     <profile>
@@ -1628,7 +1726,6 @@
         <hbase.compat.version>2.3.0</hbase.compat.version>
         <hbase.version>${hbase-2.3.runtime.version}</hbase.version>
         <hbase.thirdparty.version>3.3.0</hbase.thirdparty.version>
-        <zookeeper.version>3.5.7</zookeeper.version>
         <hadoop.version>3.1.3</hadoop.version>
         <tephra.hbase.compat.version>2.3</tephra.hbase.compat.version>
       </properties>
@@ -1647,7 +1744,6 @@
         <hbase.compat.version>2.4.0</hbase.compat.version>
         <hbase.version>${hbase-2.4.0.runtime.version}</hbase.version>
         <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
-        <zookeeper.version>3.5.7</zookeeper.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
       </properties>
     </profile>
@@ -1665,7 +1761,6 @@
         <hbase.compat.version>2.4.1</hbase.compat.version>
         <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
         <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
-        <zookeeper.version>3.5.7</zookeeper.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
       </properties>
     </profile>
@@ -1803,6 +1898,7 @@
       <plugin>
         <groupId>org.owasp</groupId>
         <artifactId>dependency-check-maven</artifactId>
+        <version>${maven-owasp-plugin.version}</version>
         <configuration>
           <skipProvidedScope>true</skipProvidedScope>
           <skipRuntimeScope>true</skipRuntimeScope>

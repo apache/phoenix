@@ -23,15 +23,19 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
+import com.google.protobuf.RpcController;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.transaction.PhoenixTransactionClient;
 import org.apache.phoenix.transaction.PhoenixTransactionService;
+import org.apache.phoenix.transaction.TransactionServiceManager;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
 import org.apache.phoenix.util.SQLCloseables;
@@ -52,9 +56,9 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(ConnectionQueryServicesTestImpl.class);
-    protected int NUM_SLAVES_BASE = 1; // number of slaves for the cluster
     // Track open connections to free them on close as unit tests don't always do this.
-    private Set<PhoenixConnection> connections = Sets.newHashSet();
+    private Set<PhoenixConnection> connections =
+            Collections.newSetFromMap(new ConcurrentHashMap<PhoenixConnection, Boolean>());
     private final PhoenixTransactionService[] txServices = new PhoenixTransactionService[TransactionFactory.Provider.values().length];
     
     public ConnectionQueryServicesTestImpl(QueryServices services, ConnectionInfo info, Properties props) throws SQLException {
@@ -62,13 +66,19 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     }
     
     @Override
-    public synchronized void addConnection(PhoenixConnection connection) throws SQLException {
+    public void addConnection(PhoenixConnection connection) throws SQLException {
         connections.add(connection);
+        super.addConnection(connection);
     }
     
     @Override
-    public synchronized void removeConnection(PhoenixConnection connection) throws SQLException {
+    public void removeConnection(PhoenixConnection connection) throws SQLException {
         connections.remove(connection);
+        super.removeConnection(connection);
+    }
+
+    public RpcController getController() {
+        return super.getController();
     }
 
     @Override
@@ -105,7 +115,7 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
         PhoenixTransactionService txService = txServices[provider.ordinal()];
         if (txService == null) {
             int port = TestUtil.getRandomPort();
-            txService = txServices[provider.ordinal()] = provider.getTransactionProvider().getTransactionService(config, connectionInfo, port);
+            txService = txServices[provider.ordinal()] = TransactionServiceManager.startTransactionService(provider, config, connectionInfo, port);
         }
         return super.initTransactionClient(provider);
     }

@@ -37,6 +37,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -47,12 +48,15 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -65,6 +69,9 @@ import org.apache.phoenix.schema.PTable.EncodedCQCounter;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.export.DefaultSchemaRegistryRepository;
+import org.apache.phoenix.schema.export.DefaultSchemaWriter;
+import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
@@ -72,8 +79,10 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -89,6 +98,7 @@ import org.junit.runners.Parameterized.Parameters;
  * or at the end of test class.
  *
  */
+@Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class AlterTableIT extends ParallelStatsDisabledIT {
     private String schemaName;
@@ -229,7 +239,99 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testAlterTableUpdatesSchemaRegistry() throws Exception {
+        String schemaName = generateUniqueName();
+        String tableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String createDdl = "CREATE TABLE " + fullTableName +
+                " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
+                " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
+                "CHANGE_DETECTION_ENABLED=true, SCHEMA_VERSION='OLD', SALT_BUCKETS=4";
+            conn.createStatement().execute(createDdl);
+            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            assertEquals("OLD", table.getSchemaVersion());
+            String expectedSchemaId = String.format("global*%s*%s*OLD", schemaName, tableName);
+            assertEquals(expectedSchemaId, table.getExternalSchemaId());
 
+            String alterVersionDdl = "ALTER TABLE " + fullTableName + " SET SCHEMA_VERSION='NEW'";
+            conn.createStatement().execute(alterVersionDdl);
+
+            PTable newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            verifySchemaExport(newTable, getUtility().getConfiguration());
+
+            String alterDdl = "ALTER TABLE " + fullTableName +
+                " ADD col3 VARCHAR NULL";
+
+            conn.createStatement().execute(alterDdl);
+            newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            verifySchemaExport(newTable, getUtility().getConfiguration());
+        }
+    }
+
+    @Test
+    public void testAlterChangeDetectionActivatesSchemaRegistryExport() throws Exception {
+        String schemaName = generateUniqueName();
+        String tableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String createDdl = "CREATE TABLE " + fullTableName + " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
+                + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) "
+                + " SCHEMA_VERSION='OLD'";
+            conn.createStatement().execute(createDdl);
+            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            Assert.assertNull(table.getExternalSchemaId());
+            String alterDdl = "ALTER TABLE " + fullTableName + " SET CHANGE_DETECTION_ENABLED=true";
+            conn.createStatement().execute(alterDdl);
+            PTable alteredTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            assertTrue(alteredTable.isChangeDetectionEnabled());
+            verifySchemaExport(alteredTable, getUtility().getConfiguration());
+        }
+    }
+
+    @Test
+    public void testChangeDetectionFalseDoesntExportToSchemaRegistry() throws Exception {
+        String schemaName = generateUniqueName();
+        String tableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String createDdl = "CREATE TABLE " + fullTableName + " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
+                + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) "
+                + "CHANGE_DETECTION_ENABLED=false, SCHEMA_VERSION='OLD'";
+            conn.createStatement().execute(createDdl);
+            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            assertFalse(table.isChangeDetectionEnabled());
+            assertNull(table.getExternalSchemaId());
+        }
+    }
+
+    public static void verifySchemaExport(PTable newTable, Configuration conf) throws IOException {
+        assertEquals(DefaultSchemaRegistryRepository.getSchemaId(newTable),
+            newTable.getExternalSchemaId());
+        String expectedSchemaText = new DefaultSchemaWriter().exportSchema(newTable);
+        String actualSchemaText = SchemaRegistryRepositoryFactory.getSchemaRegistryRepository(
+            conf).getSchemaById(newTable.getExternalSchemaId());
+
+        //filter out table and column timestamp fields, which can vary by a few ms because
+        //HBase assigns the real server timestamp after we update the schema registry
+        String pattern = "(?i)\\s*timestamp:\\s\\d*";
+        expectedSchemaText = expectedSchemaText.replaceAll(pattern, "");
+        actualSchemaText = actualSchemaText.replaceAll(pattern, "");
+
+        //external schema id can be different because it's assigned at the registry AFTER
+        //we save it
+        String externalSchemaPattern = "(?i)\\s*externalSchemaId:\\s\".*\"";
+        expectedSchemaText = expectedSchemaText.replaceAll(externalSchemaPattern, "");
+        actualSchemaText = actualSchemaText.replaceAll(externalSchemaPattern, "");
+
+        //reconstructing the complete view sometimes messes up the base column count. It's not
+        //needed in an external schema registry. TODO: fix the base column count anyway
+        String baseColumnCountPattern = "(?i)\\s*baseColumnCount:\\s\\d*";
+        expectedSchemaText = expectedSchemaText.replaceAll(baseColumnCountPattern, "");
+        actualSchemaText = actualSchemaText.replaceAll(baseColumnCountPattern, "");
+        assertEquals(expectedSchemaText, actualSchemaText);
+    }
 
     @Test
     public void testSetPropertyAndAddColumnForNewColumnFamily() throws Exception {
@@ -308,12 +410,17 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         final String tableName = generateUniqueName();
         final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, "V1.0");
-            String version = "V1.1";
-            String alterSql = "ALTER TABLE " + dataTableFullName + " SET SCHEMA_VERSION='" + version + "'";
+            CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, "V1.0", null);
+            final String version = "V1.1";
+            final String alterSql = "ALTER TABLE " + dataTableFullName + " SET SCHEMA_VERSION='" + version + "'";
             conn.createStatement().execute(alterSql);
             PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
             assertEquals(version, table.getSchemaVersion());
+            final String topicName = "MyTopicName";
+            final String alterSql2 = "ALTER TABLE " + dataTableFullName + " SET STREAMING_TOPIC_NAME='" + topicName + "'";
+            conn.createStatement().execute(alterSql2);
+            table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+            assertEquals(topicName, table.getStreamingTopicName());
         }
     }
 
@@ -762,6 +869,28 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         ddl = "ALTER TABLE " + dataTableFullName + " ADD STRING_ARRAY1 VARCHAR[]";
         conn1.createStatement().execute(ddl);
         conn1.close();
+    }
+
+    @Test
+    public void testAddColumnWithRetry_PostConcurrentFailureOnFirstTime() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String ddl = "CREATE TABLE " + dataTableFullName + " (\n"
+                +"ID VARCHAR(15) PRIMARY KEY,\n"
+                +"COL1 BIGINT) " + tableDDLOptions;
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        conn1.createStatement().execute(ddl);
+        MetaDataEndpointImpl.setFailConcurrentMutateAddColumnOneTimeForTesting(true);
+        ddl = "ALTER TABLE " + dataTableFullName + " ADD STRING VARCHAR, STRING_DATA_TYPES VARCHAR";
+        conn1.createStatement().execute(ddl);
+        ResultSet rs = conn1.getMetaData().getColumns("","",dataTableFullName,null);
+        assertTrue(rs.next());
+        assertEquals("ID", rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("COL1", rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("STRING", rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("STRING_DATA_TYPES", rs.getString(4));
     }
 
     @Test
@@ -1587,6 +1716,102 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
                 assertEquals(schemaName2, e.getSchemaName());
             }
 
+        }
+    }
+
+    @Test
+    public void testNormalizerCannotBeEnabledForSalted() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+
+        String mtTableName = generateUniqueName();
+        String mtViewName = generateUniqueName();
+        String mtIndexName = generateUniqueName();
+
+        String ddl =
+                "create table  " + tableName + " ( id integer PRIMARY KEY," + " col1 integer,"
+                        + " col2 bigint" + " ) SALT_BUCKETS=4";
+        String indexDdl =
+                "create index IF NOT EXISTS " + indexName + " on " + tableName + " (col2)";
+        String mtDdl =
+                "CREATE TABLE " + mtTableName + " (TenantId UNSIGNED_INT NOT NULL ,"
+                        + " Id UNSIGNED_INT NOT NULL ," + " val VARCHAR, "
+                        + " CONSTRAINT pk PRIMARY KEY(TenantId, Id) "
+                        + " ) MULTI_TENANT=true, SALT_BUCKETS=4";
+        String mtViewDdl =
+                "CREATE VIEW " + mtViewName + "(view_column CHAR(15)) AS " + " SELECT * FROM "
+                        + mtTableName + " WHERE val='L' ";
+        String mtIndexDdl = "CREATE INDEX " + mtIndexName + " on " + mtViewName + " (view_column) ";
+
+        String conflictDdl =
+                "ALTER TABLE " + tableName + " SET " + TableDescriptorBuilder.NORMALIZATION_ENABLED
+                        + "=true";
+
+        String conflictIndexDdl =
+                "ALTER TABLE " + indexName + " SET " + TableDescriptorBuilder.NORMALIZATION_ENABLED
+                        + "=true";
+
+        String conflictMtDdl =
+                "ALTER TABLE " + mtTableName + " SET "
+                        + TableDescriptorBuilder.NORMALIZATION_ENABLED + "=true";
+
+        String conflictMtViewDdl =
+                "ALTER TABLE " + indexName + " SET " + TableDescriptorBuilder.NORMALIZATION_ENABLED
+                        + "=true";
+
+        String conflictMtIndexDdl =
+                "ALTER TABLE " + mtIndexName + " SET "
+                        + TableDescriptorBuilder.NORMALIZATION_ENABLED + "=true";
+
+        String okDdl =
+                "ALTER TABLE " + tableName + " SET " + TableDescriptorBuilder.NORMALIZATION_ENABLED
+                        + "=false";
+
+        Properties props = new Properties();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+                Statement stmt = conn.createStatement()) {
+            stmt.execute(ddl);
+            stmt.execute(indexDdl);
+            stmt.execute(mtDdl);
+            stmt.execute(mtViewDdl);
+            stmt.execute(mtIndexDdl);
+
+            try {
+                stmt.execute(conflictDdl);
+                fail("Should have thrown an exception");
+            } catch (SQLException e) {
+                assertEquals(1147, e.getErrorCode());
+            }
+
+            try {
+                stmt.execute(conflictIndexDdl);
+                fail("Should have thrown an exception");
+            } catch (SQLException e) {
+                assertEquals(1147, e.getErrorCode());
+            }
+
+            try {
+                stmt.execute(conflictMtDdl);
+                fail("Should have thrown an exception");
+            } catch (SQLException e) {
+                assertEquals(1147, e.getErrorCode());
+            }
+
+            try {
+                stmt.execute(conflictMtViewDdl);
+                fail("Should have thrown an exception");
+            } catch (SQLException e) {
+                assertEquals(1147, e.getErrorCode());
+            }
+
+            try {
+                stmt.execute(conflictMtIndexDdl);
+                fail("Should have thrown an exception");
+            } catch (SQLException e) {
+                assertEquals(1147, e.getErrorCode());
+            }
+
+            stmt.execute(okDdl);
         }
     }
 

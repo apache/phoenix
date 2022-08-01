@@ -22,6 +22,7 @@ import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL
 import static org.apache.phoenix.util.EncodedColumnsUtil.isReservedColumnQualifier;
 
 import java.io.DataOutputStream;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -35,6 +36,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PArrayDataTypeDecoder;
 import org.apache.phoenix.schema.types.PArrayDataTypeEncoder;
@@ -162,7 +164,11 @@ public interface PTable extends PMetaDataEntity {
         /**
          * Link from an index on a view to its parent table
          */
-        VIEW_INDEX_PARENT_TABLE((byte)6);
+        VIEW_INDEX_PARENT_TABLE((byte)6),
+        /**
+         * Link from the old table to the new transforming table
+         */
+        TRANSFORMING_NEW_TABLE((byte)7);
 
         private final byte[] byteValue;
         private final byte serializedValue;
@@ -196,7 +202,8 @@ public interface PTable extends PMetaDataEntity {
 
     public enum TaskType {
         DROP_CHILD_VIEWS((byte)1),
-        INDEX_REBUILD((byte)2);
+        INDEX_REBUILD((byte)2),
+        TRANSFORM_MONITOR((byte)3);
 
         private final byte[] byteValue;
         private final byte serializedValue;
@@ -243,6 +250,85 @@ public interface PTable extends PMetaDataEntity {
         FAILED {
             public String toString() {
                 return  "FAILED";
+            }
+        },
+        RETRY {
+            public String toString() {
+                return  "RETRY";
+            }
+        },
+    }
+
+    public enum TransformType {
+        METADATA_TRANSFORM((byte)1),
+        METADATA_TRANSFORM_PARTIAL((byte)2);
+
+        private final byte[] byteValue;
+        private final int serializedValue;
+
+        TransformType(int serializedValue) {
+            this.serializedValue = serializedValue;
+            this.byteValue = Bytes.toBytes(this.name());
+        }
+
+        public byte[] getBytes() {
+            return byteValue;
+        }
+
+        public int getSerializedValue() {
+            return this.serializedValue;
+        }
+        public static TransformType getDefault() {
+            return METADATA_TRANSFORM;
+        }
+        public static TransformType fromSerializedValue(int serializedValue) {
+            if (serializedValue < 1 || serializedValue > TransformType.values().length) {
+                throw new IllegalArgumentException("Invalid TransformType " + serializedValue);
+            }
+            return TransformType.values()[serializedValue-1];
+        }
+        public static TransformType getPartialTransform(TransformType transformType) {
+            if (transformType == METADATA_TRANSFORM) {
+                return METADATA_TRANSFORM_PARTIAL;
+            }
+            return null;
+        }
+        public static boolean isPartialTransform(TransformType transformType){
+            List<PTable.TransformType> partials = new ArrayList<>();
+            partials.add(PTable.TransformType.METADATA_TRANSFORM_PARTIAL);
+            return partials.contains(transformType);
+        }
+    }
+
+    public enum TransformStatus {
+        CREATED {
+            public String toString() {
+                return  "CREATED";
+            }
+        },
+        STARTED {
+            public String toString() {
+                return  "STARTED";
+            }
+        },
+        PENDING_CUTOVER {
+            public String toString() {
+                return  "PENDING_CUTOVER";
+            }
+        },
+        COMPLETED {
+            public String toString() {
+                return  "COMPLETED";
+            }
+        },
+        FAILED {
+            public String toString() {
+                return  "FAILED";
+            }
+        },
+        PAUSED {
+            public String toString() {
+                return  "PAUSED";
             }
         },
     }
@@ -577,6 +663,9 @@ public interface PTable extends PMetaDataEntity {
     long getTimeStamp();
     long getSequenceNumber();
     long getIndexDisableTimestamp();
+
+    boolean isIndexStateDisabled();
+
     /**
      * @return table name
      */
@@ -711,6 +800,12 @@ public interface PTable extends PMetaDataEntity {
     List<PTable> getIndexes();
 
     /**
+     * Return the new version of the table if it is going through transform.
+     * @return the new table.
+     */
+    PTable getTransformingNewTable();
+
+    /**
      * For a table of index type, return the state of the table.
      * @return the state of the index.
      */
@@ -766,6 +861,7 @@ public interface PTable extends PMetaDataEntity {
 
     boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection);
     IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection);
+    TransformMaintainer getTransformMaintainer(PTable oldTable, PhoenixConnection connection);
     PName getDefaultFamilyName();
 
     boolean isWALDisabled();
@@ -799,7 +895,7 @@ public interface PTable extends PMetaDataEntity {
     int getRowTimestampColPos();
     long getUpdateCacheFrequency();
     boolean isNamespaceMapped();
-    
+
     /**
      * @return The sequence name used to get the unique identifier for views
      * that are automatically partitioned.
@@ -852,6 +948,18 @@ public interface PTable extends PMetaDataEntity {
      * object. Used only on tables, views, and indexes.
      */
     String getSchemaVersion();
+
+    /**
+     * @return String provided by an external schema registry to be used to lookup the schema for
+     * a Phoenix table or view in the registry.
+     */
+    String getExternalSchemaId();
+
+    /**
+     * @return Optional string to be used for a logical topic name that change detection capture
+     * will use to persist changes for this table or view
+     */
+    String getStreamingTopicName();
 
     /**
      * Class to help track encoded column qualifier counters per column family.

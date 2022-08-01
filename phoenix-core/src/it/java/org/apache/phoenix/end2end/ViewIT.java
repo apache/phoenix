@@ -44,29 +44,32 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.ReadOnlyTableException;
+import org.apache.phoenix.schema.export.DefaultSchemaRegistryRepository;
+import org.apache.phoenix.schema.export.DefaultSchemaWriter;
+import org.apache.phoenix.schema.export.SchemaRegistryRepository;
+import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.*;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -76,6 +79,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 /**
  * Basic test suite for views
  */
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class ViewIT extends SplitSystemCatalogIT {
 
@@ -334,12 +338,65 @@ public class ViewIT extends SplitSystemCatalogIT {
         final String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String version = "V1.0";
-            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, version);
+            String topicName = "MyTopicName";
+            CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName,
+                tableName, version, topicName);
             String createViewSql = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName +
-                    " SCHEMA_VERSION='" + version + "'";
+                    " SCHEMA_VERSION='" + version + "', STREAMING_TOPIC_NAME='" + topicName + "'";
             conn.createStatement().execute(createViewSql);
             PTable view = PhoenixRuntime.getTableNoCache(conn, viewFullName);
             assertEquals(version, view.getSchemaVersion());
+            assertEquals(topicName, view.getStreamingTopicName());
+        }
+    }
+
+    @Test
+    public void testCreateViewsWithChangeDetectionEnabled() throws Exception {
+        String tenantId = "T_" + generateUniqueName();
+        String schemaName = "S_" + generateUniqueName();
+        String tableName = "T_" + generateUniqueName();
+        String globalViewName = "GV_" + generateUniqueName();
+        String tenantViewName = "TV_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        String fullGlobalViewName = SchemaUtil.getTableName(schemaName, globalViewName);
+        String fullTenantViewName = SchemaUtil.getTableName(schemaName, tenantViewName);
+
+        PTable globalView = null;
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE " + fullTableName +
+                " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
+                " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
+                "MULTI_TENANT=true, CHANGE_DETECTION_ENABLED=true";
+            conn.createStatement().execute(ddl);
+            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            assertTrue(table.isChangeDetectionEnabled());
+            AlterTableIT.verifySchemaExport(table, getUtility().getConfiguration());
+
+            String globalViewDdl = "CREATE VIEW " + fullGlobalViewName +
+                " (id2 CHAR(12) PRIMARY KEY, col3 BIGINT NULL) " +
+                " AS SELECT * FROM " + fullTableName + " CHANGE_DETECTION_ENABLED=true";
+
+            conn.createStatement().execute(globalViewDdl);
+            globalView = PhoenixRuntime.getTableNoCache(conn, fullGlobalViewName);
+            assertTrue(globalView.isChangeDetectionEnabled());
+            PTable globalViewWithParents = ViewUtil.addDerivedColumnsFromParent(conn, globalView, table);
+            //   base column count doesn't get set properly
+            PTableImpl.Builder builder = PTableImpl.builderFromExisting(globalViewWithParents);
+            builder.setBaseColumnCount(table.getColumns().size());
+            globalViewWithParents = builder.setColumns(globalViewWithParents.getColumns()).build();
+            AlterTableIT.verifySchemaExport(globalViewWithParents, getUtility().getConfiguration());
+        }
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        try (PhoenixConnection tenantConn = (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+            String tenantViewDdl = "CREATE VIEW " + fullTenantViewName +
+                " (id3 VARCHAR PRIMARY KEY, col4 VARCHAR NULL) " +
+                " AS SELECT * FROM " + fullGlobalViewName + " CHANGE_DETECTION_ENABLED=true";
+            tenantConn.createStatement().execute(tenantViewDdl);
+            PTable tenantView = PhoenixRuntime.getTableNoCache(tenantConn, fullTenantViewName);
+            assertTrue(tenantView.isChangeDetectionEnabled());
+            PTable tenantViewWithParents = ViewUtil.addDerivedColumnsFromParent(tenantConn, tenantView, globalView);
+            AlterTableIT.verifySchemaExport(tenantViewWithParents, getUtility().getConfiguration());
         }
     }
 
@@ -380,6 +437,37 @@ public class ViewIT extends SplitSystemCatalogIT {
             CreateTableIT.verifyLastDDLTimestamp(viewFullName,
                 startTS,
                 conn);
+        }
+    }
+
+    @Test
+    public void testCreateChangeDetectionEnabledTable() throws Exception {
+        //create a view with CHANGE_DETECTION_ENABLED and verify both that it's set properly
+        //on the PTable, and that it gets persisted to the external schema registry
+
+        String schemaName = generateUniqueName();
+        String tableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        String viewName = generateUniqueName();
+        String fullViewName = SchemaUtil.getTableName(schemaName, viewName);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE " + fullTableName +
+                " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
+                " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
+                "CHANGE_DETECTION_ENABLED=true";
+            conn.createStatement().execute(ddl);
+
+            String viewDdl = "CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName
+                + " CHANGE_DETECTION_ENABLED=true";
+            conn.createStatement().execute(viewDdl);
+            PTable view = PhoenixRuntime.getTableNoCache(conn, fullViewName);
+            assertTrue(view.isChangeDetectionEnabled());
+            assertEquals(DefaultSchemaRegistryRepository.getSchemaId(view),
+                view.getExternalSchemaId());
+            String schemaText = new DefaultSchemaWriter().exportSchema(view);
+            SchemaRegistryRepository repo = SchemaRegistryRepositoryFactory.getSchemaRegistryRepository(
+                getUtility().getConfiguration());
+            //assertEquals(schemaText, repo.getSchemaById(view.getExternalSchemaId()));
         }
     }
 

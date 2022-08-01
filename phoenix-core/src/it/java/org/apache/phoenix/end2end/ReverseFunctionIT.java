@@ -28,8 +28,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class ReverseFunctionIT extends ParallelStatsDisabledIT {
 
     private String initTable(Connection conn, String sortOrder, String s) throws Exception {

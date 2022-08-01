@@ -26,7 +26,7 @@ import java.util.Objects;
  */
 public class Cost implements Comparable<Cost> {
     /** The unknown cost. */
-    public static Cost UNKNOWN = new Cost(Double.NaN, Double.NaN, Double.NaN) {
+    public static final Cost UNKNOWN = new Cost(Double.NaN, Double.NaN, Double.NaN) {
         @Override
         public String toString() {
             return "{unknown}";
@@ -34,7 +34,7 @@ public class Cost implements Comparable<Cost> {
     };
 
     /** The zero cost. */
-    public static Cost ZERO = new Cost(0, 0, 0) {
+    public static final Cost ZERO = new Cost(0, 0, 0) {
         @Override
         public String toString() {
             return "{zero}";

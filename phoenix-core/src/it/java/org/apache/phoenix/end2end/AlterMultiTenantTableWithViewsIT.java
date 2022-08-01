@@ -46,15 +46,18 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ViewUtil;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
 
     private Connection getTenantConnection(String tenantId) throws Exception {
@@ -82,7 +85,67 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
         assertFalse(rs.next());
         assertEquals(values.length, i - 1);
     }
-    
+
+    @Test
+    public void testCreateAndAlterViewsWithChangeDetectionEnabled() throws Exception {
+        String tenantId = "TE_" + generateUniqueName();
+        String schemaName = "S_" + generateUniqueName();
+        String tableName = "T_" + generateUniqueName();
+        String globalViewName = "GV_" + generateUniqueName();
+        String tenantViewName = "TV_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        String fullGlobalViewName = SchemaUtil.getTableName(schemaName, globalViewName);
+        String fullTenantViewName = SchemaUtil.getTableName(schemaName, tenantViewName);
+
+        PTable globalView = null;
+        PTable alteredGlobalView = null;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE " + fullTableName +
+                " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
+                " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
+                "MULTI_TENANT=true, CHANGE_DETECTION_ENABLED=true";
+            conn.createStatement().execute(ddl);
+            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            assertTrue(table.isChangeDetectionEnabled());
+            AlterTableIT.verifySchemaExport(table, getUtility().getConfiguration());
+
+            String globalViewDdl = "CREATE VIEW " + fullGlobalViewName +
+                " (id2 CHAR(12) NOT NULL PRIMARY KEY, col3 BIGINT NULL) " +
+                " AS SELECT * FROM " + fullTableName + " CHANGE_DETECTION_ENABLED=true";
+
+            conn.createStatement().execute(globalViewDdl);
+            globalView = PhoenixRuntime.getTableNoCache(conn, fullGlobalViewName);
+            assertTrue(globalView.isChangeDetectionEnabled());
+            //   base column count doesn't get set properly
+            PTableImpl.Builder builder = PTableImpl.builderFromExisting(globalView);
+            builder.setBaseColumnCount(table.getColumns().size());
+            globalView = builder.setColumns(globalView.getColumns()).build();
+            AlterTableIT.verifySchemaExport(globalView, getUtility().getConfiguration());
+
+            String alterViewDdl = "ALTER VIEW " + fullGlobalViewName + " ADD id3 VARCHAR(12) NULL "
+                + "PRIMARY KEY, " + " col4 BIGINT NULL";
+            conn.createStatement().execute(alterViewDdl);
+            alteredGlobalView = PhoenixRuntime.getTableNoCache(conn, fullGlobalViewName);
+
+            assertTrue(alteredGlobalView.isChangeDetectionEnabled());
+            AlterTableIT.verifySchemaExport(alteredGlobalView, getUtility().getConfiguration());
+        }
+
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        try (PhoenixConnection tenantConn = (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+            String tenantViewDdl = "CREATE VIEW " + fullTenantViewName +
+                " (col5 VARCHAR NULL) " +
+                " AS SELECT * FROM " + fullGlobalViewName + " CHANGE_DETECTION_ENABLED=true";
+            tenantConn.createStatement().execute(tenantViewDdl);
+            PTable tenantView = PhoenixRuntime.getTableNoCache(tenantConn, fullTenantViewName);
+            assertTrue(tenantView.isChangeDetectionEnabled());
+            PTable tenantViewWithParents = ViewUtil.addDerivedColumnsFromParent(tenantConn,
+                tenantView, alteredGlobalView);
+            AlterTableIT.verifySchemaExport(tenantViewWithParents, getUtility().getConfiguration());
+        }
+    }
+
     @Test
     public void testAddDropColumnToBaseTablePropagatesToEntireViewHierarchy() throws Exception {
         String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());

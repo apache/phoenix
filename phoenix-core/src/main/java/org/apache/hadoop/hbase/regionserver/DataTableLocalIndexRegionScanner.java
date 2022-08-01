@@ -77,7 +77,7 @@ public class DataTableLocalIndexRegionScanner extends DelegateRegionScanner {
         this.localIndexFamily = localIndexFamily;
         this.region=region;
         maxBatchSize = conf.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-        maxBatchSizeBytes = conf.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
+        maxBatchSizeBytes = conf.getLongBytes(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
             QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
         mutationList=new UngroupedAggregateRegionObserver.MutationList(maxBatchSize);   
     }
@@ -107,8 +107,8 @@ public class DataTableLocalIndexRegionScanner extends DelegateRegionScanner {
                 ValueGetter valueGetter = maintainer
                         .createGetterFromKeyValues(ImmutableBytesPtr.copyBytesIfNecessary(ptr), dataTableResults);
                 List<Cell> list = maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr,
-                        dataTableResults.get(0).getTimestamp(), startKey, endKey).getFamilyCellMap()
-                        .get(localIndexFamily);
+                        dataTableResults.get(0).getTimestamp(), startKey, endKey, false)
+                        .getFamilyCellMap().get(localIndexFamily);
                 Put put = null;
                 Delete del = null;
                 for (Cell cell : list) {

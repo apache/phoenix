@@ -124,11 +124,6 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
                              parameterCount + " bind parameters are defined")
                     .build().buildException();
         }
-        if (parameterIndex < 1) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.PARAM_INDEX_OUT_OF_BOUND)
-                    .setMessage("Invalid bind parameter index " + parameterIndex)
-                    .build().buildException();
-        }
         this.parameters.set(parameterIndex - 1, value);
     }
 
@@ -189,7 +184,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
         if (statement.getOperation().isMutation()) {
             throw new ExecuteQueryNotApplicableException(statement.getOperation());
         }
-        
+
         return executeQuery(statement,createQueryLogger(statement,query));
     }
 
@@ -227,7 +222,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
         }
         try {
             // Just compile top level query without optimizing to get ResultSetMetaData
-            QueryPlan plan = statement.compilePlan(this, Sequence.ValueOp.VALIDATE_SEQUENCE);
+            QueryPlan plan = statement.compilePlan(this, Sequence.ValueOp.NOOP);
             return new PhoenixResultSetMetaData(this.getConnection(), plan.getProjector());
         } finally {
             int lastSetBit = 0;
@@ -250,7 +245,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
             }
         }
         try {
-            StatementPlan plan = statement.compilePlan(this, Sequence.ValueOp.VALIDATE_SEQUENCE);
+            StatementPlan plan = statement.compilePlan(this, Sequence.ValueOp.NOOP);
             return plan.getParameterMetaData();
         } finally {
             int lastSetBit = 0;

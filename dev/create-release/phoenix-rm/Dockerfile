@@ -38,15 +38,18 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get -qq -y update \
     maven='3.6.0-*' \
     openjdk-8-jdk='8*' \
     python-pip='9.0.1-*' \
+    python3-pip='9.0.1-*' \
     subversion='1.9.7-*' \
     wget='1.19.4-*' \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* \
   && update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java \
   && pip install \
+    python-dateutil==2.8.1 \
+  && pip3 install \
     python-dateutil==2.8.1
 # Install Apache Yetus
-ENV YETUS_VERSION 0.12.0
+ENV YETUS_VERSION 0.13.0
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN wget -qO- "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=/yetus/${YETUS_VERSION}/apache-yetus-${YETUS_VERSION}-bin.tar.gz" | \
         tar xvz -C /opt

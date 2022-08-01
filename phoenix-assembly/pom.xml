@@ -41,27 +41,6 @@
         <groupId>org.codehaus.mojo</groupId>
         <executions>
           <execution>
-            <id>client without version</id>
-            <phase>compile</phase>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <configuration>
-              <executable>ln</executable>
-              <workingDirectory>${project.basedir}/../phoenix-client-parent/phoenix-client/target</workingDirectory>
-              <arguments>
-                <argument>-fnsv</argument>
-                <argument>
-                  phoenix-client-${hbase.suffix}-${project.version}.jar
-                </argument>
-                <argument>
-                  <!-- We are overwriting the unshaded client JAR, but we don't care -->
-                  phoenix-client-${hbase.suffix}.jar
-                </argument>
-              </arguments>
-            </configuration>
-          </execution>
-          <execution>
             <id>embedded client without version</id>
             <phase>compile</phase>
             <goals>
@@ -170,10 +149,6 @@
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-client-${hbase.suffix}</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-client-embedded-${hbase.suffix}</artifactId>
     </dependency>
     <dependency>
@@ -184,53 +159,6 @@
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-tracing-webapp</artifactId>
     </dependency>
-
-    <dependency>
-      <groupId>com.fasterxml.woodstox</groupId>
-      <artifactId>woodstox-core</artifactId>
-      <version>5.2.0</version>
-    </dependency>
-
-    <dependency>
-      <groupId>org.codehaus.woodstox</groupId>
-      <artifactId>stax2-api</artifactId>
-      <version>3.0.1</version>
-    </dependency>
-
-    <dependency>
-      <groupId>org.apache.commons</groupId>
-      <artifactId>commons-configuration2</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>org.apache.hbase.thirdparty</groupId>
-      <artifactId>hbase-shaded-miscellaneous</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>org.apache.hbase.thirdparty</groupId>
-      <artifactId>hbase-shaded-protobuf</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>org.apache.hbase.thirdparty</groupId>
-      <artifactId>hbase-shaded-netty</artifactId>
-      <version>${hbase.thirdparty.version}</version>
-    </dependency>
-
-    <dependency>
-      <groupId>org.apache.commons</groupId>
-      <artifactId>commons-lang3</artifactId>
-    </dependency>
-
-    <!-- Include OpenTelemetry agent -->
-    <dependency>
-      <groupId>io.opentelemetry.javaagent</groupId>
-      <artifactId>opentelemetry-javaagent</artifactId>
-      <version>${opentelemetry-instrumentation.version}</version>
-      <classifier>all</classifier>
-    </dependency>
-
     <dependency>
       <groupId>sqlline</groupId>
       <artifactId>sqlline</artifactId>

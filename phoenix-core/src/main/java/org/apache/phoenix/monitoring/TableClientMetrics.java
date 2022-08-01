@@ -16,6 +16,8 @@
 
 package org.apache.phoenix.monitoring;
 
+import org.apache.hadoop.conf.Configuration;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -24,6 +26,9 @@ import java.util.Map;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BYTES;
+import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILURES;
+import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_FAILURES;
+import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_POINTLOOKUP_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_POINTLOOKUP_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_SCAN_FAILED_COUNTER;
@@ -51,6 +56,7 @@ import static org.apache.phoenix.monitoring.MetricType.SELECT_POINTLOOKUP_FAILED
 import static org.apache.phoenix.monitoring.MetricType.SELECT_SQL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.MetricType.SELECT_SCAN_SUCCESS_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.SELECT_SCAN_FAILED_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_FAILED_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_SQL_QUERY_TIME;
@@ -68,6 +74,12 @@ import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_SUCCESS_
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.SELECT_AGGREGATE_SUCCESS_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.SELECT_AGGREGATE_FAILURE_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS;
+import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_FAILURES;
+import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
+import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_COMMIT_TIME;
+import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_SQL_QUERY_TIME;
 
 /**
  * This is used by TableMetricsManager class to store instance of
@@ -121,7 +133,14 @@ public class TableClientMetrics {
                 DELETE_AGGREGATE_SUCCESS_SQL_COUNTER), TABLE_DELETE_AGGREGATE_FAILURE_SQL_COUNTER(
                 DELETE_AGGREGATE_FAILURE_SQL_COUNTER), TABLE_SELECT_AGGREGATE_SUCCESS_SQL_COUNTER(
                 SELECT_AGGREGATE_SUCCESS_SQL_COUNTER), TABLE_SELECT_AGGREGATE_FAILURE_SQL_COUNTER(
-                SELECT_AGGREGATE_FAILURE_SQL_COUNTER);
+                SELECT_AGGREGATE_FAILURE_SQL_COUNTER),
+                TABLE_ATOMIC_UPSERT_SQL_COUNTER(ATOMIC_UPSERT_SQL_COUNTER),
+                TABLE_ATOMIC_UPSERT_COMMIT_TIME(ATOMIC_UPSERT_COMMIT_TIME),
+                TABLE_ATOMIC_UPSERT_SQL_QUERY_TIME(ATOMIC_UPSERT_SQL_QUERY_TIME),
+                TABLE_NUM_SYSTEM_TABLE_RPC_SUCCESS(NUM_SYSTEM_TABLE_RPC_SUCCESS),
+                TABLE_NUM_SYSTEM_TABLE_RPC_FAILURES(NUM_SYSTEM_TABLE_RPC_FAILURES),
+                TABLE_NUM_METADATA_LOOKUP_FAILURES(NUM_METADATA_LOOKUP_FAILURES),
+                TABLE_TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS(TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS);
 
         private MetricType metricType;
         private PhoenixTableMetric metric;
@@ -133,14 +152,16 @@ public class TableClientMetrics {
 
     private final String tableName;
     private Map<MetricType, PhoenixTableMetric> metricRegister;
+    private TableHistograms tableHistograms;
 
-    public TableClientMetrics(final String tableName) {
+    public TableClientMetrics(final String tableName, Configuration conf) {
         this.tableName = tableName;
         metricRegister = new HashMap<>();
         for (TableMetrics tableMetric : TableMetrics.values()) {
             tableMetric.metric = new PhoenixTableMetricImpl(tableMetric.metricType);
             metricRegister.put(tableMetric.metricType, tableMetric.metric);
         }
+        tableHistograms = new TableHistograms(tableName, conf);
     }
 
     /**
@@ -177,6 +198,10 @@ public class TableClientMetrics {
 
     public Map<MetricType, PhoenixTableMetric> getMetricRegistry() {
         return metricRegister;
+    }
+
+    public TableHistograms getTableHistograms() {
+        return tableHistograms;
     }
 
 }

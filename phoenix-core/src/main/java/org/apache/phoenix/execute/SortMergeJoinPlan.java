@@ -152,7 +152,7 @@ public class SortMergeJoinPlan implements QueryPlan {
         this.tableRefs.addAll(lhsPlan.getSourceRefs());
         this.tableRefs.addAll(rhsPlan.getSourceRefs());
         this.thresholdBytes =
-                context.getConnection().getQueryServices().getProps().getLong(
+                context.getConnection().getQueryServices().getProps().getLongBytes(
                     QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
                     QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
         this.spoolingEnabled =

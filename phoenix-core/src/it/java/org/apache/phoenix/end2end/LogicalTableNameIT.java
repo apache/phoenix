@@ -22,13 +22,16 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.end2end.join.HashJoinGlobalIndexIT;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.query.QueryConstants;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -51,9 +54,7 @@ import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.INVA
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.VALID_ROW_COUNT;
 import static org.apache.phoenix.util.MetaDataUtil.VIEW_INDEX_TABLE_PREFIX;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
+import static org.junit.Assert.*;
 
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
@@ -73,8 +74,9 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
         this.createChildAfterRename = createChildAfterRename;
         this.immutable = immutable;
         StringBuilder optionBuilder = new StringBuilder();
+        optionBuilder.append(" ,IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN");
         if (immutable) {
-            optionBuilder.append(" ,IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, IMMUTABLE_ROWS=true");
+            optionBuilder.append(" , IMMUTABLE_ROWS=true");
         }
         this.dataTableDdl = optionBuilder.toString();
     }
@@ -107,7 +109,7 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
                         indexName, false, createChildAfterRename);
 
                 // We have to rebuild index for this to work
-                IndexToolIT.runIndexTool(true, false, schemaName, tableName, indexName);
+                IndexToolIT.runIndexTool(false, schemaName, tableName, indexName);
 
                 validateTable(conn, fullTableName);
                 validateTable(conn2, fullTableName);
@@ -180,7 +182,7 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
         String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
         try (Connection conn = getConnection(props)) {
             try (Connection conn2 = getConnection(props)) {
-                HashMap<String, ArrayList<String>> expected = test_IndexTableChange(conn, conn2, schemaName, tableName, indexName, IndexRegionObserver.VERIFIED_BYTES, false);
+                HashMap<String, ArrayList<String>> expected = test_IndexTableChange(conn, conn2, schemaName, tableName, indexName, QueryConstants.VERIFIED_BYTES, false);
 
                 validateIndex(conn, fullIndexName, false, expected);
                 validateIndex(conn2, fullIndexName, false, expected);
@@ -212,7 +214,7 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
         String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
         try (Connection conn = getConnection(props)) {
             try (Connection conn2 = getConnection(props)) {
-                test_IndexTableChange(conn, conn2, schemaName, tableName, indexName, IndexRegionObserver.VERIFIED_BYTES, false);
+                test_IndexTableChange(conn, conn2, schemaName, tableName, indexName, QueryConstants.VERIFIED_BYTES, false);
                 List<Job>
                         completedJobs =
                         IndexScrutinyToolBaseIT.runScrutinyTool(schemaName, tableName, indexName, 1L,
@@ -230,7 +232,7 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
                 // Try with unverified bytes
                 String tableName2 = "TBL_" + generateUniqueName();
                 String indexName2 = "IDX_" + generateUniqueName();
-                test_IndexTableChange(conn, conn2, schemaName, tableName2, indexName2, IndexRegionObserver.UNVERIFIED_BYTES, false);
+                test_IndexTableChange(conn, conn2, schemaName, tableName2, indexName2, QueryConstants.UNVERIFIED_BYTES, false);
 
                 completedJobs =
                         IndexScrutinyToolBaseIT.runScrutinyTool(schemaName, tableName2, indexName2, 1L,
@@ -270,9 +272,9 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
                         schemaName, tableName, view1Name, view1IndexName1, view1IndexName2, view2Name, view2IndexName1, false, createChildAfterRename);
 
                 // We have to rebuild index for this to work
-                IndexToolIT.runIndexTool(true, false, schemaName, view1Name, view1IndexName1);
-                IndexToolIT.runIndexTool(true, false, schemaName, view1Name, view1IndexName2);
-                IndexToolIT.runIndexTool(true, false, schemaName, view2Name, view2IndexName1);
+                IndexToolIT.runIndexTool(false, schemaName, view1Name, view1IndexName1);
+                IndexToolIT.runIndexTool(false, schemaName, view1Name, view1IndexName2);
+                IndexToolIT.runIndexTool(false, schemaName, view2Name, view2IndexName1);
 
                 validateIndex(conn, fullView1IndexName1, true, expected);
                 validateIndex(conn2, fullView1IndexName2, true, expected);
@@ -426,6 +428,32 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
                 rs = conn2.createStatement().executeQuery(indexSelect);
                 assertEquals(false, rs.next());
             }
+        }
+    }
+
+    @Test @Ignore("Requires PHOENIX-6722")
+    public void testChangeDetectionAfterTableNameChange() throws Exception {
+        try(Connection conn = getConnection(props)) {
+            String schemaName = "S_" + generateUniqueName();
+            String tableName = "T_" + generateUniqueName();
+            String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+            createTable(conn, fullTableName);
+            String alterDdl = "ALTER TABLE " + fullTableName + " SET CHANGE_DETECTION_ENABLED=true";
+            conn.createStatement().execute(alterDdl);
+
+            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            assertTrue(table.isChangeDetectionEnabled());
+            assertNotNull(table.getExternalSchemaId());
+            AlterTableIT.verifySchemaExport(table, getUtility().getConfiguration());
+
+            String newTableName = "T_" + generateUniqueName();
+            String fullNewTableName = SchemaUtil.getTableName(schemaName, newTableName);
+            LogicalTableNameIT.createAndPointToNewPhysicalTable(conn, fullTableName, fullNewTableName, false);
+
+            //logical table name should still be the same for PTable lookup
+            PTable newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            //but the schema in the registry should match the new PTable
+            AlterTableIT.verifySchemaExport(newTable, getUtility().getConfiguration());
         }
     }
 

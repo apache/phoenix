@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -79,6 +80,8 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import edu.umd.cs.findbugs.annotations.SuppressWarnings;
+
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
@@ -127,7 +130,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
         final Configuration conf = context.getConfiguration();
         final FileSystem fs = outputdir.getFileSystem(conf);
      
-        final long maxsize = conf.getLong(HConstants.HREGION_MAX_FILESIZE,
+        final long maxsize = conf.getLongBytes(HConstants.HREGION_MAX_FILESIZE,
             HConstants.DEFAULT_MAX_FILE_SIZE);
         // Invented config.  Add to hbase-*.xml if other than default compression.
         final String defaultCompressionStr = conf.get("hfile.compression",
@@ -260,15 +263,14 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
                                         .withChecksumType(CompatUtil.getChecksumType(conf))
                                         .withBytesPerCheckSum(CompatUtil.getBytesPerChecksum(conf))
                                         .withBlockSize(blockSize)
-                                        .withDataBlockEncoding(encoding);
-              CompatUtil.withComparator(contextBuilder, CellComparatorImpl.COMPARATOR);
+                                        .withDataBlockEncoding(encoding)
+                                        .withCellComparator(CellComparatorImpl.COMPARATOR);
               HFileContext hFileContext = contextBuilder.build();
 
                 StoreFileWriter.Builder storeFileWriterBuilder =
                         new StoreFileWriter.Builder(conf, new CacheConfig(tempConf), fs)
                                 .withOutputDir(familydir).withBloomType(bloomType)
                                 .withFileContext(hFileContext);
-              CompatUtil.withComparator(storeFileWriterBuilder, CellComparatorImpl.COMPARATOR);
               wl.writer = storeFileWriterBuilder.build();
 
               // join and put it in the writers map .
@@ -447,7 +449,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
                 continue;
             }
             try {
-                confValMap.put(URLDecoder.decode(familySplit[0], "UTF-8").getBytes(),
+                confValMap.put(URLDecoder.decode(familySplit[0], "UTF-8").getBytes(StandardCharsets.UTF_8),
                         URLDecoder.decode(familySplit[1], "UTF-8"));
             } catch (UnsupportedEncodingException e) {
                 // will not happen with UTF-8 encoding
@@ -478,6 +480,8 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
         TotalOrderPartitioner.setPartitionFile(conf, partitionsPath);
     }
 
+    @SuppressWarnings(value="EC_ARRAY_AND_NONARRAY",
+            justification="ImmutableBytesWritable DOES implement equals(byte])")
     private static void writePartitions(Configuration conf, Path partitionsPath,
             Set<TableRowkeyPair> tablesStartKeys) throws IOException {
         

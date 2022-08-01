@@ -144,13 +144,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                             .getEnvironment().getConfiguration(), em);
     
             RegionScanner innerScanner = s;
-            boolean useProto = false;
-            byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD_PROTO);
-            useProto = localIndexBytes != null;
-            if (localIndexBytes == null) {
-                localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
-            }
-            List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes, useProto);
+            List<IndexMaintainer> indexMaintainers =
+                    IndexUtil.deSerializeIndexMaintainersFromScan(scan);
             TupleProjector tupleProjector = null;
             byte[][] viewConstants = null;
             ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
@@ -158,7 +153,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
             final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
             boolean useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan));
-            if (ScanUtil.isLocalIndex(scan) || (j == null && p != null)) {
+            if (ScanUtil.isLocalOrUncoveredGlobalIndex(scan)
+                    || (j == null && p != null)) {
                 if (dataColumns != null) {
                     tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
                     viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);

@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema.tool;
 
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
+import org.apache.phoenix.end2end.ParallelStatsEnabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.ParseException;
 import org.apache.phoenix.parse.SQLParser;
@@ -29,6 +30,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -49,6 +51,7 @@ import static junit.framework.TestCase.assertTrue;
 import static junit.framework.TestCase.fail;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
+@Category(ParallelStatsEnabledTest.class)
 public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
 
     @BeforeClass
@@ -90,13 +93,18 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
         String indexName = generateUniqueName();
         String indexName1 = generateUniqueName();
         String indexName2 = generateUniqueName();
+        String indexName3 = generateUniqueName();
         String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_WAL=true";
         String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
-        String createTableStatement = "CREATE TABLE "+pTableFullName + "(k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"
+        String createTableStatement = "CREATE TABLE "+pTableFullName + "(k VARCHAR NOT NULL PRIMARY KEY, \"v1\" VARCHAR, v2 VARCHAR)"
                 + properties;
-        String createIndexStatement = "CREATE INDEX "+indexName + " ON "+pTableFullName+"(v1 DESC) INCLUDE (v2)";
-        String createIndexStatement1 = "CREATE INDEX "+indexName1 + " ON "+pTableFullName+"(v2 DESC) INCLUDE (v1)";
+        //FIXME never verified
+        String createIndexStatement = "CREATE INDEX "+indexName + " ON "+pTableFullName+"(\"v1\" DESC) INCLUDE (v2)";
+        //FIXME never verified
+        String createIndexStatement1 = "CREATE INDEX "+indexName1 + " ON "+pTableFullName+"(v2 DESC) INCLUDE (\"v1\")";
         String createIndexStatement2 = "CREATE INDEX "+indexName2 + " ON "+pTableFullName+"(k)";
+        String createIndexStatement3 ="CREATE INDEX " + indexName3 + " ON " + pTableFullName +
+                "('QUOTED' || \"v1\" || V2 DESC, \"v1\" DESC, K) INCLUDE (V2)";
         List<String> queries = new ArrayList<String>(){};
         queries.add(createTableStatement);
         queries.add(createIndexStatement);
@@ -105,6 +113,12 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
 
         String result = runSchemaExtractionTool(schemaName, indexName2, null, queries);
         Assert.assertEquals(createIndexStatement2.toUpperCase(), result.toUpperCase());
+
+        List<String> queries3 = new ArrayList<String>(){};
+        queries3.add(createIndexStatement3);
+
+        String result3 = runSchemaExtractionTool(schemaName, indexName3, null, queries3);
+        Assert.assertEquals(createIndexStatement3, result3);
     }
 
     @Test
@@ -141,17 +155,45 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
         String tableName = generateUniqueName();
         String schemaName = generateUniqueName();
         String indexName = generateUniqueName();
+        String indexName2 = generateUniqueName();
         String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_WAL=true";
         String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
         String createTableStatement = "CREATE TABLE "+pTableFullName + "(k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"
                 + properties;
         String createIndexStatement = "CREATE LOCAL INDEX "+indexName + " ON "+pTableFullName+"(v1 DESC, k) INCLUDE (v2)";
+        String createIndexStatement2 = "CREATE LOCAL INDEX "+indexName2 + " ON "+pTableFullName+"( LPAD(v1,10) DESC, k) INCLUDE (v2)";
+
         List<String> queries = new ArrayList<String>(){};
         queries.add(createTableStatement);
         queries.add(createIndexStatement);
 
         String result = runSchemaExtractionTool(schemaName, indexName, null, queries);
         Assert.assertEquals(createIndexStatement.toUpperCase(), result.toUpperCase());
+
+        List<String> queries2 = new ArrayList<String>(){};
+        queries2.add(createIndexStatement2);
+
+        String result2 = runSchemaExtractionTool(schemaName, indexName2, null, queries2);
+        Assert.assertEquals(createIndexStatement2.toUpperCase(), result2.toUpperCase());
+    }
+
+    @Test
+    public void testCreateLocalIndexStatementLowerCase() throws Exception {
+        String tableName = generateUniqueName();
+        String schemaName = generateUniqueName();
+        String indexName = generateUniqueName();
+        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_WAL=true";
+        String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+        String createTableStatement = "CREATE TABLE "+pTableFullName + "(K VARCHAR NOT NULL PRIMARY KEY, \"v1\" VARCHAR, V2 VARCHAR)"
+                + properties;
+        String createIndexStatement = "CREATE LOCAL INDEX "+indexName + " ON "+pTableFullName+"( LPAD(\"v1\",10) DESC, K) INCLUDE (V2)";
+
+        List<String> queries = new ArrayList<String>(){};
+        queries.add(createTableStatement);
+        queries.add(createIndexStatement);
+
+        String result = runSchemaExtractionTool(schemaName, indexName, null, queries);
+        Assert.assertEquals(createIndexStatement, result);
     }
 
     @Test
@@ -164,6 +206,24 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
         String createTableStatement = "CREATE TABLE " + pTableFullName + "(\"k\" VARCHAR NOT NULL PRIMARY KEY, \"a\".V1 VARCHAR, \"v2\" VARCHAR)"
                 + properties;
         String createIndexStatement = "CREATE INDEX " + indexName + " ON "+ pTableFullName + "(\"a\".V1 DESC, \"k\") INCLUDE (\"v2\")";
+        List<String> queries = new ArrayList<String>(){};
+        queries.add(createTableStatement);
+        queries.add(createIndexStatement);
+
+        String result = runSchemaExtractionTool("\"" + schemaName + "\"",  indexName, null, queries);
+        Assert.assertEquals(createIndexStatement, result);
+    }
+
+    @Test
+    public void testCreateIndexStatementLowerCaseCombined() throws Exception {
+        String tableName = "lowercase" + generateUniqueName();
+        String schemaName = "lowercase" + generateUniqueName();
+        String indexName = "\"lowercaseIND" + generateUniqueName() + "\"";
+        String properties = "TTL=2592000,IMMUTABLE_ROWS=true,DISABLE_WAL=true";
+        String pTableFullName = SchemaUtil.getEscapedTableName(schemaName, tableName);
+        String createTableStatement = "CREATE TABLE " + pTableFullName + "(ID varchar primary key, \"number\" integer, \"currency\" decimal(6,2), lista varchar[])"
+                + properties;
+        String createIndexStatement = "CREATE INDEX " + indexName + " ON "+ pTableFullName + "(\"number\" * \"currency\", ID) INCLUDE (LISTA)";
         List<String> queries = new ArrayList<String>(){};
         queries.add(createTableStatement);
         queries.add(createIndexStatement);

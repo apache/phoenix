@@ -107,15 +107,25 @@ colorSetting = tryDecode(args.color)
 if os.name == 'nt':
     colorSetting = "false"
 
+#See PHOENIX-6661
+if os.uname()[4].startswith('ppc'):
+    disable_jna = " -Dorg.jline.terminal.jna=false "
+else:
+    disable_jna = ""
+
 java_cmd = java + ' $PHOENIX_OPTS ' + \
-    ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.hadoop_conf + os.pathsep + \
-    phoenix_utils.sqlline_with_deps_jar + os.pathsep + phoenix_utils.slf4j_backend_jar + os.pathsep + \
-    phoenix_utils.phoenix_client_embedded_jar \
-    #+ os.pathsep + phoenix_utils.phoenix_tracing_jar + \
+    ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + \
+    phoenix_utils.hadoop_conf + os.pathsep + \
+    phoenix_utils.sqlline_with_deps_jar + os.pathsep + \
+    phoenix_utils.slf4j_backend_jar + os.pathsep + \
+    phoenix_utils.logging_jar + os.pathsep + \
+    phoenix_utils.phoenix_client_embedded_jar + \
+    # os.pathsep + phoenix_utils.phoenix_tracing_jar + \
     #'" -Dotel.traces.exporter=zipkin -Dotel.metrics.exporter=none -Dotel.resource.attributes=service.name=phoenix' + \
     #'-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=9900' + \
     #' -javaagent:' + phoenix_utils.opentelemetry_javaagent_jar + \
-    ' -Dlog4j.configuration=file:' + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
+    '" -Dlog4j.configuration=file:' + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
+    disable_jna + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver" + \
     " -u jdbc:phoenix:" + phoenix_utils.shell_quote([zookeeper]) + \
     " -n none -p none --color=" + colorSetting + " --fastConnect=" + tryDecode(args.fastconnect) + \

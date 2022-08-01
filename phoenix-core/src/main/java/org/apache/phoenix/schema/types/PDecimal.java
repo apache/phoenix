@@ -335,9 +335,8 @@ public class PDecimal extends PRealNumber<BigDecimal> {
             maxLength = v[0];
             scale = v[1];
         }
-        if (desiredMaxLength != null && desiredScale != null && maxLength != null && scale != null &&
-                ((desiredScale == null && desiredMaxLength < maxLength) ||
-                        (desiredMaxLength - desiredScale) < (maxLength - scale))) {
+        if (desiredMaxLength != null && desiredScale != null && maxLength != null && scale != null
+                && ((desiredMaxLength - desiredScale) < (maxLength - scale))) {
             return false;
         }
         return true;

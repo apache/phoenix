@@ -122,6 +122,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
+import org.apache.hadoop.hbase.RegionMetrics;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -148,6 +149,8 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -194,12 +197,13 @@ import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFac
 
 public abstract class BaseTest {
     public static final String DRIVER_CLASS_NAME_ATTRIB = "phoenix.driver.class.name";
+    protected static final String NULL_STRING="NULL";
     private static final double ZERO = 1e-9;
     private static final Map<String,String> tableDDLMap;
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseTest.class);
     @ClassRule
     public static TemporaryFolder tmpFolder = new TemporaryFolder();
-    private static final int dropTableTimeout = 300; // 5 mins should be long enough.
+    private static final int dropTableTimeout = 120; // 2 mins should be long enough.
     private static final ThreadFactory factory = new ThreadFactoryBuilder().setDaemon(true)
             .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
     private static final ExecutorService dropHTableService = Executors
@@ -430,7 +434,7 @@ public abstract class BaseTest {
         return url;
     }
     
-    private static String checkClusterInitialized(ReadOnlyProps serverProps) throws Exception {
+    protected static String checkClusterInitialized(ReadOnlyProps serverProps) throws Exception {
         if (!clusterInitialized) {
             url = setUpTestCluster(config, serverProps);
             clusterInitialized = true;
@@ -780,6 +784,15 @@ public abstract class BaseTest {
         }
         SEQ_COUNTER.incrementAndGet();
         return "S" + Integer.toString(MAX_SEQ_SUFFIX_VALUE + nextName).substring(1);
+    }
+
+    public static void assertMetadata(Connection conn, PTable.ImmutableStorageScheme expectedStorageScheme, PTable.QualifierEncodingScheme
+            expectedColumnEncoding, String tableName)
+            throws Exception {
+        PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+        PTable table = PhoenixRuntime.getTableNoCache(phxConn, tableName);
+        assertEquals(expectedStorageScheme, table.getImmutableStorageScheme());
+        assertEquals(expectedColumnEncoding, table.getEncodingScheme());
     }
 
     public static synchronized void freeResourcesIfBeyondThreshold() throws Exception {
@@ -1612,45 +1625,74 @@ public abstract class BaseTest {
 
     private static synchronized void disableAndDropAllTables() throws IOException {
         long startTime = System.currentTimeMillis();
-        Admin admin = utility.getAdmin();
-        ExecutorService dropHTableExecutor = Executors
-                .newCachedThreadPool(factory);
+        long deadline = System.currentTimeMillis() + 15 * 60 * 1000;
+        final Admin admin = utility.getAdmin();
 
         List<TableDescriptor> tableDescriptors = admin.listTableDescriptors();
         int tableCount = tableDescriptors.size();
 
-        int retryCount=10;
-        List<Future<Void>> futures = new ArrayList<>();
-        while (!tableDescriptors.isEmpty() && retryCount-->0) {
-            for(TableDescriptor tableDescriptor : tableDescriptors) {
+        while (!(tableDescriptors = admin.listTableDescriptors()).isEmpty()) {
+            List<Future<Void>> futures = new ArrayList<>();
+            ExecutorService dropHTableExecutor = Executors.newFixedThreadPool(10, factory);
+
+            for(final TableDescriptor tableDescriptor : tableDescriptors) {
                 futures.add(dropHTableExecutor.submit(new Callable<Void>() {
                     @Override
                     public Void call() throws Exception {
-                        if (admin.isTableEnabled(tableDescriptor.getTableName())) {
-                            admin.disableTable(tableDescriptor.getTableName());
+                        final TableName tableName = tableDescriptor.getTableName();
+                        String table = tableName.toString();
+                        Future<Void> disableFuture = null;
+                        try {
+                            LOGGER.info("Calling disable table on: {} ", table);
+                            disableFuture = admin.disableTableAsync(tableName);
+                            disableFuture.get(dropTableTimeout, TimeUnit.SECONDS);
+                            LOGGER.info("Table disabled: {}", table);
+                        } catch (Exception e) {
+                            LOGGER.warn("Could not disable table {}", table, e);
+                            try {
+                                disableFuture.cancel(true);
+                            } catch (Exception f) {
+                              //fall through
+                            }
+                            //fall through
                         }
-                        admin.deleteTable(tableDescriptor.getTableName());
+                        Future<Void> deleteFuture = null;
+                        try {
+                            LOGGER.info("Calling delete table on: {}", table);
+                            deleteFuture = admin.deleteTableAsync(tableName);
+                            deleteFuture.get(dropTableTimeout, TimeUnit.SECONDS);
+                            LOGGER.info("Table deleted: {}", table);
+                        } catch (Exception e) {
+                            LOGGER.warn("Could not delete table {}", table, e);
+                            try {
+                                deleteFuture.cancel(true);
+                            } catch (Exception f) {
+                              //fall through
+                            }
+                            //fall through
+                        }
                         return null;
                     }
                 }));
             }
-            for (Future<Void> future : futures) {
-                try {
-                    future.get(dropTableTimeout, TimeUnit.SECONDS);
-                } catch (Exception e) {
-                    LOGGER.warn("Error while dropping table, will try again", e);
-                }
+
+            try {
+                dropHTableExecutor.shutdown();
+                dropHTableExecutor.awaitTermination(600, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                LOGGER.error("dropHTableExecutor didn't shut down in 10 minutes, calling shutdownNow()");
+                dropHTableExecutor.shutdownNow();
             }
-            tableDescriptors = admin.listTableDescriptors();
+
+            if (System.currentTimeMillis() > deadline) {
+                LOGGER.error("Could not clean up HBase tables in 15 minutes, killing JVM");
+                System.exit(-1);
+             }
         }
-        if(!tableDescriptors.isEmpty()) {
-           LOGGER.error("Could not clean up tables!");
-        }
-        dropHTableExecutor.shutdownNow();
+
         long endTime =  System.currentTimeMillis();
 
         LOGGER.info("Disabled and dropped {} tables in {} ms", tableCount, endTime-startTime);
-
     }
     
     public static void assertOneOfValuesEqualsResultSet(ResultSet rs, List<List<Object>>... expectedResultsArray) throws SQLException {
@@ -2049,7 +2091,55 @@ public abstract class BaseTest {
     protected synchronized static boolean isAnyStoreRefCountLeaked()
             throws IOException {
         if (getUtility() != null) {
-            return CompatUtil.isAnyStoreRefCountLeaked(getUtility().getAdmin());
+            return isAnyStoreRefCountLeaked(getUtility().getAdmin());
+        }
+        return false;
+    }
+
+    /**
+     * HBase 2.3+ has storeRefCount available in RegionMetrics
+     *
+     * @param admin Admin instance
+     * @return true if any region has refCount leakage
+     * @throws IOException if something went wrong while connecting to Admin
+     */
+    public synchronized static boolean isAnyStoreRefCountLeaked(Admin admin)
+            throws IOException {
+        int retries = 5;
+        while (retries > 0) {
+            boolean isStoreRefCountLeaked = isStoreRefCountLeaked(admin);
+            if (!isStoreRefCountLeaked) {
+                return false;
+            }
+            retries--;
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                LOGGER.error("Interrupted while sleeping", e);
+                break;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isStoreRefCountLeaked(Admin admin)
+            throws IOException {
+        for (ServerName serverName : admin.getRegionServers()) {
+            for (RegionMetrics regionMetrics : admin.getRegionMetrics(serverName)) {
+                if (regionMetrics.getNameAsString().
+                    contains(TableName.META_TABLE_NAME.getNameAsString())) {
+                    // Just because something is trying to read from hbase:meta in the background
+                    // doesn't mean we leaked a scanner, so skip this
+                    continue;
+                }
+                int regionTotalRefCount = regionMetrics.getStoreRefCount();
+                if (regionTotalRefCount > 0) {
+                    LOGGER.error("Region {} has refCount leak. Total refCount"
+                            + " of all storeFiles combined for the region: {}",
+                        regionMetrics.getNameAsString(), regionTotalRefCount);
+                    return true;
+                }
+            }
         }
         return false;
     }

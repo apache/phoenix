@@ -39,6 +39,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
@@ -99,6 +100,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.schema.tuple.ValueGetterTuple;
 import org.apache.phoenix.schema.types.PDataType;
@@ -149,7 +151,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     
     private static boolean sendIndexMaintainer(PTable index) {
         PIndexState indexState = index.getIndexState();
-        return ! ( PIndexState.DISABLE == indexState || PIndexState.PENDING_ACTIVE == indexState );
+        return ! ( indexState.isDisabled() || PIndexState.PENDING_ACTIVE == indexState );
     }
 
     public static Iterator<PTable> maintainedIndexes(Iterator<PTable> indexes) {
@@ -224,11 +226,22 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      */
     public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
             List<PTable> indexes, PhoenixConnection connection) {
-        if (indexes.isEmpty()) {
+        if (indexes.isEmpty() && dataTable.getTransformingNewTable() == null) {
             ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
             return;
         }
         int nIndexes = indexes.size();
+        if (dataTable.getTransformingNewTable() != null) {
+            // If the transforming new table is in CREATE_DISABLE state, the mutations don't go into the table.
+            boolean disabled = dataTable.getTransformingNewTable().isIndexStateDisabled();
+            if (disabled && nIndexes == 0) {
+                ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+                return;
+            }
+            if (!disabled) {
+                nIndexes++;
+            }
+        }
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         DataOutputStream output = new DataOutputStream(stream);
         try {
@@ -241,6 +254,17 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     byte[] protoBytes = proto.toByteArray();
                     WritableUtils.writeVInt(output, protoBytes.length);
                     output.write(protoBytes);
+            }
+            if (dataTable.getTransformingNewTable() != null) {
+                // We're not serializing the TransformMaintainer if the new transformed table is disabled
+                boolean disabled = dataTable.getTransformingNewTable().isIndexStateDisabled();
+                if (!disabled) {
+                    ServerCachingProtos.TransformMaintainer proto = TransformMaintainer.toProto(
+                            dataTable.getTransformingNewTable().getTransformMaintainer(dataTable, connection));
+                    byte[] protoBytes = proto.toByteArray();
+                    WritableUtils.writeVInt(output, protoBytes.length);
+                    output.write(protoBytes);
+                }
             }
         } catch (IOException e) {
             throw new RuntimeException(e); // Impossible
@@ -316,8 +340,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                       int protoSize = WritableUtils.readVInt(input);
                       byte[] b = new byte[protoSize];
                       input.readFully(b);
-                      org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer proto = ServerCachingProtos.IndexMaintainer.parseFrom(b);
-                      maintainers.add(IndexMaintainer.fromProto(proto, rowKeySchema, isDataTableSalted));
+                      try {
+                          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer proto = ServerCachingProtos.IndexMaintainer.parseFrom(b);
+                          maintainers.add(IndexMaintainer.fromProto(proto, rowKeySchema, isDataTableSalted));
+                      } catch (InvalidProtocolBufferException e) {
+                          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.TransformMaintainer proto = ServerCachingProtos.TransformMaintainer.parseFrom(b);
+                          maintainers.add(TransformMaintainer.fromProto(proto, rowKeySchema, isDataTableSalted));
+                      }
                     } else {
                         IndexMaintainer maintainer = new IndexMaintainer(rowKeySchema, isDataTableSalted);
                         maintainer.readFields(input);
@@ -400,7 +429,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     //**** START: New member variables added in 4.16 ****/
     private String logicalIndexName;
 
-    private IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
+    protected IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
         this.dataRowKeySchema = dataRowKeySchema;
         this.isDataTableSalted = isDataTableSalted;
     }
@@ -807,6 +836,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             indexPosOffset = (!isLocalIndex && nIndexSaltBuckets > 0 ? 1 : 0) + (isMultiTenant ? 1 : 0) + (viewIndexId == null ? 0 : 1);
             BitSet viewConstantColumnBitSet = this.rowKeyMetaData.getViewConstantColumnBitSet();
             BitSet descIndexColumnBitSet = rowKeyMetaData.getDescIndexColumnBitSet();
+            int trailingVariableWidthColumnNum = 0;
             for (int i = dataPosOffset; i < dataRowKeySchema.getFieldCount(); i++) {
                 // Write view constants from the data table, as these
                 // won't appear in the index (as they're the
@@ -841,21 +871,21 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         }
                     }
                 }
-                // Write separator byte if variable length unless it's the last field in the schema
-                // (but we still need to write it if it's DESC to ensure sort order is correct).
+                // Write separator byte if variable length
                 byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength() == 0, dataRowKeySchema.getField(i));
-                if (!dataRowKeySchema.getField(i).getDataType().isFixedWidth() && (((i+1) !=  dataRowKeySchema.getFieldCount()) || sepByte == QueryConstants.DESC_SEPARATOR_BYTE)) {
+                if (!dataRowKeySchema.getField(i).getDataType().isFixedWidth()){
                     output.writeByte(sepByte);
+                    trailingVariableWidthColumnNum++;
+                } else {
+                    trailingVariableWidthColumnNum = 0;
                 }
             }
             int length = stream.size();
-            int minLength = length - maxTrailingNulls;
             byte[] dataRowKey = stream.getBuffer();
             // Remove trailing nulls
-            int index = dataRowKeySchema.getFieldCount() - 1;
-            while (index >= 0 && !dataRowKeySchema.getField(index).getDataType().isFixedWidth() && length > minLength && dataRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
+            while (trailingVariableWidthColumnNum > 0 && dataRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
                 length--;
-                index--;
+                trailingVariableWidthColumnNum--;
             }
             // TODO: need to capture nDataSaltBuckets instead of just a boolean. For now,
             // we store this in nIndexSaltBuckets, as we only use this function for local indexes
@@ -1035,35 +1065,47 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         return indexRowKeySchema;
     }
-    
-    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
+
+    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey, boolean verified) throws IOException {
         byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey, ts);
+        return buildUpdateMutation(kvBuilder, valueGetter, dataRowKeyPtr, ts, regionStartKey, regionEndKey,
+                indexRowKey, this.getEmptyKeyValueFamily(), coveredColumnsMap,
+                indexEmptyKeyValueRef, indexWALDisabled, dataImmutableStorageScheme, immutableStorageScheme, encodingScheme, dataEncodingScheme, verified);
+    }
+
+    public static Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable dataRowKeyPtr, long ts,
+                                   byte[] regionStartKey, byte[] regionEndKey, byte[] destRowKey, ImmutableBytesPtr emptyKeyValueCFPtr,
+                                          Map<ColumnReference, ColumnReference> coveredColumnsMap,
+                                          ColumnReference destEmptyKeyValueRef, boolean destWALDisabled,
+                                          ImmutableStorageScheme srcImmutableStorageScheme, ImmutableStorageScheme destImmutableStorageScheme,
+                                          QualifierEncodingScheme destEncodingScheme, QualifierEncodingScheme srcEncodingScheme, boolean verified) throws IOException {
+        Set<ColumnReference> coveredColumns = coveredColumnsMap.keySet();
         Put put = null;
         // New row being inserted: add the empty key value
         ImmutableBytesWritable latestValue = null;
         if (valueGetter==null ||
-                this.getCoveredColumns().isEmpty() ||
-                (latestValue = valueGetter.getLatestValue(indexEmptyKeyValueRef, ts)) == null ||
+                coveredColumns.isEmpty() ||
+                (latestValue = valueGetter.getLatestValue(destEmptyKeyValueRef, ts)) == null ||
                 latestValue == ValueGetter.HIDDEN_BY_DELETE) {
             // We need to track whether or not our empty key value is hidden by a Delete Family marker at the same timestamp.
             // If it is, these Puts will be masked so should not be emitted.
             if (latestValue == ValueGetter.HIDDEN_BY_DELETE) {
                 return null;
             }
-            put = new Put(indexRowKey);
+            put = new Put(destRowKey);
             // add the keyvalue for the empty row
-            put.add(kvBuilder.buildPut(new ImmutableBytesPtr(indexRowKey),
-                    this.getEmptyKeyValueFamily(), indexEmptyKeyValueRef.getQualifierWritable(), ts,
-                    QueryConstants.EMPTY_COLUMN_VALUE_BYTES_PTR));
-            put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
+            put.add(kvBuilder.buildPut(new ImmutableBytesPtr(destRowKey),
+                    emptyKeyValueCFPtr, destEmptyKeyValueRef.getQualifierWritable(), ts,
+                    verified ? QueryConstants.VERIFIED_BYTES_PTR : QueryConstants.EMPTY_COLUMN_VALUE_BYTES_PTR));
+            put.setDurability(!destWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
         }
 
-        ImmutableBytesPtr rowKey = new ImmutableBytesPtr(indexRowKey);
-        if (immutableStorageScheme != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
+        ImmutableBytesPtr rowKey = new ImmutableBytesPtr(destRowKey);
+        if (destImmutableStorageScheme != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
             // map from index column family to list of pair of index column and data column (for covered columns)
             Map<ImmutableBytesPtr, List<Pair<ColumnReference, ColumnReference>>> familyToColListMap = Maps.newHashMap();
-            for (ColumnReference ref : this.getCoveredColumns()) {
-                ColumnReference indexColRef = this.coveredColumnsMap.get(ref);
+            for (ColumnReference ref : coveredColumns) {
+                ColumnReference indexColRef = coveredColumnsMap.get(ref);
                 ImmutableBytesPtr cf = new ImmutableBytesPtr(indexColRef.getFamily());
                 if (!familyToColListMap.containsKey(cf)) {
                     familyToColListMap.put(cf, Lists.<Pair<ColumnReference, ColumnReference>>newArrayList());
@@ -1077,7 +1119,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 int maxEncodedColumnQualifier = Integer.MIN_VALUE;
                 // find the max col qualifier
                 for (Pair<ColumnReference, ColumnReference> colRefPair : colRefPairs) {
-                    maxEncodedColumnQualifier = Math.max(maxEncodedColumnQualifier, encodingScheme.decode(colRefPair.getFirst().getQualifier()));
+                    maxEncodedColumnQualifier = Math.max(maxEncodedColumnQualifier, destEncodingScheme.decode(colRefPair.getFirst().getQualifier()));
                 }
                 Expression[] colValues = EncodedColumnsUtil.createColumnExpressionArray(maxEncodedColumnQualifier);
                 // set the values of the columns
@@ -1085,7 +1127,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     ColumnReference indexColRef = colRefPair.getFirst();
                     ColumnReference dataColRef = colRefPair.getSecond();
                     byte[] value = null;
-                    if (this.dataImmutableStorageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                    if (srcImmutableStorageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
                         Expression expression = new SingleCellColumnExpression(new PDatum() {
                             @Override public boolean isNullable() {
                                 return false;
@@ -1106,8 +1148,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                             @Override public PDataType getDataType() {
                                 return null;
                             }
-                        }, dataColRef.getFamily(), dataColRef.getQualifier(), encodingScheme,
-                                immutableStorageScheme);
+                        }, dataColRef.getFamily(), dataColRef.getQualifier(), destEncodingScheme,
+                                destImmutableStorageScheme);
                         ImmutableBytesPtr ptr = new ImmutableBytesPtr();
                         expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
                         value = ptr.copyBytesIfNecessary();
@@ -1119,36 +1161,100 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         }
                     }
                     if (value != null) {
-                        int indexArrayPos = encodingScheme.decode(indexColRef.getQualifier())-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
+                        int indexArrayPos = destEncodingScheme.decode(indexColRef.getQualifier())-QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE+1;
                         colValues[indexArrayPos] = new LiteralExpression(value);
                     }
                 }
                 
                 List<Expression> children = Arrays.asList(colValues);
                 // we use SingleCellConstructorExpression to serialize multiple columns into a single byte[]
-                SingleCellConstructorExpression singleCellConstructorExpression = new SingleCellConstructorExpression(immutableStorageScheme, children);
+                SingleCellConstructorExpression singleCellConstructorExpression = new SingleCellConstructorExpression(destImmutableStorageScheme, children);
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 singleCellConstructorExpression.evaluate(new BaseTuple() {}, ptr);
                 if (put == null) {
-                    put = new Put(indexRowKey);
-                    put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
+                    put = new Put(destRowKey);
+                    put.setDurability(!destWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
                 }
                 ImmutableBytesPtr colFamilyPtr = new ImmutableBytesPtr(columnFamily);
                 //this is a little bit of extra work for installations that are running <0.94.14, but that should be rare and is a short-term set of wrappers - it shouldn't kill GC
                 put.add(kvBuilder.buildPut(rowKey, colFamilyPtr, QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES_PTR, ts, ptr));
             }
         } else {
-            for (ColumnReference ref : this.getCoveredColumns()) {
-                ColumnReference indexColRef = this.coveredColumnsMap.get(ref);
-                ImmutableBytesPtr cq = indexColRef.getQualifierWritable();
-                ImmutableBytesPtr cf = indexColRef.getFamilyWritable();
-                ImmutableBytesWritable value = valueGetter.getLatestValue(ref, ts);
-                if (value != null && value != ValueGetter.HIDDEN_BY_DELETE) {
-                    if (put == null) {
-                        put = new Put(indexRowKey);
-                        put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
+            if (srcImmutableStorageScheme == destImmutableStorageScheme) { //both ONE_CELL
+                for (ColumnReference ref : coveredColumns) {
+                    ColumnReference indexColRef = coveredColumnsMap.get(ref);
+                    ImmutableBytesPtr cq = indexColRef.getQualifierWritable();
+                    ImmutableBytesPtr cf = indexColRef.getFamilyWritable();
+                    ImmutableBytesWritable value = valueGetter.getLatestValue(ref, ts);
+                    if (value != null && value != ValueGetter.HIDDEN_BY_DELETE) {
+                        if (put == null) {
+                            put = new Put(destRowKey);
+                            put.setDurability(!destWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
+                        }
+                        put.add(kvBuilder.buildPut(rowKey, cf, cq, ts, value));
                     }
-                    put.add(kvBuilder.buildPut(rowKey, cf, cq, ts, value));
+                }
+            } else {
+                // Src is SINGLE_CELL, destination is ONE_CELL
+                Map<ImmutableBytesPtr, List<Pair<ColumnReference, ColumnReference>>> familyToColListMap = Maps.newHashMap();
+                for (ColumnReference ref : coveredColumns) {
+                    ColumnReference indexColRef = coveredColumnsMap.get(ref);
+                    ImmutableBytesPtr cf = new ImmutableBytesPtr(indexColRef.getFamily());
+                    if (!familyToColListMap.containsKey(cf)) {
+                        familyToColListMap.put(cf, Lists.<Pair<ColumnReference, ColumnReference>>newArrayList());
+                    }
+                    familyToColListMap.get(cf).add(Pair.newPair(indexColRef, ref));
+                }
+                // iterate over each column family and create a byte[] containing all the columns
+                for (Entry<ImmutableBytesPtr, List<Pair<ColumnReference, ColumnReference>>> entry : familyToColListMap.entrySet()) {
+                    byte[] columnFamily = entry.getKey().copyBytesIfNecessary();
+                    List<Pair<ColumnReference, ColumnReference>> colRefPairs = entry.getValue();
+                    int maxEncodedColumnQualifier = Integer.MIN_VALUE;
+                    // find the max col qualifier
+                    for (Pair<ColumnReference, ColumnReference> colRefPair : colRefPairs) {
+                        maxEncodedColumnQualifier = Math.max(maxEncodedColumnQualifier, srcEncodingScheme.decode(colRefPair.getSecond().getQualifier()));
+                    }
+                    // set the values of the columns
+                    for (Pair<ColumnReference, ColumnReference> colRefPair : colRefPairs) {
+                        ColumnReference indexColRef = colRefPair.getFirst();
+                        ColumnReference dataColRef = colRefPair.getSecond();
+                        byte[] valueBytes = null;
+                            Expression expression = new SingleCellColumnExpression(new PDatum() {
+                                @Override public boolean isNullable() {
+                                    return false;
+                                }
+
+                                @Override public SortOrder getSortOrder() {
+                                    return null;
+                                }
+
+                                @Override public Integer getScale() {
+                                    return null;
+                                }
+
+                                @Override public Integer getMaxLength() {
+                                    return null;
+                                }
+
+                                @Override public PDataType getDataType() {
+                                    return null;
+                                }
+                            }, dataColRef.getFamily(), dataColRef.getQualifier(), srcEncodingScheme,
+                                    srcImmutableStorageScheme);
+                            ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+                            expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
+                            valueBytes = ptr.copyBytesIfNecessary();
+
+                        if (valueBytes != null) {
+                            ImmutableBytesPtr cq = indexColRef.getQualifierWritable();
+                            ImmutableBytesPtr cf = indexColRef.getFamilyWritable();
+                            if (put == null) {
+                                put = new Put(destRowKey);
+                                put.setDurability(!destWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
+                            }
+                            put.add(kvBuilder.buildPut(rowKey, cf, cq, ts, new ImmutableBytesWritable(valueBytes)));
+                        }
+                    }
                 }
             }
         }

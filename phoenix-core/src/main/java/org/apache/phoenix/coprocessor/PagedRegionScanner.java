@@ -81,7 +81,9 @@ public class PagedRegionScanner extends BaseRegionScanner {
                 return true;
             }
         } catch (Exception e) {
-            pageFilter.init();
+            if (pageFilter != null) {
+                pageFilter.init();
+            }
             throw e;
         }
     }

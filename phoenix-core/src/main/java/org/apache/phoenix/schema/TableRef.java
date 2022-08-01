@@ -38,6 +38,7 @@ public class TableRef {
     private final long lowerBoundTimeStamp;
     private final boolean hasDynamicCols;
     private final long currentTime;
+    private boolean hinted;
 
     private static TableRef createEmptyTableRef() {
         try {
@@ -53,15 +54,18 @@ public class TableRef {
     }
 
     public TableRef(TableRef tableRef) {
-        this(tableRef.alias, tableRef.table, tableRef.upperBoundTimeStamp, tableRef.lowerBoundTimeStamp, tableRef.hasDynamicCols);
+        this(tableRef.alias, tableRef.table, tableRef.upperBoundTimeStamp,
+                tableRef.lowerBoundTimeStamp, tableRef.hasDynamicCols, tableRef.hinted);
     }
     
     public TableRef(TableRef tableRef, long timeStamp) {
-        this(tableRef.alias, tableRef.table, timeStamp, tableRef.lowerBoundTimeStamp, tableRef.hasDynamicCols);
+        this(tableRef.alias, tableRef.table, timeStamp, tableRef.lowerBoundTimeStamp,
+                tableRef.hasDynamicCols, tableRef.hinted);
     }
     
     public TableRef(TableRef tableRef, String alias) {
-        this(alias, tableRef.table, tableRef.upperBoundTimeStamp, tableRef.lowerBoundTimeStamp, tableRef.hasDynamicCols);
+        this(alias, tableRef.table, tableRef.upperBoundTimeStamp, tableRef.lowerBoundTimeStamp,
+                tableRef.hasDynamicCols, tableRef.hinted);
     }
     
     public TableRef(PTable table) {
@@ -69,15 +73,20 @@ public class TableRef {
     }
     
     public TableRef(PTable table, long upperBoundTimeStamp, long lowerBoundTimeStamp) {
-        this(null, table, upperBoundTimeStamp, lowerBoundTimeStamp, false);
+        this(null, table, upperBoundTimeStamp, lowerBoundTimeStamp, false, false);
     }
 
     public TableRef(String alias, PTable table, long upperBoundTimeStamp, boolean hasDynamicCols) {
-        this(alias, table, upperBoundTimeStamp, 0, hasDynamicCols);
+        this(alias, table, upperBoundTimeStamp, 0, hasDynamicCols, false);
+    }
+
+    public TableRef(String alias, PTable table, long upperBoundTimeStamp, long lowerBoundTimeStamp,
+                    boolean hasDynamicCols) {
+        this(alias, table, upperBoundTimeStamp, lowerBoundTimeStamp, hasDynamicCols, false);
     }
     
-    public TableRef(String alias, PTable table, long upperBoundTimeStamp, long lowerBoundTimeStamp, 
-        boolean hasDynamicCols) {
+    public TableRef(String alias, PTable table, long upperBoundTimeStamp, long lowerBoundTimeStamp,
+        boolean hasDynamicCols, boolean hinted) {
         this.alias = alias;
         this.table = table;
         // if UPDATE_CACHE_FREQUENCY is set, always let the server set timestamps
@@ -85,6 +94,7 @@ public class TableRef {
         this.currentTime = this.upperBoundTimeStamp;
         this.lowerBoundTimeStamp = lowerBoundTimeStamp;
         this.hasDynamicCols = hasDynamicCols;
+        this.hinted = hinted;
     }
     
     public PTable getTable() {
@@ -101,6 +111,14 @@ public class TableRef {
 
     public String getTableAlias() {
         return alias;
+    }
+
+    public boolean isHinted() {
+        return hinted;
+    }
+
+    public void setHinted(boolean hinted) {
+        this.hinted = hinted;
     }
 
     public String getColumnDisplayName(ColumnRef ref, boolean cfCaseSensitive, boolean cqCaseSensitive) {

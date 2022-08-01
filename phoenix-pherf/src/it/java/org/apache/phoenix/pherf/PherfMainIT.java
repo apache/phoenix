@@ -19,6 +19,7 @@
 package org.apache.phoenix.pherf;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.pherf.result.Result;
 import org.apache.phoenix.pherf.result.ResultValue;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
@@ -27,6 +28,7 @@ import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.contrib.java.lang.system.ExpectedSystemExit;
+import org.junit.experimental.categories.Category;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -35,6 +37,7 @@ import java.util.concurrent.Future;
 
 import static org.junit.Assert.assertEquals;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class PherfMainIT extends ResultBaseTestIT {
 
     public HashMap<String, String> mapResults(Result r) throws IOException {

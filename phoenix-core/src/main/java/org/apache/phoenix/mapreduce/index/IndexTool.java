@@ -75,7 +75,6 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -353,7 +352,10 @@ public class IndexTool extends Configured implements Tool {
 
         final Options options = getOptions();
 
-        CommandLineParser parser = new DefaultParser(false, false);
+        CommandLineParser parser = DefaultParser.builder().
+                setAllowPartialMatching(false).
+                setStripLeadingAndTrailingQuotes(false).
+                build();
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);
@@ -399,11 +401,6 @@ public class IndexTool extends Configured implements Tool {
                 "VerifyType: [" + cmdLine.getOptionValue(VERIFY_OPTION.getOpt()) + "] and " +
                 "DisableLoggingType: ["
                 + cmdLine.getOptionValue(DISABLE_LOGGING_OPTION.getOpt()) + "]");
-        }
-        if ((cmdLine.hasOption(START_TIME_OPTION.getOpt()) || cmdLine.hasOption(RETRY_VERIFY_OPTION.getOpt()))
-            && !HbaseCompatCapabilities.isRawFilterSupported()) {
-            throw new IllegalStateException("Can't do incremental index verification on this " +
-                "version of HBase because raw skip scan filters are not supported.");
         }
         return cmdLine;
     }
@@ -493,6 +490,10 @@ public class IndexTool extends Configured implements Tool {
                 }
                 if (useSnapshot || (!isLocalIndexBuild && pDataTable.isTransactional())) {
                     PhoenixConfigurationUtil.setCurrentScnValue(configuration, maxTimeRange);
+                    if (indexVerifyType != IndexVerifyType.NONE) {
+                        LOGGER.warn("Verification is not supported for snapshots and transactional"
+                                + "table index rebuilds, verification parameter ignored");
+                    }
                     return configureJobForAsyncIndex();
                 } else {
                     // Local and non-transactional global indexes to be built on the server side
@@ -571,7 +572,7 @@ public class IndexTool extends Configured implements Tool {
             if (pDataTable.isTransactional()) {
                 long maxTimeRange = pDataTable.getTimeStamp() + 1;
                 scan.setAttribute(BaseScannerRegionObserver.TX_SCN,
-                        Bytes.toBytes(Long.valueOf(Long.toString(TransactionUtil.convertToNanoseconds(maxTimeRange)))));
+                        Bytes.toBytes(TransactionUtil.convertToNanoseconds(maxTimeRange)));
             }
             
           
@@ -636,6 +637,7 @@ public class IndexTool extends Configured implements Tool {
 
             configuration.set(PhoenixConfigurationUtil.UPSERT_STATEMENT, upsertQuery);
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, physicalIndexTable);
+            PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
             PhoenixConfigurationUtil.setDisableIndexes(configuration, indexTable);
 
             PhoenixConfigurationUtil.setUpsertColumnNames(configuration,
@@ -666,9 +668,14 @@ public class IndexTool extends Configured implements Tool {
                 String snapshotName;
                 try {
                     admin = pConnection.getQueryServices().getAdmin();
-                    String pdataTableName = pDataTable.getName().getString();
-                    snapshotName = new StringBuilder(pdataTableName).append("-Snapshot").toString();
-                    admin.snapshot(snapshotName, TableName.valueOf(pdataTableName));
+                    TableName hDdataTableName = TableName.valueOf(pDataTable.getPhysicalName().getBytes());
+                    snapshotName = new StringBuilder("INDEXTOOL-")
+                            .append(pDataTable.getName().getString())
+                            .append("-Snapshot-")
+                            .append(System.currentTimeMillis())
+                            .toString();
+                    //FIXME Drop this snapshot after we're done ?
+                    admin.snapshot(snapshotName, hDdataTableName);
                 } finally {
                     if (admin != null) {
                         admin.close();
@@ -889,7 +896,7 @@ public class IndexTool extends Configured implements Tool {
             validateLastVerifyTime();
         }
         if(isTimeRangeSet(startTime, endTime)) {
-            validateTimeRange();
+            validateTimeRange(startTime, endTime);
         }
         if (verify) {
             String value = cmdLine.getOptionValue(VERIFY_OPTION.getOpt());
@@ -945,10 +952,10 @@ public class IndexTool extends Configured implements Tool {
         }
     }
 
-    private void validateTimeRange() {
+    public static void validateTimeRange(Long sTime, Long eTime) {
         Long currentTime = EnvironmentEdgeManager.currentTimeMillis();
-        Long st = (startTime == null) ? 0 : startTime;
-        Long et = (endTime == null) ? currentTime : endTime;
+        Long st = (sTime == null) ? 0 : sTime;
+        Long et = (eTime == null) ? currentTime : eTime;
         if (st.compareTo(currentTime) > 0 || et.compareTo(currentTime) > 0 || st.compareTo(et) >= 0) {
             throw new RuntimeException(INVALID_TIME_RANGE_EXCEPTION_MESSAGE);
         }
@@ -972,6 +979,11 @@ public class IndexTool extends Configured implements Tool {
         qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
         if (IndexType.LOCAL.equals(indexType)) {
             isLocalIndexBuild = true;
+            if (useSnapshot) {
+                throw new IllegalArgumentException(String.format(
+                    "%s is a local index. snapshots are not supported for local indexes.",
+                    qIndexTable));
+            }
             try (org.apache.hadoop.hbase.client.Connection hConn
                     = getTemporaryHConnection(connection.unwrap(PhoenixConnection.class))) {
                 RegionLocator regionLocator = hConn
@@ -984,7 +996,7 @@ public class IndexTool extends Configured implements Tool {
         changeDisabledIndexStateToBuiding(connection);
     }
 
-    private static boolean isTimeRangeSet(Long startTime, Long endTime) {
+    public static boolean isTimeRangeSet(Long startTime, Long endTime) {
         return startTime != null || endTime != null;
     }
 
@@ -996,7 +1008,7 @@ public class IndexTool extends Configured implements Tool {
     }
 
     private void changeDisabledIndexStateToBuiding(Connection connection) throws SQLException {
-        if (pIndexTable != null && pIndexTable.getIndexState() == PIndexState.DISABLE) {
+        if (pIndexTable != null && pIndexTable.getIndexState().isDisabled()) {
             IndexUtil.updateIndexState(connection.unwrap(PhoenixConnection.class),
                     pIndexTable.getName().getString(), PIndexState.BUILDING, null);
         }
@@ -1046,9 +1058,10 @@ public class IndexTool extends Configured implements Tool {
             throws SQLException, IOException, IllegalArgumentException {
         int numRegions;
 
+        TableName hDataName = TableName.valueOf(pDataTable.getPhysicalName().getBytes());
         try (org.apache.hadoop.hbase.client.Connection tempHConn = getTemporaryHConnection(pConnection);
                 RegionLocator regionLocator =
-                        tempHConn.getRegionLocator(TableName.valueOf(qDataTable))) {
+                        tempHConn.getRegionLocator(hDataName)) {
             numRegions = regionLocator.getStartKeys().length;
             if (autosplit && (numRegions <= autosplitNumRegions)) {
                 LOGGER.info(String.format(
@@ -1089,10 +1102,10 @@ public class IndexTool extends Configured implements Tool {
                 splitPoints[splitIdx++] = b.getRightBoundExclusive();
             }
             // drop table and recreate with appropriate splits
-            TableName indexTN = TableName.valueOf(pIndexTable.getPhysicalName().getBytes());
-            HTableDescriptor descriptor = admin.getTableDescriptor(indexTN);
-            admin.disableTable(indexTN);
-            admin.deleteTable(indexTN);
+            TableName hIndexName = TableName.valueOf(pIndexTable.getPhysicalName().getBytes());
+            HTableDescriptor descriptor = admin.getTableDescriptor(hIndexName);
+            admin.disableTable(hIndexName);
+            admin.deleteTable(hIndexName);
             admin.createTable(descriptor, splitPoints);
         }
     }
@@ -1105,7 +1118,7 @@ public class IndexTool extends Configured implements Tool {
     }
 
     // setup a ValueGetter to get index values from the ResultSet
-    private ValueGetter getIndexValueGetter(final PhoenixResultSet rs, List<String> dataColNames) {
+    public static ValueGetter getIndexValueGetter(final PhoenixResultSet rs, List<String> dataColNames) {
         // map from data col name to index in ResultSet
         final Map<String, Integer> rsIndex = new HashMap<>(dataColNames.size());
         int i = 1;

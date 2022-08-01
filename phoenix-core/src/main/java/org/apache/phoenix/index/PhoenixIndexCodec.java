@@ -34,6 +34,8 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DO_TRANSFORMING;
+
 /**
  * Phoenix-based {@link IndexCodec}. Manages all the logic of how to cleanup an index (
  * {@link #getIndexDeletes(TableState, IndexMetaData, byte[], byte[])}) as well as what the new index state should be (
@@ -44,7 +46,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
     public static final String INDEX_PROTO_MD = "IdxProtoMD";
     public static final String INDEX_UUID = "IdxUUID";
     public static final String INDEX_MAINTAINERS = "IndexMaintainers";
-    public static KeyValueBuilder KV_BUILDER = GenericKeyValueBuilder.INSTANCE;
+    public static final KeyValueBuilder KV_BUILDER = GenericKeyValueBuilder.INSTANCE;
     
     private byte[] tableName;
     
@@ -69,8 +71,17 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
         return true;
     }
 
+    boolean isTransforming(Map<String, byte[]> attributes) {
+        if (attributes == null) { return false; }
+        byte[] transforming = attributes.get(DO_TRANSFORMING);
+        if (transforming == null) { return false; }
+        return true;
+    }
+
     @Override
-    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
+    public Iterable<IndexUpdate> getIndexUpserts(
+            TableState state, IndexMetaData context, byte[] regionStartKey, byte[] regionEndKey,
+            boolean verified) throws IOException {
         PhoenixIndexMetaData metaData = (PhoenixIndexMetaData)context;
         List<IndexMaintainer> indexMaintainers = metaData.getIndexMaintainers();
         if (indexMaintainers.get(0).isRowDeleted(state.getPendingUpdate())) {
@@ -85,7 +96,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             IndexUpdate indexUpdate = statePair.getSecond();
             indexUpdate.setTable(maintainer.isLocalIndex() ? tableName : maintainer.getIndexTableName());
             Put put = maintainer.buildUpdateMutation(KV_BUILDER, valueGetter, ptr, state.getCurrentTimestamp(),
-                    regionStartKey, regionEndKey);
+                    regionStartKey, regionEndKey, verified);
             indexUpdate.setUpdate(put);
             indexUpdates.add(indexUpdate);
         }
@@ -122,6 +133,6 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
 
     @Override
     public boolean isEnabled(Mutation m) {
-        return hasIndexMaintainers(m.getAttributesMap());
+        return hasIndexMaintainers(m.getAttributesMap()) || isTransforming(m.getAttributesMap());
     }
 }

@@ -278,7 +278,9 @@ public class WhereCompiler {
 
         if (LiteralExpression.isBooleanFalseOrNull(whereClause)) {
             context.setScanRanges(ScanRanges.NOTHING);
-        } else if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL) {
+        } else if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL
+                || (context.getCurrentTable().getTable().getIndexType() == IndexType.GLOBAL
+                && context.isUncoveredIndex())) {
             if (whereClause != null && !ExpressionUtil.evaluatesToTrue(whereClause)) {
                 // pass any extra where as scan attribute so it can be evaluated after all
                 // columns from the main CF have been merged in
@@ -291,11 +293,12 @@ public class WhereCompiler {
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
-                scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER, stream.toByteArray());
+                scan.setAttribute(BaseScannerRegionObserver.INDEX_FILTER, stream.toByteArray());
 
                 // this is needed just for ExplainTable, since de-serializing an expression does not restore
                 // its display properties, and that cannot be changed, due to backwards compatibility
-                scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_FILTER_STR, Bytes.toBytes(whereClause.toString()));
+                scan.setAttribute(BaseScannerRegionObserver.INDEX_FILTER_STR,
+                        Bytes.toBytes(whereClause.toString()));
             }
         } else if (whereClause != null && !ExpressionUtil.evaluatesToTrue(whereClause)) {
             Filter filter = null;

@@ -57,6 +57,12 @@ public enum MetricType {
             + " autoCommit is true, the total time taken for executeMutation + conn.commit",
             LogLevel.OFF, PLong.INSTANCE),
 
+    ATOMIC_UPSERT_SQL_COUNTER("auc", "Counter for number of atomic upsert sql queries", LogLevel.OFF, PLong.INSTANCE),
+    ATOMIC_UPSERT_COMMIT_TIME("aut", "Time it took to commit a batch of atomic upserts", LogLevel.OFF, PLong.INSTANCE),
+    ATOMIC_UPSERT_SQL_QUERY_TIME("auqt", "Time taken by atomic upsert sql queries inside executeMutation or if"
+        + " autoCommit is true, the total time taken for executeMutation + conn.commit",
+        LogLevel.OFF, PLong.INSTANCE),
+
     // delete-specific metrics updated during executeMutation
     DELETE_SQL_COUNTER("dc", "Counter for number of delete sql queries", LogLevel.OFF, PLong.INSTANCE),
     DELETE_SUCCESS_SQL_COUNTER("dssc", "Counter for number of delete sql queries that successfully"
@@ -138,6 +144,8 @@ public enum MetricType {
     PHOENIX_CONNECTIONS_THROTTLED_COUNTER("ct", "Number of client Phoenix connections prevented from opening " +
                                               "because there are already too many to that target cluster.",LogLevel.OFF, PLong.INSTANCE),
     PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER("ca","Number of requests for Phoenix connections, whether successful or not.",LogLevel.OFF, PLong.INSTANCE),
+    PHOENIX_CONNECTIONS_FAILED_COUNTER("cf", "Number of client Phoenix Connections Failed to open" +
+                                                ", not including throttled connections", LogLevel.OFF, PLong.INSTANCE),
     // hbase metrics
     COUNT_RPC_CALLS("rp", "Number of RPC calls",LogLevel.DEBUG, PLong.INSTANCE),
     COUNT_REMOTE_RPC_CALLS("rr", "Number of remote RPC calls",LogLevel.DEBUG, PLong.INSTANCE),
@@ -149,7 +157,17 @@ public enum MetricType {
     COUNT_RPC_RETRIES("rpr", "Number of RPC retries",LogLevel.DEBUG, PLong.INSTANCE),
     COUNT_REMOTE_RPC_RETRIES("rrr", "Number of remote RPC retries",LogLevel.DEBUG, PLong.INSTANCE),
     COUNT_ROWS_SCANNED("ws", "Number of rows scanned",LogLevel.DEBUG, PLong.INSTANCE),
-    COUNT_ROWS_FILTERED("wf", "Number of rows filtered",LogLevel.DEBUG,PLong.INSTANCE);
+    COUNT_ROWS_FILTERED("wf", "Number of rows filtered",LogLevel.DEBUG,PLong.INSTANCE),
+    COUNTER_METADATA_INCONSISTENCY("mi", "Number of times the metadata inconsistencies ",
+            LogLevel.DEBUG, PLong.INSTANCE),
+    NUM_SYSTEM_TABLE_RPC_SUCCESS("nstrs", "Number of successful system table RPC calls",
+                                                                        LogLevel.DEBUG,PLong.INSTANCE),
+    NUM_SYSTEM_TABLE_RPC_FAILURES("nstcf", "Number of Failed system table RPC calls ",
+                                  LogLevel.DEBUG,PLong.INSTANCE),
+    NUM_METADATA_LOOKUP_FAILURES("nmlf", "Number of Failed  metadata lookup calls",
+                                 LogLevel.DEBUG,PLong.INSTANCE),
+    TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS("tsistrc", "Time spent in RPC calls for systemTable lookup",
+                                         LogLevel.DEBUG,PLong.INSTANCE);
 	
     private final String description;
     private final String shortName;

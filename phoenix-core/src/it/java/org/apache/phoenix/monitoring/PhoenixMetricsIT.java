@@ -11,6 +11,7 @@ package org.apache.phoenix.monitoring;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_RPC_CALLS;
@@ -78,17 +79,20 @@ import org.apache.hbase.thirdparty.com.google.common.base.Joiner;
 import org.apache.hbase.thirdparty.com.google.common.collect.Lists;
 import org.apache.hbase.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.hamcrest.CoreMatchers;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.mockito.internal.util.reflection.Whitebox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,6 +104,7 @@ import org.slf4j.LoggerFactory;
  * 2. Phoenix Request level metrics are exposed via
  *   a. PhoenixRuntime
  */
+@Category(NeedsOwnMiniClusterTest.class)
 public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixMetricsIT.class);
@@ -481,7 +486,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             String t = entry.getKey();
             assertEquals("Table names didn't match!", tableName, t);
             Map<MetricType, Long> p = entry.getValue();
-            assertEquals("There should have been five metrics", 15, p.size());
+            assertEquals("There should have been sixteen metrics", 16, p.size());
             boolean mutationBatchSizePresent = false;
             boolean mutationCommitTimePresent = false;
             boolean mutationBytesPresent = false;
@@ -1094,6 +1099,61 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             }
         }
         assertEquals(maxConnections, connections.size());
+    }
+
+    @Test
+    public void testGetConnectionsFailedCounter() throws Exception {
+        int attemptedPhoenixConnections = 7;
+        //3 Failed connections and 1 throttled connection
+        int maxConnections = attemptedPhoenixConnections - 4;
+        List<Connection> connections = Lists.newArrayList();
+        String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
+        String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum +
+                ':' +  CUSTOM_URL_STRING + '=' + "FailedCounterTest";
+        Properties props = new Properties();
+        props.setProperty(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, Integer.toString(maxConnections));
+        Properties props1 = new Properties(props);
+        props1.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Integer.toString(-1));
+        Properties props2 = new Properties(props);
+        //Will create IllegalArgumentException while parsing loglevel
+        props2.setProperty(QueryServices.LOG_LEVEL, "notKnown");
+
+        GLOBAL_QUERY_SERVICES_COUNTER.getMetric().reset();
+        GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().reset();
+        GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.getMetric().reset();
+        GLOBAL_FAILED_PHOENIX_CONNECTIONS.getMetric().reset();
+        try {
+            for (int i = 0; i < attemptedPhoenixConnections; i++) {
+                try {
+                    if (i == 0) {
+                        connections.add(DriverManager.getConnection(url, props2));
+                    } else if (i % 3 == 0) {
+                        connections.add(DriverManager.getConnection(url, props1));
+                    } else {
+                        connections.add(DriverManager.getConnection(url, props));
+                    }
+                } catch (SQLException se) {
+                    if (i == 0) {
+                        assertEquals(0, se.getErrorCode());
+                    } else if (i % 3 == 0) {
+                        assertEquals(SQLExceptionCode.INVALID_SCN.getErrorCode(), se.getErrorCode());
+                    } else {
+                        assertEquals(SQLExceptionCode.NEW_CONNECTION_THROTTLED.getErrorCode(), se.getErrorCode());
+                    }
+                }
+            }
+        } finally {
+            for (Connection c : connections) {
+                c.close();
+            }
+        }
+        assertEquals(1, GLOBAL_QUERY_SERVICES_COUNTER.getMetric().getValue());
+        assertEquals(1, GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.getMetric().getValue());
+        assertEquals(3, GLOBAL_FAILED_PHOENIX_CONNECTIONS.getMetric().getValue());
+        //While initializing CQS we are creating one more metaConnection increasing Attempted_Counter by +1 during 1st conn.
+        assertTrue("Not all connections were attempted!",
+                attemptedPhoenixConnections <= GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().getValue());
+
     }
 
     @Test

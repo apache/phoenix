@@ -21,25 +21,25 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.assertNull;
 
 import java.sql.Array;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Statement;
 import java.util.Properties;
 
-import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.execute.HashJoinPlan;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class HashJoinMoreIT extends ParallelStatsDisabledIT {
     private final String[] plans = new String[] {
             /*
@@ -429,6 +429,56 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
             
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             assertEquals(String.format(plans[3],tempTableWithCompositePK,tempTableWithCompositePK), QueryUtil.getExplainPlan(rs));
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testFullJoinOnSaltedTables() throws Exception {
+        String tempTable1 = generateUniqueName();
+        String tempTable2 = generateUniqueName();
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute("CREATE TABLE "+ tempTable1 + "(" +
+                    " PRODUCT_ID VARCHAR NOT NULL," +
+                    " PRODUCT_NAME VARCHAR NOT NULL," +
+                    "  SUPPLIER_ID VARCHAR," +
+                    " CATEGORY_ID VARCHAR," +
+                    " CONSTRAINT PRODUCTS_NEW_PK PRIMARY KEY (PRODUCT_ID,PRODUCT_NAME)) " +
+                    " DEFAULT_COLUMN_FAMILY='CF',COLUMN_ENCODED_BYTES=1, SALT_BUCKETS = 2");
+            conn.createStatement().execute("CREATE TABLE "+ tempTable2+" (" +
+                    " ORDER_ID VARCHAR NOT NULL," +
+                    " PRODUCT_ID VARCHAR NOT NULL," +
+                    "  UNIT_PRICE VARCHAR," +
+                    " CONSTRAINT ORDER_DETAILS_NEW_PK PRIMARY KEY (ORDER_ID,PRODUCT_ID))" +
+                    " DEFAULT_COLUMN_FAMILY='CF',COLUMN_ENCODED_BYTES=1, SALT_BUCKETS = 2");
+            Statement statement = conn.createStatement();
+            statement.execute("UPSERT INTO "+tempTable1+" values ( '1', 'Chai', '8', '1')");
+            statement.execute("UPSERT INTO "+tempTable1+" values ( '11', 'Queso Cabrales', '5', '4')");
+            statement.execute("UPSERT INTO "+tempTable2+" values ( '10248', '11', '14')");
+            statement.execute("UPSERT INTO "+tempTable2+" values ( '10248', '42', '9.8')");
+            statement.execute("UPSERT INTO "+tempTable2+" values ( '10249', '14', '18.6')");
+            conn.commit();
+            ResultSet rs = statement.executeQuery("SELECT PROD.PRODUCT_ID, OD.ORDER_ID" +
+                    "  FROM "+tempTable1+" PROD" +
+                    "  FULL OUTER JOIN "+ tempTable2+" OD ON PROD.PRODUCT_ID=OD.PRODUCT_ID" +
+                    "  ORDER BY PROD.PRODUCT_ID");
+            assertTrue(rs.next());
+            assertEquals("1", rs.getString(1));
+            assertNull(rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("11",rs.getString(1));
+            assertEquals(rs.getString(2), "10248");
+            assertTrue(rs.next());
+            assertNull(rs.getString(1));
+            assertEquals(rs.getString(2), "10249");
+            assertTrue(rs.next());
+            assertNull(rs.getString(1));
+            assertEquals(rs.getString(2), "10248");
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }

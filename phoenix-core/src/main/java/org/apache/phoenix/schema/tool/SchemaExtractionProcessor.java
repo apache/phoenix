@@ -48,6 +48,8 @@ import java.util.List;
 import java.util.ArrayList;
 
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.util.MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES;
 
 public class SchemaExtractionProcessor implements SchemaProcessor {
@@ -118,7 +120,8 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             HTableDescriptor htd = getTableDescriptor(cqsi, table);
             setHTableProperties(htd);
         }
-        String propertiesString = convertPropertiesToString();
+
+        String propertiesString = convertPropertiesToString(true);
         return generateIndexDDLString(quotedBaseTableFullName, indexedColumnsString, coveredColumnsString,
                 indexPTable.getIndexType().equals(PTable.IndexType.LOCAL), quotedIndexTableName, propertiesString);
     }
@@ -135,8 +138,8 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         StringBuilder indexedColumnsBuilder = new StringBuilder();
 
         for (PColumn indexedColumn : indexPK) {
-            String indexColumn = extractIndexColumn(indexedColumn.getName().getString(), defaultCF);
-            if(indexColumn.equalsIgnoreCase(MetaDataUtil.VIEW_INDEX_ID_COLUMN_NAME)) {
+            String indexColumn = extractIndexColumn(indexedColumn.getExpressionStr(), defaultCF);
+            if (indexColumn == null) {
                 continue;
             }
             indexPKName.add(indexColumn);
@@ -184,18 +187,34 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
     }
 
     private String extractIndexColumn(String columnName, String defaultCF) {
+        if (columnName == null) {
+            return null;
+        }
         String [] columnNameSplit = columnName.split(":");
         if(columnNameSplit[0].equals("") || columnNameSplit[0].equalsIgnoreCase(defaultCF) ||
                 (defaultCF.startsWith("L#") && columnNameSplit[0].equalsIgnoreCase(defaultCF.substring(2)))) {
-            return SchemaUtil.formatColumnName(columnNameSplit[1]);
+            return formatColumnOrExpression(columnNameSplit[1]);
         } else {
             if (columnNameSplit.length > 1) {
                 String schema = SchemaUtil.formatSchemaName(columnNameSplit[0]);
                 String name = SchemaUtil.formatColumnName(columnNameSplit[1]);
                 return String.format("%s.%s", schema, name);
             } else {
-                return SchemaUtil.formatColumnName(columnNameSplit[0]);
+                return formatColumnOrExpression(columnNameSplit[0]);
             }
+        }
+    }
+
+    private String formatColumnOrExpression(String columnOrExpression) {
+        if (columnOrExpression.startsWith("(")) {
+            //Expressions like (a*b) are always parenthesised
+            return columnOrExpression.substring(1, columnOrExpression.length()-1);
+        } else if (columnOrExpression.contains("(")) {
+            //Expressions like like func(a) are always have a parenthesis
+            return columnOrExpression;
+        } else {
+            //If there are no parentheses, this is a column name
+            return SchemaUtil.formatIndexColumnName(columnOrExpression);
         }
     }
 
@@ -208,7 +227,9 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             }
             if(cc.getFamilyName()!=null) {
                 String indexColumn = extractIndexColumn(cc.getName().getString(), defaultCF);
-                coveredColumnsBuilder.append(indexColumn);
+                if (indexColumn != null) {
+                    coveredColumnsBuilder.append(indexColumn);
+                }
             }
         }
         return coveredColumnsBuilder.toString();
@@ -276,7 +297,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         setHColumnFamilyProperties(hcds);
 
         String columnInfoString = getColumnInfoStringForTable(table);
-        String propertiesString = convertPropertiesToString();
+        String propertiesString = convertPropertiesToString(false);
 
         return generateTableDDLString(columnInfoString, propertiesString, pSchemaName, pTableName);
     }
@@ -296,8 +317,10 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             String key = entry.getKey();
             String value = entry.getValue();
             defaultProps.put(key, value);
-            if(key.equalsIgnoreCase(HColumnDescriptor.BLOOMFILTER) || key.equalsIgnoreCase(
-                    HColumnDescriptor.COMPRESSION)) {
+            if (key.equalsIgnoreCase(HColumnDescriptor.BLOOMFILTER)) {
+                defaultProps.put(key, "ROW");
+            }
+            if (key.equalsIgnoreCase(HColumnDescriptor.COMPRESSION)) {
                 defaultProps.put(key, "NONE");
             }
             if(key.equalsIgnoreCase(HColumnDescriptor.DATA_BLOCK_ENCODING)) {
@@ -368,7 +391,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         }
     }
 
-    private String convertPropertiesToString() {
+    private String convertPropertiesToString(boolean forIndex) {
         StringBuilder optionBuilder = new StringBuilder();
         for(Map.Entry<String, String> entry : definedProps.entrySet()) {
             String key = entry.getKey();
@@ -382,6 +405,19 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             }
 
             if(value!=null && (shouldGenerateWithDefaults || (defaultProps.get(key) != null && !value.equals(defaultProps.get(key))))) {
+                if (forIndex) {
+                    // cannot set these for index
+                    if (key.equals(UPDATE_CACHE_FREQUENCY)) {
+                        continue;
+                    }
+                }
+
+                if (key.contains("TTL") && definedProps.containsKey(TRANSACTION_PROVIDER)
+                        && definedProps.get(TRANSACTION_PROVIDER).equalsIgnoreCase("OMID")) {
+                    // TTL is unsupported for OMID transactional table
+                    continue;
+                }
+
                 if (optionBuilder.length() != 0) {
                     optionBuilder.append(", ");
                 }

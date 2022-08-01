@@ -59,7 +59,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Ignore;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,6 +74,7 @@ import org.slf4j.LoggerFactory;
  * 2. Behavior under different CF's combinations.
  * 3. Behavior under different COLUMN ENCODINGS
  */
+@Category(ParallelStatsDisabledTest.class)
 public class EmptyColumnIT extends ParallelStatsDisabledIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EmptyColumnIT.class);

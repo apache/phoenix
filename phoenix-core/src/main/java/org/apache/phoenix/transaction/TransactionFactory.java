@@ -18,20 +18,22 @@
 package org.apache.phoenix.transaction;
 
 import java.io.IOException;
-import java.util.List;
-
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 
 public class TransactionFactory {
 
-    private static PhoenixTransactionProvider tephraTransactionProvider;
+    private static final PhoenixTransactionProvider tephraTransactionProvider;
 
     static{
+        boolean tephraEnabled = true;
         try {
-            tephraTransactionProvider = (PhoenixTransactionProvider)
-                    Class.forName("org.apache.phoenix.transaction.TephraTransactionProvider")
-                    .newInstance();
+            Class.forName("org.apache.tephra.TransactionFailureException");
         } catch (Throwable e) {
+            tephraEnabled = false;
+        }
+        if (tephraEnabled) {
+            tephraTransactionProvider = TephraTransactionProvider.getInstance();
+        } else {
             tephraTransactionProvider = NotAvailableTransactionProvider.getInstance();
         }
     }

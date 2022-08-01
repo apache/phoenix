@@ -53,6 +53,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY;
+
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 
 import static org.apache.phoenix.query.QueryServices.IS_NAMESPACE_MAPPING_ENABLED;
@@ -115,7 +117,8 @@ public class UpdateStatisticsTool extends Configured implements Tool {
             Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
             boolean namespaceMapping = getConf().getBoolean(IS_NAMESPACE_MAPPING_ENABLED,
                     DEFAULT_IS_NAMESPACE_MAPPING_ENABLED);
-            String physicalTableName =  SchemaUtil.getPhysicalTableName(tableName.getBytes(),
+            String physicalTableName =  SchemaUtil.getPhysicalTableName(
+                    tableName.getBytes(StandardCharsets.UTF_8),
                     namespaceMapping).getNameAsString();
             admin.snapshot(snapshotName, TableName.valueOf(physicalTableName));
             LOGGER.info("Successfully created snapshot " + snapshotName + " for " + physicalTableName);
@@ -263,7 +266,10 @@ public class UpdateStatisticsTool extends Configured implements Tool {
 
         final Options options = getOptions();
 
-        CommandLineParser parser = new DefaultParser(false, false);
+        CommandLineParser parser = DefaultParser.builder().
+                setAllowPartialMatching(false).
+                setStripLeadingAndTrailingQuotes(false).
+                build();
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);

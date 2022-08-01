@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -36,21 +38,20 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.mapreduce.Counters;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRow;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -69,6 +70,7 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -84,6 +86,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
@@ -119,13 +122,13 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
-public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT {
+public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
     public static final int MAX_LOOKBACK_AGE = 3600;
     private final String tableDDLOptions;
 
-    private final boolean directApi = true;
     private final boolean useSnapshot = false;
     private final boolean mutable;
     private final String indexDDLOptions;
@@ -167,7 +170,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
                 QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         serverProps.put(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(8));
-        serverProps.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+        serverProps.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
             Long.toString(MAX_LOOKBACK_AGE));
         serverProps.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
             Long.toString(Long.MAX_VALUE));
@@ -229,7 +232,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                     "CREATE INDEX %s ON %s (VAL1) INCLUDE (VAL2) ASYNC " + this.indexDDLOptions, indexTableName, dataTableFullName));
             // Run the index MR job and verify that the index table is built correctly
             IndexTool
-                    indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, new String[0]);
+                    indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null, 0, new String[0]);
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
             assertTrue("Index rebuild failed!", indexTool.getJob().isSuccessful());
             TestUtil.assertIndexState(conn, indexTableFullName, PIndexState.ACTIVE, null);
@@ -246,7 +249,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             assertEquals(NROWS, actualRowCount);
             actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(NROWS, actualRowCount);
-            indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null,
+            indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null,
                     0, IndexTool.IndexVerifyType.ONLY, new String[0]);
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
@@ -278,9 +281,9 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             conn.createStatement()
                     .execute(String.format("CREATE INDEX %s ON %s (NAME) INCLUDE (CODE) ASYNC " + this.indexDDLOptions,
                             indexTableName, dataTableFullName));
-            IndexTool indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
+            IndexTool indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
                     IndexTool.IndexVerifyType.ONLY);
-            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+            if (BaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
                 Cell cell =
                         IndexToolIT.getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName,
                                 indexTableFullName);
@@ -297,7 +300,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             }
 
             // Run the index tool to populate the index while verifying rows
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
+            IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
                     IndexTool.IndexVerifyType.AFTER);
 
             // Set ttl of index table ridiculously low so that all data is expired
@@ -321,7 +324,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             admin.disableTable(indexToolOutputTable);
             admin.deleteTable(indexToolOutputTable);
             // Run the index tool using the only-verify option, verify it gives no mismatch
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
+            IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
                     IndexTool.IndexVerifyType.ONLY);
             Scan scan = new Scan();
             Table hIndexToolTable =
@@ -381,7 +384,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             //add the fast fail coproc and make sure it goes first
             admin.modifyTable(newTD);
             // Run the index MR job and it should fail (return -1)
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, -1, new String[0]);
 
             // Verify that the index table should be still in the ACTIVE state
@@ -418,14 +421,14 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             conn.createStatement().execute(stmtString2);
 
             // Run the index MR job and verify that the index table is built correctly
-            IndexTool indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
+            IndexTool indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+            if (BaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
                 assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
                 assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
             } else {
@@ -441,7 +444,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                 IndexToolIT.upsertRow(stmt1, i);
             }
             conn.commit();
-            indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BOTH, new String[0]);
+            indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BOTH, new String[0]);
             assertEquals(2 * NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
             assertEquals(2 * NROWS, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
@@ -499,7 +502,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             conn.createStatement().execute(stmtString2);
 
             // Run the index MR job and verify that the index table is built correctly
-            IndexTool indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
+            IndexTool indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
             assertEquals(N_ROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
             assertEquals(N_ROWS, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
             assertEquals(N_ROWS, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
@@ -522,13 +525,13 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             conn.createStatement().execute(stmtString3);
             conn.commit();
             // Verify that IndexTool reports that there are old design index rows
-            indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.ONLY, new String[0]);
+            indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.ONLY, new String[0]);
             assertEquals(N_OLD_ROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
             // Clean up all old design rows
-            indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
+            indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
             assertEquals(N_OLD_ROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
             // Verify that IndexTool does not report them anymore
-            indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
+            indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
             actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
             assertEquals(N_ROWS, actualRowCount);
@@ -558,17 +561,17 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                     "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC " + this.indexDDLOptions, indexTableName, viewFullName));
             TestUtil.addCoprocessor(conn, "_IDX_" + dataTableFullName, IndexToolIT.MutationCountingRegionObserver.class);
             // Run the index MR job and verify that the index table rebuild succeeds
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
+            IndexToolIT.runIndexTool(useSnapshot, schemaName, viewName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.AFTER);
             assertEquals(1, IndexToolIT.MutationCountingRegionObserver.getMutationCount());
             IndexToolIT.MutationCountingRegionObserver.setMutationCount(0);
             // Since all the rows are in the index table, running the index tool with the "-v BEFORE" option should not
             // write any index rows
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
+            IndexToolIT.runIndexTool(useSnapshot, schemaName, viewName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.BEFORE);
             assertEquals(0, IndexToolIT.MutationCountingRegionObserver.getMutationCount());
             // The "-v BOTH" option should not write any index rows either
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
+            IndexToolIT.runIndexTool(useSnapshot, schemaName, viewName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.BOTH);
             assertEquals(0, IndexToolIT.MutationCountingRegionObserver.getMutationCount());
         }
@@ -598,9 +601,9 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             IndexRebuildRegionScanner.setIgnoreIndexRebuildForTesting(true);
             conn.createStatement().execute(String.format(
                     "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC " + this.indexDDLOptions, indexTableName, viewFullName));
-            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+            if (BaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
                 // Run the index MR job and verify that the index table rebuild fails
-                IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
+                IndexToolIT.runIndexTool(useSnapshot, schemaName, viewName, indexTableName,
                         null, -1, IndexTool.IndexVerifyType.AFTER);
                 // The index tool output table should report that there is a missing index row
                 Cell cell = IndexToolIT.getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, "_IDX_" + dataTableFullName);
@@ -612,7 +615,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                     Assert.fail("Fail to parsing the error message from IndexToolOutputTable");
                 }
             } else {
-                IndexTool indexTool = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, indexTableName,
+                IndexTool indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, viewName, indexTableName,
                         null, 0, IndexTool.IndexVerifyType.AFTER);
                 assertEquals(1, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
             }
@@ -622,9 +625,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
 
     @Test
     public void testIndexToolFailedMapperNotRecordToResultTable() throws Exception {
-        if (mutable != true || singleCell != true ) {
-            return;
-        }
+        Assume.assumeTrue(mutable && singleCell);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String schemaName = generateUniqueName();
@@ -645,14 +646,14 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             conn.createStatement().execute(String.format(
                     "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC " + this.indexDDLOptions, indexTableName, dataTableFullName));
             // Run the index MR job and verify that the index table rebuild fails
-            IndexTool it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            IndexTool it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, -1, IndexTool.IndexVerifyType.BEFORE);
             Assert.assertEquals(PIndexState.BUILDING, TestUtil.getIndexState(conn, indexTableFullName));
 
             // Now there is no exception, so the second partial build should retry
             Long scn = it.getJob().getConfiguration().getLong(CURRENT_SCN_VALUE, 1L);
             IndexRebuildRegionScanner.setThrowExceptionForRebuild(false);
-            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.BEFORE,"-rv", Long.toString(scn));
             Assert.assertEquals(PIndexState.ACTIVE, TestUtil.getIndexState(conn, indexTableFullName));
             ResultSet rs =
@@ -682,9 +683,9 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             // Run the index MR job to only verify that each data table row has a corresponding index row
             // IndexTool will go through each data table row and record the mismatches in the output table
             // called PHOENIX_INDEX_TOOL
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY);
-            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+            if (BaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
                 Cell cell = IndexToolIT.getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, indexTableFullName);
                 try {
                     String expectedErrorMsg = IndexRebuildRegionScanner.ERROR_MESSAGE_MISSING_INDEX_ROW;
@@ -702,16 +703,15 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             deleteAllRows(conn,
                 TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
             // Run the index tool to populate the index while verifying rows
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.AFTER);
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY);
         }
     }
 
     @Test
     public void testIndexToolForIncrementalRebuild() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
@@ -729,7 +729,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             conn.createStatement().execute("upsert into " + dataTableFullName + " values (2, 'Phoenix1', 'B')");
             conn.commit();
 
-            IndexTool it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            IndexTool it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.AFTER);
             Long scn = it.getJob().getConfiguration().getLong(CURRENT_SCN_VALUE, 1L);
 
@@ -745,7 +745,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
 
             deleteOneRowFromResultTable(conn, scn, indexTableFullName);
 
-            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.AFTER, "-rv", Long.toString(scn));
             scn = it.getJob().getConfiguration().getLong(CURRENT_SCN_VALUE, 1L);
 
@@ -761,7 +761,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             expectedStatus.set(1, RUN_STATUS_SKIPPED);
             expectedStatus.set(2, RUN_STATUS_SKIPPED);
 
-            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.AFTER, "-rv", Long.toString(scn));
             scn = it.getJob().getConfiguration().getLong(CURRENT_SCN_VALUE, 1L);
             verifyRunStatusFromResultTable(conn, scn, indexTableFullName, 8, expectedStatus);
@@ -778,7 +778,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
 
     @Test
     public void testIndexToolForIncrementalVerify() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         ManualEnvironmentEdge customEdge = new ManualEnvironmentEdge();
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
@@ -831,7 +830,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             IndexTool it;
             if(!mutable) {
                 // job with 2 rows
-                it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                         null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t0),"-et", String.valueOf(t2));
                 verifyCounters(it, 2, 2);
                 //increment time between rebuilds so that PHOENIX_INDEX_TOOL and
@@ -839,65 +838,65 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                 customEdge.incrementValue(waitForUpsert);
 
                 // only one row
-                it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                         null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),"-et", String.valueOf(t2));
                 verifyCounters(it, 1, 1);
                 customEdge.incrementValue(waitForUpsert);
                 // no rows
-                it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+                it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                         null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t5),"-et", String.valueOf(t6));
                 verifyCounters(it, 0, 0);
                 customEdge.incrementValue(waitForUpsert);
                 //view index
                 // job with 2 rows
-                it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, viewIndexName,
+                it = IndexToolIT.runIndexTool(useSnapshot, schemaName, viewName, viewIndexName,
                         null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t0),"-et", String.valueOf(t2));
                 verifyCounters(it, 2, 2);
                 customEdge.incrementValue(waitForUpsert);
                 // only one row
-                it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, viewIndexName,
+                it = IndexToolIT.runIndexTool(useSnapshot, schemaName, viewName, viewIndexName,
                         null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),"-et", String.valueOf(t2));
                 verifyCounters(it, 1, 1);
                 customEdge.incrementValue(waitForUpsert);
                 // no rows
-                it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName, viewIndexName,
+                it = IndexToolIT.runIndexTool(useSnapshot, schemaName, viewName, viewIndexName,
                         null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t5),"-et", String.valueOf(t6));
                 verifyCounters(it, 0, 0);
                 customEdge.incrementValue(waitForUpsert);
                 return;
             }
             // regular job without delete row
-            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t0),"-et", String.valueOf(t4));
             verifyCounters(it, 2, 3);
             customEdge.incrementValue(waitForUpsert);
 
             // job with 2 rows
-            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t0),"-et", String.valueOf(t2));
             verifyCounters(it, 2, 2);
             customEdge.incrementValue(waitForUpsert);
 
             // job with update on only one row
-            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),"-et", String.valueOf(t3));
             verifyCounters(it, 1, 2);
             customEdge.incrementValue(waitForUpsert);
 
             // job with update on only one row
-            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t2),"-et", String.valueOf(t4));
             verifyCounters(it, 1, 2);
             customEdge.incrementValue(waitForUpsert);
 
             // job with update on only one row
-            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t4),"-et", String.valueOf(t5));
             verifyCounters(it, 1, 1);
             customEdge.incrementValue(waitForUpsert);
 
             // job with no new updates on any row
-            it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, dataTableName, indexTableName,
+            it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t5),"-et", String.valueOf(t6));
             verifyCounters(it, 0, 0);
             customEdge.incrementValue(waitForUpsert);
@@ -908,7 +907,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
 
     @Test
     public void testIndexToolForIncrementalVerify_viewIndex() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         ManualEnvironmentEdge customeEdge = new ManualEnvironmentEdge();
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
@@ -952,28 +950,28 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             IndexTool it;
             // regular job with delete row
             it =
-                    IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
+                    IndexToolIT.runIndexTool(useSnapshot, schemaName, viewName,
                             viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),
                             "-et", String.valueOf(t4));
             verifyCounters(it, 2, 2);
 
             // job with 1 row
             it =
-                    IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
+                    IndexToolIT.runIndexTool(useSnapshot, schemaName, viewName,
                             viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),
                             "-et", String.valueOf(t2));
             verifyCounters(it, 1, 1);
 
             // job with update on only one row
             it =
-                    IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
+                    IndexToolIT.runIndexTool(useSnapshot, schemaName, viewName,
                             viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t2),
                             "-et", String.valueOf(t3));
             verifyCounters(it, 1, 1);
 
             // job with update on 2 rows
             it =
-                    IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
+                    IndexToolIT.runIndexTool(useSnapshot, schemaName, viewName,
                             viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t1),
                             "-et", String.valueOf(t3));
             verifyCounters(it, 2, 2);
@@ -992,7 +990,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             */
             // job with no new updates on any row
             it =
-                    IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, viewName,
+                    IndexToolIT.runIndexTool(useSnapshot, schemaName, viewName,
                             viewIndexName, null, 0, IndexTool.IndexVerifyType.ONLY, "-st", String.valueOf(t4),
                             "-et", String.valueOf(t5));
             verifyCounters(it, 0, 0);
@@ -1078,7 +1076,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             truncateIndexAndIndexToolTables(indexTableFullName);
 
             boolean MaxLookbackEnabled =
-                    CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration());
+                    BaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration());
             //now check that disabling logging AFTER leaves only the BEFORE logs on a BOTH run
             assertDisableLogging(conn, MaxLookbackEnabled ? 2 : 0, IndexTool.IndexVerifyType.BOTH,
                 IndexTool.IndexDisableLoggingType.AFTER,
@@ -1110,7 +1108,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
 
     @Test
     public void testEnableOutputLoggingForMaxLookback() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isMaxLookbackTimeSupported());
         //by default we don't log invalid or missing rows past max lookback age to the
         // PHOENIX_INDEX_TOOL table. Verify that we can flip that logging on from the client-side
         // using a system property (such as from the command line) and have it log rows on the
@@ -1157,7 +1154,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
             getUtility().getConfiguration().
                 set(IndexRebuildRegionScanner.PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS, "true");
-            IndexTool it = IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName,
+            IndexTool it = IndexToolIT.runIndexTool(useSnapshot, schemaName,
                 dataTableName,
                 indexTableName, null, 0, IndexTool.IndexVerifyType.ONLY);
             TestUtil.dumpTable(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
@@ -1209,7 +1206,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             // Run the index MR job and verify that the index table is built correctly
             Configuration conf = new Configuration(getUtility().getConfiguration());
             conf.set(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(2));
-            IndexTool indexTool = IndexToolIT.runIndexTool(conf, directApi, useSnapshot, schemaName, dataTableName,
+            IndexTool indexTool = IndexToolIT.runIndexTool(conf, useSnapshot, schemaName, dataTableName,
                 indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE, IndexTool.IndexDisableLoggingType.NONE, new String[0]);
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
             assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
@@ -1217,7 +1214,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+            if (BaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
                 assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
                 assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
             } else {
@@ -1247,7 +1244,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             Configuration conf = new Configuration(getUtility().getConfiguration());
             conf.set(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(1));
             IndexTool indexTool =
-                    IndexToolIT.runIndexTool(conf, directApi, useSnapshot, schemaName,
+                    IndexToolIT.runIndexTool(conf, useSnapshot, schemaName,
                         dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.BEFORE,
                         IndexTool.IndexDisableLoggingType.NONE ,new String[0]);
             assertEquals(3, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
@@ -1276,7 +1273,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
 
     @Test
     public void testIncrementalRebuildWithPageSize() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
@@ -1301,7 +1297,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             Configuration conf = new Configuration(getUtility().getConfiguration());
             conf.set(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(2));
             IndexTool indexTool =
-                    IndexToolIT.runIndexTool(conf, directApi, useSnapshot, schemaName,
+                    IndexToolIT.runIndexTool(conf, useSnapshot, schemaName,
                         dataTableName, indexTableName, null, 0, IndexTool.IndexVerifyType.AFTER,
                         IndexTool.IndexDisableLoggingType.NONE, "-st", String.valueOf(minTs), "-et",
                         String.valueOf(EnvironmentEdgeManager.currentTimeMillis()));
@@ -1332,7 +1328,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
 
     @Test
     public void testUpdatablePKFilterViewIndexRebuild() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         if (!mutable) {
             return;
         }
@@ -1395,7 +1390,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             conn.createStatement().execute(createViewIndex);
             conn.commit();
             // Rebuild using index tool
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, view1Name, indexTableName);
+            IndexToolIT.runIndexTool(useSnapshot, schemaName, view1Name, indexTableName);
             ResultSet rs =
                     conn.createStatement()
                             .executeQuery("SELECT COUNT(*) FROM " + indexTableFullName);
@@ -1411,7 +1406,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
 
     @Test
     public void testUpdatableNonPkFilterViewIndexRebuild() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         if (!mutable) {
             return;
         }
@@ -1474,7 +1468,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
             conn.createStatement().execute(createViewIndex);
             conn.commit();
             // Rebuild using index tool
-            IndexToolIT.runIndexTool(directApi, useSnapshot, schemaName, view1Name, indexTableName);
+            IndexToolIT.runIndexTool(useSnapshot, schemaName, view1Name, indexTableName);
             ResultSet rs =
                     conn.createStatement()
                             .executeQuery("SELECT COUNT(*) FROM " + indexTableFullName);
@@ -1557,7 +1551,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
                                       String indexTableName, String indexTableFullName,
                                       int expectedStatus) throws Exception {
 
-        IndexTool tool = IndexToolIT.runIndexTool(getUtility().getConfiguration(), true, false, schemaName, dataTableName,
+        IndexTool tool = IndexToolIT.runIndexTool(getUtility().getConfiguration(), false, schemaName, dataTableName,
             indexTableName,
             null,
             expectedStatus, verifyType, disableLoggingType,new String[0]);
@@ -1614,12 +1608,16 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseUniqueNamesOwnClusterIT 
         return output;
     }
 
-    public static class FastFailRegionObserver extends BaseRegionObserver {
+    public static class FastFailRegionObserver implements RegionObserver, RegionCoprocessor {
         @Override
         public RegionScanner postScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
                                         final Scan scan,
                                                final RegionScanner s) throws IOException {
             throw new DoNotRetryIOException("I'm just a coproc that's designed to fail fast");
+        }
+        @Override
+        public Optional<RegionObserver> getRegionObserver() {
+            return Optional.of(this);
         }
     }
 }

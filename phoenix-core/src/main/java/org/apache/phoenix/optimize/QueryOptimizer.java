@@ -334,6 +334,7 @@ public class QueryOptimizer {
         boolean isProjected = dataPlan.getContext().getResolver().getTables().get(0).getTable().getType() == PTableType.PROJECTED;
         // Check index state of now potentially updated index table to make sure it's active
         TableRef indexTableRef = resolver.getTables().get(0);
+        indexTableRef.setHinted(isHinted);
         Map<TableRef, QueryPlan> dataPlans = Collections.singletonMap(indexTableRef, dataPlan);
         PTable indexTable = indexTableRef.getTable();
         PIndexState indexState = indexTable.getIndexState();

@@ -39,7 +39,7 @@ pipeline {
                 axes {
                     axis {
                         name 'HBASE_PROFILE'
-                        values '2.1', '2.2', '2.3', '2.4'
+                        values '2.3', '2.4'
                     }
                 }
 
@@ -54,6 +54,9 @@ pipeline {
                             timeout(time: 30, unit: 'MINUTES')
                         }
                         environment {
+                            //HBase 2.2.7 cannot be built with Java 11
+                            PATH = "/usr/lib/jvm/java-8-openjdk-amd64/bin:$PATH"
+                            JAVA_HOME = "/usr/lib/jvm/java-8-openjdk-amd64"
                             HBASE_VERSION = sh(returnStdout: true, script: "mvn help:evaluate -Dexpression=hbase-${HBASE_PROFILE}.runtime.version -q -DforceStdout").trim()
                         }
                         steps {
@@ -70,7 +73,7 @@ pipeline {
                                 checkout scm
                                 sh """#!/bin/bash
                                     ulimit -a
-                                    mvn clean verify -Dskip.embedded -Dhbase.profile=${HBASE_PROFILE} -B
+                                    mvn clean verify -DPhoenixPatchProcess -Dskip.code-coverage -Dhbase.profile=${HBASE_PROFILE} -B
                                 """
                             }
                         }

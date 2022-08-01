@@ -29,6 +29,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES
 import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE;
 import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE_ARRAY;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
@@ -37,6 +38,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -144,8 +146,8 @@ public class SchemaUtil {
     // See PHOENIX-4424
     public static final String SCHEMA_FOR_DEFAULT_NAMESPACE = "default";
     public static final String HBASE_NAMESPACE = "hbase";
-    public static final List<String> NOT_ALLOWED_SCHEMA_LIST = Arrays.asList(SCHEMA_FOR_DEFAULT_NAMESPACE,
-            HBASE_NAMESPACE);
+    public static final List<String> NOT_ALLOWED_SCHEMA_LIST = Collections.unmodifiableList(
+        Arrays.asList(SCHEMA_FOR_DEFAULT_NAMESPACE, HBASE_NAMESPACE));
     
     /**
      * May not be instantiated
@@ -1108,10 +1110,20 @@ public class SchemaUtil {
         return TableName.valueOf(schemaName, tableName);
     }
 
+    public static PName getPhysicalHBaseTableName(byte[] fullTableName, boolean isNamespaceMappingEnabled) {
+        String tableName = getTableNameFromFullName(fullTableName);
+        String schemaName = getSchemaNameFromFullName(fullTableName);
+        return getPhysicalHBaseTableName(schemaName, tableName, isNamespaceMappingEnabled);
+    }
+
     public static PName getPhysicalHBaseTableName(String schemaName, String tableName, boolean isNamespaceMapped) {
         if (!isNamespaceMapped) { return PNameFactory.newName(getTableNameAsBytes(schemaName, tableName)); }
         if (schemaName == null || schemaName.isEmpty()) { return PNameFactory.newName(tableName); }
         return PNameFactory.newName(schemaName + QueryConstants.NAMESPACE_SEPARATOR + tableName);
+    }
+
+    public static String replaceNamespaceSeparator(PName name) {
+        return name.getString().replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR);
     }
 
     public static boolean isSchemaCheckRequired(PTableType tableType, ReadOnlyProps props) {
@@ -1136,7 +1148,8 @@ public class SchemaUtil {
 
     public static byte[] getParentTableNameFromIndexTable(byte[] physicalTableName, String indexPrefix) {
         String tableName = Bytes.toString(physicalTableName);
-        return getParentTableNameFromIndexTable(tableName, indexPrefix).getBytes();
+        return getParentTableNameFromIndexTable(tableName, indexPrefix)
+                .getBytes(StandardCharsets.UTF_8);
     }
 
     public static String getParentTableNameFromIndexTable(String physicalTableName, String indexPrefix) {
@@ -1296,6 +1309,29 @@ public class SchemaUtil {
             name = "\"" + name + "\"";
         }
         return name;
+    }
+
+    public static String formatIndexColumnName(String name) {
+        String[] splitName = name.split("\\.");
+        if(splitName.length < 2) {
+            if (!name.contains("\"")) {
+                if (quotesNeededForColumn(name)) {
+                    name = "\"" + name + "\"";
+                }
+                return name;
+            } else if (name.startsWith("\"") && name.endsWith("\"")) {
+                if (quotesNeededForColumn(name.substring(1, name.length() - 1))) {
+                    return name;
+                } else {
+                    return name.substring(1, name.length() - 1);
+                }
+            } else {
+                return name;
+            }
+        } else {
+            return String.format("%s.%s", formatIndexColumnName(splitName[0]),
+                    formatIndexColumnName(splitName[1]));
+        }
     }
 
     public static boolean containsLowerCase(String name) {

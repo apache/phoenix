@@ -29,10 +29,12 @@ import org.apache.phoenix.expression.function.LnFunction;
 import org.apache.phoenix.expression.function.LogFunction;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * End to end tests for {@link LnFunction} and {@link LogFunction}
  */
+@Category(ParallelStatsDisabledTest.class)
 public class LnLogFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

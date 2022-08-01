@@ -39,7 +39,9 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class Array2IT extends ArrayIT {
 
     private static final String TEST_QUERY = "select ?[2] from \"SYSTEM\".\"CATALOG\" limit 1";

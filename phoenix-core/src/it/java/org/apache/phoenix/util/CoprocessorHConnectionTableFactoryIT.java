@@ -27,9 +27,11 @@ import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
-import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.query.BaseTest;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,7 +39,8 @@ import org.slf4j.LoggerFactory;
  * This test is wrt to https://issues.apache.org/jira/browse/PHOENIX-4993.Test checks region
  * close should not close the shared connections
  */
-public class CoprocessorHConnectionTableFactoryIT extends BaseUniqueNamesOwnClusterIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class CoprocessorHConnectionTableFactoryIT extends BaseTest {
   private static String ORG_PREFIX = "ORG";
   private static final Logger LOGGER =
           LoggerFactory.getLogger(CoprocessorHConnectionTableFactoryIT.class);

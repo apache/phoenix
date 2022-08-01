@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -45,6 +46,7 @@ import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -62,6 +64,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.export.DefaultSchemaRegistryRepository;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -70,8 +73,9 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-
+@Category(ParallelStatsDisabledTest.class)
 public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test
@@ -261,7 +265,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertNotNull(admin.getDescriptor(TableName.valueOf(tableName)));
         ColumnFamilyDescriptor[] columnFamilies =
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
-        assertEquals(BloomType.NONE, columnFamilies[0].getBloomFilterType());
+        assertEquals(BloomType.ROW, columnFamilies[0].getBloomFilterType());
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
@@ -524,14 +528,14 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
                         + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
                         + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)"
-                        + " ) BLOOMFILTER = 'ROW', SALT_BUCKETS = 4";
+                        + " ) BLOOMFILTER = 'NONE', SALT_BUCKETS = 4";
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
         Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
         ColumnFamilyDescriptor[] columnFamilies =
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
-        assertEquals(BloomType.ROW, columnFamilies[0].getBloomFilterType());
+        assertEquals(BloomType.NONE, columnFamilies[0].getBloomFilterType());
     }
 
     /**
@@ -753,6 +757,26 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
                 oneByteQualifierSingleCellArrayWithOffsetsMultitenantTable, conn);
 
+        }
+    }
+
+    @Test
+    public void testCreateChangeDetectionEnabledTable() throws Exception {
+        //create a table with CHANGE_DETECTION_ENABLED and verify both that it's set properly
+        //on the PTable, and that it gets persisted to the external schema registry
+
+        String schemaName = generateUniqueName();
+        String tableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE " + fullTableName +
+                " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
+                " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
+                "CHANGE_DETECTION_ENABLED=true";
+            conn.createStatement().execute(ddl);
+            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            assertTrue(table.isChangeDetectionEnabled());
+            AlterTableIT.verifySchemaExport(table, getUtility().getConfiguration());
         }
     }
 
@@ -1168,28 +1192,38 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testCreateTableSchemaVersion() throws Exception {
+    public void testCreateTableSchemaVersionAndTopicName() throws Exception {
         Properties props = new Properties();
         final String schemaName = generateUniqueName();
         final String tableName = generateUniqueName();
         final String version = "V1.0";
+        final String topicName = "MyTopicName";
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            testCreateTableSchemaVersionHelper(conn, schemaName, tableName, version);
+            testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, version, topicName);
         }
     }
 
-    public static void testCreateTableSchemaVersionHelper(Connection conn, String schemaName, String tableName,
-                                                          String dataTableVersion)
+    public static void testCreateTableSchemaVersionAndTopicNameHelper(Connection conn, String schemaName, String tableName,
+                                                          String dataTableVersion, String topicName)
             throws Exception {
         final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
         String ddl =
                 "CREATE TABLE " + dataTableFullName + " (\n" + "ID1 VARCHAR(15) NOT NULL,\n"
                         + "ID2 VARCHAR(15) NOT NULL,\n" + "CREATED_DATE DATE,\n"
                         + "CREATION_TIME BIGINT,\n" + "LAST_USED DATE,\n"
-                        + "CONSTRAINT PK PRIMARY KEY (ID1, ID2)) SCHEMA_VERSION='" + dataTableVersion + "'";
+                        + "CONSTRAINT PK PRIMARY KEY (ID1, ID2)) SCHEMA_VERSION='" + dataTableVersion
+                        + "'";
+        if (topicName != null) {
+            ddl += ", STREAMING_TOPIC_NAME='" + topicName + "'";
+        }
         conn.createStatement().execute(ddl);
         PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
         assertEquals(dataTableVersion, table.getSchemaVersion());
+        if (topicName != null) {
+            assertEquals(topicName, table.getStreamingTopicName());
+        } else {
+            assertNull(table.getStreamingTopicName());
+        }
     }
 
     @Test
@@ -1207,6 +1241,63 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(ddl);
             verifyLastDDLTimestamp(dataTableFullName, startTS, conn);
+        }
+    }
+
+    @Test
+    public void testNormalizerIsDisbledForSalted() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+
+        String mtTableName = generateUniqueName();
+        String mtViewName = generateUniqueName();
+        String mtIndexName = generateUniqueName();
+
+        String conflictTableName = generateUniqueName();
+
+        String ddl =
+                "create table  " + tableName + " ( id integer PRIMARY KEY," + " col1 integer,"
+                        + " col2 bigint" + " ) SALT_BUCKETS=4";
+        String indexDdl =
+                "create index IF NOT EXISTS " + indexName + " on " + tableName + " (col2)";
+        String mtDdl =
+                "CREATE TABLE " + mtTableName + " (TenantId UNSIGNED_INT NOT NULL ,"
+                        + " Id UNSIGNED_INT NOT NULL ," + " val VARCHAR, "
+                        + " CONSTRAINT pk PRIMARY KEY(TenantId, Id) "
+                        + " ) MULTI_TENANT=true, SALT_BUCKETS=4";
+        String mtViewDdl =
+                "CREATE VIEW " + mtViewName + "(view_column CHAR(15)) AS " + " SELECT * FROM "
+                        + mtTableName + " WHERE val='L' ";
+        String mtIndexDdl = "CREATE INDEX " + mtIndexName + " on " + mtViewName + " (view_column) ";
+
+        String confictDdl =
+                "create table  " + conflictTableName + " ( id integer PRIMARY KEY,"
+                        + " col1 integer," + " col2 bigint" + " ) SALT_BUCKETS=4, "
+                        + TableDescriptorBuilder.NORMALIZATION_ENABLED + "=true";
+
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute(indexDdl);
+        conn.createStatement().execute(mtDdl);
+        conn.createStatement().execute(mtViewDdl);
+        conn.createStatement().execute(mtIndexDdl);
+
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        assertEquals("false", admin.getDescriptor(TableName.valueOf(tableName))
+                .getValue(TableDescriptorBuilder.NORMALIZATION_ENABLED));
+        assertEquals("false", admin.getDescriptor(TableName.valueOf(indexName))
+                .getValue(TableDescriptorBuilder.NORMALIZATION_ENABLED));
+        assertEquals("false", admin.getDescriptor(TableName.valueOf(mtTableName))
+                .getValue(TableDescriptorBuilder.NORMALIZATION_ENABLED));
+        assertEquals("false", admin.getDescriptor(TableName.valueOf("_IDX_" + mtTableName))
+                .getValue(TableDescriptorBuilder.NORMALIZATION_ENABLED));
+
+        try {
+            conn.createStatement().execute(confictDdl);
+            fail("Should have thrown an exception");
+        } catch (Exception e) {
+            assertTrue(e instanceof SQLException);
         }
     }
 

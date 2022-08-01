@@ -40,7 +40,6 @@
      <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>${maven-enforcer-plugin.version}</version>
           <configuration>
             <rules>
               <evaluateBeanshell>
@@ -57,13 +56,7 @@
                   hbasePatch = Integer.parseInt(versionMatcher.group(3));
 
                   hbaseMajor == 2 &amp;&amp; (
-                    ("${hbase.compat.version}".equals("2.1.6")
-                      &amp;&amp; hbaseMinor == 1
-                      &amp;&amp; hbasePatch &gt;=6)
-                    || ("${hbase.compat.version}".equals("2.2.5")
-                      &amp;&amp; hbaseMinor == 2
-                      &amp;&amp; hbasePatch &gt;=5)
-                    || ("${hbase.compat.version}".equals("2.3.0")
+                    ("${hbase.compat.version}".equals("2.3.0")
                       &amp;&amp; hbaseMinor == 3
                       &amp;&amp; hbasePatch &gt;=0)
                     || ("${hbase.compat.version}".equals("2.4.0")
@@ -182,6 +175,39 @@
             </goals>
             <configuration>
               <outputFile>${project.build.directory}/cached_classpath.txt</outputFile>
+            </configuration>
+          </execution>
+          <!-- copies libraries for use by sqlline when it is started from source dir -->
+          <execution>
+            <id>copy-for-sqlline</id>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>org.apache.logging.log4j</groupId>
+                  <artifactId>log4j-api</artifactId>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>org.apache.logging.log4j</groupId>
+                  <artifactId>log4j-core</artifactId>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>org.apache.logging.log4j</groupId>
+                  <artifactId>log4j-slf4j-impl</artifactId>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>org.apache.logging.log4j</groupId>
+                  <artifactId>log4j-1.2-api</artifactId>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>sqlline</groupId>
+                  <artifactId>sqlline</artifactId>
+                  <classifier>jar-with-dependencies</classifier>
+                </artifactItem>
+              </artifactItems>
+              <outputDirectory>${project.basedir}/../lib</outputDirectory>
             </configuration>
           </execution>
         </executions>
@@ -313,7 +339,6 @@
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-zookeeper</artifactId>
     </dependency>
-
     <dependency>
       <groupId>org.apache.hbase.thirdparty</groupId>
       <artifactId>hbase-shaded-miscellaneous</artifactId>
@@ -364,10 +389,6 @@
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-tso-server-hbase2.x</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.omid</groupId>
       <artifactId>omid-hbase-common-hbase2.x</artifactId>
     </dependency>
     <dependency>
@@ -391,10 +412,39 @@
       <artifactId>omid-common</artifactId>
     </dependency>
 
+    <!-- Tephra dependencies (not included in shaded artifacts -->
+    <dependency>
+      <groupId>org.apache.tephra</groupId>
+      <artifactId>tephra-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.tephra</groupId>
+      <artifactId>tephra-core-shaded</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.tephra</groupId>
+      <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
+      <classifier>shaded</classifier>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.thrift</groupId>
+      <artifactId>libthrift</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
     <!-- Omid test dependencies -->
     <dependency>
       <groupId>org.apache.omid</groupId>
       <artifactId>omid-tso-server-hbase2.x</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-tso-server-hbase2.x</artifactId>
+      <scope>test</scope>
       <type>test-jar</type>
     </dependency>
 
@@ -502,6 +552,10 @@
       <artifactId>zookeeper</artifactId>
     </dependency>
     <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper-jute</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.thrift</groupId>
       <artifactId>libthrift</artifactId>
     </dependency>
@@ -513,8 +567,33 @@
       <groupId> org.jruby.jcodings</groupId>
       <artifactId>jcodings</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.hdrhistogram</groupId>
+      <artifactId>HdrHistogram</artifactId>
+      <version>2.1.12</version>
+    </dependency>
 
     <!-- Other test dependencies -->
+    <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-api</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-core</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-slf4j-impl</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-1.2-api</artifactId>
+        <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
@@ -549,142 +628,5 @@
       <version>${opentelemetry.version}</version>
       <scope>test</scope>
     </dependency>
-
   </dependencies>
-
-<profiles>
-  <profile>
-    <id>exclude-tephra</id>
-    <activation>
-      <property>
-        <name>without.tephra</name>
-      </property>
-    </activation>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-api</artifactId>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-core-shaded</artifactId>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
-        <classifier>shaded</classifier>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.thrift</groupId>
-        <artifactId>libthrift</artifactId>
-        <scope>provided</scope>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>include-tephra</id>
-    <activation>
-      <property>
-        <name>!without.tephra</name>
-      </property>
-    </activation>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-api</artifactId>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-core-shaded</artifactId>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.tephra</groupId>
-        <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
-        <classifier>shaded</classifier>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.thrift</groupId>
-        <artifactId>libthrift</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.3.0</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.3</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.3</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.4.0</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.4.0</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.4.0</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.4.1</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>hbase.profile</name>
-        <value>2.4</value>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.4</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-  <profile>
-    <id>phoenix-hbase-compat-2.4.1-default</id>
-    <!-- keep dependency plugin happy -->
-    <activation>
-      <property>
-        <name>!hbase.profile</name>
-      </property>
-    </activation>
-    <properties>
-      <hbase.profile>2.4</hbase.profile>
-    </properties>
-    <dependencies>
-      <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-      </dependency>
-    </dependencies>
-  </profile>
-</profiles>
 </project>

@@ -36,6 +36,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
@@ -43,10 +45,12 @@ import java.util.Properties;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
+@Category(ParallelStatsDisabledTest.class)
 public class NullIT extends BaseQueryIT {
     
     @Parameters(name="NullIT_{index},columnEncoded={1}")
@@ -147,5 +151,57 @@ public class NullIT extends BaseQueryIT {
             conn.close();
         }
     }
-    
+
+    // PHOENIX-6583
+    @Test
+    public void testBinaryNullAssignment() throws SQLException {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        ResultSet rs;
+
+        try (Statement stmt = conn.createStatement()) {
+
+            String binTestTable=generateUniqueName();
+
+            stmt.execute("create table "+binTestTable+" (id integer not null, text varchar(255), testbin binary(16), CONSTRAINT pk primary key (id))");
+            conn.commit();
+
+            String queryIsNull = "select id, text , testbin from "+binTestTable+" where testbin is null";
+
+
+            // Let's see if without providing it, it is stored as null
+            stmt.execute("upsert into "+binTestTable+"  (id,text) values (1,'anytext')");
+            conn.commit();
+            rs= stmt.executeQuery(queryIsNull);
+            assertTrue(rs.next());
+            rs.close();
+
+            // Let's see if providing it, but it is set as null,  it is also stored as null
+            stmt.execute("upsert into "+binTestTable+"  (id,text,testbin) values (1,'anytext',null)");
+            conn.commit();
+            rs = stmt.executeQuery(queryIsNull);
+            assertTrue(rs.next());
+            rs.close();
+
+            //Now let's set a value. Now It should be NOT null
+            stmt.execute("upsert into "+binTestTable+"  (id,text,testbin) values (1,'anytext','a')");
+            conn.commit();
+            rs = stmt.executeQuery(queryIsNull);
+            assertTrue(false == rs.next());
+            rs.close();
+
+            //Right now it has a value.... let's see if we can set it again a null value
+            stmt.execute("upsert into "+binTestTable+"  (id,text,testbin) values (1,'anytext',null)");
+            conn.commit();
+            rs = stmt.executeQuery(queryIsNull);
+            assertTrue(rs.next());
+            rs.close();
+
+            stmt.execute("DROP TABLE "+binTestTable+" ");
+            conn.commit();
+
+            rs.close();
+        }
+    }
 }

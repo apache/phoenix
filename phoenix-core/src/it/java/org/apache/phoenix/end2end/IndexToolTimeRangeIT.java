@@ -24,8 +24,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
 
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdge;
@@ -34,15 +34,15 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
+import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 import static org.junit.Assert.assertFalse;
 
-public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class IndexToolTimeRangeIT extends BaseTest {
     private static final String
             CREATE_TABLE_DDL = "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, "
             + "VAL1 INTEGER, VAL2 INTEGER) COLUMN_ENCODED_BYTES=0";
@@ -134,7 +134,6 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testValidTimeRange() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         String [] args = {"--delete-all-and-rebuild",
                 "--start-time", myClock.getRelativeTimeAsString(1),
                 "--end-time", myClock.getRelativeTimeAsString(9)};
@@ -145,7 +144,6 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testValidTimeRange_startTimeInBetween() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         String [] args = {"--delete-all-and-rebuild",
                 "--start-time", myClock.getRelativeTimeAsString(6),
                 "--end-time", myClock.getRelativeTimeAsString(9)};
@@ -156,7 +154,6 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testValidTimeRange_endTimeInBetween() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         String [] args = {"--delete-all-and-rebuild",
                 "--start-time", myClock.getRelativeTimeAsString(1),
                 "--end-time", myClock.getRelativeTimeAsString(6)};
@@ -175,7 +172,6 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testValidTimeRange_onlyStartTimePassed() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         //starttime passed of last upsert
         String [] args = {"--delete-all-and-rebuild",
                 "--start-time", myClock.getRelativeTimeAsString(8)};
@@ -193,7 +189,7 @@ public class IndexToolTimeRangeIT extends BaseUniqueNamesOwnClusterIT {
     }
 
     private void runIndexTool(String [] args, int expectedStatus) throws Exception {
-        IndexToolIT.runIndexTool(true, false, schemaName, dataTableName,
+        IndexToolIT.runIndexTool(false, schemaName, dataTableName,
                 indexTableName, null, expectedStatus,
                 IndexTool.IndexVerifyType.NONE, args);
     }

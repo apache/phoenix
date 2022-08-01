@@ -20,7 +20,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
  * Test Class Only used to verify in e2e tests
  */
 public class ITGuidePostsCacheFactory implements GuidePostsCacheFactory {
-    public static ConcurrentHashMap<Integer, DefaultGuidePostsCacheFactory> map =
+    public static final ConcurrentHashMap<Integer, DefaultGuidePostsCacheFactory> map =
             new ConcurrentHashMap<>();
     private static AtomicInteger count = new AtomicInteger();
     private Integer key;

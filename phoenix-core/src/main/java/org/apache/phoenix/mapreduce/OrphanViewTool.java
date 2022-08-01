@@ -31,9 +31,14 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -194,7 +199,10 @@ public class OrphanViewTool extends Configured implements Tool {
 
         final Options options = getOptions();
 
-        CommandLineParser parser = new DefaultParser(false, false);
+        CommandLineParser parser = DefaultParser.builder().
+                setAllowPartialMatching(false).
+                setStripLeadingAndTrailingQuotes(false).
+                build();
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);
@@ -229,7 +237,7 @@ public class OrphanViewTool extends Configured implements Tool {
                     IDENTIFY_ORPHAN_VIEWS_OPTION.getOpt() + " or " + CLEAN_ORPHAN_VIEWS_OPTION.getOpt());
         }
         if (cmdLine.hasOption(AGE_OPTION.getOpt())) {
-            ageMs = Long.valueOf(cmdLine.getOptionValue(AGE_OPTION.getOpt()));
+            ageMs = Long.parseLong(cmdLine.getOptionValue(AGE_OPTION.getOpt()));
         }
 
         outputPath = cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt());
@@ -769,7 +777,8 @@ public class OrphanViewTool extends Configured implements Tool {
 
     private void readOrphanViews() throws Exception {
         String aLine;
-        reader[VIEW] = new BufferedReader(new FileReader(inputPath + fileName[VIEW]));
+        reader[VIEW] = new BufferedReader(new InputStreamReader(
+                new FileInputStream(inputPath + fileName[VIEW]), StandardCharsets.UTF_8));
         while ((aLine = reader[VIEW].readLine()) != null) {
             Key key = new Key(aLine);
             orphanViewSet.put(key, new View(key));
@@ -779,7 +788,8 @@ public class OrphanViewTool extends Configured implements Tool {
     private void readAndRemoveOrphanLinks(PhoenixConnection phoenixConnection) throws Exception{
         String aLine;
         for (byte i = VIEW+1; i < ORPHAN_TYPE_COUNT; i++) {
-            reader[i] = new BufferedReader(new FileReader(inputPath + fileName[i]));
+            reader[i] = new BufferedReader(new InputStreamReader(
+                    new FileInputStream(inputPath + fileName[i]), StandardCharsets.UTF_8));
             while ((aLine = reader[i].readLine()) != null) {
                 String ends[] = aLine.split("-->");
                 removeLink(phoenixConnection, new Key(ends[0]), new Key(ends[1]), getLinkType(i));
@@ -842,7 +852,8 @@ public class OrphanViewTool extends Configured implements Tool {
                         file.delete();
                     }
                     file.createNewFile();
-                    writer[i] = new BufferedWriter(new FileWriter(file));
+                    writer[i] = new BufferedWriter(new OutputStreamWriter(
+                        new FileOutputStream(file), StandardCharsets.UTF_8));
                 }
             }
             Properties props = new Properties();

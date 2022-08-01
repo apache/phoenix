@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LOCAL_INDEX_BUILD;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LOCAL_INDEX_BUILD_PROTO;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
@@ -29,6 +31,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.getTable;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -41,19 +44,22 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.ArrayBackedTag;
 import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.PhoenixTagType;
 import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.RawCell;
 import org.apache.hadoop.hbase.Tag;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Increment;
@@ -64,16 +70,12 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
-import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.phoenix.compat.hbase.OffsetCell;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexStatementRewriter;
@@ -95,6 +97,7 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.visitor.RowKeyExpressionVisitor;
 import org.apache.phoenix.hbase.index.AbstractValueGetter;
+import org.apache.phoenix.hbase.index.OffsetCell;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -128,7 +131,6 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema.Field;
-import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PDataType;
@@ -240,7 +242,7 @@ public class IndexUtil {
     
     public static byte[] getLocalIndexColumnFamily(byte[] dataColumnFamilyBytes) {
         String dataCF = Bytes.toString(dataColumnFamilyBytes);
-        return getLocalIndexColumnFamily(dataCF).getBytes();
+        return getLocalIndexColumnFamily(dataCF).getBytes(StandardCharsets.UTF_8);
     }
     
     public static PColumn getDataColumn(PTable dataTable, String indexColumnName) {
@@ -389,7 +391,7 @@ public class IndexUtil {
                         regionStartKey = tableRegionLocation.getRegion().getStartKey();
                         regionEndkey = tableRegionLocation.getRegion().getEndKey();
                     }
-                    indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, regionStartKey, regionEndkey));
+                    indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, regionStartKey, regionEndkey, false));
                 }
             }
             return indexMutations;
@@ -455,6 +457,25 @@ public class IndexUtil {
                 throw new RuntimeException(e);
             }
         }
+    }
+
+    public static List<IndexMaintainer> deSerializeIndexMaintainersFromScan(Scan scan) {
+        boolean useProto = false;
+        byte[] indexBytes = scan.getAttribute(LOCAL_INDEX_BUILD_PROTO);
+        useProto = indexBytes != null;
+        if (indexBytes == null) {
+            indexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
+        }
+        if (indexBytes == null) {
+            indexBytes = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
+            useProto = indexBytes != null;
+        }
+        if (indexBytes == null) {
+            indexBytes = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
+        }
+        List<IndexMaintainer> indexMaintainers =
+                indexBytes == null ? null : IndexMaintainer.deserialize(indexBytes, useProto);
+        return indexMaintainers;
     }
 
     public static byte[][] deserializeViewConstantsFromScan(Scan scan) {
@@ -552,57 +573,24 @@ public class IndexUtil {
         whereNode.toSQL(indexResolver, buf);
         return QueryUtil.getViewStatement(index.getSchemaName().getString(), index.getTableName().getString(), buf.toString());
     }
-    
-    public static void wrapResultUsingOffset(final RegionCoprocessorEnvironment environment,
-            List<Cell> result, final int offset, ColumnReference[] dataColumns,
-            TupleProjector tupleProjector, Region dataRegion, IndexMaintainer indexMaintainer,
-            byte[][] viewConstants, ImmutableBytesWritable ptr) throws IOException {
-        if (tupleProjector != null) {
-            // Join back to data table here by issuing a local get projecting
-            // all of the cq:cf from the KeyValueColumnExpression into the Get.
-            Cell firstCell = result.get(0);
-            byte[] indexRowKey = firstCell.getRowArray();
-            ptr.set(indexRowKey, firstCell.getRowOffset() + offset, firstCell.getRowLength() - offset);
-            byte[] dataRowKey = indexMaintainer.buildDataRowKey(ptr, viewConstants);
-            Get get = new Get(dataRowKey);
-            ImmutableStorageScheme storageScheme = indexMaintainer.getIndexStorageScheme();
-            for (int i = 0; i < dataColumns.length; i++) {
-                if (storageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
-                    get.addFamily(dataColumns[i].getFamily());
-                } else {
-                    get.addColumn(dataColumns[i].getFamily(), dataColumns[i].getQualifier());
-                }
-            }
-            Result joinResult = null;
-            if (dataRegion != null) {
-                joinResult = dataRegion.get(get);
-            } else {
-                TableName dataTable =
-                    TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(environment.getRegion().
-                        getTableDescriptor().getTableName().getNameAsString()));
-                Table table = null;
-                try {
-                    table = environment.getConnection().getTable(dataTable);
-                    joinResult = table.get(get);
-                } finally {
-                    if (table != null) table.close();
-                }
-            }
-            // at this point join result has data from the data table. We now need to take this result and
-            // add it to the cells that we are returning. 
-            // TODO: handle null case (but shouldn't happen)
-            Tuple joinTuple = new ResultTuple(joinResult);
-            // This will create a byte[] that captures all of the values from the data table
-            byte[] value =
-                    tupleProjector.getSchema().toBytes(joinTuple, tupleProjector.getExpressions(),
+
+    public static void addTupleAsOneCell(List<Cell> result,
+                                 Tuple tuple,
+                                 TupleProjector tupleProjector,
+                                 ImmutableBytesWritable ptr) {
+        // This will create a byte[] that captures all of the values from the data table
+        byte[] value =
+                tupleProjector.getSchema().toBytes(tuple, tupleProjector.getExpressions(),
                         tupleProjector.getValueBitSet(), ptr);
-            Cell keyValue =
-                    PhoenixKeyValueUtil.newKeyValue(firstCell.getRowArray(),
+        Cell firstCell = result.get(0);
+        Cell keyValue =
+                PhoenixKeyValueUtil.newKeyValue(firstCell.getRowArray(),
                         firstCell.getRowOffset(),firstCell.getRowLength(), VALUE_COLUMN_FAMILY,
                         VALUE_COLUMN_QUALIFIER, firstCell.getTimestamp(), value, 0, value.length);
-            result.add(keyValue);
-        }
-        
+        result.add(keyValue);
+    }
+
+    public static void wrapResultUsingOffset(List<Cell> result, final int offset) throws IOException {
         ListIterator<Cell> itr = result.listIterator();
         while (itr.hasNext()) {
             final Cell cell = itr.next();
@@ -611,7 +599,7 @@ public class IndexUtil {
             itr.set(newCell);
         }
     }
-    
+
     public static String getIndexColumnExpressionStr(PColumn col) {
         return col.getExpressionStr() == null ? IndexUtil.getCaseSensitiveDataColumnFullName(col.getName().getString())
                 : col.getExpressionStr();
@@ -871,6 +859,67 @@ public class IndexUtil {
             for (Cell cell : updatedCells) {
                 Delete d = (Delete) m;
                 d.addDeleteMarker(cell);
+            }
+        }
+    }
+
+    public static boolean isHintedGlobalIndex(final TableRef tableRef) {
+        PTable table = tableRef.getTable();
+        return table.getType() == PTableType.INDEX
+                && table.getIndexType() == PTable.IndexType.GLOBAL
+                && tableRef.isHinted();
+    }
+
+    /**
+     * Updates the EMPTY cell value to VERIFIED for global index table rows.
+     */
+    public static class IndexStatusUpdater {
+
+        private final byte[] emptyKeyValueCF;
+        private final int emptyKeyValueCFLength;
+        private final byte[] emptyKeyValueQualifier;
+        private final int emptyKeyValueQualifierLength;
+
+        public IndexStatusUpdater(final byte[] emptyKeyValueCF, final byte[] emptyKeyValueQualifier) {
+            this.emptyKeyValueCF = emptyKeyValueCF;
+            this.emptyKeyValueQualifier = emptyKeyValueQualifier;
+            this.emptyKeyValueCFLength = emptyKeyValueCF.length;
+            this.emptyKeyValueQualifierLength = emptyKeyValueQualifier.length;
+        }
+
+        /**
+         * Update the Empty cell values to VERIFIED in the passed keyValues list
+         *
+         * @param keyValues will be modified
+         */
+        public void setVerified(List<Cell> keyValues) {
+            for (int i = 0; i < keyValues.size(); i++) {
+                updateVerified(keyValues.get(i));
+            }
+        }
+
+        /**
+         * Update the Empty cell values to VERIFIED in the passed keyValues list
+         *
+         * @param cellScanner contents will be modified
+         * @throws IOException
+         */
+        public void setVerified(CellScanner cellScanner) throws IOException {
+            while (cellScanner.advance()) {
+                updateVerified(cellScanner.current());
+            }
+        }
+
+        private void updateVerified(Cell cell) {
+            if (CellUtil.compareFamilies(cell, emptyKeyValueCF, 0, emptyKeyValueCFLength) == 0
+                    && CellUtil.compareQualifiers(cell, emptyKeyValueQualifier,
+                        0, emptyKeyValueQualifierLength) == 0) {
+                if (cell.getValueLength() != 1) {
+                    //This should never happen. Fail fast if it does.
+                   throw new IllegalArgumentException("Empty cell value length is not 1");
+                }
+                //We are directly overwriting the value for performance
+                cell.getValueArray()[cell.getValueOffset()] = QueryConstants.VERIFIED_BYTE;
             }
         }
     }

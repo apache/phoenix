@@ -48,7 +48,7 @@ import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.CsvBulkImportUtil;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
@@ -170,7 +170,10 @@ public class IndexScrutinyTool extends Configured implements Tool {
     private CommandLine parseOptions(String[] args) {
         final Options options = getOptions();
 
-        CommandLineParser parser = new DefaultParser(false, false);
+        CommandLineParser parser = DefaultParser.builder().
+                setAllowPartialMatching(false).
+                setStripLeadingAndTrailingQuotes(false).
+                build();
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);
@@ -323,7 +326,6 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 // root dir not a subdirectory of hbase dir
                 Path rootDir = new Path("hdfs:///index-snapshot-dir");
                 CommonFSUtils.setRootDir(configuration, rootDir);
-                Path restoreDir = new Path(CommonFSUtils.getRootDir(configuration), "restore-dir");
 
                 // set input for map reduce job using hbase snapshots
                 //PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, snapshotName,
@@ -514,8 +516,8 @@ public class IndexScrutinyTool extends Configured implements Tool {
     }
 
     private void validateTimestamp(Configuration configuration, long ts) {
-        long maxLookBackAge = CompatBaseScannerRegionObserver.getMaxLookbackInMillis(configuration);
-        if (maxLookBackAge != CompatBaseScannerRegionObserver.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE * 1000L) {
+        long maxLookBackAge = BaseScannerRegionObserver.getMaxLookbackInMillis(configuration);
+        if (maxLookBackAge != BaseScannerRegionObserver.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE * 1000L) {
             long minTimestamp = EnvironmentEdgeManager.currentTimeMillis() - maxLookBackAge;
             if (ts < minTimestamp){
                 throw new IllegalArgumentException("Index scrutiny can't look back past the configured" +

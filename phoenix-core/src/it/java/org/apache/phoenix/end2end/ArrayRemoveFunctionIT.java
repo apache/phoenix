@@ -30,7 +30,9 @@ import java.sql.ResultSet;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class ArrayRemoveFunctionIT extends ParallelStatsDisabledIT {
 
 	private Connection conn;

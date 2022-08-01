@@ -18,16 +18,16 @@
 
 package org.apache.phoenix.end2end;
 
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -52,13 +52,13 @@ import static org.junit.Assert.fail;
  * You must create unique names using {@link #generateUniqueName()} for each
  * table and sequence used to prevent collisions.
  */
-@Category(ParallelStatsDisabledTest.class)
 public abstract class ParallelStatsDisabledIT extends BaseTest {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
+        props.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
+        props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -67,13 +67,13 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
         BaseTest.freeResourcesIfBeyondThreshold();
     }
 
-    protected ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder) throws SQLException {
+    public static ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder) throws SQLException {
         PreparedStatement statement = conn.prepareStatement(queryBuilder.build());
         ResultSet rs = statement.executeQuery();
         return rs;
     }
 
-    protected ResultSet executeQueryThrowsException(Connection conn, QueryBuilder queryBuilder,
+    public static ResultSet executeQueryThrowsException(Connection conn, QueryBuilder queryBuilder,
             String expectedPhoenixExceptionMsg, String expectedSparkExceptionMsg) {
         ResultSet rs = null;
         try {
@@ -86,7 +86,7 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
         return rs;
     }
 
-    protected void validateQueryPlan(Connection conn, QueryBuilder queryBuilder, String expectedPhoenixPlan, String expectedSparkPlan) throws SQLException {
+    public static void validateQueryPlan(Connection conn, QueryBuilder queryBuilder, String expectedPhoenixPlan, String expectedSparkPlan) throws SQLException {
         if (StringUtils.isNotBlank(expectedPhoenixPlan)) {
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + queryBuilder.build());
             assertEquals(expectedPhoenixPlan, QueryUtil.getExplainPlan(rs));

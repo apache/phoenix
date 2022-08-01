@@ -35,7 +35,6 @@ import java.util.NoSuchElementException;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compat.hbase.test.DelegateCell;
 import org.apache.phoenix.schema.tuple.EncodedColumnQualiferCellsList;
 import org.junit.Test;
 

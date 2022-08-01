@@ -28,6 +28,8 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
+import org.joda.time.DateTime;
+import org.joda.time.chrono.GJChronology;
 
 /**
  * 
@@ -57,7 +59,8 @@ public class SecondFunction extends DateScalarFunction {
             return true; //means null
         }
         long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
-        int sec = (int)((dateTime/1000) % 60);
+        DateTime dt = new DateTime(dateTime, GJChronology.getInstanceUTC());
+        int sec = dt.getSecondOfMinute();
         PDataType returnType = getDataType();
         byte[] byteValue = new byte[returnType.getByteSize()];
         returnType.getCodec().encodeInt(sec, byteValue, 0);

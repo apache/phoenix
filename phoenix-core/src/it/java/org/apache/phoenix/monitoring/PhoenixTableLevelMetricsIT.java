@@ -25,7 +25,6 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hbase.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -53,9 +52,16 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.exception.SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY;
 import static org.apache.phoenix.exception.SQLExceptionCode.GET_TABLE_REGIONS_FAIL;
 import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
+import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_COMMIT_TIME;
+import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SCAN_BYTES;
+import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_SUCCESS_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_BATCH_FAILED_COUNTER;
@@ -88,6 +94,7 @@ import static org.apache.phoenix.monitoring.MetricType.SELECT_SCAN_SUCCESS_SQL_C
 import static org.apache.phoenix.monitoring.MetricType.SELECT_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.SELECT_SQL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.MetricType.SELECT_SUCCESS_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_BATCH_FAILED_COUNTER;
@@ -130,7 +137,7 @@ import java.util.Properties;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
+public class PhoenixTableLevelMetricsIT extends BaseTest {
 
     private static final String
             CREATE_TABLE_DDL =
@@ -181,6 +188,18 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
         } catch (Exception e) {
             // ignore
+        }
+    }
+
+    public static void checkSystemCatalogTableMetric() {
+        for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(SYSTEM_CATALOG_NAME)) {
+            if (metric.getMetricType().equals(NUM_SYSTEM_TABLE_RPC_SUCCESS)) {
+                assertMetricValue(metric, NUM_SYSTEM_TABLE_RPC_SUCCESS, 0, CompareOp.GT);
+            }
+            if (metric.getMetricType().equals(TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS)) {
+                assertMetricValue(metric, TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS, 0,
+                        CompareOp.GT);
+            }
         }
     }
 
@@ -312,7 +331,8 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             final long expectedUpsertOrDeleteBatchFailedSize,
             final long expectedUpsertOrDeleteAggregateSuccessCt,
             final long expectedUpsertOrDeleteAggregateFailureCt,
-            final Map<MetricType, Long> writeMutMetrics, final Connection conn)
+            final Map<MetricType, Long> writeMutMetrics, final Connection conn,
+            final boolean expectedSystemCatalogMetric)
             throws SQLException {
         assertTrue(conn != null && conn.isClosed());
         assertFalse(hasMutationBeenExplicitlyCommitted && writeMutMetrics == null);
@@ -335,6 +355,10 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     expectedUpsertOrDeleteFailedSqlCt, CompareOp.EQ);
             assertMetricValue(metric, isUpsert ? UPSERT_SQL_QUERY_TIME : DELETE_SQL_QUERY_TIME,
                     expectedMinUpsertOrDeleteSqlQueryTime, CompareOp.GTEQ);
+            if(expectedSystemCatalogMetric){
+                assertMetricValue(metric,NUM_SYSTEM_TABLE_RPC_SUCCESS,0,CompareOp.GT);
+                assertMetricValue(metric,TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS,0,CompareOp.GT);
+            }
 
             if (hasMutationBeenExplicitlyCommitted) {
                 // conn.commit() related metrics
@@ -400,6 +424,53 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                                 DELETE_BATCH_FAILED_COUNTER), CompareOp.EQ);
             }
         }
+        if (expectedSystemCatalogMetric) {
+            checkSystemCatalogTableMetric();
+        }
+    }
+
+    private void assertHistogramMetricsForMutations(String tableName, boolean isUpsert,
+            long ltCount, long szCount, boolean verifyMetricValues) {
+        LatencyHistogram ltHisto;
+        SizeHistogram szHisto;
+        if (isUpsert) {
+            ltHisto = TableMetricsManager.getUpsertLatencyHistogramForTable(tableName);
+            szHisto = TableMetricsManager.getUpsertSizeHistogramForTable(tableName);
+        } else {
+            ltHisto = TableMetricsManager.getDeleteLatencyHistogramForTable(tableName);
+            szHisto = TableMetricsManager.getDeleteSizeHistogramForTable(tableName);
+        }
+        assertNotNull(ltHisto);
+        assertNotNull(szHisto);
+        assertEquals(ltCount, ltHisto.getHistogram().getTotalCount());
+        assertEquals(szCount, szHisto.getHistogram().getTotalCount());
+
+        // If we are just comparing one data point then we can compare with table metrics
+        // or global metrics but if there are multiple data points then we can't compare histogram
+        // data points with global metrics.
+        if (verifyMetricValues) {
+            long sqlTime;
+            if (isUpsert) {
+                sqlTime = getMetricFromTableMetrics(tableName, MetricType.UPSERT_SQL_QUERY_TIME);
+            } else {
+                sqlTime = getMetricFromTableMetrics(tableName, MetricType.DELETE_SQL_QUERY_TIME);
+
+            }
+            long commitTime = getMetricFromTableMetrics(tableName, MetricType.MUTATION_COMMIT_TIME);
+            // Latency metric for mutation is sum of time spent in executeMutation
+            // and PhoenixConnection#commit time.
+            long totalCommitTimeFromMetrics = sqlTime + commitTime;
+
+            // Histogram#maxValue is the last value in the bucket. So we can't compare directly
+            // maxValue with totalCommitTimeFromMetrics.
+            Assert.assertTrue(ltHisto.getHistogram().valuesAreEquivalent(totalCommitTimeFromMetrics,
+                    ltHisto.getHistogram().getMaxValue()));
+
+            long mutationBytesFromGlobalMetrics = GLOBAL_MUTATION_BYTES.getMetric().getValue();
+            Assert.assertTrue(szHisto.getHistogram().valuesAreEquivalent(mutationBytesFromGlobalMetrics,
+                    szHisto.getHistogram().getMaxValue()));
+        }
+
     }
 
     /**
@@ -620,7 +691,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             // Must be asserted after connection close since that's where
             // we populate table-level metrics
             assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, 0, 0, 1, 0,
-                    writeMutMetrics, conn);
+                    writeMutMetrics, conn, true);
         }
     }
 
@@ -646,7 +717,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, 0, 0, 1, 0,
-                    writeMutMetrics, conn);
+                    writeMutMetrics, conn, true);
         }
     }
 
@@ -686,7 +757,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             // mutation commit time since autoCommit was on
             assertMutationTableMetrics(true, tableName, numRows, 0,
                     writeMutMetrics.get(UPSERT_COMMIT_TIME), true, numRows, 0, 0, numRows, 0,
-                    writeMutMetrics, conn);
+                    writeMutMetrics, conn,true);
         }
     }
 
@@ -721,7 +792,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
             assertNotNull("Failed to get a connection!", conn);
             conn.close();
-            assertMutationTableMetrics(true, tableName, 0, 1, 0, false, 0, 0, 0, 1, 0, null, conn);
+            assertMutationTableMetrics(true, tableName, 0, 1, 0, false, 0, 0, 0, 1, 0, null, conn, true);
         }
     }
 
@@ -761,7 +832,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(true, tableName, numRows, 0, delay, true, numRows, 0, 0, 1,
-                    0, writeMutMetrics, conn);
+                    0, writeMutMetrics, conn, true);
         }
     }
 
@@ -809,7 +880,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(true, tableName, 0, 1, 0, true, 1, 0, 1, 0, 1,
-                    writeMutMetrics, conn);
+                    writeMutMetrics, conn, true);
         }
     }
 
@@ -860,7 +931,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, 0, numRows, 0,
-                    1, writeMutMetrics, conn);
+                    1, writeMutMetrics, conn, true);
         }
     }
 
@@ -900,7 +971,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(true, tableName, numRows, 0, 0, true, numRows, delayRs, 0, 1,
-                    0, writeMutMetrics, conn);
+                    0, writeMutMetrics, conn, true);
         }
     }
 
@@ -931,7 +1002,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(false, tableName, 1, 0, 0, true, 1, 0, 0, 1, 0,
-                    writeMutMetrics, conn);
+                    writeMutMetrics, conn, false);
         }
     }
 
@@ -962,7 +1033,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, 0, 0, 1, 0,
-                    writeMutMetrics, conn);
+                    writeMutMetrics, conn, false);
         }
     }
 
@@ -999,7 +1070,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
             assertNull(writeMutMetrics);
             conn.close();
             assertMutationTableMetrics(false, tableName, 1, 0, 0, false, 0, 0, 0, 0, 0,
-                    writeMutMetrics, conn);
+                    writeMutMetrics, conn, false);
         }
     }
 
@@ -1036,7 +1107,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             assertNull(writeMutMetrics);
             conn.close();
-            assertMutationTableMetrics(false, tableName, 0, 1, 0, false, 0, 0, 0, 0, 1, null, conn);
+            assertMutationTableMetrics(false, tableName, 0, 1, 0, false, 0, 0, 0, 0, 1, null, conn, false);
         }
     }
 
@@ -1068,7 +1139,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(false, tableName, 1, 0, injectDelay, true, 1, 0, 0, 1, 0,
-                    writeMutMetrics, conn);
+                    writeMutMetrics, conn, false);
         }
     }
 
@@ -1114,7 +1185,7 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, 0, numRows, 0, 1,
-                    writeMutMetrics, conn);
+                    writeMutMetrics, conn, false);
         }
     }
 
@@ -1149,8 +1220,194 @@ public class PhoenixTableLevelMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
             conn.close();
             assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, delayRs, 0, 1, 0,
-                    writeMutMetrics, conn);
+                    writeMutMetrics, conn, false);
         }
+    }
+
+    @Test public void testTableLevelMetricsForAtomicUpserts() throws Throwable {
+        String tableName = generateUniqueName();
+        Connection conn = null;
+        Throwable exception = null;
+        int numAtomicUpserts = 4;
+        try {
+            conn = getConnFromTestDriver();
+            String ddl = "create table " + tableName + "(pk varchar primary key, counter1 bigint)";
+            conn.createStatement().execute(ddl);
+            String dml;
+            ResultSet rs;
+            dml = String.format("UPSERT INTO %s VALUES('a', 0)", tableName);
+            conn.createStatement().execute(dml);
+            dml = String.format("UPSERT INTO %s VALUES('a', 0) ON DUPLICATE KEY UPDATE counter1 = counter1 + 1", tableName);
+            for (int i = 0; i < numAtomicUpserts; ++i) {
+                conn.createStatement().execute(dml);
+            }
+            conn.commit();
+            String dql = String.format("SELECT counter1 FROM %s WHERE counter1 > 0", tableName);
+            rs = conn.createStatement().executeQuery(dql);
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+        }catch (Throwable t) {
+            exception = t;
+        } finally {
+            // Otherwise the test fails with an error from assertions below instead of the real exception
+            if (exception != null) {
+                throw exception;
+            }
+            assertNotNull("Failed to get a connection!", conn);
+            // Get write metrics before closing the connection since that clears those metrics
+            Map<MetricType, Long>
+                writeMutMetrics =
+                getWriteMetricInfoForMutationsSinceLastReset(conn).get(tableName);
+            conn.close();
+            // 1 regular upsert + numAtomicUpserts
+            // 2 mutations (regular and atomic on the same row in the same batch will be split)
+            assertMutationTableMetrics(true, tableName, 1 + numAtomicUpserts, 0, 0, true, 2, 0, 0, 2, 0,
+                writeMutMetrics, conn, false);
+            assertEquals(numAtomicUpserts, getMetricFromTableMetrics(tableName, ATOMIC_UPSERT_SQL_COUNTER));
+            assertTrue(getMetricFromTableMetrics(tableName, ATOMIC_UPSERT_COMMIT_TIME) > 0);
+        }
+    }
+
+    @Test
+    public void testHistogramMetricsForMutations() throws Exception {
+        String tableName = generateUniqueName();
+        // Reset table level metrics to capture histogram metrics for upsert.
+        try (Connection conn =  getConnFromTestDriver()) {
+            createTableAndInsertValues(tableName, true, true, 10, true, conn, false);
+        }
+        // Metrics will be reset after creation of table so below we will get latency
+        // just for upsert queries.
+        // Since we are recording latency histograms after every executeMutation method and
+        // since we are not batch upserting, it will record histogram event after every upsert.
+        assertHistogramMetricsForMutations(tableName, true, 1, 1, true);
+
+        // Reset table histograms as well as global metrics
+        PhoenixRuntime.clearTableLevelMetrics();
+        PhoenixMetricsIT.resetGlobalMetrics();
+        try (Connection connection = getConnFromTestDriver();
+                Statement statement = connection.createStatement()) {
+            String delete = "DELETE FROM " + tableName;
+            statement.execute(delete);
+            connection.commit();
+        }
+        // Verify metrics for delete mutations
+        assertHistogramMetricsForMutations(tableName, false, 1, 1, true);
+        PhoenixRuntime.clearTableLevelMetrics();
+    }
+
+    @Test
+    public void testHistogramMetricsForMutationsAutoCommitTrue() throws Exception {
+        String tableName = generateUniqueName();
+        // Reset table level metrics to capture histogram metrics for upsert.
+        try (Connection conn =  getConnFromTestDriver()) {
+            conn.setAutoCommit(true);
+            createTableAndInsertValues(tableName, true, true, 10, false, conn, false);
+        }
+        // Metrics will be reset after creation of table so below we will get latency
+        // just for upsert queries.
+        // Since we are recording latency histograms after every executeMutation method and
+        // since we are not batch upserting, it will record histogram event after every upsert.
+        assertHistogramMetricsForMutations(tableName, true, 10, 10, false);
+
+        // Reset table histograms as well as global metrics
+        PhoenixRuntime.clearTableLevelMetrics();
+        PhoenixMetricsIT.resetGlobalMetrics();
+        try (Connection connection = getConnFromTestDriver();
+                Statement statement = connection.createStatement()) {
+            connection.setAutoCommit(true);
+            String delete = "DELETE FROM " + tableName;
+            statement.execute(delete);
+        }
+        // Verify metrics for delete mutations. We won't get any data point for
+        // size histogram since delete happened on server side using ServerSelectDeleteMutationPlan.
+        assertHistogramMetricsForMutations(tableName, false,1, 0, false);
+        PhoenixRuntime.clearTableLevelMetrics();
+    }
+
+    @Test
+    public void testHistogramMetricsForQueries() throws Exception {
+        String tableName = generateUniqueName();
+        // Reset table level metrics to capture histogram metrics for select queries.
+        try (Connection conn = getConnFromTestDriver()) {
+            createTableAndInsertValues(tableName, true, true, 10, true, conn, true);
+        }
+        // Reset table metrics as well as global metrics
+        PhoenixRuntime.clearTableLevelMetrics();
+        PhoenixMetricsIT.resetGlobalMetrics();
+        DelayedOrFailingRegionServer.setDelayEnabled(true);
+        DelayedOrFailingRegionServer.setDelayScan(30);
+        try (Connection conn =  getConnFromTestDriver();
+                Statement statement = conn.createStatement()) {
+            String select = "SELECT * FROM " + tableName;
+            ResultSet resultSet = statement.executeQuery(select);
+            while (resultSet.next()) {
+                // do nothing
+            }
+            resultSet.close();
+        } // conn close will close the rs at which point we will increment the scan_bytes counter
+
+        // Verify that value from histogram is equal to metric from global metrics.
+        LatencyHistogram ltHisto = TableMetricsManager.getQueryLatencyHistogramForTable(tableName);
+        SizeHistogram szHisto = TableMetricsManager.getQuerySizeHistogramForTable(tableName);
+
+        assertHistogramMetricsForQueries(tableName, ltHisto, szHisto, 1, 1);
+    }
+
+    @Test
+    public void testHistogramMetricsForRangeScan() throws Exception {
+        String tableName = generateUniqueName();
+        // Reset table level metrics to capture histogram metrics for select queries.
+        try (Connection conn = getConnFromTestDriver()) {
+            createTableAndInsertValues(tableName, true, true, 10, true, conn, true);
+        }
+        // Reset global metrics and table level metrics.
+        PhoenixMetricsIT.resetGlobalMetrics();
+        PhoenixRuntime.clearTableLevelMetrics();
+        try (Connection conn =  getConnFromTestDriver();
+                Statement statement = conn.createStatement()) {
+            String select = "SELECT * FROM " + tableName;
+            ResultSet resultSet = statement.executeQuery(select);
+            while (resultSet.next()) {
+                // do nothing
+            }
+        } // conn close will close the rs at which point we will increment the scan_bytes counter
+
+        // Make sure that point lookup histograms are empty since this is a range scan query.
+        LatencyHistogram pointLookupLtHisto =
+                TableMetricsManager.getPointLookupLatencyHistogramForTable(tableName);
+        SizeHistogram pointLookupSzHisto =
+                TableMetricsManager.getPointLookupSizeHistogramForTable(tableName);
+        Assert.assertEquals(0, pointLookupLtHisto.getHistogram().getTotalCount());
+        Assert.assertEquals(0, pointLookupSzHisto.getHistogram().getTotalCount());
+
+        LatencyHistogram ltHistogram =
+                TableMetricsManager.getRangeScanLatencyHistogramForTable(tableName);
+        Assert.assertEquals(1, ltHistogram.getHistogram().getTotalCount());
+        SizeHistogram sizeHistogram =
+                TableMetricsManager.getRangeScanSizeHistogramForTable(tableName);
+        Assert.assertEquals(1, sizeHistogram.getHistogram().getTotalCount());
+
+        // Verify that value from histogram is equal to metric from global metrics.
+        assertHistogramMetricsForQueries(tableName, ltHistogram, sizeHistogram, 1, 1);
+    }
+
+    // Verify that there is a histogram counter for the operation and verify with table level metrics
+    private void assertHistogramMetricsForQueries(String tableName, LatencyHistogram ltHistogram,
+            SizeHistogram sizeHistogram, int ltCount, int szCount) {
+        Assert.assertEquals(ltCount, ltHistogram.getHistogram().getTotalCount());
+        Assert.assertEquals(szCount, sizeHistogram.getHistogram().getTotalCount());
+
+        // Get latency metrics from table level metrics
+        Long queryTime = GLOBAL_QUERY_TIME.getMetric().getValue();
+        long rsNextTime = getMetricFromTableMetrics(tableName, MetricType.RESULT_SET_TIME_MS);
+        // Latency for queries is sum of time spent in executeQuery phase and rs.next phase.
+        long totalLatency = queryTime + rsNextTime;
+        long maxLtValue = ltHistogram.getHistogram().getMaxValue();
+        Assert.assertTrue(ltHistogram.getHistogram().valuesAreEquivalent(totalLatency, maxLtValue));
+
+        Long scanBytes = GLOBAL_SCAN_BYTES.getMetric().getValue();
+        long maxSzValue = sizeHistogram.getHistogram().getMaxValue();
+        Assert.assertTrue(sizeHistogram.getHistogram().valuesAreEquivalent(scanBytes, maxSzValue));
     }
 
     private Connection getConnFromTestDriver() throws SQLException {

@@ -29,15 +29,17 @@ import org.apache.hadoop.hbase.AuthUtil;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.Permission.Action;
+import org.apache.hadoop.hbase.security.access.PermissionStorage;
 import org.apache.hadoop.hbase.zookeeper.ZKUtil;
 import org.apache.hadoop.hbase.zookeeper.ZKWatcher;
 import org.apache.hadoop.hbase.zookeeper.ZNodePaths;
 import org.apache.hbase.thirdparty.com.google.common.collect.ListMultimap;
-import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class PermissionsCacheIT extends BasePermissionsIT {
 
     public PermissionsCacheIT() throws Exception {
@@ -89,7 +91,7 @@ public class PermissionsCacheIT extends BasePermissionsIT {
             String tableZNode = ZNodePaths.joinZNode(aclZNode, "@" + schema);
             byte[] data = ZKUtil.getData(zkw, tableZNode);
             ListMultimap<String, ? extends Permission> userPermissions =
-                    CompatUtil.readPermissions(data, conf);
+                    PermissionStorage.readPermissions(data, conf);
             assertTrue("User permissions not found in cache:",
                 userPermissions.containsKey(regularUser1.getName()));
             List<? extends Permission> tablePermissions =
@@ -100,8 +102,6 @@ public class PermissionsCacheIT extends BasePermissionsIT {
         } catch (Exception e) {
             System.out.println("Exception occurred: " + e);
             throw e;
-        } finally {
-            revokeAll();
         }
     }
 

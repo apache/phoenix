@@ -33,16 +33,19 @@ import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import io.opentelemetry.api.trace.Span;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Test that the logging sink stores the expected metrics/stats
  */
+@Category(ParallelStatsDisabledTest.class)
 public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
 
     private final InMemorySpanExporter testExporter = InMemorySpanExporter.create();

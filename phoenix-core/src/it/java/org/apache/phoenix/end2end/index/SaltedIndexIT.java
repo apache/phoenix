@@ -30,6 +30,7 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
@@ -38,8 +39,10 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class SaltedIndexIT extends ParallelStatsDisabledIT {
     private static final int TABLE_SPLITS = 3;
     private static final int INDEX_SPLITS = 4;
@@ -216,5 +219,21 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
                  "CLIENT 2 ROW LIMIT";
         String explainPlan = QueryUtil.getExplainPlan(rs);
         assertEquals(expectedPlan,explainPlan);
+
+        // PHOENIX-6604
+        query = "SELECT * FROM " + dataTableFullName + " ORDER BY v DESC LIMIT 1";
+        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        expectedPlan = indexSaltBuckets == null ?
+            "CLIENT SERIAL 1-WAY FULL SCAN OVER " + indexTableFullName + "\n"
+          + "    SERVER FILTER BY FIRST KEY ONLY\n"
+          + "    SERVER 1 ROW LIMIT\n"
+          + "CLIENT 1 ROW LIMIT"
+            :
+            "CLIENT PARALLEL 4-WAY FULL SCAN OVER " + indexTableFullName + "\n"
+          + "    SERVER FILTER BY FIRST KEY ONLY\n"
+          + "    SERVER 1 ROW LIMIT\n"
+          + "CLIENT MERGE SORT\n"
+          + "CLIENT 1 ROW LIMIT";
+        assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
     }
 }

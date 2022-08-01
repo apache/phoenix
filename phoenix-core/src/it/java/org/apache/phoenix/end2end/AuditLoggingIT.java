@@ -21,6 +21,7 @@ import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.*;
 import java.util.Properties;
@@ -30,6 +31,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
 
+@Category(ParallelStatsDisabledTest.class)
 public class AuditLoggingIT extends ParallelStatsDisabledIT {
 
     @Test
@@ -49,6 +51,7 @@ public class AuditLoggingIT extends ParallelStatsDisabledIT {
             stmt.executeQuery(selectQuery);
             conn.commit();
 
+            Thread.sleep(4000);
             ResultSet rs = stmt.executeQuery(getLogsQuery);
             assertFalse(rs.next());
         } finally {
@@ -65,27 +68,37 @@ public class AuditLoggingIT extends ParallelStatsDisabledIT {
         String getLogsQuery = "select * from SYSTEM.LOG WHERE TABLE_NAME='TEST2' order by start_time";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.LOG_LEVEL, LogLevel.TRACE.name());
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(true);
-        try {
-            conn.createStatement().execute(createqQery);
-            conn.createStatement().execute(upsertQuery);
-            ResultSet rs = conn.createStatement().executeQuery(selectQuery);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+                Statement stmt = conn.createStatement();
+        ){
+            conn.setAutoCommit(true);
+            stmt.execute(createqQery);
+            stmt.execute(upsertQuery);
+            ResultSet rs = stmt.executeQuery(selectQuery);
             assertTrue(rs.next());
             assertFalse(rs.next());
             rs.close();
 
-            ResultSet rs2 = conn.createStatement().executeQuery(getLogsQuery);
-            assertTrue(rs2.next());
-            assertEquals(rs2.getString(7), selectQuery);
-            assertFalse(rs2.next());
-        } finally {
-            conn.close();
+            int retryCount=10;
+            while (true) {
+                try {
+                    ResultSet rs2 = stmt.executeQuery(getLogsQuery);
+                    assertTrue(rs2.next());
+                    assertEquals(rs2.getString(7), selectQuery);
+                    assertFalse(rs2.next());
+                    break;
+                } catch (AssertionError e) {
+                    if(retryCount-- <= 0) {
+                        throw e;
+                    }
+                    Thread.sleep(4000);
+                }
+            }
         }
     }
 
     @Test
-    public void testLoggingDMLAandDDL() throws Exception {
+    public void testLoggingDMLAndDDL() throws Exception {
         String createqQery = "create table test3 (mykey integer not null primary key," +
                 " mycolumn varchar)";
         String upsertQuery = "upsert into test3 values (1,'Hello')";
@@ -93,32 +106,41 @@ public class AuditLoggingIT extends ParallelStatsDisabledIT {
         String getLogsQuery = "select * from SYSTEM.LOG WHERE TABLE_NAME='TEST3' order by start_time";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.AUDIT_LOG_LEVEL, LogLevel.INFO.name());
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(true);
-        try {
-            conn.createStatement().execute(createqQery);
-            conn.createStatement().execute(upsertQuery);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+                Statement stmt = conn.createStatement();
+        ){
+            conn.setAutoCommit(true);
+
+            stmt.execute(createqQery);
+            stmt.execute(upsertQuery);
             ResultSet rs = conn.createStatement().executeQuery(selectQuery);
             assertTrue(rs.next());
             assertFalse(rs.next());
             rs.close();
 
-            Thread.sleep(4000);
-            ResultSet rs2 = conn.createStatement().executeQuery(getLogsQuery);
-            assertTrue(rs2.next());
-            assertEquals(rs2.getString(7), createqQery);
-            assertTrue(rs2.next());
-            assertEquals(rs2.getString(7), upsertQuery);
-
-            assertFalse(rs2.next());
-        } finally {
-            conn.close();
+            int retryCount=10;
+            while (true) {
+                try {
+                    ResultSet rs2 = stmt.executeQuery(getLogsQuery);
+                    assertTrue(rs2.next());
+                    assertEquals(rs2.getString(7), createqQery);
+                    assertTrue(rs2.next());
+                    assertEquals(rs2.getString(7), upsertQuery);
+                    assertFalse(rs2.next());
+                    break;
+                } catch (AssertionError e) {
+                    if(retryCount-- <= 0) {
+                        throw e;
+                    }
+                    Thread.sleep(4000);
+                }
+            }
         }
     }
 
     @Test
     public void testLoggingDMLAandDDLandSelect() throws Exception {
-        String createqQery = "create table test4 (mykey integer not null primary key," +
+        String createqQuery = "create table test4 (mykey integer not null primary key," +
                 " mycolumn varchar)";
         String upsertQuery = "upsert into test4 values (1,'Hello')";
         String selectQuery = "select * from test4";
@@ -126,30 +148,37 @@ public class AuditLoggingIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.AUDIT_LOG_LEVEL, LogLevel.INFO.name());
         props.setProperty(QueryServices.LOG_LEVEL, LogLevel.TRACE.name());
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(true);
-        try {
-            Statement stat = conn.createStatement();
-            stat.execute(createqQery);
-            stat.execute(upsertQuery);
-            ResultSet rs = stat.executeQuery(selectQuery);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+                Statement stmt = conn.createStatement();
+        ){
+            conn.setAutoCommit(true);
+            stmt.execute(createqQuery);
+            stmt.execute(upsertQuery);
+            ResultSet rs = stmt.executeQuery(selectQuery);
             assertTrue(rs.next());
             assertFalse(rs.next());
             rs.close();
 
-            Thread.sleep(4000);
-            ResultSet rs2 = conn.createStatement().executeQuery(getLogsQuery);
-            assertTrue(rs2.next());
-            assertEquals(rs2.getString(7), createqQery);
-            assertTrue(rs2.next());
-            assertEquals(rs2.getString(7), upsertQuery);
-            assertTrue(rs2.next());
-            assertEquals(rs2.getString(7), selectQuery);
+            int retryCount=10;
+            while (true) {
+                try {
+                    ResultSet rs2 = conn.createStatement().executeQuery(getLogsQuery);
+                    assertTrue(rs2.next());
+                    assertEquals(rs2.getString(7), createqQuery);
+                    assertTrue(rs2.next());
+                    assertEquals(rs2.getString(7), upsertQuery);
+                    assertTrue(rs2.next());
+                    assertEquals(rs2.getString(7), selectQuery);
 
-            assertFalse(rs2.next());
-
-        } finally {
-            conn.close();
+                    assertFalse(rs2.next());
+                    break;
+                } catch (AssertionError e) {
+                    if(retryCount-- <= 0) {
+                        throw e;
+                    }
+                    Thread.sleep(4000);
+                }
+            }
         }
     }
 
@@ -163,42 +192,46 @@ public class AuditLoggingIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.AUDIT_LOG_LEVEL, LogLevel.INFO.name());
         props.setProperty(QueryServices.LOG_LEVEL, LogLevel.TRACE.name());
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.setAutoCommit(true);
-        try {
-            Statement stat = conn.createStatement();
-            stat.execute(createqQery);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+                Statement stmt = conn.createStatement();
+                PreparedStatement p = conn.prepareStatement(upsertQuery);
+        ){
+            conn.setAutoCommit(true);
+            stmt.execute(createqQery);
 
-
-            PreparedStatement p = conn.prepareStatement(upsertQuery);
             p.setInt(1, 1);
             p.setString(2, "foo");
-
             p.execute();
 
             p.setInt(1, 2);
             p.setString(2, "bar");
-
             p.execute();
 
-            ResultSet rs = stat.executeQuery(selectQuery);
+            ResultSet rs = stmt.executeQuery(selectQuery);
             assertTrue(rs.next());
             assertTrue(rs.next());
             assertFalse(rs.next());
             rs.close();
 
-            Thread.sleep(4000);
-            ResultSet rs2 = conn.createStatement().executeQuery(getLogsQuery);
-            assertTrue(rs2.next());
-            assertTrue(rs2.next());
-            assertEquals("1,foo", rs2.getString(13));
-            assertTrue(rs2.next());
-            assertEquals( "2,bar", rs2.getString(13));
-            assertTrue(rs2.next());
-            assertFalse(rs2.next());
-
-        } finally {
-            conn.close();
+            int retryCount=10;
+            while (true) {
+                try {
+                    ResultSet rs2 = conn.createStatement().executeQuery(getLogsQuery);
+                    assertTrue(rs2.next());
+                    assertTrue(rs2.next());
+                    assertEquals("1,foo", rs2.getString(13));
+                    assertTrue(rs2.next());
+                    assertEquals( "2,bar", rs2.getString(13));
+                    assertTrue(rs2.next());
+                    assertFalse(rs2.next());
+                    break;
+                } catch (AssertionError e) {
+                    if(retryCount-- <= 0) {
+                        throw e;
+                    }
+                    Thread.sleep(4000);
+                }
+            }
         }
     }
 

@@ -82,8 +82,10 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
     private static void createMDTestTable(Connection conn, String tableName, String extraProps)
@@ -195,6 +197,10 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
             assertEquals(PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE, rs.getString("TABLE_NAME"));
+            assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
+            assertTrue(rs.next());
+            assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
+            assertEquals(PhoenixDatabaseMetaData.SYSTEM_TRANSFORM_TABLE, rs.getString("TABLE_NAME"));
             assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
             assertTrue(rs.next());
             assertEquals(null, rs.getString("TABLE_SCHEM"));
@@ -400,7 +406,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
                 tables.add(rs.getString("TABLE_NAME"));
                 assertEquals("SYSTEM", rs.getString("TABLE_SCHEM"));
             }
-            assertEquals(8, tables.size());
+            assertEquals(9, tables.size());
             assertTrue(tables.contains("CATALOG"));
             assertTrue(tables.contains("FUNCTION"));
 

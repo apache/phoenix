@@ -33,9 +33,9 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
-import org.apache.phoenix.thirdparty.com.google.common.io.Files;
-
+@Category(ParallelStatsDisabledTest.class)
 public class SpooledTmpFileDeleteIT extends ParallelStatsDisabledIT {
     private static final String PRINCIPAL = "noRenewLease";
     private File spoolDir;
@@ -57,7 +57,7 @@ public class SpooledTmpFileDeleteIT extends ParallelStatsDisabledIT {
     @Before
     public void setup() throws Exception {
         tableName = generateUniqueName();
-        spoolDir = Files.createTempDir();
+        spoolDir = TestUtil.createTempDirectory().toFile();
         try (Connection conn = getConnection()) {
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + tableName + " (ID varchar NOT NULL PRIMARY KEY) SPLIT ON ('EA','EZ')");

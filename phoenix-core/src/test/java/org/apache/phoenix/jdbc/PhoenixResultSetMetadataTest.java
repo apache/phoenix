@@ -24,7 +24,6 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.apache.phoenix.query.QueryConstants;
 import org.junit.Test;
 
 public class PhoenixResultSetMetadataTest extends BaseConnectionlessQueryTest {
@@ -41,5 +40,13 @@ public class PhoenixResultSetMetadataTest extends BaseConnectionlessQueryTest {
         assertEquals(15, rs.getMetaData().getColumnDisplaySize(3));
         assertEquals(conn.unwrap(PhoenixConnection.class).getDatePattern().length(), rs.getMetaData().getColumnDisplaySize(4));
         assertEquals(40, rs.getMetaData().getColumnDisplaySize(5));
+    }
+
+    @Test
+    public void testNullTypeName() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        ResultSet rs = conn.createStatement().executeQuery("select null");
+
+        assertEquals("NULL", rs.getMetaData().getColumnTypeName(1));
     }
 }

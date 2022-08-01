@@ -18,6 +18,7 @@
 package org.apache.phoenix.index;
 
 import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB;
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -33,6 +34,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.join.MaxServerCacheSizeExceededException;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -134,6 +136,12 @@ public class IndexMetaDataCacheClient {
                 mutation.setAttribute(PhoenixRuntime.TENANT_ID_ATTRIB, tenantIdBytes);
             }
             mutation.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
+            if (table.getTransformingNewTable() != null) {
+                boolean disabled = table.getTransformingNewTable().isIndexStateDisabled();
+                if (!disabled) {
+                    mutation.setAttribute(BaseScannerRegionObserver.DO_TRANSFORMING, TRUE_BYTES);
+                }
+            }
             if (attribValue != null) {
                 mutation.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, attribValue);
                 mutation.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION,

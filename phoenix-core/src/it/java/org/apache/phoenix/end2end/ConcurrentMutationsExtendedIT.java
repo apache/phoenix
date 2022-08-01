@@ -29,7 +29,7 @@ import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
@@ -63,7 +63,8 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.junit.Assert.*;
 
-@RunWith(RunUntilFailure.class) @Category(NeedsOwnMiniClusterTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
+@RunWith(RunUntilFailure.class)
 public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
     private static final Random RAND = new Random(5);
@@ -77,7 +78,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
-        props.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+        props.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
             Integer.toString(MAX_LOOKBACK_AGE));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
@@ -85,7 +86,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     static long verifyIndexTable(String tableName, String indexName,
             Connection conn) throws Exception {
         // This checks the state of every raw index row without rebuilding any row
-        IndexTool indexTool = IndexToolIT.runIndexTool(true, false, "", tableName,
+        IndexTool indexTool = IndexToolIT.runIndexTool(false, "", tableName,
                 indexName, null, 0, IndexTool.IndexVerifyType.ONLY);
         System.out.println(indexTool.getJob().getCounters());
         assertEquals(0, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
@@ -99,7 +100,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         // This checks the state of an index row after it is repaired
         long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
         // We want to check the index rows again as they may be modified by the read repair
-        indexTool = IndexToolIT.runIndexTool(true, false, "", tableName, indexName,
+        indexTool = IndexToolIT.runIndexTool(false, "", tableName, indexName,
                 null, 0, IndexTool.IndexVerifyType.ONLY);
         System.out.println(indexTool.getJob().getCounters());
 
@@ -114,7 +115,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
         assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).getValue());
         // Now we rebuild the entire index table and expect that it is still good after the full rebuild
-        indexTool = IndexToolIT.runIndexTool(true, false, "", tableName, indexName,
+        indexTool = IndexToolIT.runIndexTool(false, "", tableName, indexName,
                 null, 0, IndexTool.IndexVerifyType.AFTER);
         assertEquals(indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_VALID_INDEX_ROW_COUNT).getValue(),
                 indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
@@ -130,7 +131,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
             admin.disableTable(physicalTableName);
             admin.truncateTable(physicalTableName, true);
         }
-        indexTool = IndexToolIT.runIndexTool(true, false, "", tableName, indexName,
+        indexTool = IndexToolIT.runIndexTool(false, "", tableName, indexName,
                 null, 0, IndexTool.IndexVerifyType.AFTER);
         assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
         assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());

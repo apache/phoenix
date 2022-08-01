@@ -196,6 +196,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         return setSystemDDLProperties(QueryConstants.CREATE_TASK_METADATA);
     }
 
+    protected String getTransformDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_TRANSFORM_METADATA);
+    }
+
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
           props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS),
@@ -330,6 +334,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public MetaDataMutationResult addColumn(List<Mutation> tableMetaData,
                                             PTable table,
                                             PTable parentTable,
+                                            PTable transformingNewTable,
                                             Map<String, List<Pair<String, Object>>> properties,
                                             Set<String> colFamiliesForPColumnsToBeAdded,
                                             List<PColumn> columnsToBeAdded) throws SQLException {
@@ -417,6 +422,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 try {
                     metaConnection.createStatement()
                             .executeUpdate(getTaskDDL());
+                } catch (NewerTableAlreadyExistsException ignore) {
+                }
+                try {
+                    metaConnection.createStatement()
+                            .executeUpdate(getTransformDDL());
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
             } catch (SQLException e) {
@@ -718,10 +728,6 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public MetaDataMutationResult getSchema(String schemaName, long clientTimestamp) throws SQLException {
-        try {
-            PSchema schema = metaData.getSchema(new PTableKey(null, schemaName));
-            new MetaDataMutationResult(MutationCode.SCHEMA_ALREADY_EXISTS, schema, 0);
-        } catch (SchemaNotFoundException e) {}
         return new MetaDataMutationResult(MutationCode.SCHEMA_NOT_FOUND, 0, null);
     }
 

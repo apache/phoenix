@@ -14,7 +14,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM apache/yetus:0.12.0
+FROM apache/yetus:0.13.0
 
 RUN groupadd --non-unique -g 910 jenkins || true
 RUN useradd -g 910 -u 910 -m jenkins || true
+#####
+# /run/user directory for gpg
+#####
+RUN mkdir -p /run/user/910/gnupg/ \
+    && chmod -R 700 /run/user/910 \
+    && chown -R 910:910 /run/user/910 \
+    && mkdir -p /var/run/user/910/gnupg \
+    && chown -R 910:910 /var/run/user/910 \
+    && chmod -R 700 /var/run/user/910
+#####
+# Pin the Java 11 packages to the release version to avoid the Java four number version Jetty bug
+# We cannot pin to an updated version, because Ubuntu removes old updates from its repos.
+#####
+RUN apt-get update \
+    && apt-get -q install --no-install-recommends --allow-downgrades -y openjdk-11-jdk-headless=11.0.7+10-3ubuntu1 openjdk-11-jre-headless=11.0.7+10-3ubuntu1 openjdk-11-jre=11.0.7+10-3ubuntu1
+#####
+# Set default JDK to 11
+#####
+ENV JAVA_HOME /usr/lib/jvm/java-11-openjdk-amd64

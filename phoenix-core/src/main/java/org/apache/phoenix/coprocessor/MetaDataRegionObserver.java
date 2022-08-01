@@ -387,7 +387,7 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
                     // Only perform relatively expensive check for all regions online when index
                     // is disabled or pending active since that's the state it's placed into when
                     // an index write fails.
-                    if ((indexState == PIndexState.DISABLE || indexState == PIndexState.PENDING_ACTIVE)
+                    if ((indexState.isDisabled() || indexState == PIndexState.PENDING_ACTIVE)
                             && !MetaDataUtil.tableRegionsOnline(this.env.getConfiguration(), indexPTable)) {
                         LOGGER.debug("Index rebuild has been skipped because not all regions of" +
                                 " index table=" + indexPTable.getName() + " are online.");

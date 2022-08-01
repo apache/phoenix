@@ -23,6 +23,7 @@ import static org.apache.phoenix.util.NumberUtil.add;
 import static org.apache.phoenix.util.NumberUtil.getMin;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
@@ -150,7 +151,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
         QueryServices services = plan.getContext().getConnection().getQueryServices();
         this.maxServerCacheTimeToLive = services.getProps().getInt(
                 QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS);
-        this.serverCacheLimit = services.getProps().getLong(
+        this.serverCacheLimit = services.getProps().getLongBytes(
                 QueryServices.MAX_SERVER_CACHE_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_SIZE);
     }
     
@@ -542,7 +543,8 @@ public class HashJoinPlan extends DelegateQueryPlan {
                     final byte[] cacheId;
                     String queryString = plan.getStatement().toString().replaceAll("\\$[0-9]+", "\\$");
                     if (usePersistentCache) {
-                        cacheId = Arrays.copyOfRange(digest.digest(queryString.getBytes()), 0, 8);
+                        cacheId = Arrays.copyOfRange(digest.digest(
+                            queryString.getBytes(StandardCharsets.UTF_8)), 0, 8);
                         boolean retrying = parent.delegate.getContext().getRetryingPersistentCache(Bytes.toLong(cacheId));
                         if (!retrying) {
                             try {

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,7 +18,6 @@ package org.apache.phoenix.util;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.wal.WALKey;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatIndexRegionObserver;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 
@@ -39,7 +38,7 @@ public class WALAnnotationUtil {
                 MutationState.MutationMetadataType.values()) {
                 String metadataTypeKey = metadataType.toString();
                 if (attrMap.containsKey(metadataTypeKey)) {
-                    CompatIndexRegionObserver.appendToWALKey(key, metadataTypeKey,
+                    IndexRegionObserver.appendToWALKey(key, metadataTypeKey,
                         attrMap.get(metadataTypeKey));
                 }
             }
@@ -51,24 +50,14 @@ public class WALAnnotationUtil {
      * an annotation into the HBase write ahead log (WAL) when the mutation is processed
      * server-side, usually in IndexRegionObserver
      * @param m Mutation
-     * @param tenantId Tenant (if for a tenant-owned view) otherwise null
-     * @param schemaName Schema name
-     * @param logicalTableName Logical name of the table or view
-     * @param tableType Table type (e.g table, view)
-     * @param ddlTimestamp Server-side timestamp when the table/view was created or last had a
-     *                     column added or dropped from it, whichever is greater
+     * @param externalSchemaId Byte array of a lookup id to an external schema registry
      */
-    public static void annotateMutation(Mutation m, byte[] tenantId, byte[] schemaName,
-                                        byte[] logicalTableName, byte[] tableType, byte[] ddlTimestamp) {
+    public static void annotateMutation(Mutation m, byte[] externalSchemaId) {
         if (!m.getDurability().equals(Durability.SKIP_WAL)) {
-            if (tenantId != null) {
-                m.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(), tenantId);
+            if (externalSchemaId != null) {
+                m.setAttribute(MutationState.MutationMetadataType.EXTERNAL_SCHEMA_ID.toString(),
+                    externalSchemaId);
             }
-            m.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(), schemaName);
-            m.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
-                logicalTableName);
-            m.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(), tableType);
-            m.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(), ddlTimestamp);
         }
     }
 }

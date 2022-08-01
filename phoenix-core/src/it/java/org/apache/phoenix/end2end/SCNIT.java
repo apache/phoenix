@@ -28,21 +28,16 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.Assert;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class SCNIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testReadBeforeDelete() throws Exception {
-        //we don't support reading earlier than a delete in HBase 2.0-2.2, only in 1.4+ and 2.3+
-        if (!HbaseCompatCapabilities.isLookbackBeyondDeletesSupported()){
-            return;
-        }
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);

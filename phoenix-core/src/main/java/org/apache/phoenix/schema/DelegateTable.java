@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.transaction.TransactionFactory;
 
@@ -36,6 +37,11 @@ public class DelegateTable implements PTable {
     @Override
     public long getIndexDisableTimestamp() {
         return delegate.getIndexDisableTimestamp();
+    }
+
+    @Override
+    public boolean isIndexStateDisabled() {
+        return delegate.isIndexStateDisabled();
     }
 
     @Override
@@ -142,6 +148,9 @@ public class DelegateTable implements PTable {
     public List<PTable> getIndexes() { return delegate.getIndexes(); }
 
     @Override
+    public PTable getTransformingNewTable() { return delegate.getTransformingNewTable(); }
+
+    @Override
     public PIndexState getIndexState() {
         return delegate.getIndexState();
     }
@@ -189,6 +198,11 @@ public class DelegateTable implements PTable {
     @Override
     public IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection) {
         return delegate.getIndexMaintainer(dataTable, connection);
+    }
+
+    @Override
+    public TransformMaintainer getTransformMaintainer(PTable oldTable, PhoenixConnection connection) {
+        return delegate.getTransformMaintainer(oldTable, connection);
     }
 
     @Override
@@ -374,6 +388,14 @@ public class DelegateTable implements PTable {
     public String getSchemaVersion() {
         return delegate.getSchemaVersion();
     }
+
+    @Override
+    public String getExternalSchemaId() {
+        return delegate.getExternalSchemaId();
+    }
+
+    @Override
+    public String getStreamingTopicName() { return delegate.getStreamingTopicName(); }
 
     @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }
 

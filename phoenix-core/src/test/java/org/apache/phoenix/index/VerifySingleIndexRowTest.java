@@ -31,11 +31,9 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.coprocessor.IndexToolVerificationResult;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
@@ -43,7 +41,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.*;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -61,8 +58,8 @@ import java.sql.SQLException;
 import java.util.*;
 
 import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.MUTATION_TS_DESC_COMPARATOR;
-import static org.apache.phoenix.hbase.index.IndexRegionObserver.UNVERIFIED_BYTES;
-import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
+import static org.apache.phoenix.query.QueryConstants.UNVERIFIED_BYTES;
+import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_BYTES;
 import static org.junit.Assert.*;
 import static org.mockito.Matchers.any;
@@ -471,7 +468,6 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     // We will report such row as a valid row.
     @Test
     public void testVerifySingleIndexRow_compactionOnIndexTable_atLeastOneExpectedMutationWithinMaxLookBack() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isMaxLookbackTimeSupported());
         String dataRowKey = "k1";
         byte[] indexRowKey1Bytes = generateIndexRowKey(dataRowKey, "val1");
         ManualEnvironmentEdge injectEdge = new ManualEnvironmentEdge();
@@ -490,7 +486,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
                 QueryConstants.EMPTY_COLUMN_BYTES,
                 EnvironmentEdgeManager.currentTimeMillis(),
                 Cell.Type.Put,
-                IndexRegionObserver.VERIFIED_BYTES);
+                QueryConstants.VERIFIED_BYTES);
         put.add(cell);
         // This mutation is beyond maxLookBack, so add it to expectedMutations only.
         expectedMutations.add(put);
@@ -504,7 +500,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
                 QueryConstants.EMPTY_COLUMN_BYTES,
                 EnvironmentEdgeManager.currentTimeMillis(),
                 Cell.Type.Put,
-                IndexRegionObserver.VERIFIED_BYTES);
+                QueryConstants.VERIFIED_BYTES);
         put.add(cell);
         // This mutation is in both expectedMutations and actualMutations, as it is within the maxLookBack, so it will not get chance to be compacted away
         expectedMutations.add(put);
@@ -531,7 +527,6 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     // We will report such row as an invalid beyond maxLookBack row.
     @Test
     public void testVerifySingleIndexRow_compactionOnIndexTable_noExpectedMutationWithinMaxLookBack() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isMaxLookbackTimeSupported());
         String dataRowKey = "k1";
         byte[] indexRowKey1Bytes = generateIndexRowKey(dataRowKey, "val1");
         List<Mutation> expectedMutations = new ArrayList<>();

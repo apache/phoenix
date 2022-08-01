@@ -207,7 +207,7 @@ public class PArrayDataTypeEncoder implements ColumnValueEncoder {
                     } else {
                         // count the bytes written to serialize nulls
                         if (nulls > 0) {
-                            cellSize += (1 + Math.ceil(nulls / 255));
+                            cellSize += (1 + Math.ceil(nulls / 255.0));
                             nulls = 0;
                         }
                         maxOffset = cellSize;

@@ -179,7 +179,9 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
             throws IOException {
 
         // get the index updates for this current batch
-        Iterable<IndexUpdate> upserts = codec.getIndexUpserts(state, indexMetaData, env.getRegionInfo().getStartKey(), env.getRegionInfo().getEndKey());
+        Iterable<IndexUpdate> upserts = codec.getIndexUpserts(
+            state, indexMetaData,
+            env.getRegionInfo().getStartKey(), env.getRegionInfo().getEndKey(), false);
         state.resetTrackedColumns();
 
         /*

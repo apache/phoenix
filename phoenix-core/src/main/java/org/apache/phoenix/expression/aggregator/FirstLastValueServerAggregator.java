@@ -18,6 +18,7 @@
 package org.apache.phoenix.expression.aggregator;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.TreeMap;
@@ -141,11 +142,11 @@ public class FirstLastValueServerAggregator extends BaseAggregator {
                 + " is ascending: " + isAscending + " value=");
         if (useOffset) {
             for (byte[] key : topValues.keySet()) {
-                out.append(topValues.get(key));
+                out.append(Arrays.asList(topValues.get(key)));
             }
             out.append(" offset = ").append(offset);
         } else {
-            out.append(topValue);
+            out.append(Arrays.asList(topValue));
         }
 
         return out.toString();

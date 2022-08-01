@@ -19,7 +19,8 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.hbase.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -27,6 +28,7 @@ import org.apache.phoenix.util.RunUntilFailure;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,9 +48,10 @@ import static org.apache.phoenix.end2end.ConcurrentMutationsExtendedIT
 import static org.junit.Assert.assertTrue;
 
 
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(RunUntilFailure.class)
 public class ConcurrentUpsertsWithoutIndexedColsIT
-        extends BaseUniqueNamesOwnClusterIT {
+        extends BaseTest {
 
     private static final Random RANDOM = new Random(5);
     private static final Logger LOGGER =
@@ -57,7 +60,7 @@ public class ConcurrentUpsertsWithoutIndexedColsIT
     private static final Map<String, String> PROPS = ImmutableMap.of(
         QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB,
         Long.toString(0),
-        CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+        BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
         Integer.toString(1000000));
 
     @BeforeClass

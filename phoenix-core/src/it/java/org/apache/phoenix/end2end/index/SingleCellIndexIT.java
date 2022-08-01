@@ -26,17 +26,17 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
@@ -63,6 +63,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+@Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class SingleCellIndexIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(SingleCellIndexIT.class);
@@ -416,19 +417,54 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testPartialUpdateSingleCellTable() throws Exception {
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), testProps)) {
+            conn.setAutoCommit(true);
+            String tableName = "TBL_" + generateUniqueName();
+            String idxName = "IND_" + generateUniqueName();
+
+            createTableAndIndex(conn, tableName, idxName, this.tableDDLOptions, false,3);
+            assertMetadata(conn, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, tableName);
+            assertMetadata(conn, SINGLE_CELL_ARRAY_WITH_OFFSETS, TWO_BYTE_QUALIFIERS, idxName);
+
+            // Partial update 1st row
+            String upsert = "UPSERT INTO " + tableName + " (PK1, INT_PK, V4) VALUES ('PK1',1,'UpdatedV4')";
+            conn.createStatement().execute(upsert);
+            conn.commit();
+            String selectFromData = "SELECT /*+ NO_INDEX */ PK1, INT_PK, V1, V2, V4 FROM " + tableName + " where INT_PK = 1 and V4 LIKE 'UpdatedV4'";
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectFromData);
+            String actualExplainPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(actualExplainPlan.contains(tableName));
+
+            rs = conn.createStatement().executeQuery(selectFromData);
+            assertTrue(rs.next());
+            assertEquals("PK1", rs.getString(1));
+            assertEquals(1, rs.getInt(2));
+            assertEquals("V11", rs.getString(3));
+            assertEquals(2, rs.getInt(4));
+            assertFalse(rs.next());
+
+            String selectFromIndex = "SELECT PK1, INT_PK, V1, V2, V4 FROM " + tableName + " where V2 >= 2 and V4 = 'UpdatedV4'";
+            rs = conn.createStatement().executeQuery("EXPLAIN " + selectFromIndex);
+            actualExplainPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(actualExplainPlan.contains(idxName));
+
+            rs = conn.createStatement().executeQuery(selectFromIndex);
+            assertTrue(rs.next());
+            assertEquals("PK1", rs.getString(1));
+            assertEquals(1, rs.getInt(2));
+            assertEquals("V11", rs.getString(3));
+            assertEquals(2, rs.getInt(4));
+            assertFalse(rs.next());
+        }
+    }
+
     private Connection getTenantConnection(String tenantId) throws Exception {
         Properties tenantProps = PropertiesUtil.deepCopy(testProps);
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         return DriverManager.getConnection(getUrl(), tenantProps);
-    }
-
-    private void assertMetadata(Connection conn, PTable.ImmutableStorageScheme expectedStorageScheme, PTable.QualifierEncodingScheme
-            expectedColumnEncoding, String tableName)
-            throws Exception {
-        PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
-        PTable table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), tableName));
-        assertEquals(expectedStorageScheme, table.getImmutableStorageScheme());
-        assertEquals(expectedColumnEncoding, table.getEncodingScheme());
     }
 
     private void createTableAndIndex(Connection conn, String tableName, String indexName, String tableDDL, boolean async, int numOfRows)
@@ -464,16 +500,12 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
                     hTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName.getBytes());
             Scan scan = new Scan();
             scan.setRaw(true);
-            LOGGER.debug("***** Table Name : " + tableName);
+            LOGGER.info("***** Table Name : " + tableName);
             ResultScanner scanner = hTable.getScanner(scan);
             for (Result result = scanner.next(); result != null; result = scanner.next()) {
                 for (Cell cell : result.rawCells()) {
                     String cellString = cell.toString();
-                    for (Map.Entry<byte[], NavigableMap<byte[], NavigableMap<Long, byte[]>>> entryF : result.getMap()
-                            .entrySet()) {
-                        byte[] family = entryF.getKey();
-                    }
-                    LOGGER.debug(cellString + " ****** value : " + Bytes.toStringBinary(CellUtil.cloneValue(cell)));
+                    LOGGER.info(cellString + " ****** value : " + Bytes.toStringBinary(CellUtil.cloneValue(cell)));
                 }
             }
         }

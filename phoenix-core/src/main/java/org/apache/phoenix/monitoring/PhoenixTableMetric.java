@@ -34,4 +34,5 @@ public interface PhoenixTableMetric extends Metric {
      * @return Sum of the values of the metric sampled since the last {@link #reset()} call.
      */
     public long getTotalSum();
+
 }

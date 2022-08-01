@@ -24,12 +24,14 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * This tests that the configured client statistics cache is used during execution.  These tests
  * use a class ITGuidePostsCacheFactory which is for testing only that keeps track of the number
  * of cache instances generated.
  */
+@Category(ParallelStatsEnabledTest.class)
 public class ConfigurableCacheIT extends ParallelStatsEnabledIT {
 
     static String table;

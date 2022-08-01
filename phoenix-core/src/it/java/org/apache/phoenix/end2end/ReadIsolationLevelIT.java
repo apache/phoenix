@@ -33,8 +33,10 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsEnabledTest.class)
 public class ReadIsolationLevelIT extends ParallelStatsEnabledIT {
     private static final String ENTITY_ID1= "000000000000001";
     private static final String ENTITY_ID2= "000000000000002";

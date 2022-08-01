@@ -182,7 +182,7 @@ public enum TableProperty {
 
     },
 
-    COLUMN_ENCODED_BYTES(PhoenixDatabaseMetaData.ENCODING_SCHEME, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, false, false, false) {
+    COLUMN_ENCODED_BYTES(PhoenixDatabaseMetaData.ENCODING_SCHEME, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false, false) {
         @Override
         public Object getValue(Object value) {
             if (value instanceof String) {
@@ -194,6 +194,20 @@ public enum TableProperty {
                 return value == null ? null : ((Number) value).byteValue();
             }
             return value;
+        }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.getEncodingScheme();
+        }
+
+    },
+
+    // Same as COLUMN_ENCODED_BYTES. If we don't have this one, isPhoenixProperty returns false.
+    ENCODING_SCHEME(PhoenixDatabaseMetaData.ENCODING_SCHEME, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false, false) {
+        @Override
+        public Object getValue(Object value) {
+            return COLUMN_ENCODED_BYTES.getValue(value);
         }
 
         @Override
@@ -311,8 +325,18 @@ public enum TableProperty {
         @Override public Object getPTableValue(PTable table) {
             return table.getSchemaVersion();
         }
-    }
-    ;
+    },
+
+    STREAMING_TOPIC_NAME(PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, true, true) {
+        @Override
+        public Object getValue(Object value) {
+            return value == null ? null : value.toString();
+        }
+
+        @Override public Object getPTableValue(PTable table) {
+            return table.getStreamingTopicName();
+        }
+    };
 
     private final String propertyName;
     private final SQLExceptionCode colFamSpecifiedException;

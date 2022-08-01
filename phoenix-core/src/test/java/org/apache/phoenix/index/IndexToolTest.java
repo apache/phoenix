@@ -18,16 +18,13 @@
 package org.apache.phoenix.index;
 
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.IndexScrutiny;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -40,7 +37,6 @@ import static org.apache.phoenix.mapreduce.index.IndexTool.FEATURE_NOT_APPLICABL
 import static org.apache.phoenix.mapreduce.index.IndexTool.INVALID_TIME_RANGE_EXCEPTION_MESSAGE;
 import static org.apache.phoenix.mapreduce.index.IndexTool.RETRY_VERIFY_NOT_APPLICABLE;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assume.assumeTrue;
 import static org.mockito.Mockito.when;
 
 public class IndexToolTest extends BaseTest {
@@ -69,11 +65,10 @@ public class IndexToolTest extends BaseTest {
 
     @Test
     public void testParseOptions_timeRange_timeRangeNotNull() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         Long startTime = 10L;
         Long endTime = 15L;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -85,7 +80,7 @@ public class IndexToolTest extends BaseTest {
     @Test
     public void testParseOptions_timeRange_null() throws Exception {
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE);
         CommandLine cmdLine = it.parseOptions(args);
         it.populateIndexToolAttributes(cmdLine);
@@ -95,10 +90,9 @@ public class IndexToolTest extends BaseTest {
 
     @Test
     public void testParseOptions_timeRange_startTimeNotNull() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         Long startTime = 10L;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         startTime , null);
         CommandLine cmdLine = it.parseOptions(args);
@@ -111,7 +105,7 @@ public class IndexToolTest extends BaseTest {
     public void testParseOptions_timeRange_endTimeNotNull() throws Exception {
         Long endTime = 15L;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         null , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -124,7 +118,7 @@ public class IndexToolTest extends BaseTest {
     public void testParseOptions_timeRange_startTimeNullEndTimeInFuture() throws Exception {
         Long endTime = EnvironmentEdgeManager.currentTimeMillis() + 100000;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         null , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -135,10 +129,9 @@ public class IndexToolTest extends BaseTest {
 
     @Test
     public void testParseOptions_timeRange_endTimeNullStartTimeInFuture() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         Long startTime = EnvironmentEdgeManager.currentTimeMillis() + 100000;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         startTime , null);
         CommandLine cmdLine = it.parseOptions(args);
@@ -149,11 +142,10 @@ public class IndexToolTest extends BaseTest {
 
     @Test(timeout = 10000 /* 10 secs */)
     public void testParseOptions_timeRange_startTimeInFuture() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         Long startTime = EnvironmentEdgeManager.currentTimeMillis() + 100000;
         Long endTime = EnvironmentEdgeManager.currentTimeMillis() + 200000;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -164,11 +156,10 @@ public class IndexToolTest extends BaseTest {
 
     @Test(timeout = 10000 /* 10 secs */)
     public void testParseOptions_timeRange_endTimeInFuture() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         Long startTime = EnvironmentEdgeManager.currentTimeMillis();
         Long endTime = EnvironmentEdgeManager.currentTimeMillis() + 100000;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -179,11 +170,10 @@ public class IndexToolTest extends BaseTest {
 
     @Test
     public void testParseOptions_timeRange_startTimeEqEndTime() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         Long startTime = 10L;
         Long endTime = 10L;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -194,11 +184,10 @@ public class IndexToolTest extends BaseTest {
 
     @Test
     public void testParseOptions_timeRange_startTimeGtEndTime() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         Long startTime = 10L;
         Long endTime = 1L;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -217,12 +206,11 @@ public class IndexToolTest extends BaseTest {
 
     @Test
     public void testIncrcementalVerifyOption() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         IndexTool mockTool = Mockito.mock(IndexTool.class);
         when(mockTool.getLastVerifyTime()).thenCallRealMethod();
         Long lastVerifyTime = 10L;
         String [] args =
-                IndexToolIT.getArgValues(true, true, schema,
+                IndexToolIT.getArgValues(true, schema,
                         dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                         lastVerifyTime, null, IndexTool.IndexDisableLoggingType.NONE, lastVerifyTime);
         when(mockTool.parseOptions(args)).thenCallRealMethod();
@@ -243,12 +231,11 @@ public class IndexToolTest extends BaseTest {
 
     @Test
     public void testIncrcementalVerifyOption_notApplicable() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         IndexTool mockTool = Mockito.mock(IndexTool.class);
         when(mockTool.getLastVerifyTime()).thenCallRealMethod();
         Long lastVerifyTime = 10L;
         String [] args =
-            IndexToolIT.getArgValues(true, true, schema,
+            IndexToolIT.getArgValues(true, schema,
                 dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.AFTER,
                 lastVerifyTime, null, IndexTool.IndexDisableLoggingType.NONE,
                 lastVerifyTime);
@@ -266,44 +253,11 @@ public class IndexToolTest extends BaseTest {
     }
 
     @Test
-    public void testIncrementalVerifyNotSupportedWithoutRawSkipScanFilters() {
-        //We should give an exception if we try to use incremental verification on HBase 2.1
-        // which lacks HBASE-22710 enabling raw skip scan filters. For 2.2 we assume 2.2.5+
-        Assume.assumeFalse(HbaseCompatCapabilities.isRawFilterSupported());
-        try {
-            IndexTool it = new IndexTool();
-            Long lastVerifyTime = 10L;
-            String[] args =
-                IndexToolIT.getArgValues(true, true, schema,
-                    dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.AFTER,
-                    lastVerifyTime, null, IndexTool.IndexDisableLoggingType.NONE,
-                    lastVerifyTime);
-            it.parseOptions(args);
-            Assert.fail("Should have thrown an IllegalStateException");
-        } catch (IllegalStateException ise) {
-            //eat exception
-        }
-        //now check retry-verify
-        try {
-            IndexTool it = new IndexTool();
-            Long lastVerifyTime = 10L;
-            String[] args =
-                IndexToolIT.getArgValues(true, true, schema,
-                    dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.AFTER,
-                    null, null, IndexTool.IndexDisableLoggingType.NONE,
-                    lastVerifyTime);
-            it.parseOptions(args);
-            Assert.fail("Should have thrown an IllegalStateException");
-        } catch (IllegalStateException ise) {
-            //eat exception
-        }
-    }
-    @Test
     public void testCheckVerifyAndDisableLogging_defaultsNone() throws Exception {
         Long startTime = null;
         Long endTime = 10L;
         String [] args =
-            IndexToolIT.getArgValues(true, true, schema,
+            IndexToolIT.getArgValues(true, schema,
                 dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                 startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -361,7 +315,7 @@ public class IndexToolTest extends BaseTest {
         Long startTime = null;
         Long endTime = 10L;
         String[] args =
-            IndexToolIT.getArgValues(true, true, schema,
+            IndexToolIT.getArgValues(true, schema,
                 dataTable, indexTable, tenantId, verifyType,
                 startTime, endTime, disableType, null);
         CommandLine cmdLine = it.parseOptions(args);
@@ -374,7 +328,7 @@ public class IndexToolTest extends BaseTest {
         Long startTime = null;
         Long endTime = 10L;
         String[] args =
-            IndexToolIT.getArgValues(true, true, schema,
+            IndexToolIT.getArgValues(true, schema,
                 dataTable, indexTable, tenantId, verifyType,
                 startTime, endTime, disableType, null);
         exceptionRule.expect(IllegalStateException.class);
@@ -383,11 +337,10 @@ public class IndexToolTest extends BaseTest {
 
     @Test
     public void testIndexToolDefaultSource() throws Exception {
-        assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         Long startTime = 1L;
         Long endTime = 10L;
         String [] args =
-            IndexToolIT.getArgValues(true, true, schema,
+            IndexToolIT.getArgValues(true, schema,
                 dataTable, indexTable, tenantId, IndexTool.IndexVerifyType.NONE,
                 startTime , endTime);
         CommandLine cmdLine = it.parseOptions(args);
@@ -397,7 +350,6 @@ public class IndexToolTest extends BaseTest {
 
     @Test
     public void testIndexToolFromIndexSource() throws Exception {
-        assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         verifyFromIndexOption(IndexTool.IndexVerifyType.ONLY);
         verifyFromIndexOption(IndexTool.IndexVerifyType.BEFORE);
     }

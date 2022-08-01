@@ -17,9 +17,14 @@
  */
 package org.apache.phoenix.compile;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.BaseTerminalExpression;
 import org.apache.phoenix.expression.Determinism;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.parse.SequenceValueParseNode.Op;
 import org.apache.phoenix.schema.SequenceKey;
@@ -32,17 +37,25 @@ public class SequenceValueExpression extends BaseTerminalExpression {
     private final SequenceKey key;
     final Op op;
     private final int index;
-    private final long numToAllocate;
+    private final Set<Expression> numToAllocateExpressions = new HashSet<>();
 
-    public SequenceValueExpression(SequenceKey key, Op op, int index, long numToAllocate) {
+    public SequenceValueExpression(SequenceKey key, Op op, int index, Expression numToAllocateExp) {
         this.key = key;
         this.op = op;
         this.index = index;
-        this.numToAllocate = numToAllocate;
+        this.numToAllocateExpressions.add(numToAllocateExp);
     }
 
-    public long getNumToAllocate() {
-        return numToAllocate;
+    public SequenceValueExpression(SequenceValueExpression seqIn, Op op, Expression numToAllocateExp) {
+        this.key = seqIn.getKey();
+        this.op = op;
+        this.index = seqIn.getIndex();
+        this.numToAllocateExpressions.addAll(seqIn.numToAllocateExpressions);
+        this.numToAllocateExpressions.add(numToAllocateExp);
+    }
+
+    public Set<Expression> getNumToAllocateExpressions() {
+        return numToAllocateExpressions;
     }
     
     public SequenceKey getKey() {
@@ -83,7 +96,14 @@ public class SequenceValueExpression extends BaseTerminalExpression {
 
     @Override
     public String toString() {
-        return op.getName() + (numToAllocate == 1 ? " VALUE " : (" " + numToAllocate + " VALUES " )) + "FOR " + SchemaUtil.getTableName(key.getSchemaName(),key.getSequenceName());
+        String sequenceQualifiedName =
+                SchemaUtil.getTableName(key.getSchemaName(), key.getSequenceName());
+        if (op == Op.CURRENT_VALUE) {
+            return op.getName() + " VALUE " + "FOR " + sequenceQualifiedName;
+        } else {
+            return op.getName() + Arrays.toString(getNumToAllocateExpressions().toArray())
+                    + " VALUE(S) " + "FOR " + sequenceQualifiedName;
+        }
     }
 
     @Override

@@ -30,8 +30,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
+@Category(ParallelStatsDisabledTest.class)
 public class ModulusExpressionIT extends ParallelStatsDisabledIT {
     
     private static final long SMALL_VALUE = 31L;

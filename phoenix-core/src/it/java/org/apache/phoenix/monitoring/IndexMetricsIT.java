@@ -22,6 +22,7 @@ import org.apache.hadoop.metrics2.lib.DynamicMetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableFastCounter;
 import org.apache.hadoop.metrics2.lib.MutableHistogram;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSourceImpl;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSource;
@@ -31,11 +32,13 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 
+@Category(ParallelStatsDisabledTest.class)
 public class IndexMetricsIT extends ParallelStatsDisabledIT {
     private static final String TABLE_NAME = "MyTable";
     private static final String INDEX_NAME = "MyIndex";
@@ -188,17 +191,17 @@ public class IndexMetricsIT extends ParallelStatsDisabledIT {
             registry, ageOfUnverifiedRow);
     }
 
-    private void verifyHistogram(String counterName, DynamicMetricsRegistry registry) {
+    public static void verifyHistogram(String counterName, DynamicMetricsRegistry registry) {
         verifyHistogram(counterName, registry, TIME_VAL);
     }
 
-    private void verifyHistogram(String counterName,
+    public static void verifyHistogram(String counterName,
             DynamicMetricsRegistry registry, long max) {
         MutableHistogram histogram = registry.getHistogram(counterName);
         assertEquals(max, histogram.getMax());
     }
 
-    private void verifyCounter(String counterName, DynamicMetricsRegistry registry) {
+    public static void verifyCounter(String counterName, DynamicMetricsRegistry registry) {
         MutableFastCounter counter = registry.getCounter(counterName, 0);
         assertEquals(1, counter.value());
     }

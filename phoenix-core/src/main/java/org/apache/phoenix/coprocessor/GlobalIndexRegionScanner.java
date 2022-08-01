@@ -39,8 +39,6 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import org.apache.phoenix.filter.PagedFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -65,6 +63,7 @@ import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -87,8 +86,6 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
-import static org.apache.phoenix.hbase.index.IndexRegionObserver.UNVERIFIED_BYTES;
-import static org.apache.phoenix.hbase.index.IndexRegionObserver.VERIFIED_BYTES;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.removeEmptyColumn;
 import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.BEYOND_MAX_LOOKBACK_INVALID;
@@ -97,6 +94,8 @@ import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputReposito
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.EXTRA_ROW;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.INVALID_ROW;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.MISSING_ROW;
+import static org.apache.phoenix.query.QueryConstants.UNVERIFIED_BYTES;
+import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 import static org.apache.phoenix.query.QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
@@ -162,7 +161,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     protected Map<byte[], NavigableSet<byte[]>> familyMap;
     protected IndexTool.IndexVerifyType verifyType = IndexTool.IndexVerifyType.NONE;
     protected boolean verify = false;
-    protected boolean isRawFilterSupported;
 
     public GlobalIndexRegionScanner(final RegionScanner innerScanner,
                                     final Region region,
@@ -184,7 +182,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             }
         }
         maxBatchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-        maxBatchSizeBytes = config.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
+        maxBatchSizeBytes = config.getLongBytes(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
                 QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
         blockingMemstoreSize = UngroupedAggregateRegionObserver.getBlockingMemstoreSize(region, config);
         clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
@@ -196,7 +194,13 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         if (indexMetaData == null) {
             indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
         }
-        List<IndexMaintainer> maintainers = IndexMaintainer.deserialize(indexMetaData, true);
+        byte[] transforming = scan.getAttribute(BaseScannerRegionObserver.DO_TRANSFORMING);
+        List<IndexMaintainer> maintainers = null;
+        if (transforming == null) {
+            maintainers = IndexMaintainer.deserialize(indexMetaData, true);
+        } else {
+            maintainers = TransformMaintainer.deserialize(indexMetaData);
+        }
         indexMaintainer = maintainers.get(0);
         this.scan = scan;
         this.innerScanner = innerScanner;
@@ -212,7 +216,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         }
         // Create the following objects only for rebuilds by IndexTool
         hTableFactory = IndexWriterUtils.getDefaultDelegateHTableFactory(env);
-        maxLookBackInMills = CompatBaseScannerRegionObserver.getMaxLookbackInMillis(config);
+        maxLookBackInMills = BaseScannerRegionObserver.getMaxLookbackInMillis(config);
         rowCountPerTask = config.getInt(INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY,
                 DEFAULT_INDEX_VERIFY_ROW_COUNTS_PER_TASK);
 
@@ -250,7 +254,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                     new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
             nextStartKey = null;
             minTimestamp = scan.getTimeRange().getMin();
-            isRawFilterSupported = HbaseCompatCapabilities.isRawFilterSupported();
         }
     }
 
@@ -262,26 +265,30 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         }
         @Override
         public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) {
-            List<Cell> cellList = put.get(ref.getFamily(), ref.getQualifier());
-            if (cellList == null || cellList.isEmpty()) {
+            Cell cell = getLatestCell(ref, ts);
+            if (cell == null) {
                 return null;
             }
-            Cell cell = cellList.get(0);
             valuePtr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
             return valuePtr;
         }
-        @Override
-        public KeyValue getLatestKeyValue(ColumnReference ref, long ts) {
+        public Cell getLatestCell(ColumnReference ref, long ts) {
             List<Cell> cellList = put.get(ref.getFamily(), ref.getQualifier());
             if (cellList == null || cellList.isEmpty()) {
                 return null;
             }
-            Cell cell = cellList.get(0);
-            return new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
+            return cellList.get(0);
+        }
+        @Override
+        public KeyValue getLatestKeyValue(ColumnReference ref, long ts) {
+            Cell cell = getLatestCell(ref, ts);
+            KeyValue kv = cell == null ? null :
+                new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
                     cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
                     cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
                     cell.getTimestamp(), KeyValue.Type.codeToType(cell.getTypeByte()),
                     cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+            return kv;
         }
         @Override
         public byte[] getRowKey() {
@@ -329,7 +336,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
 
     protected static boolean isTimestampBeyondMaxLookBack(long maxLookBackInMills,
             long currentTime, long tsToCheck) {
-        if (!CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(maxLookBackInMills)) {
+        if (!BaseScannerRegionObserver.isMaxLookbackTimeEnabled(maxLookBackInMills)) {
             // By definition, if the max lookback feature is not enabled, then delete markers and rows
             // version can be removed by compaction any time, and thus there is no window in which these mutations are
             // preserved, i.e.,  the max lookback window size is zero. This means all the mutations are effectively
@@ -1131,10 +1138,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         Scan indexScan = new Scan();
         indexScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
         scanRanges.initializeScan(indexScan);
-        if (isRawFilterSupported) {
-            SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
-            indexScan.setFilter(new SkipScanFilter(skipScanFilter, true));
-        }
+        SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
+        indexScan.setFilter(new SkipScanFilter(skipScanFilter, true));
         indexScan.setRaw(true);
         indexScan.readAllVersions();
         indexScan.setCacheBlocks(false);
@@ -1213,7 +1218,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                                                 ValueGetter mergedRowVG, long ts)
             throws IOException {
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
-                mergedRowVG, rowKeyPtr, ts, null, null);
+                mergedRowVG, rowKeyPtr, ts, null, null, false);
         if (indexPut == null) {
             // No covered column. Just prepare an index row with the empty column
             byte[] indexRowKey = indexMaintainer.buildRowKey(mergedRowVG, rowKeyPtr,
@@ -1432,11 +1437,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         if (filter instanceof PagedFilter) {
             PagedFilter pageFilter = (PagedFilter) filter;
             Filter delegateFilter = pageFilter.getDelegateFilter();
-            if (!HbaseCompatCapabilities.isRawFilterSupported() &&
-                    (delegateFilter == null || delegateFilter instanceof FirstKeyOnlyFilter)) {
-                scan.setFilter(null);
-                return true;
-            }
             if (delegateFilter instanceof FirstKeyOnlyFilter) {
                 pageFilter.setDelegateFilter(null);
             } else if (delegateFilter != null) {

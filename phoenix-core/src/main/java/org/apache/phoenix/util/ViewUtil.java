@@ -19,6 +19,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ExtendedCellBuilder;
 import org.apache.hadoop.hbase.HConstants;
@@ -78,6 +79,7 @@ import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYS
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
@@ -295,7 +297,33 @@ public class ViewUtil {
             return new TableViewFinderResult(tableInfoList);
         } 
     }
-    
+
+    public static TableViewFinderResult findChildViews(PhoenixConnection connection, String tenantId, String schema,
+                                                       String tableName) throws IOException, SQLException {
+        // Find child views
+        TableViewFinderResult childViewsResult = new TableViewFinderResult();
+        ReadOnlyProps readOnlyProps = connection.getQueryServices().getProps();
+        for (int i=0; i<2; i++) {
+            try (Table sysCatOrSysChildLinkTable = connection.getQueryServices()
+                    .getTable(SchemaUtil.getPhysicalName(
+                            i==0 ? SYSTEM_CHILD_LINK_NAME_BYTES : SYSTEM_CATALOG_TABLE_BYTES,
+                            readOnlyProps).getName())) {
+                byte[] tenantIdBytes = tenantId != null ? tenantId.getBytes() : null;
+                ViewUtil.findAllRelatives(sysCatOrSysChildLinkTable, tenantIdBytes,
+                        schema == null?null:schema.getBytes(),
+                        tableName.getBytes(), PTable.LinkType.CHILD_TABLE, childViewsResult);
+                break;
+            } catch (TableNotFoundException ex) {
+                // try again with SYSTEM.CATALOG in case the schema is old
+                if (i == 1) {
+                    // This means even SYSTEM.CATALOG was not found, so this is bad, rethrow
+                    throw ex;
+                }
+            }
+        }
+        return childViewsResult;
+    }
+
     /**
      * Check metadata to find if a given table/view has any immediate child views. Note that this
      * is not resilient to orphan {@code parent->child } links.
@@ -568,14 +596,92 @@ public class ViewUtil {
         }
     }
 
+    public static PTable addDerivedColumnsAndIndexesFromAncestors(PhoenixConnection connection,
+        PTable table) throws SQLException {
+        List<PTable> ancestorList = Lists.newArrayList(table);
+        //First generate a list of tables from child to base table. First element will be the
+        //ultimate descendant, last element will be the base table.
+        PName parentName = table.getParentName();
+        while (parentName != null && parentName.getString().length() > 0) {
+            PTable currentTable = ancestorList.get(ancestorList.size() -1);
+            String parentTableName = SchemaUtil.getTableName(currentTable.getParentSchemaName(),
+                currentTable.getParentTableName()).getString();
+            PTable parentTable;
+            try {
+                parentTable = PhoenixRuntime.getTable(connection, parentTableName);
+            } catch (TableNotFoundException tnfe) {
+                //check to see if there's a tenant-owned parent
+                parentTable = PhoenixRuntime.getTable(connection, table.getTenantId().getString(), parentTableName);
+            }
+            ancestorList.add(parentTable);
+            parentName = parentTable.getParentName();
+        }
+        //now add the columns from all ancestors up from the base table to the top-most view
+        if (ancestorList.size() > 1) {
+            for (int k = ancestorList.size() -2; k >= 0; k--) {
+                ancestorList.set(k, addDerivedColumnsAndIndexesFromParent(connection,
+                    ancestorList.get(k), ancestorList.get(k +1)));
+            }
+            return ancestorList.get(0);
+        } else {
+            return table;
+        }
+    }
+    /**
+     * Inherit all indexes and columns from the parent 
+     * @return table with inherited columns and indexes
+     */
+    public static PTable addDerivedColumnsAndIndexesFromParent(PhoenixConnection connection,
+            PTable table, PTable parentTable) throws SQLException {
+        PTable pTable = addDerivedColumnsFromParent(connection, table, parentTable);
+        boolean hasIndexId = table.getViewIndexId() != null;
+        // For views :
+        if (!hasIndexId) {
+            // 1. need to resolve the views's own indexes so that any columns added by ancestors
+            // are included
+            List<PTable> allIndexes = Lists.newArrayList();
+            if (pTable !=null && pTable.getIndexes() !=null && !pTable.getIndexes().isEmpty()) {
+                for (PTable viewIndex : pTable.getIndexes()) {
+                    PTable resolvedViewIndex = ViewUtil.addDerivedColumnsAndIndexesFromParent(
+                            connection, viewIndex, pTable);
+                    if (resolvedViewIndex!=null)
+                        allIndexes.add(resolvedViewIndex);
+                }
+            }
+            
+            // 2. include any indexes from ancestors that can be used by this view
+            List<PTable> inheritedIndexes = Lists.newArrayList();
+            addIndexesFromParent(connection, pTable, parentTable, inheritedIndexes);
+            allIndexes.addAll(inheritedIndexes);
+            if (!allIndexes.isEmpty()) {
+                pTable = PTableImpl.builderWithColumns(pTable, getColumnsToClone(pTable))
+                        .setIndexes(allIndexes).build();
+            }
+        }
+        return pTable;
+    }
+
     /**
      * Inherit all columns from the parent unless it's an excluded column.
      * If the same column is present in the parent and child (for table metadata created before
      * PHOENIX-3534) we choose the child column over the parent column
      * @return table with inherited columns
      */
-    public static PTable addDerivedColumnsAndIndexesFromParent(PhoenixConnection connection,
-            PTable view, PTable parentTable) throws SQLException {
+    public static PTable addDerivedColumnsFromParent(PhoenixConnection connection,
+        PTable view, PTable parentTable)
+        throws SQLException {
+        return addDerivedColumnsFromParent(connection, view, parentTable, true);
+    }
+    /**
+     * Inherit all columns from the parent unless it's an excluded column.
+     * If the same column is present in the parent and child (for table metadata created before
+     * PHOENIX-3534) we choose the child column over the parent column
+     * @return table with inherited columns
+     */
+    public static PTable addDerivedColumnsFromParent(PhoenixConnection connection,
+        PTable view, PTable parentTable,
+        boolean recalculateBaseColumnCount)
+            throws SQLException {
         // combine columns for view and view indexes
         boolean hasIndexId = view.getViewIndexId() != null;
         boolean isSalted = view.getBucketNum() != null;
@@ -697,9 +803,12 @@ public class ViewUtil {
         }
         // we need to include the salt column when setting the base table column count in order to
         // maintain b/w compatibility
-        int baseTableColumnCount =
-                isDiverged ? QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT
-                        : columnsToAdd.size() - myColumns.size() + (isSalted ? 1 : 0);
+        int baseTableColumnCount = view.getBaseColumnCount();
+        if (recalculateBaseColumnCount) {
+            baseTableColumnCount = isDiverged ?
+                QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT :
+                columnsToAdd.size() - myColumns.size() + (isSalted ? 1 : 0);
+        }
         // Inherit view-modifiable properties from the parent table/view if the current view has
         // not previously modified this property
         long updateCacheFreq = (view.getType() != PTableType.VIEW ||
@@ -735,27 +844,6 @@ public class ViewUtil {
                 .build();
         pTable = WhereConstantParser.addViewInfoToPColumnsIfNeeded(pTable);
 
-        // For views :
-        if (!hasIndexId) {
-            // 1. need to resolve the views's own indexes so that any columns added by ancestors are included
-            List<PTable> allIndexes = Lists.newArrayList();
-            if (pTable !=null && pTable.getIndexes() !=null && !pTable.getIndexes().isEmpty()) {
-                for (PTable viewIndex : pTable.getIndexes()) {
-                    PTable resolvedViewIndex =
-                            ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, viewIndex, pTable);
-                    if (resolvedViewIndex!=null)
-                        allIndexes.add(resolvedViewIndex);
-                }
-            }
-            // 2. include any indexes from ancestors that can be used by this view
-            List<PTable> inheritedIndexes = Lists.newArrayList();
-            addIndexesFromParent(connection, pTable, parentTable, inheritedIndexes);
-            allIndexes.addAll(inheritedIndexes);
-            if (!allIndexes.isEmpty()) {
-                pTable = PTableImpl.builderWithColumns(pTable, getColumnsToClone(pTable))
-                        .setIndexes(allIndexes).build();
-            }
-        }
         return pTable;
     }
 

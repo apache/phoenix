@@ -38,6 +38,7 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.task.Task;
+import org.apache.phoenix.schema.transform.Transform;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,12 +59,12 @@ public class PhoenixIndexImportDirectReducer extends
     private String indexTableName;
     private byte[] indexTableNameBytes;
 
-    private void updateCounters(IndexTool.IndexVerifyType verifyType,
+    protected void updateCounters(IndexTool.IndexVerifyType verifyType,
                                 Reducer<ImmutableBytesWritable, IntWritable, NullWritable, NullWritable>.Context context)
             throws IOException {
         Configuration configuration = context.getConfiguration();
         try (final Connection connection = ConnectionUtil.getInputConnection(configuration)) {
-            long ts = Long.valueOf(configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE));
+            long ts = Long.parseLong(configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE));
             IndexToolVerificationResult verificationResult =
                     resultRepository.getVerificationResult(connection, ts, indexTableNameBytes);
             context.getCounter(PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT).
@@ -157,6 +158,22 @@ public class PhoenixIndexImportDirectReducer extends
             } catch (SQLException e) {
                 LOGGER.error(" Failed to update the status to Active", e);
                 throw new RuntimeException(e.getMessage());
+            }
+        }
+
+        if (verifyType != IndexTool.IndexVerifyType.ONLY) {
+            if (PhoenixConfigurationUtil.getIsTransforming(context.getConfiguration())) {
+                try {
+                    Transform.completeTransform(ConnectionUtil
+                            .getInputConnection(context.getConfiguration()), context.getConfiguration());
+                    if (PhoenixConfigurationUtil.getForceCutover(context.getConfiguration())) {
+                        Transform.doForceCutover(ConnectionUtil
+                                .getInputConnection(context.getConfiguration()), context.getConfiguration());
+                    }
+                } catch (Exception e) {
+                    LOGGER.error(" Failed to complete transform", e);
+                    throw new RuntimeException(e.getMessage());
+                }
             }
         }
     }

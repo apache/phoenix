@@ -26,6 +26,7 @@ import static org.junit.Assert.fail;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collection;
@@ -36,14 +37,26 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
+@Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
     private final String indexDDL;
@@ -63,6 +76,12 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
         });
         testCases.add(new String[] {
                 "create local index %s_IDX on %s(counter1, counter2)",
+        });
+        testCases.add(new String[] {
+                "create index %s_IDX on %s(counter1) include (counter2)",
+        });
+        testCases.add(new String[] {
+                "create index %s_IDX on %s(counter1, counter2)",
         });
         return testCases;
     }
@@ -498,18 +517,29 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
         exec.shutdownNow();
 
         int finalResult = nThreads * nCommits * nIncrementsPerCommit;
-        //assertEquals(finalResult,resultHolder[0]);
-        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName + " WHERE counter1 >= 0");
+        boolean isIndexCreated = this.indexDDL != null && this.indexDDL.length() > 0;
+
+        ResultSet rs;
+        String selectSql = "SELECT * FROM " + tableName + " WHERE counter1 >= 0";
+        if (isIndexCreated) {
+            rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
+            String actualExplainPlan = QueryUtil.getExplainPlan(rs);
+            IndexToolIT.assertExplainPlan(this.indexDDL.contains("local"), actualExplainPlan,
+                tableName, tableName + "_IDX");
+        }
+        rs = conn.createStatement().executeQuery(selectSql);
         assertTrue(rs.next());
         assertEquals("a",rs.getString(1));
         assertEquals(finalResult,rs.getInt(2));
         assertFalse(rs.next());
 
-        rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ * FROM " + tableName + " WHERE counter1 >= 0");
-        assertTrue(rs.next());
-        assertEquals("a",rs.getString(1));
-        assertEquals(finalResult,rs.getInt(2));
-        assertFalse(rs.next());
+        if (isIndexCreated) {
+            rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ * FROM " + tableName + " WHERE counter1 >= 0");
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals(finalResult, rs.getInt(2));
+            assertFalse(rs.next());
+        }
         
         conn.close();
     }
@@ -648,6 +678,150 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testMultiplePartialUpdatesInSameBatch() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "create table " + tableName + "(pk varchar primary key, counter1 bigint, counter2 bigint)";
+            conn.createStatement().execute(ddl);
+            createIndex(conn, tableName);
+            String dml;
+            ResultSet rs;
+            // first commit
+            dml = String.format("UPSERT INTO %s VALUES('a',0,0)", tableName);
+            conn.createStatement().execute(dml);
+            conn.commit();
+            // batch multiple conditional updates (partial) in a single batch
+            dml = String.format(
+                "UPSERT INTO %s VALUES('a',2,3) ON DUPLICATE KEY UPDATE counter1 = counter1 + 1", tableName);
+            conn.createStatement().execute(dml);
+            dml = String.format(
+                "UPSERT INTO %s VALUES('a',2,3) ON DUPLICATE KEY UPDATE counter2 = counter2 + 2", tableName);
+            conn.createStatement().execute(dml);
+            dml = String.format(
+                "UPSERT INTO %s VALUES('a',2,3) ON DUPLICATE KEY UPDATE counter1 = counter1 + 100", tableName);
+            conn.createStatement().execute(dml);
+            dml = String.format(
+                "UPSERT INTO %s VALUES('a',2,3) ON DUPLICATE KEY UPDATE counter2 = counter2 + 200", tableName);
+            conn.createStatement().execute(dml);
+            conn.commit();
+            String dql = String.format("SELECT counter1, counter2 FROM %s WHERE counter1 > 0", tableName);
+            rs = conn.createStatement().executeQuery(dql);
+            assertTrue(rs.next());
+            assertEquals(101, rs.getInt(1));
+            assertEquals(202, rs.getInt(2));
+        }
+    }
+
+    @Test
+    public void testComplexDuplicateKeyExpression() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "create table " + tableName +
+                "(pk varchar primary key, counter1 bigint, counter2 bigint, approval varchar)";
+            conn.createStatement().execute(ddl);
+            createIndex(conn, tableName);
+            String dml;
+            dml = String.format("UPSERT INTO %s VALUES('abc', 0, 100, 'NONE')", tableName);
+            conn.createStatement().execute(dml);
+            conn.commit();
+            dml = String.format("UPSERT INTO %s(pk, counter1, counter2) VALUES ('abc', 0, 10) " +
+                "ON DUPLICATE KEY UPDATE " +
+                "counter1 = counter1 + counter2," +
+                "approval = CASE WHEN counter1 < 100 THEN 'NONE' " +
+                "WHEN counter1 < 1000 THEN 'MANAGER_APPROVAL' " +
+                "ELSE 'VP_APPROVAL' END", tableName);
+            conn.createStatement().execute(dml);
+            conn.commit();
+            String dql = "SELECT * from " + tableName;
+            ResultSet rs = conn.createStatement().executeQuery(dql);
+            assertTrue(rs.next());
+            assertEquals("abc", rs.getString("pk"));
+            assertEquals(100, rs.getInt("counter1"));
+            assertEquals(100, rs.getInt("counter2"));
+            assertEquals("NONE", rs.getString("approval"));
+
+            conn.createStatement().execute(dml);
+            conn.commit();
+            rs = conn.createStatement().executeQuery(dql);
+            assertTrue(rs.next());
+            assertEquals("abc", rs.getString("pk"));
+            assertEquals(200, rs.getInt("counter1"));
+            assertEquals(100, rs.getInt("counter2"));
+            assertEquals("MANAGER_APPROVAL", rs.getString("approval"));
+        }
+    }
+
+    @Test
+    public void testRowStampCol() throws Exception {
+        // ROW_TIMESTAMP is not supported for tables with indexes
+        if (indexDDL.length() > 0) {
+            return;
+        }
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "create table " + tableName +
+                "(\n" +
+                "ORGANIZATION_ID CHAR(15) NOT NULL,\n" +
+                "USER_ID CHAR(15) NOT NULL,\n" +
+                "TIME_STAMP DATE NOT NULL,\n" +
+                "STATUS VARCHAR,\n" +
+                "CONSTRAINT PK PRIMARY KEY \n" +
+                "    (\n" +
+                "        ORGANIZATION_ID, \n" +
+                "        USER_ID,\n" +
+                "        TIME_STAMP ROW_TIMESTAMP\n" + // ROW_TIMESTAMP col
+                "    ) \n" +
+                ")\n";
+
+            conn.createStatement().execute(ddl);
+            String orgid = "ORG1";
+            String userid = "USER1";
+            String original = "ORIGINAL";
+            String updated = "UPDATED";
+            String duplicate = "DUPLICATE";
+            long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis() - 10;
+            String dml = "UPSERT INTO  " + tableName +
+                "(ORGANIZATION_ID, USER_ID, TIME_STAMP, STATUS) VALUES (?, ?, ?, ?)";
+            String ignoreDml = dml + "ON DUPLICATE KEY IGNORE";
+            String updateDml = dml + "ON DUPLICATE KEY UPDATE status='" + duplicate + "'";
+            String nullDml = dml + "ON DUPLICATE KEY UPDATE status = null";
+            String dql = "SELECT count(*) from " + tableName + " WHERE STATUS = ?";
+
+            // row doesn't exist
+            upsertRecord(conn, ignoreDml, orgid, userid, rowTimestamp, original);
+            assertNumRecords(1, conn, dql, original);
+            assertHBaseRowTimestamp(tableName, rowTimestamp);
+
+            // on duplicate key ignore
+            upsertRecord(conn, ignoreDml, orgid, userid, rowTimestamp, updated);
+            assertNumRecords(1, conn, dql, original);
+            assertNumRecords(0, conn, dql, updated);
+            assertHBaseRowTimestamp(tableName, rowTimestamp);
+
+            // regular upsert override
+            upsertRecord(conn, dml, orgid, userid, rowTimestamp, updated);
+            assertNumRecords(0, conn, dql, original);
+            assertNumRecords(1, conn, dql, updated);
+            assertHBaseRowTimestamp(tableName, rowTimestamp);
+
+            // on duplicate key update generates extra mutations on the server but those mutations
+            // don't honor ROW_TIMESTAMP
+            upsertRecord(conn, updateDml, orgid, userid, rowTimestamp, "");
+            assertNumRecords(0, conn, dql, updated);
+            assertNumRecords(1, conn, dql, duplicate);
+
+            // set null, new mutations generated on the server
+            upsertRecord(conn, nullDml, orgid, userid, rowTimestamp, "");
+            assertNumRecords(0, conn, dql, duplicate);
+            dql = "SELECT count(*) from " + tableName + " WHERE STATUS is null";
+            assertNumRecords(1, conn, dql);
+        }
+    }
+
     private void assertRow(Connection conn, String tableName, String expectedPK, int expectedCol1, String expectedCol2) throws SQLException {
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
         assertTrue(rs.next());
@@ -657,6 +831,41 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
     }
 
+    private void upsertRecord(Connection conn, String dml, String orgid, String userid, long ts, String status) throws SQLException {
+        try(PreparedStatement stmt = conn.prepareStatement(dml)) { // regular upsert
+            stmt.setString(1, orgid);
+            stmt.setString(2, userid);
+            stmt.setDate(3, new Date(ts));
+            stmt.setString(4, status); // status should change now
+            stmt.executeUpdate();
+            conn.commit();
+        }
+    }
 
+    private void assertNumRecords(int count, Connection conn, String dql, String... params)
+        throws Exception {
+        PreparedStatement stmt = conn.prepareStatement(dql);
+        int counter = 1;
+        for (String param : params) {
+            stmt.setString(counter++, param);
+        }
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(count, rs.getInt(1));
+    }
+
+    private void assertHBaseRowTimestamp(String tableName, long expectedTimestamp) throws Exception {
+        Scan scan = new Scan();
+        byte[] emptyKVQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(true).getFirst();
+        try (org.apache.hadoop.hbase.client.Connection hconn =
+                 ConnectionFactory.createConnection(config)) {
+            Table table = hconn.getTable(TableName.valueOf(tableName));
+            ResultScanner resultScanner = table.getScanner(scan);
+            Result result = resultScanner.next();
+            long actualTimestamp = result.getColumnLatestCell(
+                QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, emptyKVQualifier).getTimestamp();
+            assertEquals(expectedTimestamp, actualTimestamp);
+        }
+    }
 }
     

@@ -24,14 +24,6 @@
      <!-- Add the client & mapreduce jars. Expects the client jar packaging phase to already be run,
       which is determined by specification order in the pom. -->
     <fileSet>
-      <directory>${project.basedir}/../phoenix-client-parent/phoenix-client/target</directory>
-      <outputDirectory>/</outputDirectory>
-      <includes>
-        <include>phoenix-client-${hbase.suffix}-${project.version}.jar</include>
-        <include>phoenix-client-${hbase.suffix}.jar</include>
-      </includes>
-    </fileSet>
-    <fileSet>
       <directory>${project.basedir}/../phoenix-client-parent/phoenix-client-embedded/target</directory>
       <outputDirectory>/</outputDirectory>
       <includes>
@@ -53,14 +45,6 @@
       <includes>
         <include>phoenix-pherf-${project.version}.jar</include>
         <include>phoenix-pherf.jar</include>
-      </includes>
-    </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-tools/target</directory>
-      <outputDirectory>/</outputDirectory>
-      <includes>
-        <include>phoenix-tools-${project.version}.jar</include>
-        <include>phoenix-tools.jar</include>
       </includes>
     </fileSet>
     <fileSet>

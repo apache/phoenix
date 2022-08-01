@@ -35,6 +35,8 @@ import org.apache.hadoop.util.ToolRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import edu.umd.cs.findbugs.annotations.SuppressWarnings;
+
 public class SchemaTool extends Configured implements Tool {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SchemaTool.class);
@@ -97,9 +99,14 @@ public class SchemaTool extends Configured implements Tool {
         }
     }
 
+    @SuppressWarnings(value="NP_NULL_ON_SOME_PATH",
+            justification="null path call calls System.exit()")
     private CommandLine parseOptions(String[] args) {
         final Options options = getOptions();
-        CommandLineParser parser = new DefaultParser(false, false);
+        CommandLineParser parser = DefaultParser.builder().
+                setAllowPartialMatching(false).
+                setStripLeadingAndTrailingQuotes(false).
+                build();
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);

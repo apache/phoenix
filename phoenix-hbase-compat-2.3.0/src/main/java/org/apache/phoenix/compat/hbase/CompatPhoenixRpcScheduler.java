@@ -25,30 +25,5 @@ import org.apache.hadoop.hbase.ipc.RpcScheduler;
  */
 public abstract class CompatPhoenixRpcScheduler extends RpcScheduler {
     protected RpcScheduler delegate;
-
-    @Override
-    public int getMetaPriorityQueueLength() {
-        return this.delegate.getMetaPriorityQueueLength();
-    }
-
-    @Override
-    public int getActiveGeneralRpcHandlerCount() {
-        return this.delegate.getActiveGeneralRpcHandlerCount();
-    }
-
-    @Override
-    public int getActivePriorityRpcHandlerCount() {
-        return this.delegate.getActivePriorityRpcHandlerCount();
-    }
-
-    @Override
-    public int getActiveMetaPriorityRpcHandlerCount() {
-        return this.delegate.getActiveMetaPriorityRpcHandlerCount();
-    }
-
-    @Override
-    public int getActiveReplicationRpcHandlerCount() {
-        return this.delegate.getActiveReplicationRpcHandlerCount();
-    }
-
 }
+

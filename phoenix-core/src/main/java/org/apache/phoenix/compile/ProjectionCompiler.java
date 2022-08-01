@@ -19,6 +19,7 @@ package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
+import static org.apache.phoenix.util.IndexUtil.isHintedGlobalIndex;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -69,9 +70,9 @@ import org.apache.phoenix.schema.ArgumentTypeMismatchException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.IndexDataColumnRef;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
-import org.apache.phoenix.schema.LocalIndexDataColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDatum;
@@ -230,9 +231,11 @@ public class ProjectionCompiler {
                 indexColumn = index.getColumnForColumnName(indexColName);
                 ref = new ColumnRef(tableRef, indexColumn.getPosition());
             } catch (ColumnNotFoundException e) {
-                if (index.getIndexType() == IndexType.LOCAL) {
+                if (tableRef.getTable().getIndexType() == IndexType.LOCAL
+                        || isHintedGlobalIndex(tableRef)) {
                     try {
-                        ref = new LocalIndexDataColumnRef(context, tableRef, indexColName);
+                        context.setUncoveredIndex(true);
+                        ref = new IndexDataColumnRef(context, tableRef, indexColName);
                         indexColumn = ref.getColumn();
                     } catch (ColumnFamilyNotFoundException c) {
                         throw e;
@@ -303,9 +306,11 @@ public class ProjectionCompiler {
                 ref = new ColumnRef(tableRef, indexColumn.getPosition());
                 indexColumnFamily = indexColumn.getFamilyName() == null ? null : indexColumn.getFamilyName().getString();
             } catch (ColumnNotFoundException e) {
-                if (index.getIndexType() == IndexType.LOCAL) {
+                if (tableRef.getTable().getIndexType() == IndexType.LOCAL
+                        || isHintedGlobalIndex(tableRef)) {
                     try {
-                        ref = new LocalIndexDataColumnRef(context, tableRef, indexColName);
+                        context.setUncoveredIndex(true);
+                        ref = new IndexDataColumnRef(context, tableRef, indexColName);
                         indexColumn = ref.getColumn();
                         indexColumnFamily =
                                 indexColumn.getFamilyName() == null ? null
@@ -702,7 +707,7 @@ public class ProjectionCompiler {
                              PColumn col = expression.getColumn();
                              // hack'ish... For covered columns with local indexes we defer to the server.
                              if (col instanceof ProjectedColumn && ((ProjectedColumn) col)
-                                     .getSourceColumnRef() instanceof LocalIndexDataColumnRef) {
+                                     .getSourceColumnRef() instanceof IndexDataColumnRef) {
                                  return null;
                              }
                              PTable table = context.getCurrentTable().getTable();

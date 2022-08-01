@@ -34,7 +34,9 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(ParallelStatsDisabledTest.class)
 public class FlappingAlterTableIT extends ParallelStatsDisabledIT {
     private String dataTableFullName;
     

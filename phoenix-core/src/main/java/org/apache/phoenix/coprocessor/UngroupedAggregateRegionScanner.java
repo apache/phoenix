@@ -217,6 +217,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         }
         indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes, useProto);
         indexMutations = localIndexBytes == null ? new UngroupedAggregateRegionObserver.MutationList() : new UngroupedAggregateRegionObserver.MutationList(1024);
+        byte[] transforming = scan.getAttribute(BaseScannerRegionObserver.DO_TRANSFORMING);
 
         replayMutations = scan.getAttribute(REPLAY_WRITES);
         indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
@@ -268,7 +269,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                 needToWrite = false;
             }
             maxBatchSize = conf.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-            maxBatchSizeBytes = conf.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
+            maxBatchSizeBytes = conf.getLongBytes(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
                     QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
         }
         minMaxQualifiers = EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan);
@@ -438,7 +439,8 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                 Put put = maintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
                         valueGetter, ptr, results.get(0).getTimestamp(),
                         env.getRegion().getRegionInfo().getStartKey(),
-                        env.getRegion().getRegionInfo().getEndKey());
+                        env.getRegion().getRegionInfo().getEndKey(),
+                        false);
 
                 if (txnProvider != null) {
                     put = txnProvider.markPutAsCommitted(put, ts, ts);
@@ -690,19 +692,10 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
 
     private void annotateDataMutations(UngroupedAggregateRegionObserver.MutationList mutationsList,
                                        Scan scan) {
-        byte[] tenantId =
-            scan.getAttribute(MutationState.MutationMetadataType.TENANT_ID.toString());
-        byte[] schemaName =
-            scan.getAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString());
-        byte[] logicalTableName =
-            scan.getAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString());
-        byte[] tableType =
-            scan.getAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString());
-        byte[] ddlTimestamp =
-            scan.getAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString());
-
+        byte[] externalSchemaRegistryId = scan.getAttribute(
+            MutationState.MutationMetadataType.EXTERNAL_SCHEMA_ID.toString());
         for (Mutation m : mutationsList) {
-            annotateMutation(m, tenantId, schemaName, logicalTableName, tableType, ddlTimestamp);
+            annotateMutation(m, externalSchemaRegistryId);
         }
     }
 }

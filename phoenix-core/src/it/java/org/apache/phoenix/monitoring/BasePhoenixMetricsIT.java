@@ -19,8 +19,8 @@ package org.apache.phoenix.monitoring;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
@@ -43,7 +43,7 @@ import static org.apache.phoenix.monitoring.MetricType.UPSERT_BATCH_FAILED_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-public class BasePhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
+public abstract class BasePhoenixMetricsIT extends BaseTest {
 
     static final int MAX_RETRIES = 5;
 
@@ -114,7 +114,9 @@ public class BasePhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             String t = entry.getKey();
             assertEquals("Table names didn't match!", tableName, t);
             Map<MetricType, Long> p = entry.getValue();
-            assertEquals("There should have been nine metrics", 15, p.size());
+
+            assertEquals("There should have been sixteen metrics", 16, p.size());
+
             boolean mutationBatchSizePresent = false;
             boolean mutationCommitTimePresent = false;
             boolean mutationBytesPresent = false;

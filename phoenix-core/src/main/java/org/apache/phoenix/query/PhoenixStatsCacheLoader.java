@@ -21,15 +21,18 @@ import org.apache.phoenix.thirdparty.com.google.common.cache.CacheLoader;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.Futures;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ListenableFuture;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ListenableFutureTask;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 
 /**
  * {@link CacheLoader} asynchronous implementation for the Phoenix Table Stats cache.
@@ -43,15 +46,20 @@ public class PhoenixStatsCacheLoader extends CacheLoader<GuidePostsKey, GuidePos
     public PhoenixStatsCacheLoader(PhoenixStatsLoader statsLoader, Configuration config) {
         this.statsLoader = statsLoader;
 
-        if (this.executor == null) {
+        if (executor == null) {
             synchronized (PhoenixStatsCacheLoader.class) {
-                if (this.executor == null) {
+                if (executor == null) {
                     // The size of the thread pool used for refreshing cached table stats
                     final int statsCacheThreadPoolSize = config.getInt(
                             QueryServices.STATS_CACHE_THREAD_POOL_SIZE,
                             QueryServicesOptions.DEFAULT_STATS_CACHE_THREAD_POOL_SIZE);
-
-                    this.executor = Executors.newFixedThreadPool(statsCacheThreadPoolSize);
+                    final ThreadFactory threadFactory =
+                            new ThreadFactoryBuilder()
+                                    .setDaemon(true)
+                                    .setNameFormat("PHOENIX-STATS-CACHE-LOADER-thread-%s")
+                                    .build();
+                    executor =
+                            Executors.newFixedThreadPool(statsCacheThreadPoolSize, threadFactory);
                 }
             }
         }

@@ -72,6 +72,7 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
     private static Map<TaskType, String> classMap = ImmutableMap.<TaskType, String>builder()
             .put(TaskType.DROP_CHILD_VIEWS, "org.apache.phoenix.coprocessor.tasks.DropChildViewsTask")
             .put(TaskType.INDEX_REBUILD, "org.apache.phoenix.coprocessor.tasks.IndexRebuildTask")
+            .put(TaskType.TRANSFORM_MONITOR, "org.apache.phoenix.coprocessor.tasks.TransformMonitorTask")
             .build();
 
     public enum TaskResultCode {
@@ -186,17 +187,20 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
                         // if current status is already Started, check if we need to re-run.
                         // Task can be async and already Started before.
                         TaskResult result = null;
-                        if (taskRecord.getStatus() != null && taskRecord.getStatus().equals(PTable.TaskStatus.STARTED.toString())) {
+                        if (taskRecord.getStatus() != null
+                                && taskRecord.getStatus().equals(PTable.TaskStatus.STARTED.toString())) {
                             result = (TaskResult) checkCurretResult.invoke(obj, taskRecord);
                         }
 
-                        if (result == null) {
+                        if (result == null || taskRecord.getStatus().equals(PTable.TaskStatus.RETRY.toString())) {
                             // reread task record. There might be async setting of task status
                             taskRecord =
                                     Task.queryTaskTable(connForTask, taskRecord.getTimeStamp(),
                                             taskRecord.getSchemaName(), taskRecord.getTableName(),
                                             taskType, taskRecord.getTenantId(), null).get(0);
-                            if (taskRecord.getStatus() != null && !taskRecord.getStatus().equals(PTable.TaskStatus.CREATED.toString())) {
+                            if (taskRecord.getStatus() != null
+                                    && !taskRecord.getStatus().equals(PTable.TaskStatus.CREATED.toString())
+                                && !taskRecord.getStatus().equals(PTable.TaskStatus.RETRY.toString())) {
                                 continue;
                             }
 
@@ -277,7 +281,7 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
                 .setPriority(taskRecord.getPriority())
                 .setStartTs(taskRecord.getTimeStamp())
                 .setEndTs(endTs)
-                .setAccessCheckEnabled(true)
+                .setAccessCheckEnabled(false)
                 .build());
         }
     }

@@ -29,11 +29,13 @@ import java.text.Collator;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * End2End test that tests the COLLATION_KEY in an ORDER BY clause
  * 
  */
+@Category(ParallelStatsDisabledTest.class)
 public class CollationKeyFunctionIT extends ParallelStatsDisabledIT {
 
 	private String tableName;

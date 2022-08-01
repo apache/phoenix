@@ -36,6 +36,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_VALUE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODING_SCHEME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.EXTERNAL_SCHEMA_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
@@ -66,6 +67,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION_BYT
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORAGE_SCHEME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES;
@@ -81,6 +83,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.VIEW_MODIFIED_PROPERTY_TAG_TYPE;
+import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
@@ -89,6 +92,7 @@ import static org.apache.phoenix.util.ViewUtil.findAllDescendantViews;
 import static org.apache.phoenix.util.ViewUtil.getSystemTableForChildLinks;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.PrivilegedExceptionAction;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -104,6 +108,7 @@ import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ArrayBackedTag;
@@ -188,6 +193,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.PFunction;
@@ -223,6 +229,12 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.export.SchemaRegistryRepository;
+import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
+import org.apache.phoenix.schema.export.SchemaWriter;
+import org.apache.phoenix.schema.export.SchemaWriterFactory;
+import org.apache.phoenix.schema.metrics.MetricsMetadataSource;
+import org.apache.phoenix.schema.metrics.MetricsMetadataSourceFactory;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.schema.types.PBinary;
@@ -351,6 +363,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             CHANGE_DETECTION_ENABLED_BYTES);
     private static final Cell SCHEMA_VERSION_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
             TABLE_FAMILY_BYTES, SCHEMA_VERSION_BYTES);
+    private static final Cell EXTERNAL_SCHEMA_ID_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
+        TABLE_FAMILY_BYTES, EXTERNAL_SCHEMA_ID_BYTES);
+    private static final Cell STREAMING_TOPIC_NAME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
+        TABLE_FAMILY_BYTES, STREAMING_TOPIC_NAME_BYTES);
 
     private static final List<Cell> TABLE_KV_COLUMNS = Lists.newArrayList(
             EMPTY_KEYVALUE_KV,
@@ -388,7 +404,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             PHOENIX_TTL_HWM_KV,
             LAST_DDL_TIMESTAMP_KV,
             CHANGE_DETECTION_ENABLED_KV,
-            SCHEMA_VERSION_KV
+            SCHEMA_VERSION_KV,
+            EXTERNAL_SCHEMA_ID_KV,
+            STREAMING_TOPIC_NAME_KV
     );
 
     static {
@@ -432,6 +450,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private static final int CHANGE_DETECTION_ENABLED_INDEX =
         TABLE_KV_COLUMNS.indexOf(CHANGE_DETECTION_ENABLED_KV);
     private static final int SCHEMA_VERSION_INDEX = TABLE_KV_COLUMNS.indexOf(SCHEMA_VERSION_KV);
+    private static final int EXTERNAL_SCHEMA_ID_INDEX =
+        TABLE_KV_COLUMNS.indexOf(EXTERNAL_SCHEMA_ID_KV);
+    private static final int STREAMING_TOPIC_NAME_INDEX =
+        TABLE_KV_COLUMNS.indexOf(STREAMING_TOPIC_NAME_KV);
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
     private static final KeyValue COLUMN_SIZE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES);
@@ -552,6 +574,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         return PNameFactory.newName(keyBuffer, keyOffset, length);
     }
 
+    private static boolean failConcurrentMutateAddColumnOneTimeForTesting = false;
     private RegionCoprocessorEnvironment env;
 
     private PhoenixMetaDataCoprocessorHost phoenixAccessCoprocessorHost;
@@ -564,6 +587,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     // a child view and also block metadata changes that were previously propagated to children
     // before 4.15, so that we can rollback the upgrade to 4.15 if required
     private boolean allowSplittableSystemCatalogRollback;
+
+    private MetricsMetadataSource metricsSource;
+
+    public static void setFailConcurrentMutateAddColumnOneTimeForTesting(boolean fail) {
+        failConcurrentMutateAddColumnOneTimeForTesting = fail;
+    }
 
     /**
      * Stores a reference to the coprocessor environment provided by the
@@ -601,11 +630,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
         Metrics.ensureConfigured();
+        metricsSource = MetricsMetadataSourceFactory.getMetadataMetricsSource();
     }
 
     @Override
     public void stop(CoprocessorEnvironment env) throws IOException {
-        // nothing to do
+        SchemaRegistryRepositoryFactory.close();
     }
 
     @Override
@@ -811,7 +841,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
     private void addColumnToTable(List<Cell> results, PName colName, PName famName,
                                   Cell[] colKeyValues, List<PColumn> columns, boolean isSalted, int baseColumnCount,
-                                  boolean isRegularView) {
+                                  boolean isRegularView, long timestamp) {
         int i = 0;
         int j = 0;
         while (i < results.size() && j < COLUMN_KV_COLUMNS.size()) {
@@ -921,7 +951,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 new PColumnImpl(colName, famName, dataType, maxLength, scale, isNullable,
                         position - 1, sortOrder, arraySize, viewConstant, isViewReferenced,
                         expressionStr, isRowTimestamp, false, columnQualifierBytes,
-                        results.get(0).getTimestamp());
+                        timestamp);
         columns.add(column);
     }
 
@@ -1018,11 +1048,51 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         if (results.isEmpty()) {
             return null;
         }
+        List<Cell> tableCellList = results;
+        results = Lists.newArrayList();
+        List<List<Cell>> allColumnCellList = Lists.newArrayList();
+
+        do {
+            if (results.size() > 0) {
+                allColumnCellList.add(results);
+                results = Lists.newArrayList();
+            }
+        } while (scanner.next(results));
+        if (results != null && results.size() > 0) {
+            allColumnCellList.add(results);
+        }
+
+        return getTableFromCells(tableCellList, allColumnCellList, clientTimeStamp, clientVersion);
+    }
+
+    private PTable getTableFromCells(List<Cell> tableCellList, List<List<Cell>> allColumnCellList,
+                                     long clientTimeStamp, int clientVersion)
+        throws IOException, SQLException {
+        return getTableFromCells(tableCellList, allColumnCellList, clientTimeStamp, clientVersion, null);
+    }
+
+    /**
+     * Utility method to get a PTable from the HBase Cells either read from SYSTEM.CATALOG or
+     * generated by a DDL statement. Optionally, an existing PTable can be provided so that its
+     * properties can be merged with the "new" PTable created from the Cell. This is useful when
+     * generating an updated PTable following an ALTER DDL statement
+     * @param tableCellList Cells from the header row containing table level properties
+     * @param allColumnCellList Cells from column or link rows
+     * @param clientTimeStamp client-provided timestamp
+     * @param clientVersion client-provided version
+     * @param oldTable Optional parameters containing properties for an existing PTable
+     * @return
+     * @throws IOException
+     * @throws SQLException
+     */
+    private PTable getTableFromCells(List<Cell> tableCellList, List<List<Cell>> allColumnCellList,
+                                     long clientTimeStamp, int clientVersion, PTable oldTable)
+        throws IOException, SQLException {
         Cell[] tableKeyValues = new Cell[TABLE_KV_COLUMNS.size()];
         Cell[] colKeyValues = new Cell[COLUMN_KV_COLUMNS.size()];
 
         // Create PTable based on KeyValues from scan
-        Cell keyValue = results.get(0);
+        Cell keyValue = tableCellList.get(0);
         byte[] keyBuffer = keyValue.getRowArray();
         int keyLength = keyValue.getRowLength();
         int keyOffset = keyValue.getRowOffset();
@@ -1043,20 +1113,29 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // This will prevent the client from continually looking for the current
         // table when we know that there will never be one since we disallow updates
         // unless the table is the latest
-        // If we already have a table newer than the one we just found and
-        // the client timestamp is less that the existing table time stamp,
-        // bump up the timeStamp to right before the client time stamp, since
-        // we know it can't possibly change.
+
         long timeStamp = keyValue.getTimestamp();
-        // long timeStamp = tableTimeStamp > keyValue.getTimestamp() &&
-        // clientTimeStamp < tableTimeStamp
-        // ? clientTimeStamp-1
-        // : keyValue.getTimestamp();
+        PTableImpl.Builder builder = null;
+        if (oldTable != null) {
+            builder = PTableImpl.builderFromExisting(oldTable);
+            List<PColumn> columns = oldTable.getColumns();
+            if (oldTable.getBucketNum() != null && oldTable.getBucketNum() > 0) {
+                //if it's salted, skip the salt column -- it will get added back during
+                //the build process
+                columns = columns.stream().skip(1).collect(Collectors.toList());
+            }
+            builder.setColumns(columns);
+        } else {
+            builder = new PTableImpl.Builder();
+        }
+        builder.setTenantId(tenantId);
+        builder.setSchemaName(schemaName);
+        builder.setTableName(tableName);
 
         int i = 0;
         int j = 0;
-        while (i < results.size() && j < TABLE_KV_COLUMNS.size()) {
-            Cell kv = results.get(i);
+        while (i < tableCellList.size() && j < TABLE_KV_COLUMNS.size()) {
+            Cell kv = tableCellList.get(i);
             Cell searchKv = TABLE_KV_COLUMNS.get(j);
             int cmp =
                     Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(),
@@ -1079,7 +1158,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 || tableKeyValues[COLUMN_COUNT_INDEX] == null) {
             // since we allow SYSTEM.CATALOG to split in certain cases there might be child links or
             // other metadata rows that are invalid and should be ignored
-            Cell cell = results.get(0);
+            Cell cell = tableCellList.get(0);
             LOGGER.error("Found invalid metadata rows for rowkey " +
                     Bytes.toString(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength()));
             return null;
@@ -1089,18 +1168,25 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         PTableType tableType =
                 PTableType
                         .fromSerializedValue(tableTypeKv.getValueArray()[tableTypeKv.getValueOffset()]);
+        builder.setType(tableType);
+
         Cell tableSeqNumKv = tableKeyValues[TABLE_SEQ_NUM_INDEX];
         long tableSeqNum =
                 PLong.INSTANCE.getCodec().decodeLong(tableSeqNumKv.getValueArray(),
                         tableSeqNumKv.getValueOffset(), SortOrder.getDefault());
+        builder.setSequenceNumber(tableSeqNum);
+
         Cell columnCountKv = tableKeyValues[COLUMN_COUNT_INDEX];
         int columnCount =
                 PInteger.INSTANCE.getCodec().decodeInt(columnCountKv.getValueArray(),
                         columnCountKv.getValueOffset(), SortOrder.getDefault());
+
         Cell pkNameKv = tableKeyValues[PK_NAME_INDEX];
         PName pkName =
                 pkNameKv != null ? newPName(pkNameKv.getValueArray(), pkNameKv.getValueOffset(),
                         pkNameKv.getValueLength()) : null;
+        builder.setPkName(pkName != null ? pkName : oldTable != null ? oldTable.getPKName() : null);
+
         Cell saltBucketNumKv = tableKeyValues[SALT_BUCKETS_INDEX];
         Integer saltBucketNum =
                 saltBucketNumKv != null ? (Integer) PInteger.INSTANCE.getCodec().decodeInt(
@@ -1108,37 +1194,62 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         if (saltBucketNum != null && saltBucketNum.intValue() == 0) {
             saltBucketNum = null; // Zero salt buckets means not salted
         }
+        builder.setBucketNum(saltBucketNum != null ? saltBucketNum : oldTable != null ? oldTable.getBucketNum() : null);
+
+        //data table name is used to find the parent table for indexes later
         Cell dataTableNameKv = tableKeyValues[DATA_TABLE_NAME_INDEX];
         PName dataTableName =
                 dataTableNameKv != null ? newPName(dataTableNameKv.getValueArray(),
                         dataTableNameKv.getValueOffset(), dataTableNameKv.getValueLength()) : null;
+
         Cell physicalTableNameKv = tableKeyValues[PHYSICAL_TABLE_NAME_INDEX];
         PName physicalTableName =
                 physicalTableNameKv != null ? newPName(physicalTableNameKv.getValueArray(),
                         physicalTableNameKv.getValueOffset(), physicalTableNameKv.getValueLength()) : null;
+        builder.setPhysicalTableName(physicalTableName != null ? physicalTableName : oldTable != null ? oldTable.getPhysicalName(true) : null);
 
         Cell indexStateKv = tableKeyValues[INDEX_STATE_INDEX];
         PIndexState indexState =
                 indexStateKv == null ? null : PIndexState.fromSerializedValue(indexStateKv
                         .getValueArray()[indexStateKv.getValueOffset()]);
+        builder.setState(indexState != null ? indexState : oldTable != null ? oldTable.getIndexState() : null);
 
         Cell immutableRowsKv = tableKeyValues[IMMUTABLE_ROWS_INDEX];
-        boolean isImmutableRows =
-                immutableRowsKv == null ? false : (Boolean) PBoolean.INSTANCE.toObject(
-                        immutableRowsKv.getValueArray(), immutableRowsKv.getValueOffset(),
-                        immutableRowsKv.getValueLength());
+        boolean isImmutableRows = immutableRowsKv != null && (Boolean) PBoolean.INSTANCE.toObject(
+            immutableRowsKv.getValueArray(), immutableRowsKv.getValueOffset(),
+            immutableRowsKv.getValueLength());
+        builder.setImmutableRows(immutableRowsKv != null ? isImmutableRows :
+            oldTable != null && oldTable.isImmutableRows());
+
         Cell defaultFamilyNameKv = tableKeyValues[DEFAULT_COLUMN_FAMILY_INDEX];
         PName defaultFamilyName = defaultFamilyNameKv != null ? newPName(defaultFamilyNameKv.getValueArray(), defaultFamilyNameKv.getValueOffset(), defaultFamilyNameKv.getValueLength()) : null;
+        builder.setDefaultFamilyName(defaultFamilyName != null ? defaultFamilyName : oldTable != null ? oldTable.getDefaultFamilyName() : null);
+
         Cell viewStatementKv = tableKeyValues[VIEW_STATEMENT_INDEX];
         String viewStatement = viewStatementKv != null ? (String) PVarchar.INSTANCE.toObject(viewStatementKv.getValueArray(), viewStatementKv.getValueOffset(),
                 viewStatementKv.getValueLength()) : null;
+        builder.setViewStatement(viewStatement != null ? viewStatement : oldTable != null ? oldTable.getViewStatement() : null);
+
         Cell disableWALKv = tableKeyValues[DISABLE_WAL_INDEX];
         boolean disableWAL = disableWALKv == null ? PTable.DEFAULT_DISABLE_WAL : Boolean.TRUE.equals(
                 PBoolean.INSTANCE.toObject(disableWALKv.getValueArray(), disableWALKv.getValueOffset(), disableWALKv.getValueLength()));
+        builder.setDisableWAL(disableWALKv != null ? disableWAL :
+            oldTable != null && oldTable.isWALDisabled());
+
         Cell multiTenantKv = tableKeyValues[MULTI_TENANT_INDEX];
-        boolean multiTenant = multiTenantKv == null ? false : Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(multiTenantKv.getValueArray(), multiTenantKv.getValueOffset(), multiTenantKv.getValueLength()));
+        boolean multiTenant = multiTenantKv != null && Boolean.TRUE.equals(
+            PBoolean.INSTANCE.toObject(multiTenantKv.getValueArray(),
+                multiTenantKv.getValueOffset(), multiTenantKv.getValueLength()));
+        builder.setMultiTenant(multiTenantKv != null ? multiTenant :
+            oldTable != null && oldTable.isMultiTenant());
+
         Cell storeNullsKv = tableKeyValues[STORE_NULLS_INDEX];
-        boolean storeNulls = storeNullsKv == null ? false : Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(storeNullsKv.getValueArray(), storeNullsKv.getValueOffset(), storeNullsKv.getValueLength()));
+        boolean storeNulls = storeNullsKv != null && Boolean.TRUE.equals(
+            PBoolean.INSTANCE.toObject(storeNullsKv.getValueArray(), storeNullsKv.getValueOffset(),
+                storeNullsKv.getValueLength()));
+        builder.setStoreNulls(storeNullsKv != null ? storeNulls :
+            oldTable != null && oldTable.getStoreNulls());
+
         Cell transactionalKv = tableKeyValues[TRANSACTIONAL_INDEX];
         Cell transactionProviderKv = tableKeyValues[TRANSACTION_PROVIDER_INDEX];
         TransactionFactory.Provider transactionProvider = null;
@@ -1158,21 +1269,42 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             transactionProviderKv.getValueOffset(),
                             SortOrder.getDefault()));
         }
+        builder.setTransactionProvider(transactionProviderKv != null || transactionalKv != null
+            ? transactionProvider : oldTable != null ? oldTable.getTransactionProvider() : null);
+
         Cell viewTypeKv = tableKeyValues[VIEW_TYPE_INDEX];
         ViewType viewType = viewTypeKv == null ? null : ViewType.fromSerializedValue(viewTypeKv.getValueArray()[viewTypeKv.getValueOffset()]);
-        PDataType viewIndexIdType = getViewIndexIdType(tableKeyValues);
+        builder.setViewType(viewType != null ? viewType : oldTable != null ? oldTable.getViewType() : null);
+
+        PDataType viewIndexIdType = oldTable != null ? oldTable.getviewIndexIdType() :
+            getViewIndexIdType(tableKeyValues);
+        builder.setViewIndexIdType(viewIndexIdType);
+
         Long viewIndexId = getViewIndexId(tableKeyValues, viewIndexIdType);
+        builder.setViewIndexId(viewIndexId != null ? viewIndexId : oldTable != null ? oldTable.getViewIndexId() : null);
+
         Cell indexTypeKv = tableKeyValues[INDEX_TYPE_INDEX];
         IndexType indexType = indexTypeKv == null ? null : IndexType.fromSerializedValue(indexTypeKv.getValueArray()[indexTypeKv.getValueOffset()]);
+        builder.setIndexType(indexType != null ? indexType : oldTable != null ? oldTable.getIndexType() : null);
+
         Cell baseColumnCountKv = tableKeyValues[BASE_COLUMN_COUNT_INDEX];
         int baseColumnCount = baseColumnCountKv == null ? 0 : PInteger.INSTANCE.getCodec().decodeInt(baseColumnCountKv.getValueArray(),
                 baseColumnCountKv.getValueOffset(), SortOrder.getDefault());
+        builder.setBaseColumnCount(baseColumnCountKv != null ? baseColumnCount : oldTable != null ? oldTable.getBaseColumnCount() : 0);
+
         Cell rowKeyOrderOptimizableKv = tableKeyValues[ROW_KEY_ORDER_OPTIMIZABLE_INDEX];
-        boolean rowKeyOrderOptimizable = rowKeyOrderOptimizableKv == null ? false : Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(rowKeyOrderOptimizableKv.getValueArray(), rowKeyOrderOptimizableKv.getValueOffset(), rowKeyOrderOptimizableKv.getValueLength()));
+        boolean rowKeyOrderOptimizable = rowKeyOrderOptimizableKv != null && Boolean.TRUE.equals(
+            PBoolean.INSTANCE.toObject(rowKeyOrderOptimizableKv.getValueArray(),
+                rowKeyOrderOptimizableKv.getValueOffset(),
+                rowKeyOrderOptimizableKv.getValueLength()));
+        builder.setRowKeyOrderOptimizable(rowKeyOrderOptimizableKv != null ? rowKeyOrderOptimizable :
+            oldTable != null && oldTable.rowKeyOrderOptimizable());
+
         Cell updateCacheFrequencyKv = tableKeyValues[UPDATE_CACHE_FREQUENCY_INDEX];
         long updateCacheFrequency = updateCacheFrequencyKv == null ? 0 :
                 PLong.INSTANCE.getCodec().decodeLong(updateCacheFrequencyKv.getValueArray(),
                         updateCacheFrequencyKv.getValueOffset(), SortOrder.getDefault());
+        builder.setUpdateCacheFrequency(updateCacheFrequencyKv != null ? updateCacheFrequency : oldTable != null ? oldTable.getUpdateCacheFrequency() : 0);
 
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUpdateCacheFreq = (updateCacheFrequencyKv == null) ?
@@ -1180,62 +1312,116 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 TagUtil.concatTags(HConstants.EMPTY_BYTE_ARRAY, updateCacheFrequencyKv);
         boolean viewModifiedUpdateCacheFrequency = (PTableType.VIEW.equals(tableType)) &&
                 Bytes.contains(tagUpdateCacheFreq, VIEW_MODIFIED_PROPERTY_BYTES);
+        builder.setViewModifiedUpdateCacheFrequency(!Bytes.equals(tagUpdateCacheFreq,
+            HConstants.EMPTY_BYTE_ARRAY) ? viewModifiedUpdateCacheFrequency :
+            oldTable != null && oldTable.hasViewModifiedUpdateCacheFrequency());
+
         Cell indexDisableTimestampKv = tableKeyValues[INDEX_DISABLE_TIMESTAMP];
         long indexDisableTimestamp = indexDisableTimestampKv == null ? 0L : PLong.INSTANCE.getCodec().decodeLong(indexDisableTimestampKv.getValueArray(),
                 indexDisableTimestampKv.getValueOffset(), SortOrder.getDefault());
+        builder.setIndexDisableTimestamp(indexDisableTimestampKv != null ?
+            indexDisableTimestamp : oldTable != null ? oldTable.getIndexDisableTimestamp() : 0L);
+
         Cell isNamespaceMappedKv = tableKeyValues[IS_NAMESPACE_MAPPED_INDEX];
-        boolean isNamespaceMapped = isNamespaceMappedKv == null ? false
-                : Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isNamespaceMappedKv.getValueArray(),
+        boolean isNamespaceMapped = isNamespaceMappedKv != null && Boolean.TRUE.equals(
+            PBoolean.INSTANCE.toObject(isNamespaceMappedKv.getValueArray(),
                 isNamespaceMappedKv.getValueOffset(), isNamespaceMappedKv.getValueLength()));
+        builder.setNamespaceMapped(isNamespaceMappedKv != null ? isNamespaceMapped :
+            oldTable != null && oldTable.isNamespaceMapped());
+
         Cell autoPartitionSeqKv = tableKeyValues[AUTO_PARTITION_SEQ_INDEX];
         String autoPartitionSeq = autoPartitionSeqKv != null ? (String) PVarchar.INSTANCE.toObject(autoPartitionSeqKv.getValueArray(), autoPartitionSeqKv.getValueOffset(),
                 autoPartitionSeqKv.getValueLength()) : null;
+        builder.setAutoPartitionSeqName(autoPartitionSeq != null
+            ? autoPartitionSeq : oldTable != null ? oldTable.getAutoPartitionSeqName() : null);
+
         Cell isAppendOnlySchemaKv = tableKeyValues[APPEND_ONLY_SCHEMA_INDEX];
-        boolean isAppendOnlySchema = isAppendOnlySchemaKv == null ? false
-                : Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isAppendOnlySchemaKv.getValueArray(),
+        boolean isAppendOnlySchema = isAppendOnlySchemaKv != null && Boolean.TRUE.equals(
+            PBoolean.INSTANCE.toObject(isAppendOnlySchemaKv.getValueArray(),
                 isAppendOnlySchemaKv.getValueOffset(), isAppendOnlySchemaKv.getValueLength()));
+        builder.setAppendOnlySchema(isAppendOnlySchemaKv != null ? isAppendOnlySchema :
+            oldTable != null && oldTable.isAppendOnlySchema());
+
         Cell storageSchemeKv = tableKeyValues[STORAGE_SCHEME_INDEX];
         //TODO: change this once we start having other values for storage schemes
         ImmutableStorageScheme storageScheme = storageSchemeKv == null ? ImmutableStorageScheme.ONE_CELL_PER_COLUMN : ImmutableStorageScheme
                 .fromSerializedValue((byte) PTinyint.INSTANCE.toObject(storageSchemeKv.getValueArray(),
                         storageSchemeKv.getValueOffset(), storageSchemeKv.getValueLength()));
+        builder.setImmutableStorageScheme(storageSchemeKv != null ? storageScheme :
+            oldTable != null ? oldTable.getImmutableStorageScheme() : ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
+
         Cell encodingSchemeKv = tableKeyValues[QUALIFIER_ENCODING_SCHEME_INDEX];
         QualifierEncodingScheme encodingScheme = encodingSchemeKv == null ? QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : QualifierEncodingScheme
                 .fromSerializedValue((byte) PTinyint.INSTANCE.toObject(encodingSchemeKv.getValueArray(),
                         encodingSchemeKv.getValueOffset(), encodingSchemeKv.getValueLength()));
+        builder.setQualifierEncodingScheme(encodingSchemeKv != null ? encodingScheme :
+            oldTable != null ? oldTable.getEncodingScheme() : QualifierEncodingScheme.NON_ENCODED_QUALIFIERS);
+
         Cell useStatsForParallelizationKv = tableKeyValues[USE_STATS_FOR_PARALLELIZATION_INDEX];
-        Boolean useStatsForParallelization = useStatsForParallelizationKv == null ? null : Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(useStatsForParallelizationKv.getValueArray(), useStatsForParallelizationKv.getValueOffset(), useStatsForParallelizationKv.getValueLength()));
+        Boolean useStatsForParallelization = useStatsForParallelizationKv == null ? null :
+            Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(useStatsForParallelizationKv.getValueArray(), useStatsForParallelizationKv.getValueOffset(), useStatsForParallelizationKv.getValueLength()));
+         builder.setUseStatsForParallelization(useStatsForParallelization != null ?
+             useStatsForParallelization : oldTable != null ? oldTable.useStatsForParallelization() : null);
+
         Cell phoenixTTLKv = tableKeyValues[PHOENIX_TTL_INDEX];
         long phoenixTTL = phoenixTTLKv == null ? PHOENIX_TTL_NOT_DEFINED :
                 PLong.INSTANCE.getCodec().decodeLong(phoenixTTLKv.getValueArray(),
                         phoenixTTLKv.getValueOffset(), SortOrder.getDefault());
+        builder.setPhoenixTTL(phoenixTTLKv != null ? phoenixTTL :
+            oldTable != null ? oldTable.getPhoenixTTL() : PHOENIX_TTL_NOT_DEFINED);
 
         Cell phoenixTTLHWMKv = tableKeyValues[PHOENIX_TTL_HWM_INDEX];
         long phoenixTTLHWM = phoenixTTLHWMKv == null ? MIN_PHOENIX_TTL_HWM :
                 PLong.INSTANCE.getCodec().decodeLong(phoenixTTLHWMKv.getValueArray(),
                         phoenixTTLHWMKv.getValueOffset(), SortOrder.getDefault());
+        builder.setPhoenixTTLHighWaterMark(phoenixTTLHWMKv != null ? phoenixTTLHWM :
+            oldTable != null ? oldTable.getPhoenixTTLHighWaterMark() : MIN_PHOENIX_TTL_HWM);
 
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagPhoenixTTL = (phoenixTTLKv == null) ?
                 HConstants.EMPTY_BYTE_ARRAY : CellUtil.getTagArray(phoenixTTLKv);
         boolean viewModifiedPhoenixTTL = (PTableType.VIEW.equals(tableType)) &&
                 Bytes.contains(tagPhoenixTTL, VIEW_MODIFIED_PROPERTY_BYTES);
+        builder.setViewModifiedPhoenixTTL(oldTable != null ?
+            oldTable.hasViewModifiedPhoenixTTL() || viewModifiedPhoenixTTL : viewModifiedPhoenixTTL);
 
         Cell lastDDLTimestampKv = tableKeyValues[LAST_DDL_TIMESTAMP_INDEX];
         Long lastDDLTimestamp = lastDDLTimestampKv == null ?
            null : PLong.INSTANCE.getCodec().decodeLong(lastDDLTimestampKv.getValueArray(),
                 lastDDLTimestampKv.getValueOffset(), SortOrder.getDefault());
+        builder.setLastDDLTimestamp(lastDDLTimestampKv != null ? lastDDLTimestamp :
+            oldTable != null ? oldTable.getLastDDLTimestamp() : null);
 
         Cell changeDetectionEnabledKv = tableKeyValues[CHANGE_DETECTION_ENABLED_INDEX];
         boolean isChangeDetectionEnabled = changeDetectionEnabledKv != null
             && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(changeDetectionEnabledKv.getValueArray(),
             changeDetectionEnabledKv.getValueOffset(),
             changeDetectionEnabledKv.getValueLength()));
+        builder.setIsChangeDetectionEnabled(changeDetectionEnabledKv != null ?
+            isChangeDetectionEnabled : oldTable != null && oldTable.isChangeDetectionEnabled());
 
         Cell schemaVersionKv = tableKeyValues[SCHEMA_VERSION_INDEX];
         String schemaVersion = schemaVersionKv != null ? (String) PVarchar.INSTANCE.toObject(
                 schemaVersionKv.getValueArray(), schemaVersionKv.getValueOffset(), schemaVersionKv.getValueLength())
                 : null;
+        builder.setSchemaVersion(schemaVersion != null ?
+            schemaVersion : oldTable != null ? oldTable.getSchemaVersion() : null);
+
+        Cell externalSchemaIdKv = tableKeyValues[EXTERNAL_SCHEMA_ID_INDEX];
+        String externalSchemaId = externalSchemaIdKv != null ?
+            (String) PVarchar.INSTANCE.toObject(externalSchemaIdKv.getValueArray(),
+                externalSchemaIdKv.getValueOffset(), externalSchemaIdKv.getValueLength())
+            : null;
+        builder.setExternalSchemaId(externalSchemaId != null ? externalSchemaId :
+            oldTable != null ? oldTable.getExternalSchemaId() : null);
+
+        Cell streamingTopicNameKv = tableKeyValues[STREAMING_TOPIC_NAME_INDEX];
+        String streamingTopicName = streamingTopicNameKv != null ?
+            (String) PVarchar.INSTANCE.toObject(streamingTopicNameKv.getValueArray(),
+                streamingTopicNameKv.getValueOffset(), streamingTopicNameKv.getValueLength())
+            : null;
+        builder.setStreamingTopicName(streamingTopicName != null ? streamingTopicName :
+            oldTable != null ? oldTable.getStreamingTopicName() : null);
 
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
@@ -1243,31 +1429,50 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 TagUtil.concatTags(HConstants.EMPTY_BYTE_ARRAY, useStatsForParallelizationKv);
         boolean viewModifiedUseStatsForParallelization = (PTableType.VIEW.equals(tableType)) &&
                 Bytes.contains(tagUseStatsForParallelization, VIEW_MODIFIED_PROPERTY_BYTES);
+        builder.setViewModifiedUseStatsForParallelization(viewModifiedUseStatsForParallelization ||
+            (oldTable != null && oldTable.hasViewModifiedUseStatsForParallelization()));
 
+        boolean setPhysicalName = false;
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnCount);
         List<PTable> indexes = Lists.newArrayList();
         List<PName> physicalTables = Lists.newArrayList();
         PName parentTableName = tableType == INDEX ? dataTableName : null;
         PName parentSchemaName = tableType == INDEX ? schemaName : null;
         PName parentLogicalName = null;
-        EncodedCQCounter cqCounter =
-                (!EncodedColumnsUtil.usesEncodedColumnNames(encodingScheme) || tableType == PTableType.VIEW) ? PTable.EncodedCQCounter.NULL_COUNTER
-                        : new EncodedCQCounter();
+        EncodedCQCounter cqCounter = null;
+        if (oldTable != null) {
+            cqCounter = oldTable.getEncodedCQCounter();
+        } else {
+            cqCounter = (!EncodedColumnsUtil.usesEncodedColumnNames(encodingScheme) || tableType == PTableType.VIEW) ?
+                PTable.EncodedCQCounter.NULL_COUNTER :
+                new EncodedCQCounter();
+        }
+
+        if (timeStamp == HConstants.LATEST_TIMESTAMP) {
+            timeStamp = lastDDLTimestamp != null ? lastDDLTimestamp : clientTimeStamp;
+        }
+        builder.setTimeStamp(timeStamp);
+
+
+        PTable transformingNewTable = null;
         boolean isRegularView = (tableType == PTableType.VIEW && viewType != ViewType.MAPPED);
-        while (true) {
-            results.clear();
-            scanner.next(results);
-            if (results.isEmpty()) {
-                break;
-            }
-            Cell colKv = results.get(LINK_TYPE_INDEX);
+        for (List<Cell> columnCellList : allColumnCellList) {
+
+            Cell colKv = columnCellList.get(LINK_TYPE_INDEX);
             int colKeyLength = colKv.getRowLength();
+
             PName colName = newPName(colKv.getRowArray(), colKv.getRowOffset() + offset, colKeyLength - offset);
+            if (colName == null) {
+                continue;
+            }
             int colKeyOffset = offset + colName.getBytes().length + 1;
             PName famName = newPName(colKv.getRowArray(), colKv.getRowOffset() + colKeyOffset, colKeyLength - colKeyOffset);
+
             if (isQualifierCounterKV(colKv)) {
-                Integer value = PInteger.INSTANCE.getCodec().decodeInt(colKv.getValueArray(), colKv.getValueOffset(), SortOrder.ASC);
-                cqCounter.setValue(famName.getString(), value);
+                if (famName != null) {
+                    Integer value = PInteger.INSTANCE.getCodec().decodeInt(colKv.getValueArray(), colKv.getValueOffset(), SortOrder.ASC);
+                    cqCounter.setValue(famName.getString(), value);
+                }
             } else if (Bytes.compareTo(LINK_TYPE_BYTES, 0, LINK_TYPE_BYTES.length, colKv.getQualifierArray(), colKv.getQualifierOffset(), colKv.getQualifierLength()) == 0) {
                 LinkType linkType = LinkType.fromSerializedValue(colKv.getValueArray()[colKv.getValueOffset()]);
                 if (linkType == LinkType.INDEX_TABLE) {
@@ -1276,8 +1481,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     // famName contains the logical name of the parent table. We need to get the actual physical name of the table
                     PTable parentTable = null;
                     if (indexType != IndexType.LOCAL) {
-                        parentTable = getTable(null, SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(),
-                                SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(), clientTimeStamp, clientVersion);
+                        parentTable = getTable(null, SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8),
+                                SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8), clientTimeStamp, clientVersion);
                         if (parentTable == null) {
                             // parentTable is not in the cache. Since famName is only logical name, we need to find the physical table.
                             try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
@@ -1290,21 +1495,30 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
                     if (parentTable == null) {
                         if (indexType == IndexType.LOCAL) {
-                            PName tablePhysicalName = getPhysicalTableName(env.getRegion(),null, SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(),
-                                    SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(), clientTimeStamp);
+                            PName tablePhysicalName = getPhysicalTableName(
+                                env.getRegion(),null,
+                                SchemaUtil.getSchemaNameFromFullName(
+                                    famName.getBytes()).getBytes(StandardCharsets.UTF_8),
+                                SchemaUtil.getTableNameFromFullName(
+                                    famName.getBytes()).getBytes(StandardCharsets.UTF_8),
+                                clientTimeStamp);
                             if (tablePhysicalName == null) {
                                 physicalTables.add(famName);
+                                setPhysicalName = true;
                             } else {
                                 physicalTables.add(SchemaUtil.getPhysicalHBaseTableName(schemaName, tablePhysicalName, isNamespaceMapped));
+                                setPhysicalName = true;
                             }
                         } else {
                             physicalTables.add(famName);
+                            setPhysicalName = true;
                         }
                         // If this is a view index, then one of the link is IDX_VW -> _IDX_ PhysicalTable link. Since famName is _IDX_ and we can't get this table hence it is null, we need to use actual view name
                         parentLogicalName = (tableType == INDEX ? SchemaUtil.getTableName(parentSchemaName, parentTableName) : famName);
                     } else {
                         String parentPhysicalTableName = parentTable.getPhysicalName().getString();
                         physicalTables.add(PNameFactory.newName(parentPhysicalTableName));
+                        setPhysicalName = true;
                         parentLogicalName = SchemaUtil.getTableName(parentTable.getSchemaName(), parentTable.getTableName());
                     }
                 } else if (linkType == LinkType.PARENT_TABLE) {
@@ -1313,65 +1527,57 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 } else if (linkType == LinkType.EXCLUDED_COLUMN) {
                     // add the excludedColumn
                     addExcludedColumnToTable(columns, colName, famName, colKv.getTimestamp());
+                } else if (linkType == LinkType.TRANSFORMING_NEW_TABLE) {
+                    transformingNewTable = doGetTable((tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getBytes())
+                            , SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(), SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(), clientTimeStamp, null, clientVersion);
+                    if (transformingNewTable == null) {
+                        // It could be global
+                        transformingNewTable = doGetTable(ByteUtil.EMPTY_BYTE_ARRAY
+                                , SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(), SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(), clientTimeStamp, null, clientVersion);
+                        if (transformingNewTable == null) {
+                            ServerUtil.throwIOException("Transforming new table not found", new TableNotFoundException(schemaName.getString(), famName.getString()));
+                        }
+                    }
                 }
             } else {
-                addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null, baseColumnCount, isRegularView);
+                long columnTimestamp =
+                    columnCellList.get(0).getTimestamp() != HConstants.LATEST_TIMESTAMP ?
+                        columnCellList.get(0).getTimestamp() : timeStamp;
+                boolean isSalted = saltBucketNum != null
+                    || (oldTable != null &&
+                    oldTable.getBucketNum() != null && oldTable.getBucketNum() > 0);
+                addColumnToTable(columnCellList, colName, famName, colKeyValues, columns,
+                    isSalted, baseColumnCount, isRegularView, columnTimestamp);
             }
         }
+        builder.setEncodedCQCounter(cqCounter);
+
+        builder.setIndexes(indexes != null ? indexes : oldTable != null
+            ? oldTable.getIndexes() : Collections.<PTable>emptyList());
+
+        if (physicalTables == null || physicalTables.size() == 0) {
+            builder.setPhysicalNames(oldTable != null ? oldTable.getPhysicalNames()
+                : ImmutableList.<PName>of());
+        } else {
+            builder.setPhysicalNames(ImmutableList.copyOf(physicalTables));
+        }
+        if (!setPhysicalName && oldTable != null) {
+            builder.setPhysicalTableName(oldTable.getPhysicalName(true));
+        }
+        builder.setTransformingNewTable(transformingNewTable);
+
+        builder.setExcludedColumns(ImmutableList.<PColumn>of());
+        builder.setBaseTableLogicalName(parentLogicalName != null ?
+            parentLogicalName : oldTable != null ? oldTable.getBaseTableLogicalName() : null);
+        builder.setParentTableName(parentTableName != null ?
+            parentTableName : oldTable != null ? oldTable.getParentTableName() : null);
+        builder.setParentSchemaName(parentSchemaName != null ? parentSchemaName :
+            oldTable != null ? oldTable.getParentSchemaName() : null);
+
+        builder.addOrSetColumns(columns);
         // Avoid querying the stats table because we're holding the rowLock here. Issuing an RPC to a remote
         // server while holding this lock is a bad idea and likely to cause contention.
-        return new PTableImpl.Builder()
-                .setType(tableType)
-                .setState(indexState)
-                .setTimeStamp(timeStamp)
-                .setIndexDisableTimestamp(indexDisableTimestamp)
-                .setSequenceNumber(tableSeqNum)
-                .setImmutableRows(isImmutableRows)
-                .setViewStatement(viewStatement)
-                .setDisableWAL(disableWAL)
-                .setMultiTenant(multiTenant)
-                .setStoreNulls(storeNulls)
-                .setViewType(viewType)
-                .setViewIndexIdType(viewIndexIdType)
-                .setViewIndexId(viewIndexId)
-                .setIndexType(indexType)
-                .setTransactionProvider(transactionProvider)
-                .setUpdateCacheFrequency(updateCacheFrequency)
-                .setNamespaceMapped(isNamespaceMapped)
-                .setAutoPartitionSeqName(autoPartitionSeq)
-                .setAppendOnlySchema(isAppendOnlySchema)
-                .setImmutableStorageScheme(storageScheme == null ?
-                        ImmutableStorageScheme.ONE_CELL_PER_COLUMN : storageScheme)
-                .setQualifierEncodingScheme(encodingScheme == null ?
-                        QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : encodingScheme)
-                .setBaseColumnCount(baseColumnCount)
-                .setEncodedCQCounter(cqCounter)
-                .setUseStatsForParallelization(useStatsForParallelization)
-                .setPhoenixTTL(phoenixTTL)
-                .setPhoenixTTLHighWaterMark(phoenixTTLHWM)
-                .setExcludedColumns(ImmutableList.<PColumn>of())
-                .setTenantId(tenantId)
-                .setSchemaName(schemaName)
-                .setTableName(tableName)
-                .setPhysicalTableName(physicalTableName)
-                .setPkName(pkName)
-                .setDefaultFamilyName(defaultFamilyName)
-                .setRowKeyOrderOptimizable(rowKeyOrderOptimizable)
-                .setBucketNum(saltBucketNum)
-                .setIndexes(indexes == null ? Collections.<PTable>emptyList() : indexes)
-                .setParentSchemaName(parentSchemaName)
-                .setParentTableName(parentTableName)
-                .setBaseTableLogicalName(parentLogicalName)
-                .setPhysicalNames(physicalTables == null ?
-                        ImmutableList.<PName>of() : ImmutableList.copyOf(physicalTables))
-                .setViewModifiedUpdateCacheFrequency(viewModifiedUpdateCacheFrequency)
-                .setViewModifiedUseStatsForParallelization(viewModifiedUseStatsForParallelization)
-                .setViewModifiedPhoenixTTL(viewModifiedPhoenixTTL)
-                .setLastDDLTimestamp(lastDDLTimestamp)
-                .setIsChangeDetectionEnabled(isChangeDetectionEnabled)
-                .setSchemaVersion(schemaVersion)
-                .setColumns(columns)
-                .build();
+        return builder.build();
     }
 
     private Long getViewIndexId(Cell[] tableKeyValues, PDataType viewIndexIdType) {
@@ -1821,8 +2027,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         byte[] colBytes = rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
         byte[] famBytes = rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX];
         if ((colBytes == null || colBytes.length == 0) && (famBytes != null && famBytes.length > 0)) {
-            byte[] sName = SchemaUtil.getSchemaNameFromFullName(famBytes).getBytes();
-            byte[] tName = SchemaUtil.getTableNameFromFullName(famBytes).getBytes();
+            byte[] sName =
+                    SchemaUtil.getSchemaNameFromFullName(famBytes).getBytes(StandardCharsets.UTF_8);
+            byte[] tName =
+                    SchemaUtil.getTableNameFromFullName(famBytes).getBytes(StandardCharsets.UTF_8);
             schemaTableNames[0] = tenantId;
             schemaTableNames[1] = sName;
             schemaTableNames[2] = tName;
@@ -1858,6 +2066,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, tableName);
             ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(tableKey);
             long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
+            boolean isChangeDetectionEnabled = MetaDataUtil.getChangeDetectionEnabled(tableMetadata);
+
             PTable table = null;
             // Get as of latest timestamp so we can detect if we have a newer table that already
             // exists without making an additional query
@@ -1952,7 +2162,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     }
                 } else {
                     // Mapped View
-                    cParentPhysicalName = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
+                    cParentPhysicalName = SchemaUtil.getPhysicalHBaseTableName(
+                            schemaName, tableName, isNamespaceMapped).getBytes();
+
                 }
                 parentSchemaName = parentPhysicalSchemaTableNames[1];
                 parentTableName = parentPhysicalSchemaTableNames[2];
@@ -1980,7 +2192,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     // The view index physical table name is constructed from logical name of base table.
                     // For example, _IDX_SC.TBL1 is the view index name and SC.TBL1 is the logical name of the base table.
                     String namepaceMappedParentLogicalName = MetaDataUtil.getNamespaceMappedName(parentTable.getBaseTableLogicalName(), isNamespaceMapped);
-                    cPhysicalName = MetaDataUtil.getViewIndexPhysicalName(namepaceMappedParentLogicalName.getBytes());
+                    cPhysicalName = MetaDataUtil.getViewIndexPhysicalName(namepaceMappedParentLogicalName.getBytes(StandardCharsets.UTF_8));
                     cParentPhysicalName = parentTable.getPhysicalName().getBytes();
                 } else {
                     cParentPhysicalName = SchemaUtil
@@ -2190,7 +2402,30 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (MetaDataUtil.isTableDirectlyQueried(tableType)) {
                     tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(tableKey,
                         clientTimeStamp, EnvironmentEdgeManager.currentTimeMillis()));
+
+                    //and if we're doing change detection on this table or view, notify the
+                    //external schema registry and get its schema id
+                    if (isChangeDetectionEnabled) {
+                        long startTime = EnvironmentEdgeManager.currentTimeMillis();
+                        try {
+                            exportSchema(tableMetadata, tableKey, clientTimeStamp, clientVersion, null);
+                            metricsSource.incrementCreateExportCount();
+                            metricsSource.updateCreateExportTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
+                        } catch (IOException ie){
+                            metricsSource.incrementCreateExportFailureCount();
+                            metricsSource.updateCreateExportFailureTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
+                            //If we fail to write to the schema registry, fail the entire
+                            //CREATE TABLE or VIEW operation so we stay consistent
+                            LOGGER.error("Error writing schema to external schema registry", ie);
+                            builder.setReturnCode(
+                                MetaDataProtos.MutationCode.ERROR_WRITING_TO_SCHEMA_REGISTRY);
+                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                            done.run(builder.build());
+                            return;
+                        }
+                    }
                 }
+
                 // When we drop a view we first drop the view metadata and then drop the parent->child linking row
                 List<Mutation> localMutations =
                         Lists.newArrayListWithExpectedSize(tableMetadata.size());
@@ -2259,6 +2494,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (newTable != null) {
                     builder.setTable(PTableImpl.toProto(newTable));
                 }
+
                 done.run(builder.build());
             } finally {
                 ServerUtil.releaseRowLocks(locks);
@@ -2267,6 +2503,47 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             LOGGER.error("createTable failed", t);
             ProtobufUtil.setControllerException(controller,
                     ServerUtil.createIOException(fullTableName, t));
+        }
+    }
+
+    private void exportSchema(List<Mutation> tableMetadata, byte[] tableKey, long clientTimestamp,
+                              int clientVersion, PTable oldTable) throws SQLException, IOException {
+        List<Cell> tableCellList = MetaDataUtil.getTableCellsFromMutations(tableMetadata);
+
+        List<List<Cell>> allColumnsCellList = MetaDataUtil.getColumnAndLinkCellsFromMutations(tableMetadata);
+        //getTableFromCells assumes the Cells are sorted as they would be when reading from HBase
+        Collections.sort(tableCellList, KeyValue.COMPARATOR);
+        for (List<Cell> columnCellList : allColumnsCellList) {
+            Collections.sort(columnCellList, KeyValue.COMPARATOR);
+        }
+
+        PTable newTable = getTableFromCells(tableCellList, allColumnsCellList, clientTimestamp,
+            clientVersion, oldTable);
+        PTable parentTable = null;
+        //if this is a view, we need to get the columns from its parent table / view
+        if (newTable != null && newTable.getType().equals(PTableType.VIEW)) {
+            try (PhoenixConnection conn = (PhoenixConnection)
+                ConnectionUtil.getInputConnection(env.getConfiguration())) {
+                newTable = ViewUtil.addDerivedColumnsAndIndexesFromAncestors(conn, newTable);
+            }
+        }
+        Configuration conf = env.getConfiguration();
+        SchemaRegistryRepository exporter = SchemaRegistryRepositoryFactory.
+            getSchemaRegistryRepository(conf);
+        if (exporter != null) {
+            SchemaWriter schemaWriter = SchemaWriterFactory.getSchemaWriter(conf);
+            //we export to an external schema registry, then put the schema id
+            //to lookup the schema in the registry into SYSTEM.CATALOG so we
+            //can look it up later (and use it in WAL annotations)
+
+            //Note that if we succeed here but the write to SYSTEM.CATALOG fails,
+            //we can have "orphaned" rows in the schema registry because there's
+            //no way to make this fully atomic.
+            String externalSchemaId =
+                exporter.exportSchema(schemaWriter, newTable);
+            tableMetadata.add(MetaDataUtil.getExternalSchemaIdUpdate(tableKey,
+                externalSchemaId));
+
         }
     }
 
@@ -2833,7 +3110,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private MetaDataMutationResult mutateColumn(
             final List<Mutation> tableMetadata,
             final ColumnMutator mutator, final int clientVersion,
-            final PTable parentTable, boolean isAddingOrDroppingColumns) throws IOException {
+            final PTable parentTable, final PTable transformingNewTable, boolean isAddingOrDroppingColumns) throws IOException {
         byte[][] rowKeyMetaData = new byte[5][];
         MetaDataUtil.getTenantIdAndSchemaAndTableName(tableMetadata, rowKeyMetaData);
         byte[] tenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
@@ -2871,6 +3148,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
                 invalidateList.add(cacheKey);
                 PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion);
+                if (failConcurrentMutateAddColumnOneTimeForTesting) {
+                    failConcurrentMutateAddColumnOneTimeForTesting = false;
+                    return new MetaDataMutationResult(MutationCode.CONCURRENT_TABLE_MUTATION,
+                            EnvironmentEdgeManager.currentTimeMillis(), table);
+                }
                 if (LOGGER.isDebugEnabled()) {
                     if (table == null) {
                         LOGGER.debug("Table " + Bytes.toStringBinary(key)
@@ -2913,6 +3195,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table,
                                 parentTable);
                     }
+                }
+                if (transformingNewTable !=null) {
+                    table = PTableImpl.builderWithColumns(table, getColumnsToClone(table))
+                            .setTransformingNewTable(transformingNewTable).build();
                 }
 
                 if (table.getTimeStamp() >= clientTimeStamp) {
@@ -3000,6 +3286,21 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     }
                 }
 
+                if (table.isChangeDetectionEnabled() || MetaDataUtil.getChangeDetectionEnabled(tableMetadata)) {
+                    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+                    try {
+                        exportSchema(tableMetadata, key, clientTimeStamp, clientVersion, table);
+                        metricsSource.incrementAlterExportCount();
+                        metricsSource.updateAlterExportTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
+                    } catch (Exception e) {
+                        LOGGER.error("Error writing to schema registry", e);
+                        metricsSource.incrementAlterExportFailureCount();
+                        metricsSource.updateAlterExportFailureTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
+                        result = new MetaDataMutationResult(MutationCode.ERROR_WRITING_TO_SCHEMA_REGISTRY,
+                            EnvironmentEdgeManager.currentTimeMillis(), table);
+                        return result;
+                    }
+                }
                 Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
                         GlobalCache.getInstance(this.env).getMetaDataCache();
 
@@ -3192,9 +3493,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         try {
             List<Mutation> tableMetaData = ProtobufUtil.getMutations(request);
             PTable parentTable = request.hasParentTable() ? PTableImpl.createFromProto(request.getParentTable()) : null;
+            PTable transformingNewTable = request.hasTransformingNewTable() ? PTableImpl.createFromProto(request.getTransformingNewTable()) : null;
             boolean addingColumns = request.getAddingColumns();
             MetaDataMutationResult result = mutateColumn(tableMetaData, new AddColumnMutator(),
-                    request.getClientVersion(), parentTable, addingColumns);
+                    request.getClientVersion(), parentTable, transformingNewTable, addingColumns);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
             }
@@ -3332,7 +3634,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             tableMetaData = ProtobufUtil.getMutations(request);
             PTable parentTable = request.hasParentTable() ? PTableImpl.createFromProto(request.getParentTable()) : null;
             MetaDataMutationResult result = mutateColumn(tableMetaData, new DropColumnMutator(env.getConfiguration()),
-                    request.getClientVersion(), parentTable, true);
+                    request.getClientVersion(), parentTable,null, true);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
             }
@@ -3605,19 +3907,22 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             if (rowLock == null) {
                 throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
             }
-            try {
-                Get get = new Get(key);
-                get.addColumn(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
-                get.addColumn(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
-                get.addColumn(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
-                get.addColumn(TABLE_FAMILY_BYTES, ROW_KEY_ORDER_OPTIMIZABLE_BYTES);
-                Result currentResult = region.get(get);
-                if (currentResult.rawCells().length == 0) {
+
+            Get get = new Get(key);
+            get.addColumn(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
+            get.addColumn(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
+            get.addColumn(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
+            get.addColumn(TABLE_FAMILY_BYTES, ROW_KEY_ORDER_OPTIMIZABLE_BYTES);
+            try (RegionScanner scanner = region.getScanner(new Scan(get))) {
+                List<Cell> cells = new ArrayList<>();
+                scanner.next(cells);
+                if (cells.isEmpty()) {
                     builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
                     builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
                     done.run(builder.build());
                     return;
                 }
+                Result currentResult = Result.create(cells);
                 Cell dataTableKV = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
                 Cell currentStateKV = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
                 Cell currentDisableTimeStamp = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
@@ -3719,10 +4024,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (currentState == PIndexState.PENDING_DISABLE) {
                     if (newState == PIndexState.ACTIVE) {
                         //before making index ACTIVE check if all clients succeed otherwise keep it PENDING_DISABLE
-                        byte[] count = region
-                                .get(new Get(key).addColumn(TABLE_FAMILY_BYTES,
-                                        PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES))
-                                .getValue(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
+                        byte[] count;
+                        try (RegionScanner countScanner = region.getScanner(new Scan(get))) {
+                            List<Cell> countCells = new ArrayList<>();
+                            scanner.next(countCells);
+                            count = Result.create(countCells)
+                                    .getValue(TABLE_FAMILY_BYTES,
+                                        PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
+                        }
                         if (count != null && Bytes.toLong(count) != 0) {
                             newState = PIndexState.PENDING_DISABLE;
                             newKVs.remove(disableTimeStampKVIndex);
@@ -3803,7 +4112,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         metaDataCache.invalidate(new ImmutableBytesPtr(dataTableKey));
                     }
                     if (setRowKeyOrderOptimizableCell || disableTimeStampKVIndex != -1
-                            || currentState == PIndexState.DISABLE || newState == PIndexState.BUILDING) {
+                            || currentState.isDisabled() || newState == PIndexState.BUILDING) {
                         returnTable = doGetTable(tenantId, schemaName, tableName,
                                 HConstants.LATEST_TIMESTAMP, rowLock, request.getClientVersion());
                     }
@@ -4146,7 +4455,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 Region region = env.getRegion();
                 Scan scan = MetaDataUtil.newTableRowsScan(keys.get(0), MIN_TABLE_TIMESTAMP, clientTimeStamp);
                 List<Cell> results = Lists.newArrayList();
-                try (RegionScanner scanner = region.getScanner(scan);) {
+                try (RegionScanner scanner = region.getScanner(scan)) {
                     scanner.next(results);
                     if (results.isEmpty()) { // Should not be possible
                         return new MetaDataMutationResult(MutationCode.FUNCTION_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
@@ -4175,6 +4484,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         try {
             List<Mutation> schemaMutations = ProtobufUtil.getMutations(request);
             schemaName = request.getSchemaName();
+            //don't do the user permission checks for the SYSTEM schema, because an ordinary
+            //user has to be able to create it if it doesn't already exist when bootstrapping
+            //the system tables
+            if (!schemaName.equals(QueryConstants.SYSTEM_SCHEMA_NAME)) {
+                getCoprocessorHost().preCreateSchema(schemaName);
+            }
             Mutation m = MetaDataUtil.getPutOnlyTableHeaderRow(schemaMutations);
 
             byte[] lockKey = m.getRow();

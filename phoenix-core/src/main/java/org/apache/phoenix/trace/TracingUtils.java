@@ -18,6 +18,7 @@
 package org.apache.phoenix.trace;
 
 import io.opentelemetry.api.trace.Span;
+import java.nio.charset.StandardCharsets;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 
@@ -38,7 +39,8 @@ public class TracingUtils {
     }
 
     public static Pair<String, String> readAnnotation(byte[] key, byte[] value) {
-        return new Pair<String, String>(new String(key), Bytes.toString(value));
+        return new Pair<String, String>(new String(key, StandardCharsets.UTF_8),
+                Bytes.toString(value));
     }
 
     /**

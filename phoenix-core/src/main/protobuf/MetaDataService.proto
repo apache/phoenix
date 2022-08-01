@@ -54,6 +54,7 @@ enum MutationCode {
   UNABLE_TO_UPDATE_PARENT_TABLE = 24;
   UNABLE_TO_DELETE_CHILD_LINK = 25;
   UNABLE_TO_UPSERT_TASK = 26;
+  ERROR_WRITING_TO_SCHEMA_REGISTRY = 27;
 };
 
 message SharedTableState {
@@ -145,6 +146,7 @@ message AddColumnRequest {
   optional int32 clientVersion = 2;
   optional PTable parentTable = 3;
   optional bool addingColumns = 4;
+  optional PTable transformingNewTable = 5;
 }
 
 message DropColumnRequest {

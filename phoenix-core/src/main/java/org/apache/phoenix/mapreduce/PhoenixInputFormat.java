@@ -87,7 +87,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
         return generateSplits(queryPlan, configuration);
     }
 
-    private List<InputSplit> generateSplits(final QueryPlan qplan, Configuration config) throws IOException {
+    protected List<InputSplit> generateSplits(final QueryPlan qplan, Configuration config) throws IOException {
         // We must call this in order to initialize the scans and splits from the query plan
         setupParallelScansFromQueryPlan(qplan);
         final List<KeyRange> splits = qplan.getSplits();
@@ -202,7 +202,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
 
               // since we can't set a scn on connections with txn set TX_SCN attribute so that the max time range is set by BaseScannerRegionObserver
               if (txnScnValue != null) {
-                scan.setAttribute(BaseScannerRegionObserver.TX_SCN, Bytes.toBytes(Long.valueOf(txnScnValue)));
+                scan.setAttribute(BaseScannerRegionObserver.TX_SCN, Bytes.toBytes(Long.parseLong(txnScnValue)));
               }
 
               // setting the snapshot configuration

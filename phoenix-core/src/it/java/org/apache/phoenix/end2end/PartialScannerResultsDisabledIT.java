@@ -31,9 +31,11 @@ import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@Category(ParallelStatsDisabledTest.class)
 public class PartialScannerResultsDisabledIT extends ParallelStatsDisabledIT {
     public static final String TEST_TABLE_DDL =
             "CREATE TABLE IF NOT EXISTS %s\n" + "(\n" + "    ORGANIZATION_ID CHAR(15) NOT NULL,\n"

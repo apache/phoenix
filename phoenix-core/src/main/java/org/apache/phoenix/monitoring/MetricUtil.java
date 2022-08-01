@@ -17,10 +17,18 @@
  */
 package org.apache.phoenix.monitoring;
 
+import java.lang.reflect.Field;
+
+import org.apache.hadoop.metrics2.impl.MetricsSystemImpl;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.CombinableMetric.NoOpRequestMetric;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class MetricUtil {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(MetricUtil.class);
 
     public static CombinableMetric getCombinableMetric(boolean isRequestMetricsEnabled,
                                                        LogLevel connectionLogLevel,
@@ -38,4 +46,22 @@ public class MetricUtil {
         return new MetricsStopWatch(true);
     }
 
+    // We need to cover the case when JmxCacheBuster has just stopped the HBase metrics
+    // system, and not accidentally overwrite the DefaultMetricsSystem singleton.
+    // See PHOENIX-6699
+    public static boolean isDefaultMetricsInitialized() {
+        try {
+            MetricsSystemImpl metrics = (MetricsSystemImpl) DefaultMetricsSystem.instance();
+            Field prefixField = MetricsSystemImpl.class.getDeclaredField("prefix");
+            prefixField.setAccessible(true);
+            String prefix = (String) prefixField.get(metrics);
+            prefixField.setAccessible(false);
+            if (prefix != null) {
+                return true;
+            }
+        } catch (Exception e) {
+            LOGGER.error("Exception trying to determine if HBase metrics is initialized", e);
+        }
+        return false;
+    }
 }

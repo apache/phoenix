@@ -20,6 +20,8 @@ package org.apache.phoenix.jdbc;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_SQL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.ATOMIC_UPSERT_SQL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_FAILED_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_SQL_COUNTER;
@@ -310,10 +312,16 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger)
             throws SQLException {
-        return executeQuery(stmt, true, queryLogger);
+        return executeQuery(stmt, true, queryLogger, false);
     }
+
+    protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger, boolean noCommit)
+            throws SQLException {
+        return executeQuery(stmt, true, queryLogger, noCommit);
+    }
+
     private PhoenixResultSet executeQuery(final CompilableStatement stmt,
-        final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger) throws SQLException {
+                                          final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger, final boolean noCommit) throws SQLException {
         GLOBAL_SELECT_SQL_COUNTER.increment();
 
         try {
@@ -385,7 +393,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                 setLastUpdateCount(NO_UPDATE);
                                 setLastUpdateOperation(stmt.getOperation());
                                 // If transactional, this will move the read pointer forward
-                                if (connection.getAutoCommit()) {
+                                if (connection.getAutoCommit() && !noCommit) {
                                     connection.commit();
                                 }
                                 connection.incrementStatementExecutionCounter();
@@ -403,7 +411,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                                     e.getSchemaName(), e.getTableName(), true)
                                             .wasUpdated()) {
                                         //TODO we can log retry count and error for debugging in LOG table
-                                        return executeQuery(stmt, false, queryLogger);
+                                        return executeQuery(stmt, false, queryLogger, noCommit);
                                     }
                                 }
                                 throw e;
@@ -499,7 +507,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     }
 
     private int executeMutation(final CompilableStatement stmt, final boolean doRetryOnMetaNotFoundError, final AuditQueryLogger queryLogger) throws SQLException {
-	 if (connection.isReadOnly()) {
+        if (connection.isReadOnly()) {
             throw new SQLExceptionInfo.Builder(
                 SQLExceptionCode.READ_ONLY_CONNECTION).
                 build().buildException();
@@ -514,6 +522,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                             boolean success = false;
                             String tableName = null;
                             boolean isUpsert = false;
+                            boolean isAtomicUpsert = false;
                             boolean isDelete = false;
                             MutationState state = null;
                             MutationPlan plan = null;
@@ -528,6 +537,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                 plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.VALIDATE_SEQUENCE);
                                 isUpsert = stmt instanceof ExecutableUpsertStatement;
                                 isDelete = stmt instanceof ExecutableDeleteStatement;
+                                isAtomicUpsert = isUpsert && ((ExecutableUpsertStatement)stmt).getOnDupKeyPairs() != null;
                                 if (plan.getTargetRef() != null && plan.getTargetRef().getTable() != null) {
                                     if(!Strings.isNullOrEmpty(plan.getTargetRef().getTable().getPhysicalName().toString())) {
                                         tableName = plan.getTargetRef().getTable().getPhysicalName().toString();
@@ -599,6 +609,12 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                                 UPSERT_SQL_COUNTER : DELETE_SQL_COUNTER, 1);
                                         TableMetricsManager.updateMetricsMethod(tableName, isUpsert ?
                                                 UPSERT_SQL_QUERY_TIME : DELETE_SQL_QUERY_TIME, executeMutationTimeSpent);
+                                        if (isAtomicUpsert) {
+                                            TableMetricsManager.updateMetricsMethod(tableName,
+                                                ATOMIC_UPSERT_SQL_COUNTER, 1);
+                                            TableMetricsManager.updateMetricsMethod(tableName,
+                                                ATOMIC_UPSERT_SQL_QUERY_TIME, executeMutationTimeSpent);
+                                        }
 
                                         if (success) {
                                             TableMetricsManager.updateMetricsMethod(tableName, isUpsert ?
@@ -609,6 +625,17 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                             //Failures are updated for executeMutation phase and for autocommit=true case here.
                                             TableMetricsManager.updateMetricsMethod(tableName, isUpsert ? UPSERT_AGGREGATE_FAILURE_SQL_COUNTER:
                                                     DELETE_AGGREGATE_FAILURE_SQL_COUNTER, 1);
+                                        }
+                                        if (plan instanceof DeleteCompiler.ServerSelectDeleteMutationPlan
+                                                || plan instanceof UpsertCompiler.ServerUpsertSelectMutationPlan) {
+                                            TableMetricsManager.updateLatencyHistogramForMutations(
+                                                    tableName, executeMutationTimeSpent, false);
+                                            // We won't have size histograms for delete mutations when auto commit is set to true and
+                                            // if plan is of ServerSelectDeleteMutationPlan or ServerUpsertSelectMutationPlan
+                                            // since the update happens on server.
+                                        } else {
+                                            state.addExecuteMutationTime(
+                                                    executeMutationTimeSpent, tableName);
                                         }
                                     }
                                 }
