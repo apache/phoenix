@@ -119,7 +119,11 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
     WAL.Entry entry = new WAL.Entry(new WALKeyImpl(REGION,
         TableName.valueOf(TestUtil.ENTITY_HISTORY_TABLE_NAME), System.currentTimeMillis()), new WALEdit());
     entry.getEdit().add(
-            ExtendedCellBuilderFactory.create(CellBuilderType.DEEP_COPY).setRow(Bytes.toBytes("foo")).build());
+            ExtendedCellBuilderFactory.create(
+                    CellBuilderType.DEEP_COPY)
+                    .setRow(Bytes.toBytes("foo"))
+                    .setType(Cell.Type.Put)
+                    .build());
     SystemCatalogWALEntryFilter filter = new SystemCatalogWALEntryFilter();
     Assert.assertEquals(1, filter.filter(entry).getEdit().size());
   }
