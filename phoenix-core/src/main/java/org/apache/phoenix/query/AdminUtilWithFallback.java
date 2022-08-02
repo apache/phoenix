@@ -19,10 +19,10 @@ import org.apache.zookeeper.KeeperException;
 
 /**
  * Admin utility class specifically useful for running Admin APIs in the middle of the
- * rolling upgrade from HBase 1.x to 2.x versions. Some of the Admin APIs fail to retrieve
+ * rolling upgrade from HBase 1.x to 2.x versions. Some Admin APIs fail to retrieve
  * table state details from meta table if master is running on 1.x version and coprocs are
  * running on 2.x version. Hence, as a fallback, server side coproc can directly perform
- * zookeeper look-up to retrieve table state data. The fallback usecases would not be
+ * zookeeper look-up to retrieve table state data. The fallback use-cases would not be
  * encountered for fully upgraded 2.x cluster.
  */
 public class AdminUtilWithFallback {
@@ -36,7 +36,7 @@ public class AdminUtilWithFallback {
     } catch (IOException e) {
       if (e instanceof NoSuchColumnFamilyException || (e.getCause() != null
           && e.getCause() instanceof NoSuchColumnFamilyException)) {
-        LOG.error("Admin API to retrieve table existence failed due to missing CF in meta."
+        LOG.warn("Admin API to retrieve table existence failed due to missing CF in meta."
             + " This should happen only when HBase master is running on 1.x and"
             + " current regionserver is on 2.x. Falling back to retrieve info from ZK.", e);
         return getTableStateFromZk(tableName, admin) != null;
