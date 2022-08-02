@@ -2270,8 +2270,8 @@ public class InListIT extends ParallelStatsDisabledIT {
         int numINs = 25;
         int expectedExtractedNodes = Arrays.asList(new SortOrder[] {sortOrder[0], sortOrder[1]}).stream().allMatch(Predicate.isEqual(SortOrder.ASC)) ? 3 : checkMaxSkipScanCardinality ? 1 : 2;
 
-        // Test for increasing orders of ORs (5,50,500,5000,50000)
-        for (int o = 0; o < 5;o++) {
+        // Test for increasing orders of ORs (5,50,500,5000)
+        for (int o = 0; o < 4;o++) {
             int numORs = (int) (5.0 * Math.pow(10.0,(double) o));
             String context = "ORs:" + numORs + ", sql: " + testSQL + ", type: " + testType + ", sort-order: " + Arrays.stream(sortOrder).map(s -> s.name()).collect(Collectors.joining(","));
             String tenantConnectionUrl = String.format("%s;%s=%s%06d", getUrl(), TENANT_ID_ATTRIB, TENANT_PREFIX, tenantId);
