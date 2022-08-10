@@ -60,7 +60,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -105,10 +104,9 @@ public class PartialCommitIT extends BaseTest {
     
     @Parameters(name="PartialCommitIT_transactionProvider={0}")
     public static synchronized Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
-                 {"TEPHRA"},{"OMID"}}),0);
+        return Arrays.asList(new Object[][] { { "OMID" } });
     }
-    
+
     public PartialCommitIT(String transactionProvider) {
         this.transactionProvider = transactionProvider;
         this.transactional = transactionProvider != null;

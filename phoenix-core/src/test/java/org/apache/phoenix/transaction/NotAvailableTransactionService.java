@@ -15,18 +15,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.coprocessor;
+package org.apache.phoenix.transaction;
 
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
-import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import java.io.IOException;
 
-/**
- * Tephra support has been removed, see PHOENIX-6627. However we preserve a class
- * of this name for now with a no-op implementation, in case the user has not
- * followed proper upgrade or migration procedure for former Tephra managed transactional
- * tables. Although expected but unavailable functionality will be missing, regionservers
- * will not crash due to a failure to load a coprocessor of this name.
- */
-public class TephraTransactionalProcessor implements RegionObserver, RegionCoprocessor {
+public class NotAvailableTransactionService implements PhoenixTransactionService {
+
+  private static final NotAvailableTransactionService INSTANCE = new NotAvailableTransactionService();
+
+  public static NotAvailableTransactionService getInstance() {
+      return INSTANCE;
+  }
+
+  @Override
+  public void close() throws IOException {
+  }
 
 }

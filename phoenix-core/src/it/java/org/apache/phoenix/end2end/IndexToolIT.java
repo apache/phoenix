@@ -97,7 +97,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -201,11 +200,7 @@ public class IndexToolIT extends BaseTest {
         boolean[] Booleans = new boolean[] { false, true };
         for (boolean namespaceMapped : Booleans) {
             for (boolean useSnapshot : Booleans) {
-                for (String transactionProvider : new String[] {"TEPHRA", "OMID", null}) {
-                    if(transactionProvider !=null &&
-                            !TransactionFactory.Provider.valueOf(transactionProvider).runTests()) {
-                        continue;
-                    }
+                for (String transactionProvider : new String[] { "OMID", null }) {
                     for (boolean mutable : Booleans) {
                         for (boolean localIndex : Booleans) {
                             if(localIndex && useSnapshot) {
@@ -226,7 +221,7 @@ public class IndexToolIT extends BaseTest {
         }
         // Add the usetenantId
         list.add(new Object[] { null, false, true, false, true, false});
-        return TestUtil.filterTxParamData(list,0);
+        return list;
     }
 
     protected static void setEveryNthRowWithNull(int nrows, int nthRowNull, PreparedStatement stmt) throws Exception {

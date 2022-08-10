@@ -93,11 +93,11 @@ public class NoLookbackMutableIndexExtendedIT extends BaseTest {
     @Parameterized.Parameters(name = "NoLookbackMutableIndexExtendedIT_localIndex={0},transactionProvider={1},columnEncoded={2}")
     // name is used by failsafe as file name in reports
     public static Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(
-                new Object[][] { { false, null, false }, { false, null, true },
-                        { false, "TEPHRA", false }, { false, "TEPHRA", true },
-                        { false, "OMID", false }, { true, null, false }, { true, null, true },
-                        { true, "TEPHRA", false }, { true, "TEPHRA", true }, }), 1);
+        return Arrays.asList(
+            // OMID does not support local indexes
+            new Object[][] { { false, null, false }, { false, null, true },
+                { false, "OMID", false }, { false, "OMID", true },
+                { true, null, false }, { true, null, true } });
     }
 
     // Tests that if major compaction is run on a table with a disabled index,
