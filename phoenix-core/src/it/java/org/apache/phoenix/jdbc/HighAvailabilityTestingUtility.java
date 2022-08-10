@@ -197,6 +197,8 @@ public class HighAvailabilityTestingUtility {
             }
             // wait for the cluster roles are populated into client side from ZK nodes.
             waitFor(() -> newRoleRecord.equals(haGroup.getRoleRecord()), 1000, 10_000);
+            // May have to wait for the transistion to be picked up client side, current test timeouts around 3seconds
+            Thread.sleep(3000);
 
             LOG.info("Now the HA group {} should have detected and updated V{} cluster role record",
                     haGroup, newRoleRecord.getVersion());
