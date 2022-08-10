@@ -107,7 +107,7 @@ public class CSVCommonsLoader {
     }
 
     public CSVFormat getFormat() {
-        return format;
+        return CSVFormat.Builder.create(this.format).build();
     }
 
     /**

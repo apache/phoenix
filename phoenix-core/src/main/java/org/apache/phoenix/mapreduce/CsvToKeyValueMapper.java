@@ -36,15 +36,17 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 
 /**
  * MapReduce mapper that converts CSV input lines into KeyValues that can be written to HFiles.
- * 
+ *
  * KeyValues are produced by executing UPSERT statements on a Phoenix connection and then
  * extracting the created KeyValues and rolling back the statement execution before it is
  * committed to HBase.
  */
 public class CsvToKeyValueMapper extends FormatToBytesWritableMapper<CSVRecord> {
-
     /** Configuration key for the field delimiter for input csv records */
     public static final String FIELD_DELIMITER_CONFKEY = "phoenix.mapreduce.import.fielddelimiter";
+
+    public static final String FIELD_MULTIPLE_DELIMITER_CONFKEY =
+            "phoenix.mapreduce.import.multiplefielddelimiter";
 
     /** Configuration key for the quote char for input csv records */
     public static final String QUOTE_CHAR_CONFKEY = "phoenix.mapreduce.import.quotechar";
@@ -66,10 +68,15 @@ public class CsvToKeyValueMapper extends FormatToBytesWritableMapper<CSVRecord> 
     protected void setup(Context context) throws IOException, InterruptedException {
         super.setup(context);
         Configuration conf = context.getConfiguration();
-        lineParser = new CsvLineParser(
-                CsvBulkImportUtil.getCharacter(conf, FIELD_DELIMITER_CONFKEY),
-                CsvBulkImportUtil.getCharacter(conf, QUOTE_CHAR_CONFKEY),
-                CsvBulkImportUtil.getCharacter(conf, ESCAPE_CHAR_CONFKEY));
+        Character quote = CsvBulkImportUtil.getCharacter(conf, QUOTE_CHAR_CONFKEY);
+        Character escape = CsvBulkImportUtil.getCharacter(conf, ESCAPE_CHAR_CONFKEY);
+        String delimiterStr = CsvBulkImportUtil.getString(conf, FIELD_MULTIPLE_DELIMITER_CONFKEY);
+        if (delimiterStr != null) {
+            lineParser = new CsvLineParser(delimiterStr, quote, escape);
+        } else {
+            Character delimiterChar = CsvBulkImportUtil.getCharacter(conf, FIELD_DELIMITER_CONFKEY);
+            lineParser = new CsvLineParser(delimiterChar, quote, escape);
+        }
     }
 
     @VisibleForTesting
@@ -77,7 +84,7 @@ public class CsvToKeyValueMapper extends FormatToBytesWritableMapper<CSVRecord> 
     protected UpsertExecutor<CSVRecord, ?> buildUpsertExecutor(Configuration conf) {
         String tableName = conf.get(TABLE_NAME_CONFKEY);
         String arraySeparator = conf.get(ARRAY_DELIMITER_CONFKEY,
-                                            CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR);
+                CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR);
         Preconditions.checkNotNull(tableName, "table name is not configured");
 
         List<ColumnInfo> columnInfoList = buildColumnInfoList(conf);
@@ -93,11 +100,21 @@ public class CsvToKeyValueMapper extends FormatToBytesWritableMapper<CSVRecord> 
         private final CSVFormat csvFormat;
 
         CsvLineParser(Character fieldDelimiter, Character quote, Character escape) {
-            this.csvFormat = CSVFormat.DEFAULT
-                    .withIgnoreEmptyLines(true)
-                    .withDelimiter(fieldDelimiter)
-                    .withEscape(escape)
-                    .withQuote(quote);
+            this.csvFormat = CSVFormat.Builder.create()
+                    .setIgnoreEmptyLines(true)
+                    .setDelimiter(fieldDelimiter)
+                    .setEscape(escape)
+                    .setQuote(quote)
+                    .build();
+        }
+
+        CsvLineParser(String multipleFieldDelimiter, Character quote, Character escape) {
+            this.csvFormat = CSVFormat.Builder.create()
+                    .setIgnoreEmptyLines(true)
+                    .setDelimiter(multipleFieldDelimiter)
+                    .setEscape(escape)
+                    .setQuote(quote)
+                    .build();
         }
 
         @Override
