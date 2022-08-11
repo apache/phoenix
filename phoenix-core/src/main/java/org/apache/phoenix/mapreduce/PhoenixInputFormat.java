@@ -169,6 +169,9 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
             final String currentScnValue = configuration.get(PhoenixConfigurationUtil.CURRENT_SCN_VALUE);
             final String tenantId = configuration.get(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID);
             final Properties overridingProps = new Properties();
+                        
+            overridingProps.setProperty("phoenix.schema.isNamespaceMappingEnabled","true");
+
             if (txnScnValue == null && currentScnValue != null) {
                 overridingProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, currentScnValue);
             }
