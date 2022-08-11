@@ -19,6 +19,8 @@ package org.apache.phoenix.coprocessor;
 
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Tephra support has been removed, see PHOENIX-6627. However we preserve a class
@@ -28,5 +30,10 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
  * will not crash due to a failure to load a coprocessor of this name.
  */
 public class TephraTransactionalProcessor implements RegionObserver, RegionCoprocessor {
+
+  private static final Logger LOG = LoggerFactory.getLogger(TephraTransactionalProcessor.class);
+  static {
+    LOG.error("Tephra support has been removed, see https://issues.apache.org/jira/browse/PHOENIX-6627.");
+  }
 
 }
