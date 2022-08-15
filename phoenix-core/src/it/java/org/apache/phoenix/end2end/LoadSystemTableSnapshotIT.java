@@ -20,26 +20,42 @@ package org.apache.phoenix.end2end;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+
+import java.io.File;
 import java.io.IOException;
+
+import java.net.URL;
+
 import java.util.HashMap;
+
 import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+
 import org.apache.hadoop.hbase.snapshot.ExportSnapshot;
 import org.apache.hadoop.hbase.util.CommonFSUtils;
+
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
+
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.utils.IOUtils;
+
+
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 
 /**
  * This is a not a standard IT.
@@ -49,19 +65,43 @@ import org.slf4j.LoggerFactory;
  * (or even being committed to the ASF branches)
  */
 
-@Ignore
 @Category(NeedsOwnMiniClusterTest.class)
-public class SnapshotTestTemplateIT extends BaseTest {
+public class LoadSystemTableSnapshotIT extends BaseTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(
-        SnapshotTestTemplateIT.class);
+            LoadSystemTableSnapshotIT.class);
+
+    public static final String SNAPSHOT_DIR = "snapshots4_7/";
+    public static String rootDir;
 
     private static final HashMap<String, String> SNAPSHOTS_TO_LOAD;
+//    private static final HashMap<String, String> SNAPSHOTS_TO_RESTORE;
 
     static {
         SNAPSHOTS_TO_LOAD = new HashMap<>();
         //Add any HBase tables, including Phoenix System tables
-        SNAPSHOTS_TO_LOAD.put("SYSTEM.CATALOG_SNAPSHOT", "/path/to/local/snapshot_dir");
+
+        SNAPSHOTS_TO_LOAD.put("SYSTEM.CATALOG_SNAPSHOT", "SYSTEM.CATALOG");
+        SNAPSHOTS_TO_LOAD.put("SYSTEM.FUNCTION_SNAPSHOT", "SYSTEM.FUNCTION");
+        SNAPSHOTS_TO_LOAD.put("SYSTEM.SEQUENCE_SNAPSHOT", "SYSTEM.SEQUENCE");
+        SNAPSHOTS_TO_LOAD.put("SYSTEM.STATS_SNAPSHOT", "SYSTEM.STATS");
+    }
+
+    private static void decompress(String in, File out) throws IOException {
+        try (TarArchiveInputStream fin = new TarArchiveInputStream(new FileInputStream(in))){
+            TarArchiveEntry entry;
+            while ((entry = fin.getNextTarEntry()) != null) {
+                if (entry.isDirectory()) {
+                    continue;
+                }
+                File curfile = new File(out, entry.getName());
+                File parent = curfile.getParentFile();
+                if (!parent.exists()) {
+                    parent.mkdirs();
+                }
+                IOUtils.copy(fin, new FileOutputStream(curfile));
+            }
+        }
     }
 
     @BeforeClass
@@ -75,20 +115,29 @@ public class SnapshotTestTemplateIT extends BaseTest {
         //Start minicluster without Phoenix first
         checkClusterInitialized(new ReadOnlyProps(serverProps.entrySet().iterator()));
 
-        //load snapshots int HBase
-        for (Entry<String, String> snapshot : SNAPSHOTS_TO_LOAD.entrySet()) {
-            importSnapshot(snapshot.getKey(), snapshot.getValue());
-        }
+        URL folderUrl = LoadSystemTableSnapshotIT.class.getClassLoader()
+                .getResource(SNAPSHOT_DIR);
 
-        //Now we can start Phoenix
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
-                .iterator()));
+        // extract the tar
+
+        File archive = new File(folderUrl.getFile() + "snapshots47.tar.gz");
+        File destination = new File(folderUrl.getFile());
+
+        decompress(archive.toString(), destination);
+
+        //load snapshots int HBase
+        rootDir = CommonFSUtils.getRootDir(config).toUri().toString();
+
+        for (Entry<String, String> snapshot : SNAPSHOTS_TO_LOAD.entrySet()) {
+            String snapshotLoc = new File(folderUrl.getFile()).getAbsolutePath() + "/" + snapshot.getKey();
+            importSnapshot(snapshot.getKey(), snapshot.getValue(), snapshotLoc);
+        }
     }
 
-    private static void importSnapshot(String key, String value) throws IOException {
+    private static void importSnapshot(String key, String value, String loc) throws IOException {
         LOGGER.info("importing {} snapshot from {}", key, value);
         // copy local snapshot dir to Minicluster HDFS
-        Path localPath = new Path(value);
+        Path localPath = new Path(loc);
         assertTrue(FileSystem.getLocal(config).exists(new Path(localPath, ".hbase-snapshot")));
         FileSystem hdfsFs = FileSystem.get(config);
         Path hdfsImportPath = new Path(hdfsFs.getHomeDirectory(), "snapshot-import" + "/" + key + "/");
@@ -103,7 +152,7 @@ public class SnapshotTestTemplateIT extends BaseTest {
         int importExitCode = exportTool.run(new String[] {
                 "-snapshot", key,
                 "-copy-from", hdfsImportPath.toUri().toString(),
-                "-copy-to", CommonFSUtils.getRootDir(config).toUri().toString()
+                "-copy-to", rootDir
                 });
         assertEquals(0, importExitCode);
 
@@ -112,7 +161,16 @@ public class SnapshotTestTemplateIT extends BaseTest {
     }
 
     @Test
-    public void testDummy() throws Exception {
+    public void testPhoenixUpgrade() throws Exception {
+        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
+        serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
+        clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+
+        //Now we can start Phoenix
+        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
+                .iterator()));
         assertTrue(true);
     }
 
