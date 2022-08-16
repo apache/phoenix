@@ -94,9 +94,9 @@ public class NoLookbackMutableIndexExtendedIT extends BaseTest {
     // name is used by failsafe as file name in reports
     public static Collection<Object[]> data() {
         return Arrays.asList(
-            // OMID does not support local indexes
+            // OMID does not support local indexes or column encoding
             new Object[][] { { false, null, false }, { false, null, true },
-                { false, "OMID", false }, { false, "OMID", true },
+                { false, "OMID", false },
                 { true, null, false }, { true, null, true } });
     }
 
