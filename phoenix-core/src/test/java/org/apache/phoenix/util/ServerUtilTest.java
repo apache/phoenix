@@ -16,16 +16,14 @@
  */
 package org.apache.phoenix.util;
 
-import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
-import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -33,7 +31,34 @@ import org.mockito.Mockito;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 public class ServerUtilTest {
+
+    String existingNamespaceOne = "existingNamespaceOne";
+    String existingNamespaceTwo = "existingNamespaceTwo";
+    String nonExistingNamespace = "nonExistingNamespace";
+
+    String[] namespaces = { existingNamespaceOne, existingNamespaceTwo };
+
+    @Test
+    public void testIsHbaseNamespaceAvailableWithExistingNamespace() throws Exception {
+        Admin mockAdmin = getMockedAdmin();
+        assertTrue(ServerUtil.isHBaseNamespaceAvailable(mockAdmin, existingNamespaceOne));
+    }
+
+    @Test
+    public void testIsHbaseNamespaceAvailableWithNonExistingNamespace() throws Exception{
+        Admin mockAdmin = getMockedAdmin();
+        assertFalse(ServerUtil.isHBaseNamespaceAvailable(mockAdmin,nonExistingNamespace));
+    }
+
+    private Admin getMockedAdmin() throws Exception {
+        Admin mockAdmin = Mockito.mock(Admin.class);
+        Mockito.when(mockAdmin.listNamespaces()).thenReturn(namespaces);
+        return mockAdmin;
+    }
 
     @Test
     public void testCoprocessorHConnectionGetTableWithClosedConnection() throws Exception {

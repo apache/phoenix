@@ -574,6 +574,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         return PNameFactory.newName(keyBuffer, keyOffset, length);
     }
 
+    private static boolean failConcurrentMutateAddColumnOneTimeForTesting = false;
     private RegionCoprocessorEnvironment env;
 
     private PhoenixMetaDataCoprocessorHost phoenixAccessCoprocessorHost;
@@ -588,6 +589,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private boolean allowSplittableSystemCatalogRollback;
 
     private MetricsMetadataSource metricsSource;
+
+    public static void setFailConcurrentMutateAddColumnOneTimeForTesting(boolean fail) {
+        failConcurrentMutateAddColumnOneTimeForTesting = fail;
+    }
 
     /**
      * Stores a reference to the coprocessor environment provided by the
@@ -3143,6 +3148,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
                 invalidateList.add(cacheKey);
                 PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion);
+                if (failConcurrentMutateAddColumnOneTimeForTesting) {
+                    failConcurrentMutateAddColumnOneTimeForTesting = false;
+                    return new MetaDataMutationResult(MutationCode.CONCURRENT_TABLE_MUTATION,
+                            EnvironmentEdgeManager.currentTimeMillis(), table);
+                }
                 if (LOGGER.isDebugEnabled()) {
                     if (table == null) {
                         LOGGER.debug("Table " + Bytes.toStringBinary(key)
@@ -4474,6 +4484,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         try {
             List<Mutation> schemaMutations = ProtobufUtil.getMutations(request);
             schemaName = request.getSchemaName();
+            //don't do the user permission checks for the SYSTEM schema, because an ordinary
+            //user has to be able to create it if it doesn't already exist when bootstrapping
+            //the system tables
+            if (!schemaName.equals(QueryConstants.SYSTEM_SCHEMA_NAME)) {
+                getCoprocessorHost().preCreateSchema(schemaName);
+            }
             Mutation m = MetaDataUtil.getPutOnlyTableHeaderRow(schemaMutations);
 
             byte[] lockKey = m.getRow();

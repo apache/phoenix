@@ -186,12 +186,20 @@
             <configuration>
               <artifactItems>
                 <artifactItem>
-                  <groupId>ch.qos.reload4j</groupId>
-                  <artifactId>reload4j</artifactId>
+                  <groupId>org.apache.logging.log4j</groupId>
+                  <artifactId>log4j-api</artifactId>
                 </artifactItem>
                 <artifactItem>
-                  <groupId>org.slf4j</groupId>
-                  <artifactId>slf4j-reload4j</artifactId>
+                  <groupId>org.apache.logging.log4j</groupId>
+                  <artifactId>log4j-core</artifactId>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>org.apache.logging.log4j</groupId>
+                  <artifactId>log4j-slf4j-impl</artifactId>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>org.apache.logging.log4j</groupId>
+                  <artifactId>log4j-1.2-api</artifactId>
                 </artifactItem>
                 <artifactItem>
                   <groupId>sqlline</groupId>
@@ -511,6 +519,11 @@
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
+      <artifactId>commons-compress</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
       <artifactId>commons-lang3</artifactId>
     </dependency>
     <dependency>
@@ -561,6 +574,26 @@
 
     <!-- Other test dependencies -->
     <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-api</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-core</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-slf4j-impl</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-1.2-api</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <scope>test</scope>
@@ -575,6 +608,5 @@
       <artifactId>hamcrest-core</artifactId>
       <scope>test</scope>
     </dependency>
-
   </dependencies>
 </project>

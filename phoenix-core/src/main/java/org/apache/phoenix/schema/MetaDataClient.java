@@ -450,11 +450,11 @@ public class MetaDataClient {
 
     /*
      * Custom sql to add a column to SYSTEM.CATALOG table during upgrade.
-     * We can't use the regular INSERT_COLUMN_ALTER_TABLE sql because the COLUMN_QUALIFIER column
+     * We can't use the regular ColumnMetaDataOps.UPSERT_COLUMN sql because the COLUMN_QUALIFIER column
      * was added in 4.10. And so if upgrading from let's say 4.7, we won't be able to
      * find the COLUMN_QUALIFIER column which the INSERT_COLUMN_ALTER_TABLE sql expects.
      */
-    private static final String ALTER_SYSCATALOG_TABLE_UPGRADE =
+    public static final String ALTER_SYSCATALOG_TABLE_UPGRADE =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                     TENANT_ID + "," +
                     TABLE_SCHEM + "," +
@@ -2882,8 +2882,13 @@ public class MetaDataClient {
             Collections.reverse(columnMetadata);
             tableMetaData.addAll(columnMetadata);
             String dataTableName = parent == null || tableType == PTableType.VIEW ? null : parent.getTableName().getString();
-            PIndexState defaultCreateState = PIndexState.valueOf(connection.getQueryServices().getConfiguration().
-                            get(INDEX_CREATE_DEFAULT_STATE, QueryServicesOptions.DEFAULT_CREATE_INDEX_STATE));
+            PIndexState defaultCreateState;
+            String defaultCreateStateString = connection.getClientInfo(INDEX_CREATE_DEFAULT_STATE);
+            if (defaultCreateStateString == null)  {
+                defaultCreateStateString = connection.getQueryServices().getConfiguration().get(
+                     INDEX_CREATE_DEFAULT_STATE, QueryServicesOptions.DEFAULT_CREATE_INDEX_STATE);
+            }
+            defaultCreateState = PIndexState.valueOf(defaultCreateStateString);
             if (defaultCreateState == PIndexState.CREATE_DISABLE) {
                 if  (indexType == IndexType.LOCAL || sharedTable) {
                     defaultCreateState = PIndexState.BUILDING;
@@ -4166,7 +4171,7 @@ public class MetaDataClient {
                 }
 
                 if (EncodedColumnsUtil.usesEncodedColumnNames(table)
-                        && stmtProperties.isEmpty()) {
+                        && stmtProperties.isEmpty() && !acquiredBaseTableMutex) {
                     // For tables that use column encoding acquire a mutex on
                     // the base table as we need to update the encoded column
                     // qualifier counter on the base table. Not applicable to
@@ -4186,7 +4191,7 @@ public class MetaDataClient {
                     // a conflicting type etc
                     boolean acquiredMutex = writeCell(null, physicalSchemaName, physicalTableName,
                         pColumn.toString());
-                    if (!acquiredMutex) {
+                    if (!acquiredMutex && !acquiredColumnMutexSet.contains(pColumn.toString())) {
                         throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
                     }
                     acquiredColumnMutexSet.add(pColumn.toString());

@@ -25,6 +25,7 @@ import org.junit.contrib.java.lang.system.ExpectedSystemExit;
 import java.util.Properties;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 public class PherfTest {
     @Rule
@@ -43,6 +44,21 @@ public class PherfTest {
         // Makes sure that System.exit(1) is called.
         exit.expectSystemExitWithStatus(1);
         Pherf.main(args);
+    }
+
+    @Test
+    public void testLongOptions() throws Exception{
+        String extension = ".sql";
+        String args = "testArgs";
+        Long numericArg = 15l;
+
+        String[] longOptionArgs = {"--schemaFile",PherfConstants.SCHEMA_ROOT_PATTERN + extension,"--disableSchemaApply","--disableRuntimeResult","--listFiles","--scenarioFile",args,"--scenarioName",args,"--useAverageCompareType"};
+        //Asset that No Exception is thrown, ParseException is thrown in case of invalid option
+        assertNotNull(new Pherf(longOptionArgs));
+
+        String[] otherLongOptionArgs = {"--drop",args,"--monitorFrequency",args,"--rowCountOverride",numericArg.toString(),"--hint",args,"--log_per_nrows",numericArg.toString(),"--diff","--export","--writerThreadSize",args,"--stats","--label",args,"--compare",args};
+        //Asset that No Exception is thrown, ParseException is thrown in case of invalid option
+        assertNotNull(new Pherf(otherLongOptionArgs));
     }
 
     @Test

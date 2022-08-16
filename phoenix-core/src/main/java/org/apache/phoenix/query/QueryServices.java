@@ -179,6 +179,7 @@ public interface QueryServices extends SQLCloseable {
             "phoenix.index.failure.handling.rebuild.overlap.forward.time";
     public static final String INDEX_PRIOIRTY_ATTRIB = "phoenix.index.rpc.priority";
     public static final String METADATA_PRIOIRTY_ATTRIB = "phoenix.metadata.rpc.priority";
+    public static final String SERVER_SIDE_PRIOIRTY_ATTRIB = "phoenix.serverside.rpc.priority";
     public static final String ALLOW_LOCAL_INDEX_ATTRIB = "phoenix.index.allowLocalIndex";
 
     // Retries when doing server side writes to SYSTEM.CATALOG
@@ -243,7 +244,8 @@ public interface QueryServices extends SQLCloseable {
     // rpc queue configs
     public static final String INDEX_HANDLER_COUNT_ATTRIB = "phoenix.rpc.index.handler.count";
     public static final String METADATA_HANDLER_COUNT_ATTRIB = "phoenix.rpc.metadata.handler.count";
-    
+    public static final String SERVER_SIDE_HANDLER_COUNT_ATTRIB = "phoenix.rpc.serverside.handler.count";
+
     public static final String FORCE_ROW_KEY_ORDER_ATTRIB = "phoenix.query.force.rowkeyorder";
     public static final String ALLOW_USER_DEFINED_FUNCTIONS_ATTRIB = "phoenix.functions.allowUserDefinedFunctions";
     public static final String COLLECT_REQUEST_LEVEL_METRICS = "phoenix.query.request.metrics.enabled";
@@ -389,6 +391,9 @@ public interface QueryServices extends SQLCloseable {
      * It can include metadata about the customer, service, etc.
      */
     String SOURCE_OPERATION_ATTRIB = "phoenix.source.operation";
+
+    // The max point keys that can be generated for large in list clause
+    public static final String MAX_IN_LIST_SKIP_SCAN_SIZE = "phoenix.max.inList.skipScan.size";
 
     /**
      * Parameter to skip the system tables existence check to avoid unnecessary calls to

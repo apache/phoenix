@@ -28,6 +28,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.google.protobuf.RpcController;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
@@ -74,6 +75,10 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     public void removeConnection(PhoenixConnection connection) throws SQLException {
         connections.remove(connection);
         super.removeConnection(connection);
+    }
+
+    public RpcController getController() {
+        return super.getController();
     }
 
     @Override

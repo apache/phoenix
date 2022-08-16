@@ -84,7 +84,7 @@
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.3.runtime.version>2.3.7</hbase-2.3.runtime.version>
     <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
-    <hbase-2.4.runtime.version>2.4.11</hbase-2.4.runtime.version>
+    <hbase-2.4.runtime.version>2.4.13</hbase-2.4.runtime.version>
 
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
@@ -95,7 +95,9 @@
     <!-- Dependency versions -->
     <jackson-bom.version>2.12.6.20220326</jackson-bom.version>
     <antlr.version>3.5.2</antlr.version>
+    <!-- Only used for tests with HBase 2.1-2.4 -->
     <reload4j.version>1.2.19</reload4j.version>
+    <log4j2.version>2.18.0</log4j2.version>
     <disruptor.version>3.3.6</disruptor.version>
     <slf4j.version>1.7.36</slf4j.version>
     <!-- com.google repo will be used except on Aarch64 platform. -->
@@ -105,6 +107,7 @@
     <commons-io.version>2.11.0</commons-io.version>
     <commons-lang.version>3.8</commons-lang.version>
     <commons-csv.version>1.0</commons-csv.version>
+    <commons-compress.version>1.21</commons-compress.version>
     <sqlline.version>1.9.0</sqlline.version>
     <commons-configuration2.version>2.1.1</commons-configuration2.version>
     <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
@@ -378,10 +381,19 @@
                   org.apache.omid:omid-timestamp-storage-hbase2.x
                 </ignoredUnusedDeclaredDependency>
                 <ignoredUnusedDeclaredDependency>
-                  org.slf4j:slf4j-reload4j
+                  org.apache.hbase:hbase-testing-util
                 </ignoredUnusedDeclaredDependency>
                 <ignoredUnusedDeclaredDependency>
-                  org.apache.hbase:hbase-testing-util
+                  org.apache.logging.log4j:log4j-api
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-core
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-slf4j-impl
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-1.2-api
                 </ignoredUnusedDeclaredDependency>
               </ignoredUnusedDeclaredDependencies>
               <ignoredUsedUndeclaredDependencies>
@@ -745,12 +757,30 @@
             <groupId>org.apache.htrace</groupId>
             <artifactId>htrace-core4</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-mapreduce-client-core</artifactId>
         <version>${hadoop.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
@@ -778,6 +808,16 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-hdfs</artifactId>
         <version>${hadoop.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
@@ -795,9 +835,29 @@
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
         </exclusions>
         <version>${hadoop.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-yarn-client</artifactId>
+        <version>${hadoop.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jline</groupId>
+            <artifactId>jline</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+
       <!-- Only for shading in phoenix-server - remove ? -->
       <dependency>
         <groupId>org.apache.hadoop</groupId>
@@ -818,6 +878,16 @@
         <artifactId>hadoop-minikdc</artifactId>
         <version>${hadoop.version}</version>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
@@ -830,6 +900,14 @@
           <exclusion>
             <groupId>org.apache.htrace</groupId>
             <artifactId>htrace-core4</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -868,6 +946,16 @@
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-common</artifactId>
         <version>${hbase.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -898,12 +986,30 @@
             <groupId>xom</groupId>
             <artifactId>xom</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-mapreduce</artifactId>
         <version>${hbase.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -919,6 +1025,12 @@
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-zookeeper</artifactId>
         <version>${hbase.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
 
       <dependency>
@@ -944,6 +1056,14 @@
             <groupId>org.jruby</groupId>
             <artifactId>jruby-complete</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -952,6 +1072,12 @@
         <version>${hbase.version}</version>
         <type>test-jar</type>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -959,6 +1085,16 @@
         <version>${hbase.version}</version>
         <type>test-jar</type>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
 
       <!-- Transaction dependencies -->
@@ -1136,6 +1272,14 @@
             <groupId>commons-daemon</groupId>
             <artifactId>commons-daemon</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1182,6 +1326,14 @@
           <exclusion>
             <groupId>commons-daemon</groupId>
             <artifactId>commons-daemon</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1248,6 +1400,14 @@
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1298,6 +1458,16 @@
         <artifactId>hbase-testing-util</artifactId>
         <version>${hbase.version}</version>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
 
       <!-- Other dependencies -->
@@ -1305,6 +1475,16 @@
         <groupId>org.apache.zookeeper</groupId>
         <artifactId>zookeeper</artifactId>
         <version>${zookeeper.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.zookeeper</groupId>
@@ -1377,6 +1557,11 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-csv</artifactId>
         <version>${commons-csv.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-compress</artifactId>
+        <version>${commons-compress.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -1465,13 +1650,31 @@
         <groupId>ch.qos.reload4j</groupId>
         <artifactId>reload4j</artifactId>
         <version>${reload4j.version}</version>
-        <scope>runtime</scope>
       </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-reload4j</artifactId>
         <version>${slf4j.version}</version>
-        <scope>runtime</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-api</artifactId>
+        <version>${log4j2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-core</artifactId>
+        <version>${log4j2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-slf4j-impl</artifactId>
+        <version>${log4j2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-1.2-api</artifactId>
+        <version>${log4j2.version}</version>
       </dependency>
       <dependency>
         <groupId>sqlline</groupId>

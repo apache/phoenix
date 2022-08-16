@@ -377,7 +377,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         long flushSize = region.getTableDescriptor().getMemStoreFlushSize();
 
         if (flushSize <= 0) {
-            flushSize = conf.getLong(HConstants.HREGION_MEMSTORE_FLUSH_SIZE,
+            flushSize = conf.getLongBytes(HConstants.HREGION_MEMSTORE_FLUSH_SIZE,
                     TableDescriptorBuilder.DEFAULT_MEMSTORE_FLUSH_SIZE);
         }
         return flushSize * (conf.getLong(HConstants.HREGION_MEMSTORE_BLOCK_MULTIPLIER,

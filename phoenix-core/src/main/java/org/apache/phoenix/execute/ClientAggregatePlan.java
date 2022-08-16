@@ -152,7 +152,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
                 aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, keyExpressions);
             } else {
                 long thresholdBytes =
-                        context.getConnection().getQueryServices().getProps().getLong(
+                        context.getConnection().getQueryServices().getProps().getLongBytes(
                             QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
                             QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
                 boolean spoolingEnabled =
@@ -201,7 +201,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
             }
         } else {
             long thresholdBytes =
-                    context.getConnection().getQueryServices().getProps().getLong(
+                    context.getConnection().getQueryServices().getProps().getLongBytes(
                         QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
                         QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
             boolean spoolingEnabled =

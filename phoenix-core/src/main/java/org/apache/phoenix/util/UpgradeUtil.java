@@ -376,10 +376,10 @@ public class UpgradeUtil {
      * @return
      * @throws IOException
      */
-    private static org.apache.hadoop.hbase.client.Connection getHBaseConnection(Map<String, String> options)
+    private static org.apache.hadoop.hbase.client.Connection getHBaseConnection(Configuration config, Map<String, String> options)
             throws IOException {
+        Configuration conf = HBaseConfiguration.create(config);
 
-        Configuration conf = HBaseConfiguration.create();
         conf.set(HConstants.HBASE_RPC_READ_TIMEOUT_KEY, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
         conf.set(HConstants.HBASE_RPC_WRITE_TIMEOUT_KEY, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
         conf.set(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
@@ -1246,7 +1246,7 @@ public class UpgradeUtil {
     }
 
     /**
-     * Move or copy child links form SYSTEM.CATALOG to SYSTEM.CHILD_LINK
+     * Move or copy child links from SYSTEM.CATALOG to SYSTEM.CHILD_LINK
      * @param oldMetaConnection caller should take care of closing the passed connection appropriately
      * @throws SQLException
      */
@@ -1260,8 +1260,18 @@ public class UpgradeUtil {
                         QueryServices.MOVE_CHILD_LINKS_DURING_UPGRADE_ENABLED,
                         QueryServicesOptions.DEFAULT_MOVE_CHILD_LINKS_DURING_UPGRADE_ENABLED);
 
-        try (org.apache.hadoop.hbase.client.Connection moveChildLinkConnection =  getHBaseConnection(options);
-            Table sysCatalogTable = moveChildLinkConnection.getTable(TableName.valueOf(SYSTEM_CATALOG_NAME))) {
+        Configuration conf = oldMetaConnection.getQueryServices().getConfiguration();
+
+        ReadOnlyProps readOnlyProps = oldMetaConnection.getQueryServices().getProps();
+        TableName sysCat = SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME, readOnlyProps);
+        TableName sysChildLink = SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME, readOnlyProps);
+
+        LOGGER.debug(String.format("SYSTEM CATALOG tabled use for copying child links: %s", sysCat.toString()));
+        LOGGER.debug(String.format("SYSTEM CHILD LINK table used for copying child links: %s", sysChildLink.toString()));
+
+
+        try (org.apache.hadoop.hbase.client.Connection moveChildLinkConnection =  getHBaseConnection(conf, options);
+             Table sysCatalogTable = moveChildLinkConnection.getTable(sysCat)) {
             boolean pageMore = false;
             byte[] lastRowKey = null;
 
@@ -1304,7 +1314,7 @@ public class UpgradeUtil {
 
                     if (puts.size() > 0) {
                         Object[] putResults = new Object[puts.size()];
-                        try (Table childLinkTable = moveChildLinkConnection.getTable(TableName.valueOf(SYSTEM_CHILD_LINK_NAME))) {
+                        try (Table childLinkTable = moveChildLinkConnection.getTable(sysChildLink)) {
                             // Process a batch of child links
                             childLinkTable.batch(puts, putResults);
                             // if move child links is enabled instead of copy, delete the rows from SYSTEM.CATALOG.

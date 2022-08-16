@@ -104,6 +104,7 @@ import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED;
+import static org.apache.phoenix.query.QueryServices.MAX_IN_LIST_SKIP_SCAN_SIZE;
 
 import java.util.Map.Entry;
 
@@ -185,6 +186,7 @@ public class QueryServicesOptions {
     public static final long DEFAULT_SCAN_RESULT_CHUNK_SIZE = 2999;
     public static final boolean DEFAULT_IS_NAMESPACE_MAPPING_ENABLED = false;
     public static final boolean DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE = true;
+    public static final int DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE = 50000;
 
     //
     // Spillable GroupBy - SPGBY prefix
@@ -224,11 +226,13 @@ public class QueryServicesOptions {
      * HConstants#HIGH_QOS is the max we will see to a standard table. We go higher to differentiate
      * and give some room for things in the middle
      */
+    public static final int DEFAULT_SERVER_SIDE_PRIORITY = 500;
     public static final int DEFAULT_INDEX_PRIORITY = 1000;
     public static final int DEFAULT_METADATA_PRIORITY = 2000;
     public static final boolean DEFAULT_ALLOW_LOCAL_INDEX = true;
     public static final int DEFAULT_INDEX_HANDLER_COUNT = 30;
     public static final int DEFAULT_METADATA_HANDLER_COUNT = 30;
+    public static final int DEFAULT_SERVERSIDE_HANDLER_COUNT = 30;
     public static final int DEFAULT_SYSTEM_MAX_VERSIONS = 1;
     public static final boolean DEFAULT_SYSTEM_KEEP_DELETED_CELLS = false;
 
@@ -482,7 +486,8 @@ public class QueryServicesOptions {
             .setIfUnset(INDEX_CREATE_DEFAULT_STATE, DEFAULT_CREATE_INDEX_STATE)
             .setIfUnset(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK,
                 DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK)
-            ;
+            .setIfUnset(MAX_IN_LIST_SKIP_SCAN_SIZE, DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE);
+
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
         // it to 1, so we'll change it.
@@ -671,7 +676,7 @@ public class QueryServicesOptions {
     }
 
     public long getSpillableGroupByMaxCacheSize() {
-        return config.getLong(GROUPBY_MAX_CACHE_SIZE_ATTRIB, DEFAULT_GROUPBY_MAX_CACHE_MAX);
+        return config.getLongBytes(GROUPBY_MAX_CACHE_SIZE_ATTRIB, DEFAULT_GROUPBY_MAX_CACHE_MAX);
     }
 
     public int getSpillableGroupByNumSpillFiles() {
