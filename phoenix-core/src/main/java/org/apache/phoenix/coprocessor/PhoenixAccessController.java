@@ -31,7 +31,6 @@ import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
-import org.apache.hadoop.hbase.coprocessor.HasRegionServerServices;
 import org.apache.hadoop.hbase.coprocessor.MasterCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.MasterObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -384,7 +383,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         if (!accessCheckEnabled) { return; }
         for (MasterObserver observer : getAccessControllers()) {
             if (tableType != PTableType.VIEW) {
-            observer.preModifyTable(getMasterObsevrverContext(), physicalTableName,
+            observer.preModifyTable(getMasterObsevrverContext(), physicalTableName, null,
                     TableDescriptorBuilder.newBuilder(physicalTableName).build());
             }
         }
@@ -430,9 +429,9 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     public void preIndexUpdate(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
             String indexName, TableName physicalTableName, TableName parentPhysicalTableName, PIndexState newState)
             throws IOException {
-        if (!accessCheckEnabled) { return; }
+//        if (!accessCheckEnabled) { return; }
         for (MasterObserver observer : getAccessControllers()) {
-            observer.preModifyTable(getMasterObsevrverContext(), physicalTableName,
+            observer.preModifyTable(getMasterObsevrverContext(), physicalTableName, null,
                     TableDescriptorBuilder.newBuilder(physicalTableName).build());
         }
         // Check for read access in case of rebuild

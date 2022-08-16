@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HConstants.OperationStatusCode;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
@@ -444,7 +445,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
                   // inconsistencies as this case isn't handled correctly currently).
                   for (List<Cell> cells : m.getFamilyCellMap().values()) {
                       for (Cell cell : cells) {
-                          CellUtil.setTimestamp(cell, now);
+                          PrivateCellUtil.setTimestamp(cell, now);
                       }
                   }
               }

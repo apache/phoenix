@@ -36,8 +36,4 @@ public class ScannerContextUtil {
                     cell.heapSize());
         }
     }
-
-    public static void updateTimeProgress(ScannerContext sc) {
-        sc.updateTimeProgress();
-    }
 }

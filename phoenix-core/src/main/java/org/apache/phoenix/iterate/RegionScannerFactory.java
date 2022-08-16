@@ -359,7 +359,6 @@ public abstract class RegionScannerFactory {
           throws IOException {
         boolean res = next(result);
         ScannerContextUtil.incrementSizeProgress(scannerContext, result);
-        ScannerContextUtil.updateTimeProgress(scannerContext);
         return res;
       }
 

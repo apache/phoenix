@@ -37,6 +37,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.hadoop.hbase.CellComparator;
+import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -639,7 +640,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private static void setTimestampOnMutation(Mutation m, long ts) throws IOException {
         for (List<Cell> cells : m.getFamilyCellMap().values()) {
             for (Cell cell : cells) {
-                CellUtil.setTimestamp(cell, ts);
+                PrivateCellUtil.setTimestamp(cell, ts);
             }
         }
     }
