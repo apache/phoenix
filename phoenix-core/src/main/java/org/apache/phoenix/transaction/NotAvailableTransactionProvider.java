@@ -29,7 +29,7 @@ import org.apache.phoenix.transaction.TransactionFactory.Provider;
 public class NotAvailableTransactionProvider implements PhoenixTransactionProvider {
     private static final NotAvailableTransactionProvider INSTANCE = new NotAvailableTransactionProvider();
 
-    private static final String message = "This Phoenix has been built without Tephra support";
+    private static final String message = "Phoenix no longer supports the Tephra transaction processor.";
 
     public static final NotAvailableTransactionProvider getInstance() {
         return INSTANCE;
