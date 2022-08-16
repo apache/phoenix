@@ -490,8 +490,8 @@ public class HighAvailabilityTestingUtility {
                     PhoenixRpcSchedulerFactory.class.getName());
             conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
 
-            // Make HBase cluster not fail too fast for debbuging
-            conf.setLong(HConstants.ZK_SESSION_TIMEOUT, 1_000_000);
+
+            conf.setLong(HConstants.ZK_SESSION_TIMEOUT, 12_000);
             conf.setLong(HConstants.ZOOKEEPER_TICK_TIME, 6_000);
             conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
             // Make HBase run faster by skipping sanity checks
