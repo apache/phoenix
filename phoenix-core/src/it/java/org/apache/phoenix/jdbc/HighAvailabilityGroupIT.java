@@ -17,16 +17,17 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.hadoop.hbase.HConstants.*;
+import static org.apache.hadoop.hbase.ipc.RpcClient.*;
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION;
-import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
-import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_SHOULD_FALLBACK_WHEN_MISSING_CRR_KEY;
-import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_ZK_RETRY_MAX_KEY;
-import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_ZK_RETRY_MAX_SLEEP_MS_KEY;
+import static org.apache.phoenix.jdbc.FailoverPhoenixConnection.FAILOVER_TIMEOUT_MS_ATTR;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.*;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.doTestWhenOneHBaseDown;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.doTestWhenOneZKDown;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
+import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -107,14 +108,26 @@ public class HighAvailabilityGroupIT {
         haGroupName = testName.getMethodName();
         clientProperties = new Properties();
         clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
+        // Set some client configurations to make test run faster
+        clientProperties.setProperty(COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
+        clientProperties.setProperty(FAILOVER_TIMEOUT_MS_ATTR, "30000");
         clientProperties.setProperty(PHOENIX_HA_ZK_RETRY_MAX_KEY, "3");
-        clientProperties.setProperty(PHOENIX_HA_ZK_RETRY_MAX_SLEEP_MS_KEY, "2000");
-
-        //A bunch of retries in hbase paths is causing this test to time out so we set timeout/retries low here
-        clientProperties.setProperty(HConstants.HBASE_CLIENT_RETRIES_NUMBER,"2");
-        clientProperties.setProperty(HConstants.HBASE_RPC_TIMEOUT_KEY,"5000");
-        clientProperties.setProperty(HConstants.HBASE_CLIENT_META_OPERATION_TIMEOUT,"5000");
-        clientProperties.setProperty(HConstants.HBASE_CLIENT_META_REPLICA_SCAN_TIMEOUT,"10000");
+        clientProperties.setProperty(PHOENIX_HA_ZK_RETRY_MAX_SLEEP_MS_KEY, "1000");
+        clientProperties.setProperty(ZK_SYNC_BLOCKING_TIMEOUT_MS,"1000");
+        clientProperties.setProperty(ZK_SESSION_TIMEOUT, "3000");
+        clientProperties.setProperty(PHOENIX_HA_TRANSITION_TIMEOUT_MS_KEY, "3000");
+        clientProperties.setProperty("zookeeper.recovery.retry.maxsleeptime", "1000");
+        clientProperties.setProperty("zookeeper.recovery.retry","1");
+        clientProperties.setProperty("zookeeper.recovery.retry.intervalmill","10");
+        clientProperties.setProperty(HBASE_CLIENT_RETRIES_NUMBER,"4");
+        clientProperties.setProperty(HBASE_CLIENT_PAUSE,"2000"); //bad server elapses in 2sec
+        clientProperties.setProperty(HBASE_RPC_TIMEOUT_KEY,"2000");
+        clientProperties.setProperty(HBASE_CLIENT_META_OPERATION_TIMEOUT,"2000");
+        clientProperties.setProperty(SOCKET_TIMEOUT_CONNECT,"2000");
+        clientProperties.setProperty(SOCKET_TIMEOUT_READ,"2000");
+        clientProperties.setProperty(SOCKET_TIMEOUT_WRITE,"2000");
+        clientProperties.setProperty(REPLICATION_SOURCE_SHIPEDITS_TIMEOUT,"5000");
+        clientProperties.setProperty(HConstants.THREAD_WAKE_FREQUENCY, "100");
 
         // Make first cluster ACTIVE
         CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
