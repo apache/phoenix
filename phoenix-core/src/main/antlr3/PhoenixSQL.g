@@ -1163,7 +1163,13 @@ literal returns [LiteralParseNode ret]
         }
     |   dbl=DOUBLE  {
             ret = factory.literal(Double.valueOf(dbl.getText()));
-        }    
+        }
+    |   h=HEX_LITERAL  {
+            ret = factory.hexLiteral(h.getText());
+        }
+    |   b=BIN_LITERAL  {
+            ret = factory.binLiteral(b.getText());
+        }
     |   NULL {ret = factory.literal(null);}
     |   TRUE {ret = factory.literal(Boolean.TRUE);} 
     |   FALSE {ret = factory.literal(Boolean.FALSE);}
@@ -1235,6 +1241,14 @@ DOUBLE
     :   '.' POSINTEGER Exponent
     |   POSINTEGER '.' Exponent
     |   POSINTEGER ('.' (POSINTEGER (Exponent)?)? | Exponent)
+    ;
+
+HEX_LITERAL
+    :   ('X' | 'x') '\'' (HEX_DIGIT)* '\''
+    ;
+
+BIN_LITERAL
+    :   ('B' | 'b') '\'' (BIN_DIGIT)* '\''
     ;
 
 Exponent
@@ -1370,6 +1384,17 @@ fragment
 DIGIT
     :    '0'..'9'
     ;
+
+fragment
+HEX_DIGIT
+    :   ('0'..'9' | 'a'..'f' | 'A'..'F')
+    ;
+
+fragment
+BIN_DIGIT
+    :   ('0' | '1')
+    ;
+
 
 // string literals
 STRING_LITERAL
