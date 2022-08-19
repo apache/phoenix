@@ -50,16 +50,15 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.apache.hadoop.hbase.HConstants.*;
+import static org.apache.hadoop.hbase.ipc.RpcClient.*;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_KEY;
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.hbase.index.write.AbstractParallelWriterIndexCommitter.NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY;
 import static org.apache.phoenix.jdbc.ClusterRoleRecordGeneratorTool.PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT;
-import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
-import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_ZK_CONNECTION_TIMEOUT_MS_KEY;
-import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_ZK_RETRY_BASE_SLEEP_MS_KEY;
-import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_ZK_RETRY_MAX_KEY;
-import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_ZK_RETRY_MAX_SLEEP_MS_KEY;
-import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_ZK_SESSION_TIMEOUT_MS_KEY;
+import static org.apache.phoenix.jdbc.FailoverPhoenixConnection.FAILOVER_TIMEOUT_MS_ATTR;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.*;
+import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -586,5 +585,34 @@ public class HighAvailabilityTestingUtility {
     public static List<PhoenixHAExecutorServiceProvider.PhoenixHAClusterExecutorServices> getListOfSingleThreadExecutorServices() {
         return ImmutableList.of( new PhoenixHAExecutorServiceProvider.PhoenixHAClusterExecutorServices(Executors.newFixedThreadPool(1), Executors.newFixedThreadPool(1)),
                 new PhoenixHAExecutorServiceProvider.PhoenixHAClusterExecutorServices(Executors.newFixedThreadPool(1), Executors.newFixedThreadPool(1)));
+    }
+
+    /**
+     * Properties with tuned retry and timeout configuration to bring up and down miniclusters and connect to them
+     * @return set properteis
+     */
+    public static Properties getHATestProperties() {
+        Properties properties = new Properties();
+        // Set some client configurations to make test run faster
+        properties.setProperty(COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
+        properties.setProperty(FAILOVER_TIMEOUT_MS_ATTR, "30000");
+        properties.setProperty(PHOENIX_HA_ZK_RETRY_MAX_KEY, "3");
+        properties.setProperty(PHOENIX_HA_ZK_RETRY_MAX_SLEEP_MS_KEY, "1000");
+        properties.setProperty(ZK_SYNC_BLOCKING_TIMEOUT_MS,"1000");
+        properties.setProperty(ZK_SESSION_TIMEOUT, "3000");
+        properties.setProperty(PHOENIX_HA_TRANSITION_TIMEOUT_MS_KEY, "3000");
+        properties.setProperty("zookeeper.recovery.retry.maxsleeptime", "1000");
+        properties.setProperty("zookeeper.recovery.retry","1");
+        properties.setProperty("zookeeper.recovery.retry.intervalmill","10");
+        properties.setProperty(HBASE_CLIENT_RETRIES_NUMBER,"4");
+        properties.setProperty(HBASE_CLIENT_PAUSE,"2000"); //bad server elapses in 2sec
+        properties.setProperty(HBASE_RPC_TIMEOUT_KEY,"2000");
+        properties.setProperty(HBASE_CLIENT_META_OPERATION_TIMEOUT,"2000");
+        properties.setProperty(SOCKET_TIMEOUT_CONNECT,"2000");
+        properties.setProperty(SOCKET_TIMEOUT_READ,"2000");
+        properties.setProperty(SOCKET_TIMEOUT_WRITE,"2000");
+        properties.setProperty(REPLICATION_SOURCE_SHIPEDITS_TIMEOUT,"5000");
+        properties.setProperty(HConstants.THREAD_WAKE_FREQUENCY, "100");
+        return properties;
     }
 }

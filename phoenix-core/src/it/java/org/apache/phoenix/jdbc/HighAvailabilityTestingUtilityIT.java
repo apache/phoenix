@@ -128,7 +128,7 @@ public class HighAvailabilityTestingUtilityIT {
     public void testGetNewCQSShouldFail() throws Exception {
         doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
             try {
-                Properties properties = new Properties();
+                Properties properties = HighAvailabilityTestingUtility.getHATestProperties();
                 properties.setProperty(PHOENIX_HA_GROUP_ATTR, testName.getMethodName());
                 ConnectionQueryServices cqs = PhoenixDriver.INSTANCE.getConnectionQueryServices(
                         CLUSTERS.getUrl1(), properties);
