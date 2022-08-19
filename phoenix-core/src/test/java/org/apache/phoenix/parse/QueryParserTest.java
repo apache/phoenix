@@ -66,6 +66,15 @@ public class QueryParserTest {
         }
     }
 
+    private void parseQueryThatShouldFailWithSQLException(String sql) throws Exception {
+        try {
+            parseQuery(sql);
+            fail("Query should throw a PhoenixParserException \n " + sql);
+        }
+        catch (SQLException e){
+        }
+    }
+
     @Test
     public void testParseGrantQuery() throws Exception {
 
@@ -925,6 +934,51 @@ public class QueryParserTest {
         // Expected failures.
         parseQueryThatShouldFail("SHOW CREATE VIEW foo");
         parseQueryThatShouldFail("SHOW CREATE TABLE 'foo'");
-
     }
+
+    @Test
+    public void testBinaryLiteral() throws Exception {
+        // As per ISO/IEC 9075-2:2011(E) 5.3 <literal> page 163
+        // The literal syntax is:
+        //
+        // <binary string literal> ::=
+        // X <quote> [ <space>... ] [ { <hexit> [ <space>... ] <hexit> [ <space>... ] }... ] <quote>
+        // [ { <separator> <quote> [ <space>... ] [ { <hexit> [ <space>... ]
+        // <hexit> [ <space>... ] }... ] <quote> }... ]
+        //
+        // With the current grammar we only approximate the multi-line syntax, but
+        // we're close enough for most practical purposes
+        // (We do not enforce a new line before continuation lines)
+
+        // Happy paths
+        parseQuery("SELECT b, x from x WHERE x = x'00'");
+        parseQuery("SELECT b, x from x WHERE x = "
+                + "x'0 12 ' --comment \n /* comment */ '34 567' \n \n 'aA'");
+        parseQuery("SELECT b, x from x WHERE x = "
+                + "b'0 10 ' --comment \n /* comment */ '10 101' \n \n '00000000'");
+
+        // Expected failures.
+        // Space after 'x'
+        parseQueryThatShouldFailWithSQLException("SELECT b, x from x WHERE x = x '00'");
+        parseQueryThatShouldFailWithSQLException("SELECT b, x from x WHERE b = b '00'");
+
+        // Illegal digit character in first line
+        parseQueryThatShouldFail("SELECT b, x from x WHERE x = "
+                + "x'X0 12 ' --comment \n /* comment */ '34 5670' \n \n 'aA'");
+        parseQueryThatShouldFail("SELECT b, x from b WHERE b = "
+                + "b'B0 10 ' --comment \n /* comment */ '10 101' \n \n '000000000'");
+
+        // Illegal digit character in continuation line
+        parseQueryThatShouldFail("SELECT b, x from x WHERE x = "
+                + "x'0 12 ' --comment \n /* comment */ '34 5670' \n \n 'aA_'");
+        parseQueryThatShouldFail("SELECT b, x from x WHERE x = "
+                + "b'0 10 ' --comment \n /* comment */ '00 0000' \n \n '00_'");
+
+        // No digit between quotes in continuation line
+        parseQueryThatShouldFail("SELECT b, x from x WHERE x = "
+                + "x'0 12 ' --comment \n /* comment */ '34 5670' \n \n ''");
+        parseQueryThatShouldFail("SELECT b, x from x WHERE x = "
+                + "b'0 10 ' --comment \n /* comment */ '00 000' \n \n ''");
+    }
+
 }

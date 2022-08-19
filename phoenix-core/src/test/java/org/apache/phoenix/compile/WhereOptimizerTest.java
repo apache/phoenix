@@ -2735,8 +2735,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
             assertTrue(filterList.getFilters().get(0) instanceof SkipScanFilter);
             assertTrue(filterList.getFilters().get(1) instanceof RowKeyComparisonFilter);
             RowKeyComparisonFilter rowKeyComparisonFilter =(RowKeyComparisonFilter) filterList.getFilters().get(1);
-            assertTrue(rowKeyComparisonFilter.toString().equals(
-                    "(OBJECT_ID, OBJECT_VERSION) IN ([111,98,106,49,0,205,205,205,205],[111,98,106,50,0,206,206,206,206],[111,98,106,51,0,206,206,206,206])"));
+            assertEquals(rowKeyComparisonFilter.toString(),
+                    "(OBJECT_ID, OBJECT_VERSION) IN (X'6f626a3100cdcdcdcd',X'6f626a3200cececece',X'6f626a3300cececece')");
 
             assertTrue(queryPlan.getContext().getScanRanges().isPointLookup());
             assertArrayEquals(startKey, scan.getStartRow());
@@ -2780,8 +2780,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
             scan = queryPlan.getContext().getScan();
             assertTrue(scan.getFilter() instanceof RowKeyComparisonFilter);
             rowKeyComparisonFilter = (RowKeyComparisonFilter)scan.getFilter();
-            assertTrue(rowKeyComparisonFilter.toString().equals(
-                    "((PK1, PK2) IN ([128,0,0,2,128,0,0,3],[128,0,0,2,128,0,0,4]) AND PK3 = 5)"));
+            assertEquals(rowKeyComparisonFilter.toString(),
+                    "((PK1, PK2) IN (X'8000000280000003',X'8000000280000004') AND PK3 = 5)");
             assertArrayEquals(
                     scan.getStartRow(),
                     ByteUtil.concat(
@@ -2961,9 +2961,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
 
             assertTrue(filterList.getFilters().get(1) instanceof RowKeyComparisonFilter);
             rowKeyComparisonFilter =(RowKeyComparisonFilter) filterList.getFilters().get(1);
-            assertTrue(rowKeyComparisonFilter.toString().equals(
-                    "((PK3, PK4) IN ([127,255,255,251,128,0,0,5],[127,255,255,252,128,0,0,4])"+
-                    " AND (PK5, PK6, PK7) IN ([128,0,0,5,127,255,255,249,128,0,0,7],[128,0,0,6,127,255,255,248,128,0,0,8]))"));
+            assertEquals(rowKeyComparisonFilter.toString(),
+                    "((PK3, PK4) IN (X'7ffffffb80000005',X'7ffffffc80000004') AND (PK5, PK6, PK7) IN (X'800000057ffffff980000007',X'800000067ffffff880000008'))");
             /**
              * RVC is not singleKey
              */

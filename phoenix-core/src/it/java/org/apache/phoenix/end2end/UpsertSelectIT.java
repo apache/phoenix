@@ -1640,7 +1640,7 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
             rs = stmt.executeQuery("select * from " + t2);
             assertTrue(rs.next());
             assertEquals(2, rs.getLong(1));
-            assertEquals("[[128,0,0,54], [128,0,4,0]]", rs.getArray(2).toString());
+            assertEquals("[X'80000036', X'80000400']", rs.getArray(2).toString());
         }
     }
 

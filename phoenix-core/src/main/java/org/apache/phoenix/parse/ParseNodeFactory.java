@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
@@ -49,9 +50,11 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
+import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
@@ -78,7 +81,6 @@ public class ParseNodeFactory {
     private static final Map<BuiltInFunctionKey, BuiltInFunctionInfo> BUILT_IN_FUNCTION_MAP = Maps.newHashMap();
     private static final Multimap<String, BuiltInFunctionInfo> BUILT_IN_FUNCTION_MULTIMAP = ArrayListMultimap.create();
     private static final BigDecimal MAX_LONG = BigDecimal.valueOf(Long.MAX_VALUE);
-
 
     /**
      *
@@ -555,7 +557,7 @@ public class ParseNodeFactory {
     public LiteralParseNode realNumber(String text) {
         return new LiteralParseNode(new BigDecimal(text, PDataType.DEFAULT_MATH_CONTEXT));
     }
-    
+
     public LiteralParseNode wholeNumber(String text) {
         int length = text.length();
         // We know it'll fit into long, might still fit into int
@@ -583,6 +585,44 @@ public class ParseNodeFactory {
             return new LiteralParseNode((int)l);
         }
         return new LiteralParseNode(l);
+    }
+
+    public LiteralParseNode hexLiteral(String text) {
+        // The lexer has already removed everything but the digits
+        int length = text.length();
+        if (length % 2 != 0) {
+            throw new IllegalArgumentException("Hex literals must have an even number of digits");
+        }
+        byte[] bytes = Bytes.fromHex(text);
+        return new LiteralParseNode(bytes, PBinary.INSTANCE);
+    }
+
+    public String stringToHexLiteral(String in) {
+        String noSpace = in.replaceAll(" ", "");
+        if (!noSpace.matches("^[0-9a-fA-F]+$")) {
+            throw new IllegalArgumentException(
+                "Hex literal continuation line has non hex digit characters");
+        }
+        return noSpace;
+    }
+
+    public LiteralParseNode binLiteral(String text) {
+        // The lexer has already removed everything but the digits
+        int length = text.length();
+        if (length % 8 != 0) {
+            throw new IllegalArgumentException("Binary literals must have a multiple of 8 digits");
+        }
+        byte[] bytes = ByteUtil.fromAscii(text.toCharArray());
+        return new LiteralParseNode(bytes, PBinary.INSTANCE);
+    }
+
+    public String stringToBinLiteral(String in) {
+        String noSpace = in.replaceAll(" ", "");
+        if (!noSpace.matches("^[0-1]+$")) {
+            throw new IllegalArgumentException(
+                "Binary literal continuation line has non binary digit characters");
+        }
+        return noSpace;
     }
 
     public CastParseNode cast(ParseNode expression, String dataType, Integer maxLength, Integer scale) {
