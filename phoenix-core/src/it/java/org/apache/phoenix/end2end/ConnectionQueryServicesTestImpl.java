@@ -59,6 +59,8 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     // Track open connections to free them on close as unit tests don't always do this.
     private Set<PhoenixConnection> connections =
             Collections.newSetFromMap(new ConcurrentHashMap<PhoenixConnection, Boolean>());
+    // Use Provider.values() instead of Provider.available() here because array accesses will be
+    // indexed by ordinal.
     private final PhoenixTransactionService[] txServices = new PhoenixTransactionService[TransactionFactory.Provider.values().length];
     
     public ConnectionQueryServicesTestImpl(QueryServices services, ConnectionInfo info, Properties props) throws SQLException {

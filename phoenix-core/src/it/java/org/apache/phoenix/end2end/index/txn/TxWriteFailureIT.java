@@ -47,7 +47,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -72,17 +71,17 @@ public class TxWriteFailureIT extends BaseTest {
     private final boolean localIndex;
     private final String tableDDLOptions;
 
-	public TxWriteFailureIT(boolean localIndex, boolean mutable, String transactionProvider) {
-		this.localIndex = localIndex;
+    public TxWriteFailureIT(boolean localIndex, boolean mutable, String transactionProvider) {
+        this.localIndex = localIndex;
         StringBuilder optionBuilder = new StringBuilder();
         optionBuilder.append(" TRANSACTION_PROVIDER='" + transactionProvider + "'");
         if (!mutable) {
             optionBuilder.append(",IMMUTABLE_ROWS=true");
         }
         this.tableDDLOptions = optionBuilder.toString();
-	}
+    }
 	
-	@BeforeClass
+    @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(3);
         serverProps.put("hbase.coprocessor.region.classes", FailingRegionObserver.class.getName());
@@ -93,15 +92,16 @@ public class TxWriteFailureIT extends BaseTest {
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, "true");
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
-	
-	@Parameters(name="TxWriteFailureIT_localIndex={0},mutable={1},transactionProvider={2}") // name is used by failsafe as file name in reports
+
+    // name is used by failsafe as file name in reports
+    @Parameters(name="TxWriteFailureIT_localIndex={0},mutable={1},transactionProvider={2}")
     public static synchronized Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {
-                 { false, false, "TEPHRA" }, { false, true, "TEPHRA" }, { true, false, "TEPHRA" }, { true, true, "TEPHRA" },
-                 { false, false, "OMID" }, { false, true, "OMID" }, 
-           }), 2);
+        return Arrays.asList(new Object[][] {
+            // OMID does not support local indexes
+            { false, false, "OMID" }, { false, true, "OMID" },
+        });
     }
-    
+
     @Before
     public void generateTableNames() throws SQLException {
         schemaName = generateUniqueName();

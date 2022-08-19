@@ -89,14 +89,15 @@ public class MutableIndexExtendedIT extends ParallelStatsDisabledIT {
         return getConnection(props);
     }
 
-    @Parameterized.Parameters(name = "MutableIndexExtendedIT_localIndex={0},transactionProvider={1},columnEncoded={2}")
     // name is used by failsafe as file name in reports
+    @Parameterized.Parameters(name = "MutableIndexExtendedIT_localIndex={0},transactionProvider={1},columnEncoded={2}")
     public static Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(
-                new Object[][] { { false, null, false }, { false, null, true },
-                        { false, "TEPHRA", false }, { false, "TEPHRA", true },
-                        { false, "OMID", false }, { true, null, false }, { true, null, true },
-                        { true, "TEPHRA", false }, { true, "TEPHRA", true }, }), 1);
+        return Arrays.asList(new Object[][] {
+            { false, null, false }, { false, null, true },
+            // OMID does not support local indexes or column encoding
+            { false, "OMID", false },
+            { true, null, false }, { true, null, true },
+        });
     }
 
     // some tables (e.g. indexes on views) have UngroupedAgg coproc loaded, but don't have a

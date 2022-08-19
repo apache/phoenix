@@ -412,29 +412,6 @@
       <artifactId>omid-common</artifactId>
     </dependency>
 
-    <!-- Tephra dependencies (not included in shaded artifacts -->
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-api</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-core-shaded</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
-      <classifier>shaded</classifier>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.thrift</groupId>
-      <artifactId>libthrift</artifactId>
-      <scope>provided</scope>
-    </dependency>
-
     <!-- Omid test dependencies -->
     <dependency>
       <groupId>org.apache.omid</groupId>
@@ -553,10 +530,6 @@
     <dependency>
         <groupId>org.apache.zookeeper</groupId>
         <artifactId>zookeeper-jute</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.thrift</groupId>
-      <artifactId>libthrift</artifactId>
     </dependency>
     <dependency>
       <groupId>org.jruby.joni</groupId>

@@ -376,7 +376,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     // List of queues instead of a single queue to provide reduced contention via lock striping
     private final List<LinkedBlockingQueue<WeakReference<PhoenixConnection>>> connectionQueues;
     private ScheduledExecutorService renewLeaseExecutor;
-    private PhoenixTransactionClient[] txClients = new PhoenixTransactionClient[TransactionFactory.Provider.values().length];;
+    // Use TransactionFactory.Provider.values() here not TransactionFactory.Provider.available()
+    // because the array will be indexed by ordinal.
+    private PhoenixTransactionClient[] txClients = new PhoenixTransactionClient[TransactionFactory.Provider.values().length];
     /*
      * We can have multiple instances of ConnectionQueryServices. By making the thread factory
      * static, renew lease thread names will be unique across them.
@@ -2923,7 +2925,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                     }
                 }
-                // Set Tephra's TTL property based on HBase property if we're
+                // Set transaction context TTL property based on HBase property if we're
                 // transitioning to become transactional or setting TTL on
                 // an already transactional table.
                 int ttl = getTTL(table, newTableDescriptorBuilder.build(), newTTL);
@@ -2936,6 +2938,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         } else {
                             props = new HashMap<>(props);
                         }
+                        // Note: After PHOENIX-6627, is PhoenixTransactionContext.PROPERTY_TTL still useful?
                         props.put(PhoenixTransactionContext.PROPERTY_TTL, ttl);
                         // Remove HBase TTL if we're not transitioning an existing table to become transactional
                         // or if the existing transactional table wasn't originally non transactional.

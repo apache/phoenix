@@ -107,10 +107,10 @@ public class ViewIT extends SplitSystemCatalogIT {
     // name is used by failsafe as file name in reports
     @Parameters(name="ViewIT_transactionProvider={0}, columnEncoded={1}")
     public static synchronized Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
-            { "TEPHRA", false }, { "TEPHRA", true },
-            { "OMID", false }, 
-            { null, false }, { null, true }}),0);
+        return Arrays.asList(new Object[][] {
+            // OMID does not support column encoding
+            { "OMID", false },
+            { null, false }, { null, true }});
     }
     
     @BeforeClass
