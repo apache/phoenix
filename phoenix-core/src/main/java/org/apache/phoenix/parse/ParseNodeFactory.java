@@ -588,12 +588,12 @@ public class ParseNodeFactory {
 
     public LiteralParseNode hexLiteral(String text) {
         int length = text.length();
-        if ((length-3) % 2 != 0) {
+        if ((length - 3) % 2 != 0) {
             throw new IllegalArgumentException("Hex literals must have an even number of digits");
         }
 
         // Can we avoid this copy ?
-        String hexDigits = text.substring(2, text.length()-1);
+        String hexDigits = text.substring(2, text.length() - 1);
         byte[] bytes;
         bytes = Bytes.fromHex(hexDigits);
         return new LiteralParseNode(bytes);
@@ -601,12 +601,12 @@ public class ParseNodeFactory {
 
     public LiteralParseNode binLiteral(String text) {
         int length = text.length();
-        if ((length-3) % 8 != 0) {
+        if ((length - 3) % 8 != 0) {
             throw new IllegalArgumentException("Binary literals must have a multiple of 8 digits");
         }
 
         // Can we avoid this copy ?
-        String binDigits = text.substring(2, text.length()-1);
+        String binDigits = text.substring(2, text.length() - 1);
         byte[] bytes;
         bytes =  ByteUtil.fromAscii(binDigits.toCharArray());
 

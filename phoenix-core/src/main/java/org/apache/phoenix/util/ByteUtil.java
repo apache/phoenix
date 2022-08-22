@@ -680,7 +680,8 @@ public class ByteUtil {
         return dst;
     }
 
-    // Adapted from Commons-codec BinaryCodec but without reverting the bytes
+    // Adapted from the Commons Codec BinaryCodec, but treat the input as a byte sequence, without
+    // the endinanness reversion in the original code
     public static byte[] fromAscii(final char[] ascii) {
         if (ascii == null || ascii.length == 0) {
             return EMPTY_BYTE_ARRAY;
@@ -688,10 +689,8 @@ public class ByteUtil {
         final int asciiLength = ascii.length;
         // get length/8 times bytes with 3 bit shifts to the right of the length
         final byte[] l_raw = new byte[asciiLength >> 3];
-        /*
-         * We incr index jj by 8 as we go along to not recompute indices using multiplication every time inside the
-         * loop.
-         */
+        // We incr index jj by 8 as we go along to not recompute indices using multiplication every
+        // time inside the loop.
         for (int ii = 0, jj = 0; ii < l_raw.length; ii++, jj += 8) {
             for (int bits = 0; bits < BITS.length; ++bits) {
                 if (ascii[jj + bits] == '1') {
