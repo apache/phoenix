@@ -592,7 +592,8 @@ public class ParseNodeFactory {
             throw new IllegalArgumentException("Hex literals must have an even number of digits");
         }
 
-        // Can we avoid this copy ?
+        // We cannot avoid this copy without re-implementing the converter to handle offsets
+        // It is probably not worth doing that.
         String hexDigits = text.substring(2, text.length() - 1);
         byte[] bytes;
         bytes = Bytes.fromHex(hexDigits);
@@ -605,7 +606,8 @@ public class ParseNodeFactory {
             throw new IllegalArgumentException("Binary literals must have a multiple of 8 digits");
         }
 
-        // Can we avoid this copy ?
+        // We cannot avoid this copy without re-implementing the converter to handle offsets
+        // It is probably not worth doing that.
         String binDigits = text.substring(2, text.length() - 1);
         byte[] bytes;
         bytes =  ByteUtil.fromAscii(binDigits.toCharArray());
