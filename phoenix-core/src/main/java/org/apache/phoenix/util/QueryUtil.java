@@ -74,6 +74,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.MasterRegistry;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
@@ -102,6 +103,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.tool.SchemaExtractionProcessor;
 import org.apache.phoenix.schema.tool.SchemaProcessor;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -136,6 +138,7 @@ public final class QueryUtil {
      */
     public static final int DATA_TYPE_NAME_POSITION = 6;
 
+    public static final String IS_HREGISTRY_CONNECTION = "IS_HREGISTRY_CONNECTION";
     public static final String IS_SERVER_CONNECTION = "IS_SERVER_CONNECTION";
     private static final String SELECT = "SELECT";
     private static final String FROM = "FROM";
@@ -345,10 +348,16 @@ public final class QueryUtil {
         return getUrlInternal(zkQuorum, port, znodeParent, principal);
     }
 
+    public static String getHRpcUrl(String hmasters, Integer port, String principal){
+        return new PhoenixEmbeddedDriver.ConnectionInfo(hmasters, port, principal, null).toUrl()
+                + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+    }
+
     private static String getUrlInternal(String zkQuorum, Integer port, String znodeParent, String principal) {
         return new PhoenixEmbeddedDriver.ConnectionInfo(zkQuorum, port, znodeParent, principal, null).toUrl()
                 + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
     }
+
 
     public static String getExplainPlan(ResultSet rs) throws SQLException {
         StringBuilder buf = new StringBuilder();
@@ -436,11 +445,26 @@ public final class QueryUtil {
     public static String getConnectionUrl(Properties props, Configuration conf, String principal)
             throws SQLException {
         // read the hbase properties from the configuration
-        int port = getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT, props, conf);
-        // Build the ZK quorum server string with "server:clientport" list, separated by ','
-        final String server = getString(HConstants.ZOOKEEPER_QUORUM, HConstants.LOCALHOST, props, conf);
-        String znodeParent = getString(HConstants.ZOOKEEPER_ZNODE_PARENT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT, props, conf);
-        String url = getUrl(server, port, znodeParent, principal);
+
+        boolean zkRegistry = true;
+        String regKey = conf.get(IS_HREGISTRY_CONNECTION);
+        if (!Strings.isNullOrEmpty(regKey)) {
+            zkRegistry = false;
+        }
+
+        String url;
+        if (zkRegistry) {
+            int port = getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT, props, conf);
+            // Build the ZK quorum server string with "server:clientport" list, separated by ','
+
+            final String server = getString(HConstants.ZOOKEEPER_QUORUM, HConstants.LOCALHOST, props, conf);
+            String znodeParent = getString(HConstants.ZOOKEEPER_ZNODE_PARENT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT, props, conf);
+            url = getUrl(server, port, znodeParent, principal);
+        } else {
+            final String server = getString(HConstants.MASTER_ADDRS_KEY, null, props, conf);
+            url = getHRpcUrl(server, null, principal);
+        }
+
         if (url.endsWith(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + "")) {
             url = url.substring(0, url.length() - 1);
         }

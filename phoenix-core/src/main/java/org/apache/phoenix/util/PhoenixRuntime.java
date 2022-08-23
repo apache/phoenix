@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.schema.types.PDataType.ARRAY_TYPE_SUFFIX;
 
 import java.io.File;
@@ -45,6 +47,9 @@ import java.util.TreeSet;
 
 import javax.annotation.Nullable;
 
+import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.monitoring.PhoenixTableMetric;
+import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
@@ -55,6 +60,7 @@ import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
 
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -128,6 +134,8 @@ public class PhoenixRuntime {
     public final static String JDBC_THIN_PROTOCOL = "jdbc:phoenix:thin";
     public final static char JDBC_PROTOCOL_TERMINATOR = ';';
     public final static char JDBC_PROTOCOL_SEPARATOR = ':';
+    public final static char JDBC_PROTOCOL_CONNECTOR_PREFIX = '+';
+
 
     @Deprecated
     public final static String EMBEDDED_JDBC_PROTOCOL = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;

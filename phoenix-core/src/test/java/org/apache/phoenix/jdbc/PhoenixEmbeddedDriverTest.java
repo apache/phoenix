@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.HBaseFactoryProvider;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Test;
 
 public class PhoenixEmbeddedDriverTest {
@@ -153,7 +154,50 @@ public class PhoenixEmbeddedDriverTest {
             }
         }
     }
-    
+
+    @Test
+    public void testConnectorBootstrap() throws SQLException {
+        // HRPC
+        ConnectionInfo c1 = ConnectionInfo.create("jdbc:phoenix+hrpc:hostname1,hostname2,hostname3:90210:user/principal:/user.keytab;test=false");
+        ReadOnlyProps rop1 = c1.asProps();
+        assertEquals("hostname1:90210,hostname2:90210,hostname3:90210", rop1.get("hbase.masters"));
+
+
+        ConnectionInfo c2 = ConnectionInfo.create("jdbc:phoenix+hrpc:hostname1,hostname2,hostname3:user/principal:/user.keytab;test=false");
+        ReadOnlyProps rop2 = c2.asProps();
+        assertEquals("hostname1:16000,hostname2:16000,hostname3:16000", rop2.get("hbase.masters"));
+
+        // ZK
+        String[] jdbcUrls = new String[]{
+                "jdbc:phoenix+zk:hostname1,hostname2,hostname3:2181:user/principal:/user.keytab;test=false",
+                "jdbc:phoenix:hostname1,hostname2,hostname3:2181:user/principal:/user.keytab;test=false"
+        };
+
+        for (final String c : jdbcUrls) {
+            ConnectionInfo connInfo = ConnectionInfo.create(c);
+            ReadOnlyProps readOnlyProps = connInfo.asProps();
+            assertEquals("hostname1,hostname2,hostname3", readOnlyProps.get("hbase.zookeeper.quorum"));
+            assertEquals("2181", readOnlyProps.get("hbase.zookeeper.property.clientPort"));
+        }
+
+        for (String invalidConnUrl : new String[]{
+                "jdbc:phoenix+timhortons:it,dont,matter:user/principal:/user.keytab;",
+                "jdbc:phoenix+:hostname1,hostname2,hostname3:user/principal:/user.keytab;test=false",
+                "jdbc:phoenix:hostname1:2181,hostname:2182,hostname3:2183:user/principal:/user.keytab;test=false"
+        }) {
+            // Invalid connector
+            try {
+                ConnectionInfo.create(invalidConnUrl);
+            } catch (SQLException e) {
+                try {
+                    assertEquals(SQLExceptionCode.MALFORMED_CONNECTION_URL.getSQLState(), e.getSQLState());
+                } catch (AssertionError ae) {
+                    throw new AssertionError("Expected malformed connection" + ae.getMessage());
+                }
+            }
+        }
+    }
+
     @Test
     public void testNotAccept() throws Exception {
         Driver driver = new PhoenixDriver();
