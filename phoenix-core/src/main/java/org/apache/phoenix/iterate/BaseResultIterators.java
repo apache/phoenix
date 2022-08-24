@@ -929,12 +929,19 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
      * @throws SQLException
      */
     private List<List<Scan>> getParallelScans(byte[] startKey, byte[] stopKey) throws SQLException {
-        List<HRegionLocation> regionLocations = getRegionBoundaries(scanGrouper);
-        List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         ScanRanges scanRanges = context.getScanRanges();
         PTable table = getTable();
-        boolean isSalted = table.getBucketNum() != null;
         boolean isLocalIndex = table.getIndexType() == IndexType.LOCAL;
+        if(!isLocalIndex && scanRanges.isPointLookup()) {
+            List<List<Scan>> parallelScans = Lists.newArrayListWithExpectedSize(1);
+            List<Scan> scans = Lists.newArrayListWithExpectedSize(1);
+            scans.add(context.getScan());
+            parallelScans.add(scans);
+            return parallelScans;
+        }
+        List<HRegionLocation> regionLocations = getRegionBoundaries(scanGrouper);
+        List<byte[]> regionBoundaries = toBoundaries(regionLocations);
+        boolean isSalted = table.getBucketNum() != null;
         GuidePostsInfo gps = getGuidePosts();
         // case when stats wasn't collected
         hasGuidePosts = gps != GuidePostsInfo.NO_GUIDEPOST;

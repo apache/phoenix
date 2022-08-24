@@ -63,6 +63,33 @@ public class SaltedTableIT extends BaseSaltedTableIT {
     }
 
     @Test
+    public void testPointLookupOnSaltedTable() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            String tableName = generateUniqueName();
+            String query = "create table " + tableName + " (a_integer integer not null "
+                    + "CONSTRAINT pk PRIMARY KEY (a_integer)) SALT_BUCKETS = 256";
+            conn.createStatement().execute(query);
+            PreparedStatement stmt = conn.prepareStatement("upsert into " +
+                    tableName + " values(?)");
+            stmt.setInt(1, 1);
+            stmt.execute();
+            stmt.setInt(1, 2);
+            stmt.execute();
+            stmt.setInt(1, 3);
+            stmt.execute();
+            conn.commit();
+            query = "select * from " + tableName + " where a_integer = 1";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt("a_integer"));
+            query = "explain " + query;
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(QueryUtil.getExplainPlan(rs).contains("POINT LOOKUP ON 1 KEY"));
+        }
+    }
+
+    @Test
     public void testTableWithSplit() throws Exception {
         try {
             createTestTable(getUrl(), "create table " + generateUniqueName() + " (a_integer integer not null primary key) SALT_BUCKETS = 4",
