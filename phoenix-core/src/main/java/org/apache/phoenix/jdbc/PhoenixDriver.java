@@ -22,10 +22,12 @@ import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -289,6 +291,23 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     private void throwDriverClosedException() {
         throw new IllegalStateException(driverShutdownMsg != null ? driverShutdownMsg : "The Phoenix jdbc driver has been closed.");
     }
+
+
+    /**
+     * Invalidate the CQS in global connection query services cache.
+     *
+     * @param url The JDBC connection string
+     * @param properties properties containing the fields of connection info (key of cache)
+     * @throws SQLException if fails to generate key for CQS to invalidate
+     */
+    void invalidateCache(String url, Properties properties) throws SQLException {
+        ConnectionInfo connInfo = ConnectionInfo.create(url)
+                .normalize(getQueryServices().getProps(), properties);
+        LOGGER.info("Invalidating the CQS from cache for connInfo={}", connInfo);
+        connectionQueryServicesCache.invalidate(connInfo);
+        LOGGER.debug(connectionQueryServicesCache.asMap().keySet().stream().map(Objects::toString).collect(Collectors.joining(",")));
+    }
+
 
     @Override
     public synchronized void close() throws SQLException {

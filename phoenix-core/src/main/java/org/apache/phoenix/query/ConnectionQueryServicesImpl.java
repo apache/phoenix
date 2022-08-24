@@ -571,6 +571,26 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     /**
+     * Closes all the connections it has in its connectionQueues.
+     */
+    @Override
+    public void closeAllConnections(SQLExceptionInfo.Builder reasonBuilder) {
+        for (LinkedBlockingQueue<WeakReference<PhoenixConnection>> queue : connectionQueues) {
+            for (WeakReference<PhoenixConnection> connectionReference : queue) {
+                PhoenixConnection connection = connectionReference.get();
+                try {
+                    if (connection != null && !connection.isClosed()) {
+                        connection.close(reasonBuilder.build().buildException());
+                    }
+                } catch (SQLException e) {
+                    LOGGER.warn("Exception while closing phoenix connection {}", connection, e);
+                }
+            }
+        }
+    }
+
+
+    /**
      * Closes the underlying connection to zookeeper. The QueryServices
      * may not be used after that point. When a Connection is closed,
      * this is not called, since these instances are pooled by the
@@ -5594,7 +5614,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return user;
     }
 
-    private void checkClosed() {
+    @VisibleForTesting
+    public void checkClosed() {
         if (closed) {
             throwConnectionClosedException();
         }

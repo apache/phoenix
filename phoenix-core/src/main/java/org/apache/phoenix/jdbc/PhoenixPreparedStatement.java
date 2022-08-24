@@ -71,7 +71,7 @@ import org.apache.phoenix.util.SQLCloseable;
  *
  * @since 0.1
  */
-public class PhoenixPreparedStatement extends PhoenixStatement implements PreparedStatement, SQLCloseable {
+public class PhoenixPreparedStatement extends PhoenixStatement implements PhoenixMonitoredPreparedStatement, SQLCloseable {
     private final int parameterCount;
     private final List<Object> parameters;
     private final CompilableStatement statement;

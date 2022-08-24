@@ -42,4 +42,8 @@ public final class JacksonUtil {
     public static ObjectWriter getObjectWriter(){
         return mapper.writer();
     }
+
+    public static ObjectWriter getObjectWriterPretty() {
+        return mapper.writerWithDefaultPrettyPrinter();
+    }
 }
