@@ -29,8 +29,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
-import org.apache.phoenix.expression.DelegateExpression;
-import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -1615,8 +1613,8 @@ public class WhereOptimizer {
         @Override
         public Iterator<Expression> visitEnter(LikeExpression node) {
             // TODO: can we optimize something that starts with '_' like this: foo LIKE '_a%' ?
-            if (node.getLikeType() == LikeType.CASE_INSENSITIVE || // TODO: remove this when we optimize ILIKE
-                ! (node.getChildren().get(1) instanceof LiteralExpression) || node.startsWithWildcard()) {
+            if (!(node.getChildren().get(1) instanceof LiteralExpression)
+                || node.startsWithWildcard()) {
                 return Collections.emptyIterator();
             }
 
@@ -1625,51 +1623,87 @@ public class WhereOptimizer {
 
         @Override
         public KeySlots visitLeave(LikeExpression node, List<KeySlots> childParts) {
-            // TODO: optimize ILIKE by creating two ranges for the literal prefix: one with lower case, one with upper case
             if (childParts.isEmpty()) {
                 return null;
             }
+
             // for SUBSTR(<column>,1,3) LIKE 'foo%'
             KeySlots childSlots = childParts.get(0);
             KeySlot childSlot = childSlots.getSlots().get(0);
-            final String startsWith = node.getLiteralPrefix();
-            SortOrder sortOrder = node.getChildren().get(0).getSortOrder();
-            byte[] key = PVarchar.INSTANCE.toBytes(startsWith, sortOrder);
-            // If the expression is an equality expression against a fixed length column
-            // and the key length doesn't match the column length, the expression can
-            // never be true.
-            // An zero length byte literal is null which can never be compared against as true
-            Expression firstChild = node.getChildren().get(0);
-            Integer childNodeFixedLength = firstChild.getDataType().isFixedWidth() ? firstChild.getMaxLength() : null;
-            if (childNodeFixedLength != null && key.length > childNodeFixedLength) {
-                return EMPTY_KEY_SLOTS;
-            }
-            // TODO: is there a case where we'd need to go through the childPart to calculate the key range?
             PColumn column = childSlot.getKeyPart().getColumn();
-            PDataType type = column.getDataType();
-            byte[] lowerRange = key;
-            byte[] upperRange = ByteUtil.nextKey(key);
-            Integer columnFixedLength = column.getMaxLength();
-            if (type.isFixedWidth()) {
-                if (columnFixedLength != null) { // Sanity check - should always be non null
-                    // Always use minimum byte to fill as otherwise our key is bigger
-                    // that it should be when the sort order is descending.
-                    lowerRange = type.pad(lowerRange, columnFixedLength, SortOrder.ASC);
-                    upperRange = type.pad(upperRange, columnFixedLength, SortOrder.ASC);
+            PDataType<?> type = column.getDataType();
+            SortOrder sortOrder = node.getChildren().get(0).getSortOrder();
+            Expression firstChild = node.getChildren().get(0);
+
+            final String literalPrefix = node.getLiteralPrefix();
+            List<String> rangeStarts;
+
+            if (node.getLikeType() == LikeType.CASE_INSENSITIVE) {
+                rangeStarts = generateIlikeRangeStarts(literalPrefix);
+            } else {
+                rangeStarts = Collections.singletonList(literalPrefix);
+            }
+
+            List<KeyRange> ranges = new ArrayList<>();
+            for (String startsWith : rangeStarts) {
+                byte[] key = PVarchar.INSTANCE.toBytes(startsWith, sortOrder);
+                // If the expression is an equality expression against a fixed length column
+                // and the key length doesn't match the column length, the expression can
+                // never be true.
+                // An zero length byte literal is null which can never be compared against as true
+
+                Integer childNodeFixedLength = firstChild.getDataType().isFixedWidth()
+                    ? firstChild.getMaxLength() : null;
+                if (childNodeFixedLength != null && key.length > childNodeFixedLength) {
+                    return EMPTY_KEY_SLOTS;
                 }
-            } else if (column.getSortOrder() == SortOrder.DESC && table.rowKeyOrderOptimizable()) {
-                // Append a zero byte if descending since a \xFF byte will be appended to the lowerRange
-                // causing rows to be skipped that should be included. For example, with rows 'ab', 'a',
-                // a lowerRange of 'a\xFF' would skip 'ab', while 'a\x00\xFF' would not.
-                lowerRange = Arrays.copyOf(lowerRange, lowerRange.length+1);
-                lowerRange[lowerRange.length-1] = QueryConstants.SEPARATOR_BYTE;
+                // TODO: is there a case where we'd need to
+                //  go through the childPart to calculate the key range?
+                byte[] lowerRange = key;
+                byte[] upperRange = ByteUtil.nextKey(key);
+                Integer columnFixedLength = column.getMaxLength();
+                if (type.isFixedWidth()) {
+                    if (columnFixedLength != null) { // Sanity check - should always be non null
+                        // Always use minimum byte to fill as otherwise our key is bigger
+                        // that it should be when the sort order is descending.
+                        lowerRange = type.pad(lowerRange, columnFixedLength, SortOrder.ASC);
+                        upperRange = type.pad(upperRange, columnFixedLength, SortOrder.ASC);
+                    }
+                } else if (column.getSortOrder() == SortOrder.DESC
+                    && table.rowKeyOrderOptimizable()) {
+                    // Append a zero byte if descending since a \xFF byte
+                    // will be appended to the lowerRange causing rows to be skipped
+                    // that should be included. For example, with rows 'ab', 'a',
+                    // a lowerRange of 'a\xFF' would skip 'ab', while 'a\x00\xFF' would not.
+                    lowerRange = Arrays.copyOf(lowerRange, lowerRange.length + 1);
+                    lowerRange[lowerRange.length - 1] = QueryConstants.SEPARATOR_BYTE;
+                }
+                KeyRange range = type.getKeyRange(lowerRange, true, upperRange, false);
+                if (column.getSortOrder() == SortOrder.DESC) {
+                    range = range.invert();
+                }
+
+                ranges.add(range);
             }
-            KeyRange range = type.getKeyRange(lowerRange, true, upperRange, false);
-            if (column.getSortOrder() == SortOrder.DESC) {
-                range = range.invert();
-            }
+
             // Only extract LIKE expression if pattern ends with a wildcard and everything else was extracted
-            return newKeyParts(childSlot, node.endsWithOnlyWildcard() ? node : null, range);
+            Expression extractNode = node.endsWithOnlyWildcard() ? node : null;
+            return newKeyParts(childSlot, extractNode, ranges);
+        }
+
+        private List<String> generateIlikeRangeStarts(String str) {
+            List<String> variants = new ArrayList<>();
+            String baseString = str.toLowerCase();
+            for (int i = 0; i < 1 << baseString.length(); i++) {
+                char[] characters = baseString.toCharArray();
+                for (int j = 0; j < characters.length; j++) {
+                    if (((i >> j) &  1) == 1) {
+                        characters[j] = (char) (characters[j] - 32);
+                    }
+                }
+                variants.add(String.valueOf(characters));
+            }
+            return variants;
         }
 
         @Override
