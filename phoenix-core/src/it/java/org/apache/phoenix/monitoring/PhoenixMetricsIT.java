@@ -9,6 +9,8 @@
  */
 package org.apache.phoenix.monitoring;
 
+import static org.apache.hadoop.hbase.HConstants.HBASE_CLIENT_RETRIES_NUMBER;
+import static org.apache.hadoop.hbase.HConstants.ZK_SESSION_TIMEOUT;
 import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_PHOENIX_CONNECTIONS;
@@ -74,6 +76,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.hbase.thirdparty.com.google.common.base.Joiner;
 import org.apache.hbase.thirdparty.com.google.common.collect.Lists;
@@ -1154,6 +1157,19 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         assertTrue("Not all connections were attempted!",
                 attemptedPhoenixConnections <= GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().getValue());
 
+
+        //Test case for bad url
+        props1.setProperty(ZK_SESSION_TIMEOUT, Integer.toString(100));
+        props1.setProperty(HBASE_CLIENT_RETRIES_NUMBER, Integer.toString(2));
+        props1.setProperty("zookeeper.recovery.retry", Integer.toString(2));
+        try {
+            DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "jdbcthisIsBadZk", props1);
+        } catch (Exception e) {
+            assertEquals(4, GLOBAL_FAILED_PHOENIX_CONNECTIONS.getMetric().getValue());
+            assertEquals(attemptedPhoenixConnections + 1, GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().getValue());
+            return;
+        }
+        fail();
     }
 
     @Test

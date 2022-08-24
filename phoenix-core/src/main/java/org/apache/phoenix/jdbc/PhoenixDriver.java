@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_PHOENIX_CONNECTIONS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 
 import java.sql.Connection;
@@ -214,13 +216,23 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     
     @Override
     public Connection connect(String url, Properties info) throws SQLException {
+        GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.increment();
         if (!acceptsURL(url)) {
-          return null;
+            GLOBAL_FAILED_PHOENIX_CONNECTIONS.increment();
+            return null;
         }
         try {
             lockInterruptibly(LockMode.READ);
             checkClosed();
             return createConnection(url, info);
+        } catch (SQLException sqlException) {
+            if (sqlException.getErrorCode() != SQLExceptionCode.NEW_CONNECTION_THROTTLED.getErrorCode()) {
+                GLOBAL_FAILED_PHOENIX_CONNECTIONS.increment();
+            }
+            throw sqlException;
+        } catch(Exception e) {
+            GLOBAL_FAILED_PHOENIX_CONNECTIONS.increment();
+            throw e;
         } finally {
             unlock(LockMode.READ);
         }

@@ -257,8 +257,6 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
             Properties info, PMetaData metaData, MutationState mutationState,
             boolean isDescVarLengthRowKeyUpgrade, boolean isRunningUpgrade,
             boolean buildingIndex, boolean isInternalConnection) throws SQLException {
-        try {
-            GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.increment();
             this.url = url;
             this.isDescVarLengthRowKeyUpgrade = isDescVarLengthRowKeyUpgrade;
             this.isInternalConnection = isInternalConnection;
@@ -415,17 +413,6 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
             }
             this.sourceOfOperation =
                     this.services.getProps().get(QueryServices.SOURCE_OPERATION_ATTRIB, null);
-        } catch (SQLException sqlException) {
-            if (!isInternalConnection && sqlException.getErrorCode() != SQLExceptionCode.NEW_CONNECTION_THROTTLED.getErrorCode()) {
-                GLOBAL_FAILED_PHOENIX_CONNECTIONS.increment();
-            }
-            throw sqlException;
-        } catch (Exception e) {
-            if (!isInternalConnection) {
-                GLOBAL_FAILED_PHOENIX_CONNECTIONS.increment();
-            }
-            throw e;
-        }
     }
 
     private static void checkScn(Long scnParam) throws SQLException {
