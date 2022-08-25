@@ -110,7 +110,7 @@ tokens
     CYCLE='cycle';
     CASCADE='cascade';
     UPDATE='update';
-    STATISTICS='statistics';    
+    STATISTICS='statistics';
     COLUMNS='columns';
     TRACE='trace';
     ASYNC='async';
@@ -1152,7 +1152,10 @@ literal_or_bind returns [ParseNode ret]
 
 // Get a string, integer, double, date, boolean, or NULL value.
 literal returns [LiteralParseNode ret]
-    :   s=STRING_LITERAL {
+    :
+    h=hex_literal { ret = h; }
+    |   b=bin_literal { ret = b; }
+    |   s=STRING_LITERAL {
             ret = factory.literal(s.getText()); 
         }
     |   n=NUMBER {
@@ -1163,12 +1166,6 @@ literal returns [LiteralParseNode ret]
         }
     |   dbl=DOUBLE  {
             ret = factory.literal(Double.valueOf(dbl.getText()));
-        }
-    |   h=HEX_LITERAL  {
-            ret = factory.hexLiteral(h.getText());
-        }
-    |   b=BIN_LITERAL  {
-            ret = factory.binLiteral(b.getText());
         }
     |   NULL {ret = factory.literal(null);}
     |   TRUE {ret = factory.literal(Boolean.TRUE);} 
@@ -1181,11 +1178,31 @@ literal returns [LiteralParseNode ret]
             }
         }
     ;
-    
+
 int_or_long_literal returns [LiteralParseNode ret]
     :   n=NUMBER {
             ret = factory.intOrLong(n.getText());
         }
+    ;
+
+hex_literal returns [LiteralParseNode ret]
+@init {StringBuilder sb = new StringBuilder();}
+    :
+    (
+    h=HEX_LITERAL { sb.append(h.getText()); }
+    (s=STRING_LITERAL { sb.append(factory.stringToHexLiteral(s.getText())); } )*
+    )
+    { ret = factory.hexLiteral(sb.toString()); }
+    ;
+
+bin_literal returns [LiteralParseNode ret]
+@init {StringBuilder sb = new StringBuilder();}
+    :
+    (
+    b=BIN_LITERAL { sb.append(b.getText()); }
+    (s=STRING_LITERAL { sb.append(factory.stringToBinLiteral(s.getText())); } )*
+    )
+    { ret = factory.binLiteral(sb.toString()); }
     ;
 
 // Bind names are a colon followed by 1+ letter/digits/underscores, or '?' (unclear how Oracle acutally deals with this, but we'll just treat it as a special bind)
@@ -1223,6 +1240,28 @@ BIND_NAME
     : COLON (DIGIT)+
     ;
 
+HEX_LITERAL
+@init{ StringBuilder sb = new StringBuilder();}
+    :
+    X { $type = NAME;}
+    (
+    (FIELDCHAR)=> FIELDCHAR+
+    | (' '* '\'' )=>  ' '* '\'' ( d=HEX_DIGIT { sb.append(d.getText()); } ' '* )* '\'' { $type=HEX_LITERAL; }
+    )?
+    { if ($type == HEX_LITERAL) { setText(sb.toString()); } }
+    ;
+
+BIN_LITERAL
+@init{ StringBuilder sb = new StringBuilder();}
+    :
+    B { $type = NAME;}
+    (
+    (FIELDCHAR)=> FIELDCHAR+
+    | (' '* '\'' )=>  ' '* '\'' ( d=BIN_DIGIT { sb.append(d.getText()); } ' '* )* '\'' { $type=BIN_LITERAL; }
+    )?
+    { if ($type == BIN_LITERAL) { setText(sb.toString()); } }
+    ;
+
 NAME
     :    LETTER (FIELDCHAR)*
     |    '\"' (DBL_QUOTE_CHAR)* '\"'
@@ -1241,14 +1280,6 @@ DOUBLE
     :   '.' POSINTEGER Exponent
     |   POSINTEGER '.' Exponent
     |   POSINTEGER ('.' (POSINTEGER (Exponent)?)? | Exponent)
-    ;
-
-HEX_LITERAL
-    :   ('X' | 'x') '\'' (HEX_DIGIT)* '\''
-    ;
-
-BIN_LITERAL
-    :   ('B' | 'b') '\'' (BIN_DIGIT)* '\''
     ;
 
 Exponent
@@ -1395,7 +1426,6 @@ BIN_DIGIT
     :   ('0' | '1')
     ;
 
-
 // string literals
 STRING_LITERAL
 @init{ StringBuilder sb = new StringBuilder(); }
@@ -1413,6 +1443,16 @@ CHAR
 fragment
 DBL_QUOTE_CHAR
     :   ( ~('\"') )+
+    ;
+
+fragment
+X
+    : ( 'X' | 'x' )
+    ;
+
+fragment
+B
+    : ( 'B' | 'b' )
     ;
 
 // escape sequence inside a string literal
@@ -1438,7 +1478,7 @@ CHAR_ESC
 WS
     :   ( ' ' | '\t' | '\u2002' ) { $channel=HIDDEN; }
     ;
-    
+
 EOL
     :  ('\r' | '\n')
     { skip(); }

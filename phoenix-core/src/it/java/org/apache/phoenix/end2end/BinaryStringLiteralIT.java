@@ -10,24 +10,16 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
-import org.apache.phoenix.expression.function.GetBitFunction;
-import org.apache.phoenix.expression.function.GetByteFunction;
-import org.apache.phoenix.expression.function.SetBitFunction;
-import org.apache.phoenix.expression.function.SetByteFunction;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -35,37 +27,18 @@ import org.junit.experimental.categories.Category;
  * End to end tests for Hexadecimal and Binary literals
  */
 @Category(ParallelStatsDisabledTest.class)
-public class BinaryLiteralIT extends ParallelStatsDisabledIT {
+public class BinaryStringLiteralIT extends ParallelStatsDisabledIT {
 
-    private static final String KEY = "key";
-    private String TABLE_NAME;
+    private static String EMPTY = "";
+    private static String THREE_HEX = "0001AA";
+    private static String NINE_HEX = "0102030405607080F0";
 
-    private String EMPTY = "";
-    private String THREE_HEX = "0001AA";
-    private String NINE_HEX = "0102030405607080F0";
-
-    private String THREE_BIN = "00000000" + "00000001" + "10101010";
-    private String NINE_BIN =
+    private static String THREE_BIN = "00000000" + "00000001" + "10101010";
+    private static String NINE_BIN =
             "00000001" + "00000010" + "00000011" + "00000100" + "00000101" + "01100000" + "01110000"
                     + "10000000" + "11110000";
 
-    @Before
-    public void initTable() throws Exception {
-        TABLE_NAME = generateUniqueName();
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        try {
-            conn = DriverManager.getConnection(getUrl());
-            String ddl;
-            ddl =
-                    "CREATE TABLE " + TABLE_NAME
-                            + " (id INTEGER NOT NULL PRIMARY KEY, b BINARY(10), vb VARBINARY)";
-            conn.createStatement().execute(ddl);
-            conn.commit();
-        } finally {
-            closeStmtAndConn(stmt, conn);
-        }
-    }
+    private String PARSER_STRESS = "x '0 12 ' --comment \n /* comment */ '34 567' \n \n 'aA'";
 
     private String toHex(String s) {
         return "X'" + s + "'";
@@ -75,25 +48,33 @@ public class BinaryLiteralIT extends ParallelStatsDisabledIT {
         return "B'" + s + "'";
     }
 
-    private void insertRow(Statement stmt, int id, String s) throws SQLException {
-        stmt.executeUpdate(
-            "UPSERT INTO " + TABLE_NAME + " VALUES (" + id + "," + s + "," + s + ")");
+    private void insertRow(Statement stmt, String tableName, int id, String s) throws SQLException {
+        stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES (" + id + "," + s + "," + s + ")");
     }
 
     @Test
-    public void test() throws Exception {
+    public void testBinary() throws Exception {
+        String tableName = generateUniqueName();
+
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Statement stmt = conn.createStatement();) {
-            insertRow(stmt, 1, toHex(EMPTY));
-            insertRow(stmt, 3, toHex(THREE_HEX));
-            insertRow(stmt, 9, toHex(NINE_HEX));
+            String ddl =
+                    "CREATE TABLE " + tableName
+                            + " (id INTEGER NOT NULL PRIMARY KEY, b BINARY(10), vb VARBINARY)";
+            stmt.execute(ddl);
+            conn.commit();
 
-            insertRow(stmt, 101, toBin(EMPTY));
-            insertRow(stmt, 103, toBin(THREE_BIN));
-            insertRow(stmt, 109, toBin(NINE_BIN));
+            insertRow(stmt, tableName, 1, toHex(EMPTY));
+            insertRow(stmt, tableName, 3, toHex(THREE_HEX));
+            insertRow(stmt, tableName, 9, toHex(NINE_HEX));
+            insertRow(stmt, tableName, 10, PARSER_STRESS);
+
+            insertRow(stmt, tableName, 101, toBin(EMPTY));
+            insertRow(stmt, tableName, 103, toBin(THREE_BIN));
+            insertRow(stmt, tableName, 109, toBin(NINE_BIN));
 
             conn.commit();
-            ResultSet rs = stmt.executeQuery("SELECT * FROM " + TABLE_NAME + " ORDER BY ID ASC");
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName + " ORDER BY ID ASC");
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
             assertEquals(null, rs.getString(2));
@@ -108,6 +89,11 @@ public class BinaryLiteralIT extends ParallelStatsDisabledIT {
             assertEquals(9, rs.getInt(1));
             assertEquals("0102030405607080f000", rs.getString(2));
             assertEquals("0102030405607080f0", rs.getString(3));
+
+            assertTrue(rs.next());
+            assertEquals(10, rs.getInt(1));
+            assertEquals("01234567aa00000000000", rs.getString(2));
+            assertEquals("01234567aa", rs.getString(3));
 
             assertTrue(rs.next());
             assertEquals(101, rs.getInt(1));
@@ -127,4 +113,5 @@ public class BinaryLiteralIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
         }
     }
+
 }

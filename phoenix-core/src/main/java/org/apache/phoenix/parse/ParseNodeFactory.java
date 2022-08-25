@@ -587,32 +587,41 @@ public class ParseNodeFactory {
     }
 
     public LiteralParseNode hexLiteral(String text) {
+        // The lexer has already removed everything but the digits
         int length = text.length();
-        if ((length - 3) % 2 != 0) {
+        if (length % 2 != 0) {
             throw new IllegalArgumentException("Hex literals must have an even number of digits");
         }
-
-        // We cannot avoid this copy without re-implementing the converter to handle offsets
-        // It is probably not worth doing that.
-        String hexDigits = text.substring(2, text.length() - 1);
-        byte[] bytes;
-        bytes = Bytes.fromHex(hexDigits);
+        byte[] bytes = Bytes.fromHex(text);
         return new LiteralParseNode(bytes);
     }
 
+    public String stringToHexLiteral(String in) {
+        String noSpace = in.replaceAll(" ","");
+        if(!noSpace.matches("^[0-9a-fA-F]+$")) {
+            throw new IllegalArgumentException(
+                "Hex literal continuation line has non hex digit characters");
+        }
+        return noSpace;
+    }
+
     public LiteralParseNode binLiteral(String text) {
+        // The lexer has already removed everything but the digits
         int length = text.length();
-        if ((length - 3) % 8 != 0) {
+        if (length % 8 != 0) {
             throw new IllegalArgumentException("Binary literals must have a multiple of 8 digits");
         }
-
-        // We cannot avoid this copy without re-implementing the converter to handle offsets
-        // It is probably not worth doing that.
-        String binDigits = text.substring(2, text.length() - 1);
-        byte[] bytes;
-        bytes =  ByteUtil.fromAscii(binDigits.toCharArray());
-
+        byte[] bytes = ByteUtil.fromAscii(text.toCharArray());
         return new LiteralParseNode(bytes);
+    }
+
+    public String stringToBinLiteral(String in) {
+        String noSpace = in.replaceAll(" ","");
+        if(!noSpace.matches("^[0-1]+$")) {
+            throw new IllegalArgumentException(
+                "Binary literal continuation line has non binary digit characters");
+        }
+        return noSpace;
     }
 
     public CastParseNode cast(ParseNode expression, String dataType, Integer maxLength, Integer scale) {

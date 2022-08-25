@@ -925,6 +925,31 @@ public class QueryParserTest {
         // Expected failures.
         parseQueryThatShouldFail("SHOW CREATE VIEW foo");
         parseQueryThatShouldFail("SHOW CREATE TABLE 'foo'");
-
     }
+
+    @Test
+    public void testBinaryLiteral() throws Exception {
+        // Happy paths
+        parseQuery("SELECT b, x from x WHERE x = x'00'");
+        parseQuery("SELECT b, x from x WHERE x = "
+                + "x  '0 12 ' --comment \n /* comment */ '34 567' \n \n 'aA'");
+        parseQuery("SELECT b, x from x WHERE x = "
+                + "b  '0 10 ' --comment \n /* comment */ '10 101' \n \n '00000000'");
+
+        // Expected failures.
+        parseQueryThatShouldFail("SELECT b, x from x WHERE x = "
+                + "x  '0 12 ' --comment \n /* comment */ '34 5670' \n \n 'aA'");
+        parseQueryThatShouldFail("SELECT b, x from x WHERE x = "
+                + "x  'X0 12 ' --comment \n /* comment */ '34 5670' \n \n 'aA'");
+        parseQueryThatShouldFail("SELECT b, x from x WHERE x = "
+                + "x  '0 12 ' --comment \n /* comment */ '34 5670' \n \n 'aA_'");
+
+        parseQueryThatShouldFail("SELECT b, x from b WHERE b = "
+                + "b  '0 10 ' --comment \n /* comment */ '10 101' \n \n '000000000'");
+        parseQueryThatShouldFail("SELECT b, x from b WHERE b = "
+                + "b  'B0 10 ' --comment \n /* comment */ '10 101' \n \n '000000000'");
+        parseQueryThatShouldFail("SELECT b, x from x WHERE x = "
+                + "b  '0 12 ' --comment \n /* comment */ '34 5670' \n \n 'aA_'");
+    }
+
 }
