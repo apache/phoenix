@@ -59,7 +59,7 @@ public class ByteUtil {
 
 
     /** Mask for bit 0 of a byte. */
-    private static final int BIT_0 = 1;
+    private static final int BIT_0 = 0x01;
 
     /** Mask for bit 1 of a byte. */
     private static final int BIT_1 = 0x02;

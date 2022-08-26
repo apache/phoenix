@@ -20,6 +20,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -92,7 +93,7 @@ public class BinaryStringLiteralIT extends ParallelStatsDisabledIT {
 
             assertTrue(rs.next());
             assertEquals(10, rs.getInt(1));
-            assertEquals("01234567aa00000000000", rs.getString(2));
+            assertEquals("01234567aa0000000000", rs.getString(2));
             assertEquals("01234567aa", rs.getString(3));
 
             assertTrue(rs.next());
@@ -110,6 +111,30 @@ public class BinaryStringLiteralIT extends ParallelStatsDisabledIT {
             assertEquals("0102030405607080f000", rs.getString(2));
             assertEquals("0102030405607080f0", rs.getString(3));
 
+            assertFalse(rs.next());
+        }
+    }
+
+    @Ignore
+    @Test
+    public void testBinaryArray() throws Exception {
+        String tableName = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement();) {
+            String ddl =
+                    "CREATE TABLE " + tableName
+                            + " (id INTEGER NOT NULL PRIMARY KEY, b BINARY(10), a BINARY(10)[])";
+            stmt.execute(ddl);
+            conn.commit();
+
+            //FIXME why does not this work ?
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES (" + 3 + "," + toHex(THREE_HEX) + ", ARRAY[" + toHex(THREE_HEX)+", "+toHex(THREE_HEX)+", "+toHex(THREE_HEX)+"])");
+
+            conn.commit();
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName + " ORDER BY ID ASC");
+            assertTrue(rs.next());
+            //Tests would come here if the upsert worked
             assertFalse(rs.next());
         }
     }
