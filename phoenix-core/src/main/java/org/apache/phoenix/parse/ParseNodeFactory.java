@@ -597,8 +597,8 @@ public class ParseNodeFactory {
     }
 
     public String stringToHexLiteral(String in) {
-        String noSpace = in.replaceAll(" ","");
-        if(!noSpace.matches("^[0-9a-fA-F]+$")) {
+        String noSpace = in.replaceAll(" ", "");
+        if (!noSpace.matches("^[0-9a-fA-F]+$")) {
             throw new IllegalArgumentException(
                 "Hex literal continuation line has non hex digit characters");
         }
@@ -616,8 +616,8 @@ public class ParseNodeFactory {
     }
 
     public String stringToBinLiteral(String in) {
-        String noSpace = in.replaceAll(" ","");
-        if(!noSpace.matches("^[0-1]+$")) {
+        String noSpace = in.replaceAll(" ", "");
+        if (!noSpace.matches("^[0-1]+$")) {
             throw new IllegalArgumentException(
                 "Binary literal continuation line has non binary digit characters");
         }
