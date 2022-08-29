@@ -59,6 +59,11 @@ public class DelegateFilter extends FilterBase {
     }
 
     @Override
+    public ReturnCode filterCell(Cell v) throws IOException {
+        return delegate.filterCell(v);
+    }
+
+    @Override
     public Cell transformCell(Cell v) throws IOException {
         return delegate.transformCell(v);
     }

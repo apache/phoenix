@@ -42,4 +42,14 @@ public class AllVersionsIndexRebuildFilter extends DelegateFilter {
             return delegateCode;
         }
     }
+
+    @Override
+    public ReturnCode filterCell(Cell v) throws IOException {
+        ReturnCode delegateCode = super.filterCell(v);
+        if (delegateCode == ReturnCode.INCLUDE_AND_NEXT_COL) {
+            return ReturnCode.INCLUDE;
+        } else {
+            return delegateCode;
+        }
+    }
 }
