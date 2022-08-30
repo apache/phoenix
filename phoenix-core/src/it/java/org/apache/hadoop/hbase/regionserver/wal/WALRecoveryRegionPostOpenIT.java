@@ -317,7 +317,7 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
         HMaster master = miniHBaseCluster.getMaster();
         getUtility().getAdmin().move(
                 destRegion.getRegionInfo().getEncodedNameAsBytes(),
-                Bytes.toBytes(destRegionServer.getServerName().getServerName()));
+                destRegionServer.getServerName());
         while (true) {
             ServerName currentRegionServerName =
                     master.getAssignmentManager().getRegionStates().getRegionServerOfRegion(destRegion.getRegionInfo());

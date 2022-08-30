@@ -202,32 +202,7 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
 
     @Override
     public ReturnCode filterKeyValue(Cell cell) {
-        if (Boolean.TRUE.equals(this.matchedColumn)) {
-          // We already found and matched the single column, all keys now pass
-          return ReturnCode.INCLUDE_AND_NEXT_COL;
-        }
-        if (Boolean.FALSE.equals(this.matchedColumn)) {
-          // We found all the columns, but did not match the expression, so skip to next row
-          return ReturnCode.NEXT_ROW;
-        }
-        // This is a key value we're not interested in (TODO: why INCLUDE here instead of NEXT_COL?)
-        ReturnCode code = inputTuple.resolveColumn(cell);
-        if (code != null) {
-            return code;
-        }
-
-        // We found a new column, so we can re-evaluate
-        // TODO: if we have row key columns in our expression, should
-        // we always evaluate or just wait until the end?
-        this.matchedColumn = this.evaluate(inputTuple);
-        if (this.matchedColumn == null) {
-            if (inputTuple.isImmutable()) {
-                this.matchedColumn = Boolean.FALSE;
-            } else {
-                return ReturnCode.INCLUDE_AND_NEXT_COL;
-            }
-        }
-        return this.matchedColumn ? ReturnCode.INCLUDE_AND_NEXT_COL : ReturnCode.NEXT_ROW;
+        return filterCell(cell);
     }
 
     @Override

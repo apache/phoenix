@@ -217,42 +217,7 @@ public class MultiEncodedCQKeyValueComparisonFilter extends BooleanExpressionFil
 
     @Override
     public ReturnCode filterKeyValue(Cell cell) {
-        if (Boolean.TRUE.equals(this.matchedColumn)) {
-          // We already found and matched the single column, all keys now pass
-          return ReturnCode.INCLUDE_AND_NEXT_COL;
-        }
-        if (Boolean.FALSE.equals(this.matchedColumn)) {
-          // We found all the columns, but did not match the expression, so skip to next row
-          return ReturnCode.NEXT_ROW;
-        }
-        inputTuple.setKey(cell);
-        int qualifier = encodingScheme.decode(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength());
-        if (isQualifierForColumnInWhereExpression(qualifier)) {
-            filteredKeyValues.setCell(qualifier, cell);
-            // We found a new column, so we can re-evaluate
-            this.matchedColumn = this.evaluate(inputTuple);
-            if (this.matchedColumn == null) {
-                if (inputTuple.isImmutable()) {
-                    this.matchedColumn = Boolean.FALSE;
-                } else {
-                    return ReturnCode.INCLUDE_AND_NEXT_COL;
-                }
-            }
-            return this.matchedColumn ? ReturnCode.INCLUDE_AND_NEXT_COL : ReturnCode.NEXT_ROW;
-        }
-        // The qualifier is not one of the qualifiers in the expression. So decide whether
-        // we would need to include it in our result.
-        if (qualifier < minQualifier) {
-            // Qualifier is smaller than the minimum expected qualifier. Look at the next column.
-            return ReturnCode.NEXT_COL;
-        }
-        // TODO: I don't think we would ever hit this case of encountering a greater than what we expect.
-        // Leaving the code commented out here for future reference.
-        // if (qualifier > maxQualifier) {
-            // Qualifier is larger than the max expected qualifier. We are done looking at columns in this row.
-            // return ReturnCode.NEXT_ROW;
-        // }
-        return ReturnCode.INCLUDE_AND_NEXT_COL;
+        return filterCell(cell);
     }
 
     @Override

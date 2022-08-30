@@ -2046,7 +2046,7 @@ public abstract class BaseTest {
         HRegionServer dstServer = util.getHBaseCluster().getRegionServer(dstServerName);
         HRegionServer srcServer = util.getHBaseCluster().getRegionServer(srcServerName);
         byte[] encodedRegionNameInBytes = regionInfo.getEncodedNameAsBytes();
-        admin.move(encodedRegionNameInBytes, Bytes.toBytes(dstServer.getServerName().getServerName()));
+        admin.move(encodedRegionNameInBytes, dstServer.getServerName());
         while (dstServer.getOnlineRegion(regionInfo.getRegionName()) == null
                 || dstServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
                 || srcServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)) {

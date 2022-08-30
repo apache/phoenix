@@ -210,7 +210,6 @@ public class PagedFilter extends FilterBase implements Writable {
     }
 
     @Override
-    @Deprecated
     public ReturnCode filterKeyValue(Cell v) throws IOException {
         if (delegate != null) {
             return delegate.filterKeyValue(v);

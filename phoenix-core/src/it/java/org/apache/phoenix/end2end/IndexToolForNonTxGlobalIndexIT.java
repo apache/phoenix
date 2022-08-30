@@ -314,7 +314,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
                 ColumnFamilyDescriptorBuilder.newBuilder(desc).setTimeToLive(1).build();
             Future<Void> modifyColumnFams = admin.modifyColumnFamilyAsync(indexTable, newDesc);
             modifyColumnFams.get(41000, TimeUnit.MILLISECONDS);
-            assertTrue(modifyColumnFams.isDone());
 
             TableName indexToolOutputTable = TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES);
             admin.disableTable(indexToolOutputTable);

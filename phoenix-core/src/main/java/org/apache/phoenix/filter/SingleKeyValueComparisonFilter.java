@@ -73,30 +73,7 @@ public abstract class SingleKeyValueComparisonFilter extends BooleanExpressionFi
 
     @Override
     public ReturnCode filterKeyValue(Cell keyValue) {
-        if (this.matchedColumn) {
-          // We already found and matched the single column, all keys now pass
-          return ReturnCode.INCLUDE_AND_NEXT_COL;
-        }
-        if (this.foundColumn()) {
-          // We found all the columns, but did not match the expression, so skip to next row
-          return ReturnCode.NEXT_ROW;
-        }
-        if (compare(keyValue.getFamilyArray(), keyValue.getFamilyOffset(), keyValue.getFamilyLength(),
-                keyValue.getQualifierArray(), keyValue.getQualifierOffset(), keyValue.getQualifierLength()) != 0) {
-            // Remember the key in case this is the only key value we see.
-            // We'll need it if we have row key columns too.
-            inputTuple.setKey(keyValue);
-            // This is a key value we're not interested in
-            return ReturnCode.INCLUDE_AND_NEXT_COL;
-        }
-        inputTuple.setCell(keyValue);
-
-        // We have the columns, so evaluate here
-        if (!Boolean.TRUE.equals(evaluate(inputTuple))) {
-            return ReturnCode.NEXT_ROW;
-        }
-        this.matchedColumn = true;
-        return ReturnCode.INCLUDE_AND_NEXT_COL;
+        return filterCell(keyValue);
     }
 
     @Override

@@ -150,7 +150,7 @@ public class EncodedQualifiersColumnProjectionFilter extends FilterBase implemen
 
     @Override
     public ReturnCode filterKeyValue(Cell ignored) throws IOException {
-        return ReturnCode.INCLUDE_AND_NEXT_COL;
+        return filterCell(ignored);
     }
 
     @Override

@@ -35,12 +35,7 @@ public class AllVersionsIndexRebuildFilter extends DelegateFilter {
 
     @Override
     public ReturnCode filterKeyValue(Cell v) throws IOException {
-        ReturnCode delegateCode = super.filterKeyValue(v);
-        if (delegateCode == ReturnCode.INCLUDE_AND_NEXT_COL) {
-            return ReturnCode.INCLUDE;
-        } else {
-            return delegateCode;
-        }
+        return filterCell(v);
     }
 
     @Override

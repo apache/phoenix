@@ -49,13 +49,11 @@ public class SuffixFilter extends FilterBase {
     }
 
     @Override
-    @Deprecated
     public ReturnCode filterKeyValue(Cell ignored) throws IOException {
         return ReturnCode.INCLUDE;
     }
 
     @Override
-    @Deprecated
     public boolean filterRowKey(byte[] buffer, int offset, int length) {
         if (buffer == null || this.suffix == null) return true;
         if (length < suffix.length) return true;

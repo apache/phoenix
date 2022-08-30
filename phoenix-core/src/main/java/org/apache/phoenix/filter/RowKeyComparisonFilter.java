@@ -67,16 +67,7 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
      */
     @Override
     public ReturnCode filterKeyValue(Cell v) {
-        if (evaluate) {
-            inputTuple.setKey(v.getRowArray(), v.getRowOffset(), v.getRowLength());
-            this.keepRow = Boolean.TRUE.equals(evaluate(inputTuple));
-            if (LOGGER.isTraceEnabled()) {
-                LOGGER.trace("RowKeyComparisonFilter: " + (this.keepRow ? "KEEP" : "FILTER")
-                        + " row " + inputTuple);
-            }
-            evaluate = false;
-        }
-        return keepRow ? ReturnCode.INCLUDE_AND_NEXT_COL : ReturnCode.NEXT_ROW;
+        return filterCell(v);
     }
 
     /**

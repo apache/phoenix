@@ -59,22 +59,7 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
 
     @Override
     public ReturnCode filterKeyValue(Cell v) throws IOException {
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-
-        // First determine the prefix based on the schema
-        int maxOffset = schema.iterator(v.getRowArray(), v.getRowOffset()+offset, v.getRowLength()-offset, ptr);
-        int position = schema.next(ptr, 0, maxOffset, prefixLength - 1);
-
-        // now check whether we have seen this prefix before
-        if (lastKey.getLength() != ptr.getLength() || !Bytes.equals(ptr.get(), ptr.getOffset(),
-                ptr.getLength(), lastKey.get(), lastKey.getOffset(), ptr.getLength())) {
-            // if we haven't seen this prefix, include the row and remember this prefix
-            lastKey.set(ptr.get(), ptr.getOffset(), ptr.getLength());
-            lastPosition = position - 1;
-            return ReturnCode.INCLUDE;
-        }
-        // we've seen this prefix already, seek to the next
-        return ReturnCode.SEEK_NEXT_USING_HINT;
+        return filterCell(v);
     }
 
     @Override

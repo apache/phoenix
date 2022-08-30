@@ -184,16 +184,15 @@ public class ColumnProjectionFilter extends FilterBase implements Writable {
     public String toString() {
         return "";
     }
-    
+
     @Override
-    public ReturnCode filterCell(Cell ignored) throws IOException {
-      return ReturnCode.INCLUDE_AND_NEXT_COL;
+    public ReturnCode filterKeyValue(Cell ignored) throws IOException {
+        return filterCell(ignored);
     }
 
     @Override
-    @Deprecated
-    public ReturnCode filterKeyValue(Cell ignored) throws IOException {
-        return ReturnCode.INCLUDE_AND_NEXT_COL;
+    public ReturnCode filterCell(Cell ignored) throws IOException {
+      return ReturnCode.INCLUDE_AND_NEXT_COL;
     }
 
     public void addTrackedColumn(ImmutableBytesPtr cf, ImmutableBytesPtr cq) {

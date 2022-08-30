@@ -429,7 +429,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     public void preIndexUpdate(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
             String indexName, TableName physicalTableName, TableName parentPhysicalTableName, PIndexState newState)
             throws IOException {
-//        if (!accessCheckEnabled) { return; }
+        if (!accessCheckEnabled) { return; }
         for (MasterObserver observer : getAccessControllers()) {
             observer.preModifyTable(getMasterObsevrverContext(), physicalTableName, null,
                     TableDescriptorBuilder.newBuilder(physicalTableName).build());

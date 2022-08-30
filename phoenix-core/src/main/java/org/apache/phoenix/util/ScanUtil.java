@@ -947,7 +947,7 @@ public class ScanUtil {
                 upperRangeToBe = Math.min(upperRangeToBe, maxScanTimeRange);
             }
         }
-        return new TimeRange(lowerRangeToBe, upperRangeToBe);
+        return TimeRange.between(lowerRangeToBe, upperRangeToBe);
     }
     
     public static boolean isDefaultTimeRange(TimeRange range) {
