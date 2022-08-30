@@ -50,6 +50,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
+import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
@@ -593,7 +594,7 @@ public class ParseNodeFactory {
             throw new IllegalArgumentException("Hex literals must have an even number of digits");
         }
         byte[] bytes = Bytes.fromHex(text);
-        return new LiteralParseNode(bytes);
+        return new LiteralParseNode(bytes, PBinary.INSTANCE);
     }
 
     public String stringToHexLiteral(String in) {
@@ -612,7 +613,7 @@ public class ParseNodeFactory {
             throw new IllegalArgumentException("Binary literals must have a multiple of 8 digits");
         }
         byte[] bytes = ByteUtil.fromAscii(text.toCharArray());
-        return new LiteralParseNode(bytes);
+        return new LiteralParseNode(bytes, PBinary.INSTANCE);
     }
 
     public String stringToBinLiteral(String in) {

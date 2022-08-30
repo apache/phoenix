@@ -1144,7 +1144,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
     }
 
     public static int estimateSize(int size, PDataType baseType) {
-        if (baseType.isFixedWidth()) {
+        if (baseType.isFixedWidth() && baseType.getByteSize() != null) {
             return baseType.getByteSize() * size;
         } else {
             return size * ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;

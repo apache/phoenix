@@ -115,7 +115,6 @@ public class BinaryStringLiteralIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Ignore
     @Test
     public void testBinaryArray() throws Exception {
         String tableName = generateUniqueName();
@@ -134,7 +133,9 @@ public class BinaryStringLiteralIT extends ParallelStatsDisabledIT {
             conn.commit();
             ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName + " ORDER BY ID ASC");
             assertTrue(rs.next());
-            //Tests would come here if the upsert worked
+            assertEquals("0001aa00000000000000", rs.getString(2));
+            //FIXME we're using a different string representation here than for the scalar values
+            assertEquals("[X'0001aa00000000000000', X'0001aa00000000000000', X'0001aa00000000000000']", rs.getString(3));
             assertFalse(rs.next());
         }
     }
