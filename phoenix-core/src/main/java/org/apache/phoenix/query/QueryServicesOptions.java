@@ -104,6 +104,7 @@ import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED;
+import static org.apache.phoenix.query.QueryServices.MAX_IN_LIST_SKIP_SCAN_SIZE;
 
 import java.util.Map.Entry;
 
@@ -185,6 +186,7 @@ public class QueryServicesOptions {
     public static final long DEFAULT_SCAN_RESULT_CHUNK_SIZE = 2999;
     public static final boolean DEFAULT_IS_NAMESPACE_MAPPING_ENABLED = false;
     public static final boolean DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE = true;
+    public static final int DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE = 50000;
 
     //
     // Spillable GroupBy - SPGBY prefix
@@ -484,7 +486,8 @@ public class QueryServicesOptions {
             .setIfUnset(INDEX_CREATE_DEFAULT_STATE, DEFAULT_CREATE_INDEX_STATE)
             .setIfUnset(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK,
                 DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK)
-            ;
+            .setIfUnset(MAX_IN_LIST_SKIP_SCAN_SIZE, DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE);
+
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
         // it to 1, so we'll change it.
