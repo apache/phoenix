@@ -25,9 +25,8 @@ import java.util.Map;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.ExtendedCellBuilderFactory;
+import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -66,7 +65,7 @@ public class TransactionUtil {
     }
     
     private static Cell newDeleteFamilyMarker(byte[] row, byte[] family, long timestamp) {
-        return ExtendedCellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+        return CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
                 .setRow(row)
                 .setFamily(family)
                 .setQualifier(FAMILY_DELETE_MARKER)
@@ -77,7 +76,7 @@ public class TransactionUtil {
     }
     
     private static Cell newDeleteColumnMarker(byte[] row, byte[] family, byte[] qualifier, long timestamp) {
-        return ExtendedCellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+        return CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
                 .setRow(row)
                 .setFamily(family)
                 .setQualifier(qualifier)

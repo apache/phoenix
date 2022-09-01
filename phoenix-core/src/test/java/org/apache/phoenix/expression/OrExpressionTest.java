@@ -19,9 +19,7 @@ package org.apache.phoenix.expression;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilderType;
-import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.ExtendedCellBuilderFactory;
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
@@ -138,12 +136,12 @@ public class OrExpressionTest {
 
     private Cell createCell(String name, Boolean value) {
         byte[] valueBytes = value == null ? null : value ? PBoolean.TRUE_BYTES : PBoolean.FALSE_BYTES;
-        return ExtendedCellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+        return CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
                 .setRow(Bytes.toBytes("row"))
                 .setFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)
                 .setQualifier(Bytes.toBytes(name))
                 .setTimestamp(1)
-                .setType(KeyValue.Type.Put.getCode())
+                .setType(Cell.Type.Put)
                 .setValue(valueBytes)
                 .build();
     }

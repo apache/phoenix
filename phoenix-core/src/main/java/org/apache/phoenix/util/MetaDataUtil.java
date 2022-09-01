@@ -965,12 +965,12 @@ public class MetaDataUtil {
 	public static Scan newTableRowsScan(byte[] startKey, byte[] stopKey, long startTimeStamp, long stopTimeStamp) {
 		Scan scan = new Scan();
 		ScanUtil.setTimeRange(scan, startTimeStamp, stopTimeStamp);
-		scan.withStartRow(startKey);
+        scan.withStartRow(startKey);
 		if (stopKey == null) {
 			stopKey = ByteUtil.concat(startKey, QueryConstants.SEPARATOR_BYTE_ARRAY);
 			ByteUtil.nextKey(stopKey, stopKey.length);
 		}
-		scan.withStopRow(stopKey);
+        scan.withStopRow(stopKey);
 		return scan;
 	}
 

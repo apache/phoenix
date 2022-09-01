@@ -23,9 +23,9 @@ import java.util.Properties;
 import java.util.UUID;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CellBuilderType;
-import org.apache.hadoop.hbase.ExtendedCellBuilderFactory;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
@@ -123,7 +123,7 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
     WAL.Entry entry = new WAL.Entry(new WALKeyImpl(REGION,
         TableName.valueOf(TestUtil.ENTITY_HISTORY_TABLE_NAME), System.currentTimeMillis()), new WALEdit());
     entry.getEdit().add(
-            ExtendedCellBuilderFactory.create(
+            CellBuilderFactory.create(
                     CellBuilderType.DEEP_COPY)
                     .setRow(Bytes.toBytes("foo"))
                     .setType(Cell.Type.Put)

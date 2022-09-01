@@ -36,14 +36,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.hadoop.hbase.CellComparator;
-import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -640,7 +639,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private static void setTimestampOnMutation(Mutation m, long ts) throws IOException {
         for (List<Cell> cells : m.getFamilyCellMap().values()) {
             for (Cell cell : cells) {
-                PrivateCellUtil.setTimestamp(cell, ts);
+                CellUtil.setTimestamp(cell, ts);
             }
         }
     }

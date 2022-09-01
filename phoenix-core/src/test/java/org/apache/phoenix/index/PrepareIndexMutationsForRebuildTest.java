@@ -21,8 +21,7 @@ package org.apache.phoenix.index;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.ExtendedCellBuilderFactory;
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -753,7 +752,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
     void addCellToPutMutation(Put put, byte[] family, byte[] column, long ts, byte[] value) throws Exception {
         byte[] rowKey = put.getRow();
-        Cell cell = ExtendedCellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+        Cell cell = CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
                 .setRow(rowKey)
                 .setFamily(family)
                 .setQualifier(column)
@@ -766,7 +765,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
     void addCellToDelMutation(Delete del, byte[] family, byte[] column, long ts, Cell.Type type) throws Exception {
         byte[] rowKey = del.getRow();
-        Cell cell =  ExtendedCellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+        Cell cell = CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
                 .setRow(rowKey)
                 .setFamily(family)
                 .setQualifier(column)
