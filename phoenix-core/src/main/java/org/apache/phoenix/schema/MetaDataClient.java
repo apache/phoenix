@@ -450,11 +450,11 @@ public class MetaDataClient {
 
     /*
      * Custom sql to add a column to SYSTEM.CATALOG table during upgrade.
-     * We can't use the regular INSERT_COLUMN_ALTER_TABLE sql because the COLUMN_QUALIFIER column
+     * We can't use the regular ColumnMetaDataOps.UPSERT_COLUMN sql because the COLUMN_QUALIFIER column
      * was added in 4.10. And so if upgrading from let's say 4.7, we won't be able to
      * find the COLUMN_QUALIFIER column which the INSERT_COLUMN_ALTER_TABLE sql expects.
      */
-    private static final String ALTER_SYSCATALOG_TABLE_UPGRADE =
+    public static final String ALTER_SYSCATALOG_TABLE_UPGRADE =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                     TENANT_ID + "," +
                     TABLE_SCHEM + "," +
@@ -2254,8 +2254,8 @@ public class MetaDataClient {
             // to determine which coprocessors to install on the new table.
             tableProps.put(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER, transactionProvider);
             if (transactionProvider != null) {
-                // TODO: for Omid
-                // If TTL set, use Tephra TTL property name instead
+                // If TTL set, use transaction context TTL property name instead
+                // Note: After PHOENIX-6627, is PhoenixTransactionContext.PROPERTY_TTL still useful?
                 Object ttl = commonFamilyProps.remove(ColumnFamilyDescriptorBuilder.TTL);
                 if (ttl != null) {
                     commonFamilyProps.put(PhoenixTransactionContext.PROPERTY_TTL, ttl);
@@ -2267,19 +2267,18 @@ public class MetaDataClient {
 
             boolean sharedTable = statement.getTableType() == PTableType.VIEW || allocateIndexId;
             if (transactionProvider != null) {
-                // Tephra uses an empty value cell as its delete marker, so we need to turn on
-                // storeNulls for transactional tables.
-                // If we use regular column delete markers (which is what non transactional tables
-                // use), then they get converted
-                // on the server, but this can mess up our secondary index code as the changes get
-                // committed prior to the
+                // We turn on storeNulls for transactional tables for compatibility. This was required
+                // when Tephra was a supported txn engine option. After PHOENIX-6627, this may no longer
+                // be necessary.
+                // Tephra would have converted normal delete markers on the server which could mess up
+                // our secondary index code as the changes get committed prior to the
                 // maintenance code being able to see the prior state to update the rows correctly.
+                // A future tnx engine might do the same?
                 if (Boolean.FALSE.equals(storeNullsProp)) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.STORE_NULLS_MUST_BE_TRUE_FOR_TRANSACTIONAL)
                     .setSchemaName(schemaName).setTableName(tableName)
                     .build().buildException();
                 }
-                // Force STORE_NULLS to true when transactional as Tephra cannot deal with column deletes
                 storeNulls = true;
                 tableProps.put(PhoenixDatabaseMetaData.STORE_NULLS, Boolean.TRUE);
 
@@ -2880,8 +2879,13 @@ public class MetaDataClient {
             Collections.reverse(columnMetadata);
             tableMetaData.addAll(columnMetadata);
             String dataTableName = parent == null || tableType == PTableType.VIEW ? null : parent.getTableName().getString();
-            PIndexState defaultCreateState = PIndexState.valueOf(connection.getQueryServices().getConfiguration().
-                            get(INDEX_CREATE_DEFAULT_STATE, QueryServicesOptions.DEFAULT_CREATE_INDEX_STATE));
+            PIndexState defaultCreateState;
+            String defaultCreateStateString = connection.getClientInfo(INDEX_CREATE_DEFAULT_STATE);
+            if (defaultCreateStateString == null)  {
+                defaultCreateStateString = connection.getQueryServices().getConfiguration().get(
+                     INDEX_CREATE_DEFAULT_STATE, QueryServicesOptions.DEFAULT_CREATE_INDEX_STATE);
+            }
+            defaultCreateState = PIndexState.valueOf(defaultCreateStateString);
             if (defaultCreateState == PIndexState.CREATE_DISABLE) {
                 if  (indexType == IndexType.LOCAL || sharedTable) {
                     defaultCreateState = PIndexState.BUILDING;
@@ -4164,7 +4168,7 @@ public class MetaDataClient {
                 }
 
                 if (EncodedColumnsUtil.usesEncodedColumnNames(table)
-                        && stmtProperties.isEmpty()) {
+                        && stmtProperties.isEmpty() && !acquiredBaseTableMutex) {
                     // For tables that use column encoding acquire a mutex on
                     // the base table as we need to update the encoded column
                     // qualifier counter on the base table. Not applicable to
@@ -4184,7 +4188,7 @@ public class MetaDataClient {
                     // a conflicting type etc
                     boolean acquiredMutex = writeCell(null, physicalSchemaName, physicalTableName,
                         pColumn.toString());
-                    if (!acquiredMutex) {
+                    if (!acquiredMutex && !acquiredColumnMutexSet.contains(pColumn.toString())) {
                         throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
                     }
                     acquiredColumnMutexSet.add(pColumn.toString());
@@ -5314,10 +5318,10 @@ public class MetaDataClient {
         if (metaProperties.getIsTransactionalProp() != null) {
             if (metaProperties.getIsTransactionalProp().booleanValue() != table.isTransactional()) {
                 metaPropertiesEvaluated.setIsTransactional(metaProperties.getIsTransactionalProp());
-                // We can only go one way: from non transactional to transactional
-                // Going the other way would require rewriting the cell timestamps
-                // and doing a major compaction to get rid of any Tephra specific
-                // delete markers.
+                // Note: Going from transactional to non transactional used to be not supportable because
+                // it would have required rewriting the cell timestamps and doing a major compaction to
+                // remove Tephra specific delete markers. After PHOENIX-6627, Tephra has been removed.
+                // For now we continue to reject the request.
                 if (!metaPropertiesEvaluated.getIsTransactional()) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX)
                             .setSchemaName(schemaName).setTableName(tableName).build().buildException();

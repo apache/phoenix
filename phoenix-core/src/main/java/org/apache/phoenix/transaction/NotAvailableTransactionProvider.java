@@ -29,7 +29,7 @@ import org.apache.phoenix.transaction.TransactionFactory.Provider;
 public class NotAvailableTransactionProvider implements PhoenixTransactionProvider {
     private static final NotAvailableTransactionProvider INSTANCE = new NotAvailableTransactionProvider();
 
-    private static final String message="This Phoenix has been built without Tephra support";
+    private static final String message = "Phoenix no longer supports the Tephra transaction processor.";
 
     public static final NotAvailableTransactionProvider getInstance() {
         return INSTANCE;
@@ -60,22 +60,25 @@ public class NotAvailableTransactionProvider implements PhoenixTransactionProvid
 
     @Override
     public Provider getProvider() {
-        return TransactionFactory.Provider.TEPHRA;
+        return TransactionFactory.Provider.NOTAVAILABLE;
     }
 
     @Override
     public String getCoprocessorClassName() {
-        throw new UnsupportedOperationException(message);
+        // No coprocessor is required
+        return null;
     }
 
     @Override
     public String getGCCoprocessorClassName() {
-        throw new UnsupportedOperationException(message);
+        // No GC coprocessor is required
+        return null;
     }
 
     @Override
     public boolean isUnsupported(Feature feature) {
-        throw new UnsupportedOperationException(message);
+        // All features are unsupported
+        return true;
     }
 
     @Override

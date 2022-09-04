@@ -653,7 +653,6 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
     @Test
     public void testTransformFailedForTransactionalTable() throws Exception {
         testTransactionalTableCannotTransform("OMID");
-        testTransactionalTableCannotTransform("TEPHRA");
     }
 
     private void testTransactionalTableCannotTransform(String provider) throws Exception{

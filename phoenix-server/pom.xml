@@ -116,11 +116,10 @@
                         <exclude>org.eclipse.jetty:*</exclude>
                         <exclude>org.apache.phoenix:phoenix-server</exclude>
                         <exclude>sqlline:sqlline</exclude>
-                        <exclude>log4j:log4j</exclude>
-                        <exclude>ch.qos.reload4j:reload4j</exclude>
-                        <exclude>org.slf4j:slf4j-api</exclude>
-                        <exclude>org.slf4j:slf4j-log4j12</exclude>
-                        <exclude>org.slf4j:slf4j-reload4j</exclude>
+                        <exclude>log4j:*</exclude>
+                        <exclude>ch.qos.reload4j:*</exclude>
+                        <exclude>org.slf4j:*</exclude>
+                        <exclude>org.apache.logging.log4j:*</exclude>
                     </excludes>
                 </artifactSet>
                 <filters>
@@ -172,15 +171,6 @@
                       <pattern>org.joda</pattern>
                       <shadedPattern>${shaded.package}.org.joda</shadedPattern>
                     </relocation>
-                    <!-- Tephra and dependencies -->
-                    <relocation>
-                      <pattern>co.cask.tephra</pattern>
-                      <shadedPattern>${shaded.package}.co.cask.tephra</shadedPattern>
-                    </relocation>
-                    <relocation>
-                      <pattern>org.apache.tephra</pattern>
-                      <shadedPattern>${shaded.package}.org.apache.tephra</shadedPattern>
-                    </relocation>
                     <relocation>
                         <pattern>org.apache.omid</pattern>
                         <shadedPattern>${shaded.package}.org.apache.omid</shadedPattern>
@@ -192,14 +182,6 @@
                     <relocation>
                         <pattern>org.jboss.netty:netty</pattern>
                         <shadedPattern>${shaded.package}.org.jboss.netty:netty</shadedPattern>
-                    </relocation>
-                    <relocation>
-                      <pattern>org.apache.twill</pattern>
-                      <shadedPattern>${shaded.package}.org.apache.twill</shadedPattern>
-                    </relocation>
-                    <relocation>
-                      <pattern>org.apache.thrift</pattern>
-                      <shadedPattern>${shaded.package}.org.apache.thrift</shadedPattern>
                     </relocation>
 
                     <relocation>

@@ -9,8 +9,11 @@
  */
 package org.apache.phoenix.monitoring;
 
+import static org.apache.hadoop.hbase.HConstants.HBASE_CLIENT_RETRIES_NUMBER;
+import static org.apache.hadoop.hbase.HConstants.ZK_SESSION_TIMEOUT;
 import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_RPC_CALLS;
@@ -73,6 +76,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.hbase.thirdparty.com.google.common.base.Joiner;
 import org.apache.hbase.thirdparty.com.google.common.collect.Lists;
@@ -85,6 +89,7 @@ import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -1097,6 +1102,74 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
             }
         }
         assertEquals(maxConnections, connections.size());
+    }
+
+    @Test
+    public void testGetConnectionsFailedCounter() throws Exception {
+        int attemptedPhoenixConnections = 7;
+        //3 Failed connections and 1 throttled connection
+        int maxConnections = attemptedPhoenixConnections - 4;
+        List<Connection> connections = Lists.newArrayList();
+        String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
+        String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum +
+                ':' +  CUSTOM_URL_STRING + '=' + "FailedCounterTest";
+        Properties props = new Properties();
+        props.setProperty(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, Integer.toString(maxConnections));
+        Properties props1 = new Properties(props);
+        props1.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Integer.toString(-1));
+        Properties props2 = new Properties(props);
+        //Will create IllegalArgumentException while parsing loglevel
+        props2.setProperty(QueryServices.LOG_LEVEL, "notKnown");
+
+        GLOBAL_QUERY_SERVICES_COUNTER.getMetric().reset();
+        GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().reset();
+        GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.getMetric().reset();
+        GLOBAL_FAILED_PHOENIX_CONNECTIONS.getMetric().reset();
+        try {
+            for (int i = 0; i < attemptedPhoenixConnections; i++) {
+                try {
+                    if (i == 0) {
+                        connections.add(DriverManager.getConnection(url, props2));
+                    } else if (i % 3 == 0) {
+                        connections.add(DriverManager.getConnection(url, props1));
+                    } else {
+                        connections.add(DriverManager.getConnection(url, props));
+                    }
+                } catch (SQLException se) {
+                    if (i == 0) {
+                        assertEquals(0, se.getErrorCode());
+                    } else if (i % 3 == 0) {
+                        assertEquals(SQLExceptionCode.INVALID_SCN.getErrorCode(), se.getErrorCode());
+                    } else {
+                        assertEquals(SQLExceptionCode.NEW_CONNECTION_THROTTLED.getErrorCode(), se.getErrorCode());
+                    }
+                }
+            }
+        } finally {
+            for (Connection c : connections) {
+                c.close();
+            }
+        }
+        assertEquals(1, GLOBAL_QUERY_SERVICES_COUNTER.getMetric().getValue());
+        assertEquals(1, GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.getMetric().getValue());
+        assertEquals(3, GLOBAL_FAILED_PHOENIX_CONNECTIONS.getMetric().getValue());
+        //While initializing CQS we are creating one more metaConnection increasing Attempted_Counter by +1 during 1st conn.
+        assertTrue("Not all connections were attempted!",
+                attemptedPhoenixConnections <= GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().getValue());
+
+
+        //Test case for bad url
+        props1.setProperty(ZK_SESSION_TIMEOUT, Integer.toString(100));
+        props1.setProperty(HBASE_CLIENT_RETRIES_NUMBER, Integer.toString(2));
+        props1.setProperty("zookeeper.recovery.retry", Integer.toString(2));
+        try {
+            DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "jdbcthisIsBadZk", props1);
+        } catch (Exception e) {
+            assertEquals(4, GLOBAL_FAILED_PHOENIX_CONNECTIONS.getMetric().getValue());
+            assertEquals(attemptedPhoenixConnections + 1, GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().getValue());
+            return;
+        }
+        fail();
     }
 
     @Test

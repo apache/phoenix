@@ -56,6 +56,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -71,7 +72,6 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.export.DefaultSchemaRegistryRepository;
 import org.apache.phoenix.schema.export.DefaultSchemaWriter;
 import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
-import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -871,6 +871,28 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testAddColumnWithRetry_PostConcurrentFailureOnFirstTime() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String ddl = "CREATE TABLE " + dataTableFullName + " (\n"
+                +"ID VARCHAR(15) PRIMARY KEY,\n"
+                +"COL1 BIGINT) " + tableDDLOptions;
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        conn1.createStatement().execute(ddl);
+        MetaDataEndpointImpl.setFailConcurrentMutateAddColumnOneTimeForTesting(true);
+        ddl = "ALTER TABLE " + dataTableFullName + " ADD STRING VARCHAR, STRING_DATA_TYPES VARCHAR";
+        conn1.createStatement().execute(ddl);
+        ResultSet rs = conn1.getMetaData().getColumns("","",dataTableFullName,null);
+        assertTrue(rs.next());
+        assertEquals("ID", rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("COL1", rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("STRING", rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("STRING_DATA_TYPES", rs.getString(4));
+    }
+
+    @Test
     public void testAddMultipleColumns() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String ddl = "CREATE TABLE " + dataTableFullName + " (\n"
@@ -1230,9 +1252,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     
 	@Test
 	public void testCreatingTxnTableFailsIfTxnsDisabled() throws Exception {
-	    if (!TransactionFactory.Provider.getDefault().runTests()) {
-	        return;
-	    }
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(false));
 		try (Connection conn = DriverManager.getConnection(getUrl(), props)) {

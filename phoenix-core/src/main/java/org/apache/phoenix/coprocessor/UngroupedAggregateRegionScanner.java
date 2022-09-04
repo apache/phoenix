@@ -269,7 +269,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                 needToWrite = false;
             }
             maxBatchSize = conf.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-            maxBatchSizeBytes = conf.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
+            maxBatchSizeBytes = conf.getLongBytes(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
                     QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
         }
         minMaxQualifiers = EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan);
@@ -464,8 +464,6 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         }
 
         mutations.add(delete);
-        // force tephra to ignore this deletes
-        delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
     }
 
     void deleteCForQ(Tuple result, List<Cell> results, UngroupedAggregateRegionObserver.MutationList mutations) {
@@ -477,8 +475,6 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                     results.get(0).getRowOffset(),
                     results.get(0).getRowLength());
             delete.addColumns(deleteCF,  deleteCQ, ts);
-            // force tephra to ignore this deletes
-            delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
             // TODO: We need to set SOURCE_OPERATION_ATTRIB here also. The control will come here if
             // TODO: we drop a column. We also delete metadata from SYSCAT table for the dropped column
             // TODO: and delete the column. In short, we need to set this attribute for the DM for SYSCAT metadata

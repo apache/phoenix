@@ -21,8 +21,10 @@ import static org.apache.phoenix.thirdparty.com.google.common.collect.Maps.newHa
 import static org.apache.phoenix.util.PhoenixRuntime.ANNOTATION_ATTRIB_PREFIX;
 
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
 
@@ -35,8 +37,6 @@ import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
-
-
 
 /**
  * Utilities for JDBC
@@ -146,7 +146,10 @@ public class JDBCUtil {
 
     public static long getMutateBatchSizeBytes(String url, Properties info, ReadOnlyProps props) throws SQLException {
         String batchSizeStr = findProperty(url, info, PhoenixRuntime.UPSERT_BATCH_SIZE_BYTES_ATTRIB);
-        return (batchSizeStr == null ? props.getLong(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES) : Long.parseLong(batchSizeStr));
+        return batchSizeStr == null ?
+                props.getLongBytes(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB,
+                QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES)
+                : Long.parseLong(batchSizeStr);
     }
 
     public static @Nullable PName getTenantId(String url, Properties info) throws SQLException {
@@ -202,4 +205,21 @@ public class JDBCUtil {
         String schema = findProperty(url, info, PhoenixRuntime.SCHEMA_ATTRIB);
         return (schema == null || schema.equals("")) ? defaultValue : schema;
     }
+
+    /**
+     * Formats a zkUrl which includes the zkQuroum of the jdbc url and the rest to sort the zk quorum hosts.
+     * Example input zkUrl "zk1.net,zk2.net,zk3.net:2181:/hbase"
+     */
+    //TODO: Adjust for non-zkurl
+    public static String formatZookeeperUrl(String zkUrl){
+        String lowerZkUrl = zkUrl.toLowerCase();
+        String[] components = lowerZkUrl.split(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR));
+        Preconditions.checkArgument(components.length > 0, "Unexpected zk url format.");
+        String[] hosts = components[0].split(",");
+        Preconditions.checkArgument(hosts.length > 0,"Unexpected zk url format no hosts found.");
+        String hostsStrings = Arrays.stream(hosts).sorted().collect(Collectors.joining(","));
+        components[0] = hostsStrings;
+        return Arrays.stream(components).collect(Collectors.joining(":"));
+    }
+
 }

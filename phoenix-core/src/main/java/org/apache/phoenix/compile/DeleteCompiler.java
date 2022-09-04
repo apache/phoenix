@@ -145,7 +145,9 @@ public class DeleteCompiler {
         final boolean autoFlush = connection.getAutoCommit() || tableRef.getTable().isTransactional();
         ConnectionQueryServices services = connection.getQueryServices();
         final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        final long maxSizeBytes = services.getProps().getLong(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
+        final long maxSizeBytes = services.getProps()
+                .getLongBytes(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
+                        QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         final int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
         MultiRowMutationState mutations = new MultiRowMutationState(batchSize);
         List<MultiRowMutationState> otherMutations = null;
@@ -587,7 +589,9 @@ public class DeleteCompiler {
         }
 
         final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        final long maxSizeBytes = services.getProps().getLong(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
+        final long maxSizeBytes = services.getProps()
+                .getLongBytes(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
+                        QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
  
         // If we're doing a query for a set of rows with no where clause, then we don't need to contact the server at all.
         if (noQueryReqd) {

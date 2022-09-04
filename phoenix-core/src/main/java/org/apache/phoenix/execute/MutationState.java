@@ -287,13 +287,14 @@ public class MutationState implements SQLCloseable {
     /**
      * Commit a write fence when creating an index so that we can detect when a data table transaction is started before
      * the create index but completes after it. In this case, we need to rerun the data table transaction after the
-     * index creation so that the index rows are generated. See TEPHRA-157 for more information.
+     * index creation so that the index rows are generated.
      * 
      * @param dataTable
      *            the data table upon which an index is being added
      * @throws SQLException
      */
     public void commitDDLFence(PTable dataTable) throws SQLException {
+        // Is this still useful after PHOENIX-6627?
         if (dataTable.isTransactional()) {
             try {
                 phoenixTransactionContext.commitDDLFence(dataTable);
@@ -301,7 +302,7 @@ public class MutationState implements SQLCloseable {
                 // The client expects a transaction to be in progress on the txContext while the
                 // VisibilityFence.prepareWait() starts a new tx and finishes/aborts it. After it's
                 // finished, we start a new one here.
-                // TODO: seems like an autonomous tx capability in Tephra would be useful here.
+                // TODO: seems like an autonomous tx capability would be useful here.
                 phoenixTransactionContext.begin();
             }
         }

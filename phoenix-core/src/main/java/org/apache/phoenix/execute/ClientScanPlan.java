@@ -95,7 +95,7 @@ public class ClientScanPlan extends ClientProcessingPlan {
         
         if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
             long thresholdBytes =
-                    context.getConnection().getQueryServices().getProps().getLong(
+                    context.getConnection().getQueryServices().getProps().getLongBytes(
                         QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
                         QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
             boolean spoolingEnabled =

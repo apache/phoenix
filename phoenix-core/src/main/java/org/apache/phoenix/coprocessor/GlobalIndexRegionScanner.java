@@ -182,7 +182,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             }
         }
         maxBatchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-        maxBatchSizeBytes = config.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
+        maxBatchSizeBytes = config.getLongBytes(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
                 QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
         blockingMemstoreSize = UngroupedAggregateRegionObserver.getBlockingMemstoreSize(region, config);
         clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);

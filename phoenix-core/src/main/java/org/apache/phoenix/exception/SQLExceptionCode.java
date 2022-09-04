@@ -248,6 +248,16 @@ public enum SQLExceptionCode {
     }),
     TABLES_NOT_IN_SYNC(1140, "42M05", "Tables not in sync for some properties."),
 
+    // High Availability Errors
+    HA_CLOSED_AFTER_FAILOVER(1984, "F1Q84", "Connection closed after failover happened.",
+        i -> new FailoverSQLException(i.getMessage(), i.getHaGroupInfo(), i.getRootCause())),
+    HA_NO_ACTIVE_CLUSTER(1985, "F1Q85", "No ACTIVE HBase cluster found.",
+        i -> new FailoverSQLException(i.getMessage(), i.getHaGroupInfo(), i.getRootCause())),
+    HA_READ_FROM_CLUSTER_FAILED_ON_NULL(1986, "F1Q86", "Unable to read from cluster for null."),
+    HA_INVALID_PROPERTIES(1987, "F1Q87", "Invalid properties to get a Phoenix HA connection."),
+    HA_CLUSTER_CAN_NOT_CONNECT(1988, "F1Q88", "Cluster can not serve any requests for this HA group"),
+
+
     // Syntax error
     TYPE_NOT_SUPPORTED_FOR_OPERATOR(1014, "42Y01", "The operator does not support the operand type."),
     AGGREGATE_IN_GROUP_BY(1016, "42Y26", "Aggregate expressions may not be used in GROUP BY."),

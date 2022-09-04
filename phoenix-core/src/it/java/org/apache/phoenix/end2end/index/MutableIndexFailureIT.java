@@ -175,27 +175,25 @@ public class MutableIndexFailureIT extends BaseTest {
         return serverProps;
     }
 
-    @Parameters(name = "MutableIndexFailureIT_transactionProvider={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},failRebuildTask={4},throwIndexWriteFailure={5}") // name is used by failsafe as file name in reports
+    // name is used by failsafe as file name in reports
+    @Parameters(name = "MutableIndexFailureIT_transactionProvider={0},localIndex={1},isNamespaceMapped={2},disableIndexOnWriteFailure={3},failRebuildTask={4},throwIndexWriteFailure={5}")
     public static synchronized Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(
-                Arrays.asList(new Object[][] { 
-                    // note - can't disableIndexOnWriteFailure without throwIndexWriteFailure, PHOENIX-4130
-                    { null, false, false, false, false, false},
-                    { null, false, false, true, false, null},
-                    { "TEPHRA", false, false, true, false, null},
-                    { "OMID", false, false, true, false, null},
-                    { null, true, false, null, false, null},
-                    { "TEPHRA", true, false, true, false, null},
-                    { null, false, false, false, false, null},
-                    { null, true, false, false, false, null},
-                    { null, false, false, false, false, null},
-                    { null, false, false, true, false, null},
-                    { null, true, false, true, false, null},
-                    { null, true, false, true, false, null},
-                    { null, false, false, true, true, null},
-                    { null, false, false, false, true, false},
-                    }), 0);
-        
+        return Arrays.asList(new Object[][] {
+            // Note: Can't disableIndexOnWriteFailure without throwIndexWriteFailure, PHOENIX-4130
+            { null, false, false, false, false, false},
+            { null, false, false, true, false, null},
+            // Note: OMID does not support local indexes
+            { "OMID", false, false, true, false, null},
+            { null, true, false, null, false, null},
+            { null, false, false, false, false, null},
+            { null, true, false, false, false, null},
+            { null, false, false, false, false, null},
+            { null, false, false, true, false, null},
+            { null, true, false, true, false, null},
+            { null, true, false, true, false, null},
+            { null, false, false, true, true, null},
+            { null, false, false, false, true, false},
+        });
     }
 
     private void runRebuildTask(Connection conn) throws InterruptedException, SQLException {

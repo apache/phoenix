@@ -420,7 +420,8 @@ public final class QueryUtil {
     private static Connection getConnection(Properties props, Configuration conf)
             throws SQLException {
         String url = getConnectionUrl(props, conf);
-        LOGGER.info("Creating connection with the jdbc url: " + url);
+        LOGGER.info(String.format("Creating connection with the jdbc url: %s, isServerSide = %s",
+                url, props.getProperty(IS_SERVER_CONNECTION)));
         props = PropertiesUtil.combineProperties(props, conf);
         return DriverManager.getConnection(url, props);
     }
