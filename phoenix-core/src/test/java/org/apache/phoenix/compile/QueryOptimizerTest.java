@@ -82,12 +82,31 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
+    public void testExistsWithNoFromClause() throws Exception{
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("select 1 where exists(select 1)");
+
+
+
+    }
+
+    @Test
     public void testOrderByOptimizedOut() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE foo (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) IMMUTABLE_ROWS=true");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT * FROM foo ORDER BY k");
-        assertEquals(OrderBy.FWD_ROW_KEY_ORDER_BY,plan.getOrderBy());
+      try {
+
+          String query = "select 1  where exists(select 1)";
+          PreparedStatement statement = conn.prepareStatement(query);
+          ResultSet rs = statement.executeQuery();
+      }
+      catch (Exception e)
+      {
+         fail(e.getMessage()+" should not have happened");
+      }
+      finally {
+          conn.close();
+      }
+
     }
 
     @Test
