@@ -1245,8 +1245,8 @@ HEX_LITERAL
     :
     X { $type = NAME;}
     (
-    (FIELDCHAR)=> FIELDCHAR+
-    | (' '* '\'' )=>  ' '* '\'' ( d=HEX_DIGIT { sb.append(d.getText()); } ' '* )* '\'' { $type=HEX_LITERAL; }
+    (FIELDCHAR) => FIELDCHAR+
+    | ('\'') => '\'' ' '* ( d=HEX_DIGIT { sb.append(d.getText()); } ' '* )* '\'' { $type=HEX_LITERAL; }
     )?
     { if ($type == HEX_LITERAL) { setText(sb.toString()); } }
     ;
@@ -1256,8 +1256,8 @@ BIN_LITERAL
     :
     B { $type = NAME;}
     (
-    (FIELDCHAR)=> FIELDCHAR+
-    | (' '* '\'' )=>  ' '* '\'' ( d=BIN_DIGIT { sb.append(d.getText()); } ' '* )* '\'' { $type=BIN_LITERAL; }
+    (FIELDCHAR) => FIELDCHAR+
+    | ('\'') =>  '\'' ' '* ( d=BIN_DIGIT { sb.append(d.getText()); } ' '* )* '\'' { $type=BIN_LITERAL; }
     )?
     { if ($type == BIN_LITERAL) { setText(sb.toString()); } }
     ;
@@ -1504,7 +1504,7 @@ SL_COMMENT
 DOT
     : '.'
     ;
-    
+
 OTHER      
     : . { if (true) // to prevent compile error
               throw new RuntimeException("Unexpected char: '" + $text + "'"); } 

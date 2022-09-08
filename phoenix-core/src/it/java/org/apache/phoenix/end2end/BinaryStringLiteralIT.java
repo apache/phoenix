@@ -127,7 +127,6 @@ public class BinaryStringLiteralIT extends ParallelStatsDisabledIT {
             stmt.execute(ddl);
             conn.commit();
 
-            //FIXME why does not this work ?
             stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES (" + 3 + "," + toHex(THREE_HEX) + ", ARRAY[" + toHex(THREE_HEX)+", "+toHex(THREE_HEX)+", "+toHex(THREE_HEX)+"])");
 
             conn.commit();

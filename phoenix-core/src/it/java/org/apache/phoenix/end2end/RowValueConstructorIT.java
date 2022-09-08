@@ -1238,7 +1238,7 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
                 explainPlanAttributes.getExplainScanType());
             assertEquals(tempTableWithCompositePK,
                 explainPlanAttributes.getTableName());
-            assertEquals(" [0,2] - [3,4]", explainPlanAttributes.getKeyRanges());
+            assertEquals(" [X'00',2] - [X'03',4]", explainPlanAttributes.getKeyRanges());
             assertEquals("CLIENT MERGE SORT",
                 explainPlanAttributes.getClientSortAlgo());
         } finally {
