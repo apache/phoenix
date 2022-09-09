@@ -39,7 +39,7 @@ public class BinaryStringLiteralIT extends ParallelStatsDisabledIT {
             "00000001" + "00000010" + "00000011" + "00000100" + "00000101" + "01100000" + "01110000"
                     + "10000000" + "11110000";
 
-    private String PARSER_STRESS = "x '0 12 ' --comment \n /* comment */ '34 567' \n \n 'aA'";
+    private String PARSER_STRESS = "x'0 12 ' --comment \n /* comment */ ' 34 567' \n \n 'aA'";
 
     private String toHex(String s) {
         return "X'" + s + "'";
