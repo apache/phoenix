@@ -62,16 +62,18 @@ public class SaltedTableIT extends BaseSaltedTableIT {
         }
     }
 
-    @Test
-    public void testPointLookupOnSaltedTable() throws Exception {
+    @Test public void testPointLookupOnSaltedTable() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String tableName = generateUniqueName();
-            String query = "create table " + tableName + " (a_integer integer not null "
-                    + "CONSTRAINT pk PRIMARY KEY (a_integer)) SALT_BUCKETS = 256";
+            String
+                    query =
+                    "create table " + tableName + " (a_integer integer not null "
+                            + "CONSTRAINT pk PRIMARY KEY (a_integer)) SALT_BUCKETS = 10";
             conn.createStatement().execute(query);
-            PreparedStatement stmt = conn.prepareStatement("upsert into " +
-                    tableName + " values(?)");
+            PreparedStatement
+                    stmt =
+                    conn.prepareStatement("upsert into " + tableName + " values(?)");
             stmt.setInt(1, 1);
             stmt.execute();
             stmt.setInt(1, 2);
