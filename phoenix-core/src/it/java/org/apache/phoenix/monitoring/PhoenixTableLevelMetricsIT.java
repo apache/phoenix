@@ -550,6 +550,12 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         assertSelectQueryTableMetrics(tableName, false, 1, 0, 1, 0, 0, true, 0, 0, rs);
     }
 
+    /**
+     * After PHOENIX-6767 point lookup queries don't require to get table regions using
+     * {@link ConnectionQueryServices#getAllTableRegions(byte[])}  to prepare scans
+     * so custom driver defined here inject failures or delays don't have effect.
+     * Hence skipping the test.
+     */
     @Ignore
     @Test public void testTableLevelMetricsforFailingSelectQuery() throws Exception {
         String tableName = generateUniqueName();
@@ -568,6 +574,12 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         }
     }
 
+    /**
+     * After PHOENIX-6767 point lookup queries don't require to get table regions using
+     * {@link ConnectionQueryServices#getAllTableRegions(byte[])}  to prepare scans
+     * so custom driver {@link PhoenixMetricsTestingDriver} defined here inject failures or delays
+     * don't have effect. Hence skipping the test.
+     */
     @Ignore
     @Test public void testTableLevelMetricsforDelayedSelectQuery() throws Exception {
         String tableName = generateUniqueName();
@@ -1077,6 +1089,12 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         }
     }
 
+    /**
+     * After PHOENIX-6767 point lookup queries don't require to get table regions using
+     * {@link ConnectionQueryServices#getAllTableRegions(byte[])}  to prepare scans
+     * so custom driver defined here inject failures or delays don't have effect.
+     * Hence skipping the test.
+     */
     @Ignore
     @Test public void testTableLevelMetricsforFailingDelete() throws Throwable {
         String tableName = generateUniqueName();
@@ -1115,6 +1133,12 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         }
     }
 
+    /**
+     * After PHOENIX-6767 point lookup queries don't require to get table regions using
+     * {@link ConnectionQueryServices#getAllTableRegions(byte[])}  to prepare scans
+     * so custom driver defined here inject failures or delays don't have effect.
+     * Hence skipping the test.
+     */
     @Ignore
     @Test public void testTableLevelMetricsforDelayedDeleteQuery() throws Throwable {
         String tableName = generateUniqueName();
