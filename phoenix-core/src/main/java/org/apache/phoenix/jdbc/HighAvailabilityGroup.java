@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.jdbc;
 
-import com.sun.istack.NotNull;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
@@ -42,6 +41,8 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -651,7 +652,7 @@ public class HighAvailabilityGroup {
      * @param newRoleRecord the new cluster role record to set
      * @return true if the new record is set as current one; false otherwise
      */
-    private synchronized boolean applyClusterRoleRecord(@NotNull ClusterRoleRecord newRoleRecord) {
+    private synchronized boolean applyClusterRoleRecord(@NonNull ClusterRoleRecord newRoleRecord) {
         if (roleRecord == null) {
             roleRecord = newRoleRecord;
             state = State.READY;

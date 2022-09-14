@@ -404,10 +404,6 @@
                 <ignoredUsedUndeclaredDependency>
                   dnsjava:dnsjava
                 </ignoredUsedUndeclaredDependency>
-                <ignoredUsedUndeclaredDependency>
-                  <!-- Until PHOENIX-6789 is fixed -->
-                  com.sun.istack:istack-commons-runtime
-                </ignoredUsedUndeclaredDependency>
               </ignoredUsedUndeclaredDependencies>
             </configuration>
           <executions>
@@ -504,6 +500,13 @@
                     <reason>Use commons lang 3</reason>
                     <bannedImports>
                       <bannedImport>org.apache.commons.lang.**</bannedImport>
+                    </bannedImports>
+                  </restrictImports>
+                  <restrictImports implementation="de.skuzzle.enforcer.restrictimports.rule.RestrictImports">
+                    <includeTestCode>true</includeTestCode>
+                    <reason>Use edu.umd.cs.findbugs.annotations</reason>
+                    <bannedImports>
+                      <bannedImport>com.sun.istack.**</bannedImport>
                     </bannedImports>
                   </restrictImports>
                 </rules>
