@@ -1201,17 +1201,17 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             } else if (scanRanges.isPointLookup()) {
                 this.estimatedRows = Long.valueOf(scanRanges.getPointLookupCount());
             } else {
-                this.estimatedRows = Long.valueOf(pageLimit) * parallelFactor;
+                this.estimatedRows = pageLimit * parallelFactor;
             }
             this.estimatedSize = this.estimatedRows * SchemaUtil.estimateRowSize(table);
              // Indication to client that the statistics estimates were not
              // calculated based on statistics but instead are based on row
              // limits from the query.
-           this.estimateInfoTimestamp = StatisticsUtil.NOT_STATS_BASED_TS;
+            this.estimateInfoTimestamp = StatisticsUtil.NOT_STATS_BASED_TS;
         } else if (emptyGuidePost) {
             // In case of an empty guide post, we estimate the number of rows scanned by
             // using the estimated row size
-            this.estimatedRows = (gps.getByteCounts()[0] / SchemaUtil.estimateRowSize(table));
+            this.estimatedRows = gps.getByteCounts()[0] / SchemaUtil.estimateRowSize(table);
             this.estimatedSize = gps.getByteCounts()[0];
             this.estimateInfoTimestamp = gps.getGuidePostTimestamps()[0];
         } else if (hasGuidePosts) {
@@ -1274,10 +1274,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (tableSamplingRate == null || tableSamplingRate == 100d) {
             return;
         }
-    	final Predicate<byte[]> tableSamplerPredicate=TableSamplerPredicate.of(tableSamplingRate);
+        final Predicate<byte[]> tableSamplerPredicate = TableSamplerPredicate.of(tableSamplingRate);
 
-        for (Iterator<List<Scan>> is = parallelScans.iterator(); is.hasNext(); ) {
-            for (Iterator<Scan> i = is.next().iterator(); i.hasNext(); ) {
+        for (Iterator<List<Scan>> is = parallelScans.iterator(); is.hasNext();) {
+            for (Iterator<Scan> i = is.next().iterator(); i.hasNext();) {
     			final Scan scan=i.next();
                 if (!tableSamplerPredicate.apply(scan.getStartRow())) {
                     i.remove();

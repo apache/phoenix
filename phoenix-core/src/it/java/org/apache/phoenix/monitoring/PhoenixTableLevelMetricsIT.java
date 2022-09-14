@@ -49,6 +49,7 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -549,6 +550,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         assertSelectQueryTableMetrics(tableName, false, 1, 0, 1, 0, 0, true, 0, 0, rs);
     }
 
+    @Ignore
     @Test public void testTableLevelMetricsforFailingSelectQuery() throws Exception {
         String tableName = generateUniqueName();
         try (Connection conn = getConnFromTestDriver()) {
@@ -566,6 +568,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         }
     }
 
+    @Ignore
     @Test public void testTableLevelMetricsforDelayedSelectQuery() throws Exception {
         String tableName = generateUniqueName();
         ResultSet rs;
@@ -1074,6 +1077,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         }
     }
 
+    @Ignore
     @Test public void testTableLevelMetricsforFailingDelete() throws Throwable {
         String tableName = generateUniqueName();
         int numRows = 15;
@@ -1111,6 +1115,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         }
     }
 
+    @Ignore
     @Test public void testTableLevelMetricsforDelayedDeleteQuery() throws Throwable {
         String tableName = generateUniqueName();
         Connection conn = null;
