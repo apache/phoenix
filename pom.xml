@@ -395,10 +395,18 @@
                 <ignoredUnusedDeclaredDependency>
                   org.apache.logging.log4j:log4j-core
                 </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  <!-- Needed for Hbase 2.5 -->
+                  com.sun.xml.bind:jaxb-impl
+                </ignoredUnusedDeclaredDependency>
               </ignoredUnusedDeclaredDependencies>
               <ignoredUsedUndeclaredDependencies>
                 <ignoredUsedUndeclaredDependency>
                   dnsjava:dnsjava
+                </ignoredUsedUndeclaredDependency>
+                <ignoredUsedUndeclaredDependency>
+                  <!-- Until PHOENIX-6789 is fixed -->
+                  com.sun.istack:istack-commons-runtime
                 </ignoredUsedUndeclaredDependency>
               </ignoredUsedUndeclaredDependencies>
             </configuration>
