@@ -821,7 +821,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 cells.add(
                     PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                         Bytes.toBytes(COLUMN_DEF),
-                        MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+                        MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                        PVarchar.INSTANCE.toBytes(column.getExpressionStr())));
                 // SQL_DATA_TYPE
                 cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                     Bytes.toBytes(SQL_DATA_TYPE), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
