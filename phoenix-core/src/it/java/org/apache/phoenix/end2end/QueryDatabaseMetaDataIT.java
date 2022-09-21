@@ -92,7 +92,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             throws SQLException {
         String ddl =
                 "create table if not exists " + tableName + "   (id char(1) primary key,\n"
-                        + "    a.col1 integer,\n" + "    b.col2 bigint,\n" + "    b.col3 decimal,\n"
+                        + "    a.col1 integer default 42,\n" + "    b.col2 bigint,\n" + "    b.col3 decimal,\n"
                         + "    b.col4 decimal(5),\n" + "    b.col5 decimal(6,3))\n" + "    a."
                         + HConstants.VERSIONS + "=" + 1 + "," + "a."
                         + ColumnFamilyDescriptorBuilder.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE
@@ -481,6 +481,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col1"), rs.getString("COLUMN_NAME"));
+        assertEquals("42", rs.getString("COLUMN_DEF"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
         assertEquals(PInteger.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(2, rs.getInt("ORDINAL_POSITION"));
