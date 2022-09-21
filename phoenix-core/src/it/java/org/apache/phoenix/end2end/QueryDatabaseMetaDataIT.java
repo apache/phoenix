@@ -495,6 +495,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
+        assertEquals(null, rs.getString("COLUMN_DEF"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
         assertEquals(PLong.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(3, rs.getInt("ORDINAL_POSITION"));
