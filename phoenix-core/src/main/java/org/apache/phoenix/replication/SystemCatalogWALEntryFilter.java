@@ -107,7 +107,7 @@ public class SystemCatalogWALEntryFilter implements
       boolean isChildLink = CellUtil.matchingQualifier(
         cell, PhoenixDatabaseMetaData.LINK_TYPE_BYTES);
       if ((isChildLink && CellUtil.matchingValue(cell, CHILD_TABLE_BYTES)) ||
-          CellUtil.isDeleteFamily(cell)) {
+              cell.getType() == Cell.Type.DeleteFamily) {
         byte[][] rowViewKeyMetadata = new byte[NUM_COLUMNS_PRIMARY_KEY][];
         SchemaUtil.getVarChars(key.get(), key.getOffset(),
             key.getLength(), 0, rowViewKeyMetadata);

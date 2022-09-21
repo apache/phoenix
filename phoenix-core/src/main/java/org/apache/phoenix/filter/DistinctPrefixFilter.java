@@ -59,6 +59,11 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
 
     @Override
     public ReturnCode filterKeyValue(Cell v) throws IOException {
+        return filterCell(v);
+    }
+
+    @Override
+    public ReturnCode filterCell(Cell v) throws IOException {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
         // First determine the prefix based on the schema

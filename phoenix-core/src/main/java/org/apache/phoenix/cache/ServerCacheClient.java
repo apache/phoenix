@@ -286,7 +286,7 @@ public class ServerCacheClient {
                         LOGGER.debug(addCustomAnnotations(
                                 "Adding cache entry to be sent for " + entry, connection));
                     }
-                    final byte[] key = getKeyInRegion(entry.getRegionInfo().getStartKey());
+                    final byte[] key = getKeyInRegion(entry.getRegion().getStartKey());
                     final Table htable = services.getTable(cacheUsingTable.getPhysicalName().getBytes());
                     closeables.add(htable);
                     futures.add(executor.submit(new JobCallable<Boolean>() {

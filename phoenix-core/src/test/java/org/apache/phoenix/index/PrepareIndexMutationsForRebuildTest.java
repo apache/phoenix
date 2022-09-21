@@ -19,8 +19,9 @@
 package org.apache.phoenix.index;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -209,7 +210,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 info.indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
                 Bytes.toBytes("C1"),
                 2,
-                KeyValue.Type.DeleteColumn);
+                Cell.Type.DeleteColumn);
 
         List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
                 dataPut,
@@ -236,7 +237,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
                 null,
                 2,
-                KeyValue.Type.DeleteFamily);
+                Cell.Type.DeleteFamily);
         expectedIndexMutation.add(idxDel);
 
         assertEqualMutationList(expectedIndexMutation, actualIndexMutations);
@@ -275,7 +276,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 info.indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
                 Bytes.toBytes("C2"),
                 2,
-                KeyValue.Type.DeleteColumn);
+                Cell.Type.DeleteColumn);
 
         List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
                 dataPut,
@@ -335,7 +336,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 info.indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
                 null,
                 3,
-                KeyValue.Type.DeleteFamily);
+                Cell.Type.DeleteFamily);
 
         List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
                 dataPut,
@@ -363,7 +364,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 info.indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
                 null,
                 2,
-                KeyValue.Type.DeleteFamily);
+                Cell.Type.DeleteFamily);
         expectedIndexMutations.add(idxDel1);
 
         // idxDel2 is corresponding index mutation of dataDel
@@ -372,7 +373,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 info.indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
                 null,
                 3,
-                KeyValue.Type.DeleteFamily);
+                Cell.Type.DeleteFamily);
         expectedIndexMutations.add(idxDel2);
 
         assertEqualMutationList(expectedIndexMutations, actualIndexMutations);
@@ -403,7 +404,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 info.indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
                 Bytes.toBytes("C1"),
                 1,
-                KeyValue.Type.DeleteColumn);
+                Cell.Type.DeleteColumn);
 
         List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
                 dataPut,
@@ -455,7 +456,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 Bytes.toBytes("CF1"),
                 null,
                 2,
-                KeyValue.Type.DeleteFamily);
+                Cell.Type.DeleteFamily);
 
         List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(
                 info.indexMaintainer,
@@ -513,13 +514,13 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 Bytes.toBytes("CF2"),
                 null,
                 2,
-                KeyValue.Type.DeleteFamily);
+                Cell.Type.DeleteFamily);
         addCellToDelMutation(
                 dataDel,
                 SchemaUtil.getEmptyColumnFamily(info.pDataTable),
                 null,
                 2,
-                KeyValue.Type.DeleteFamily);
+                Cell.Type.DeleteFamily);
 
         List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(
                 info.indexMaintainer,
@@ -542,7 +543,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 info.indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
                 null,
                 2,
-                KeyValue.Type.DeleteFamily);
+                Cell.Type.DeleteFamily);
         expectedIndexMutations.add(idxDel2);
 
         assertEqualMutationList(expectedIndexMutations, actualIndexMutations);
@@ -576,7 +577,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 info.indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
                 Bytes.toBytes("C1"),
                 2,
-                KeyValue.Type.DeleteColumn);
+                Cell.Type.DeleteColumn);
 
         List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
                 dataPut,
@@ -616,7 +617,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
                 null,
                 2,
-                KeyValue.Type.DeleteFamily);
+                Cell.Type.DeleteFamily);
         expectedIndexMutations.add(idxDel);
 
         assertEqualMutationList(expectedIndexMutations, actualIndexMutations);
@@ -652,7 +653,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 Bytes.toBytes("CF1"),
                 Bytes.toBytes("C1"),
                 2,
-                KeyValue.Type.DeleteColumn);
+                Cell.Type.DeleteColumn);
 
         List<Mutation> actualIndexMutations = IndexRebuildRegionScanner.prepareIndexMutationsForRebuild(info.indexMaintainer,
                 dataPut,
@@ -688,7 +689,7 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
                 Bytes.toBytes("CF2"),
                 null,
                 2,
-                KeyValue.Type.DeleteFamily);
+                Cell.Type.DeleteFamily);
         expectedIndexMutation.add(idxDel);
 
         assertEqualMutationList(expectedIndexMutation, actualIndexMutations);
@@ -751,14 +752,28 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
 
     void addCellToPutMutation(Put put, byte[] family, byte[] column, long ts, byte[] value) throws Exception {
         byte[] rowKey = put.getRow();
-        Cell cell = CellUtil.createCell(rowKey, family, column, ts, KeyValue.Type.Put.getCode(), value);
+        Cell cell = CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                .setRow(rowKey)
+                .setFamily(family)
+                .setQualifier(column)
+                .setTimestamp(ts)
+                .setType(Cell.Type.Put)
+                .setValue(value)
+                .build();
         put.add(cell);
     }
 
-    void addCellToDelMutation(Delete del, byte[] family, byte[] column, long ts, KeyValue.Type type) throws Exception {
+    void addCellToDelMutation(Delete del, byte[] family, byte[] column, long ts, Cell.Type type) throws Exception {
         byte[] rowKey = del.getRow();
-        Cell cell = CellUtil.createCell(rowKey, family, column, ts, type.getCode(), null);
-        del.addDeleteMarker(cell);
+        Cell cell = CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                .setRow(rowKey)
+                .setFamily(family)
+                .setQualifier(column)
+                .setTimestamp(ts)
+                .setType(type)
+                .setValue(null)
+                .build();
+        del.add(cell);
     }
 
     /**
@@ -849,11 +864,11 @@ public class PrepareIndexMutationsForRebuildTest extends BaseConnectionlessQuery
     }
 
     boolean isEqualCell(Cell a, Cell b) {
-        return CellUtil.matchingRow(a, b)
+        return CellUtil.matchingRows(a, b)
                 && CellUtil.matchingFamily(a, b)
                 && CellUtil.matchingQualifier(a, b)
                 && CellUtil.matchingTimestamp(a, b)
-                && CellUtil.matchingType(a, b)
+                && a.getType() == b.getType()
                 && CellUtil.matchingValue(a, b);
     }
 }

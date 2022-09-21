@@ -63,8 +63,8 @@ public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
         try {
             // Create table then get the single region for our new table.
             TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(tableName);
-            builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("cf1")))
-                    .addColumnFamily(ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("cf2")));
+            builder.setColumnFamily(ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("cf1")))
+                    .setColumnFamily(ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("cf2")));
             admin.createTable(builder.build());
             Table t = conn.getQueryServices().getTable(Bytes.toBytes(mtest));
             insertData(tableName.getName(), admin, t);

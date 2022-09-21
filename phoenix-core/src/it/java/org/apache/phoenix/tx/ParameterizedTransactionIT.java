@@ -34,10 +34,12 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptor;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -385,7 +387,8 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
         
         htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("SYSTEM." + nonTxTableName));
-        assertFalse(htable.getDescriptor().getCoprocessors().contains(transactionProvider.getCoprocessorClassName()));
+        assertFalse(htable.getDescriptor().getCoprocessorDescriptors().stream().map(CoprocessorDescriptor::getClassName)
+                .collect(Collectors.toList()).contains(transactionProvider.getCoprocessorClassName()));
         assertEquals(1,conn.unwrap(PhoenixConnection.class).getQueryServices().
                 getTableDescriptor(Bytes.toBytes("SYSTEM." + nonTxTableName)).
                 getColumnFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES).getMaxVersions());
@@ -408,7 +411,8 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         PTable table = pconn.getTable(new PTableKey(null, t1));
         Table htable = pconn.getQueryServices().getTable(Bytes.toBytes(t1));
         assertTrue(table.isTransactional());
-        assertTrue(htable.getDescriptor().getCoprocessors().contains(transactionProvider.getCoprocessorClassName()));
+        assertTrue(htable.getDescriptor().getCoprocessorDescriptors().stream().map(CoprocessorDescriptor::getClassName)
+                .collect(Collectors.toList()).contains(transactionProvider.getCoprocessorClassName()));
         
         try {
             ddl = "ALTER TABLE " + t1 + " SET transactional=false";
@@ -420,7 +424,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
 
         Admin admin = pconn.getQueryServices().getAdmin();
         admin.createTable(TableDescriptorBuilder.newBuilder(TableName.valueOf(t2))
-                .addColumnFamily(ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)).build());
+                .setColumnFamily(ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)).build());
         try {
             ddl = "CREATE TABLE " + t2 + " (k varchar primary key) transactional=true,transaction_provider='" + transactionProvider + "'";
             conn.createStatement().execute(ddl);
@@ -452,7 +456,8 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         table = pconn.getTable(new PTableKey(null, t1));
         htable = pconn.getQueryServices().getTable(Bytes.toBytes(t1));
         assertTrue(table.isTransactional());
-        assertTrue(htable.getDescriptor().getCoprocessors().contains(transactionProvider.getCoprocessorClassName()));
+        assertTrue(htable.getDescriptor().getCoprocessorDescriptors().stream().map(CoprocessorDescriptor::getClassName)
+                .collect(Collectors.toList()).contains(transactionProvider.getCoprocessorClassName()));
     }
 
     @Test

@@ -47,10 +47,10 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -108,7 +108,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         Filter filter = scan.getFilter();
         assertEquals(
             singleKVFilter(constantComparison(
-                CompareOp.EQUAL,
+                CompareOperator.EQUAL,
                 A_INTEGER,
                 0)),
             filter);
@@ -138,9 +138,9 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                         pointRange("i2"))),
                     SchemaUtil.VAR_BINARY_SCHEMA),
                 singleKVFilter(
-                        or(constantComparison(CompareOp.EQUAL,id,"i1"),
-                           and(constantComparison(CompareOp.EQUAL,id,"i2"),
-                               constantComparison(CompareOp.EQUAL,company,"c3"))))),
+                        or(constantComparison(CompareOperator.EQUAL,id,"i1"),
+                           and(constantComparison(CompareOperator.EQUAL,id,"i2"),
+                               constantComparison(CompareOperator.EQUAL,company,"c3"))))),
             filterList.getFilters());
     }
 
@@ -156,9 +156,9 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         PColumn column = plan.getTableRef().getTable().getColumnForColumnName("COMPANY");
         assertEquals(
                 singleKVFilter(constantComparison(
-                    CompareOp.EQUAL,
-                    new KeyValueColumnExpression(column),
-                    "c3")),
+                        CompareOperator.EQUAL,
+                        new KeyValueColumnExpression(column),
+                        "c3")),
                 filter);
     }
 
@@ -267,11 +267,11 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
         assertEquals(
-            multiEncodedKVFilter(columnComparison(
-                CompareOp.EQUAL,
-                A_STRING,
-                B_STRING), TWO_BYTE_QUALIFIERS),
-            filter);
+                multiEncodedKVFilter(columnComparison(
+                        CompareOperator.EQUAL,
+                        A_STRING,
+                        B_STRING), TWO_BYTE_QUALIFIERS),
+                filter);
     }
 
     @Test
@@ -302,16 +302,16 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         Filter filter = scan.getFilter();
 
         assertEquals(
-            multiEncodedKVFilter(and(
-                constantComparison(
-                    CompareOp.EQUAL,
-                    A_INTEGER,
-                    0),
-                constantComparison(
-                    CompareOp.EQUAL,
-                    A_STRING,
-                    "foo")), TWO_BYTE_QUALIFIERS),
-            filter);
+                multiEncodedKVFilter(and(
+                        constantComparison(
+                                CompareOperator.EQUAL,
+                                A_INTEGER,
+                                0),
+                        constantComparison(
+                                CompareOperator.EQUAL,
+                                A_STRING,
+                                "foo")), TWO_BYTE_QUALIFIERS),
+                filter);
     }
 
     @Test
@@ -325,11 +325,11 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
 
         Filter filter = scan.getFilter();
         assertEquals(
-            singleKVFilter(constantComparison(
-                CompareOp.LESS_OR_EQUAL,
-                A_INTEGER,
-                0)),
-            filter);
+                singleKVFilter(constantComparison(
+                        CompareOperator.LESS_OR_EQUAL,
+                        A_INTEGER,
+                        0)),
+                filter);
     }
 
     @Test
@@ -347,7 +347,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
 
         assertEquals(
             singleKVFilter(constantComparison(
-                CompareOp.GREATER_OR_EQUAL,
+                    CompareOperator.GREATER_OR_EQUAL,
                 A_DATE,
                 date)),
             filter);
@@ -364,7 +364,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
 
         assertEquals(
             singleKVFilter(constantComparison(
-                CompareOp.GREATER_OR_EQUAL,
+                    CompareOperator.GREATER_OR_EQUAL,
                 X_DECIMAL,
                 expectedDecimal)),
             filter);
@@ -422,7 +422,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
 
         assertEquals(
             new RowKeyComparisonFilter(
-                constantComparison(CompareOp.EQUAL,
+                constantComparison(CompareOperator.EQUAL,
                     new SubstrFunction(
                         Arrays.<Expression>asList(
                             new RowKeyColumnExpression(ENTITY_ID,new RowKeyValueAccessor(ATABLE.getPKColumns(),1)),
@@ -510,7 +510,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
             singleKVFilter( // single b/c one column is a row key column
             or(
                 constantComparison(
-                    CompareOp.EQUAL,
+                    CompareOperator.EQUAL,
                     new SubstrFunction(Arrays.<Expression> asList(
                         new RowKeyColumnExpression(
                             ENTITY_ID,
@@ -519,7 +519,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                         LiteralExpression.newConstant(3))),
                     keyPrefix),
                 constantComparison(
-                    CompareOp.EQUAL,
+                    CompareOperator.EQUAL,
                     A_INTEGER,
                     aInt))),
             filter);
@@ -586,7 +586,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         Filter filter = scan.getFilter();
         assertEquals(
             singleKVFilter(constantComparison(
-                CompareOp.EQUAL,
+                CompareOperator.EQUAL,
                 A_INTEGER,
                 0)),
             filter);
@@ -608,7 +608,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         Filter filter = scan.getFilter();
         assertEquals(
             singleKVFilter(constantComparison(
-                CompareOp.EQUAL,
+                CompareOperator.EQUAL,
                 A_INTEGER,
                 0)),
             filter);
@@ -898,11 +898,11 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 singleKVFilter(and(
                     constantComparison(
-                        CompareOp.GREATER_OR_EQUAL,
+                        CompareOperator.GREATER_OR_EQUAL,
                         A_INTEGER,
                         0),
                     constantComparison(
-                        CompareOp.LESS_OR_EQUAL,
+                        CompareOperator.LESS_OR_EQUAL,
                         A_INTEGER,
                         10))),
                 filter);
@@ -920,11 +920,11 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 singleKVFilter(not(and(
                     constantComparison(
-                        CompareOp.GREATER_OR_EQUAL,
+                        CompareOperator.GREATER_OR_EQUAL,
                         A_INTEGER,
                         0),
                     constantComparison(
-                        CompareOp.LESS_OR_EQUAL,
+                        CompareOperator.LESS_OR_EQUAL,
                         A_INTEGER,
                         10)))).toString(),
                 filter.toString());
@@ -951,11 +951,11 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         assertEquals(
             multiEncodedKVFilter(and(
                 constantComparison(
-                    CompareOp.EQUAL,
+                    CompareOperator.EQUAL,
                     aInteger,
                     0),
                 constantComparison(
-                    CompareOp.EQUAL,
+                    CompareOperator.EQUAL,
                     aString,
                     "foo")), TWO_BYTE_QUALIFIERS),
             filter);
@@ -985,11 +985,11 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         assertEquals(
             multiEncodedKVFilter(and(
                 constantComparison(
-                    CompareOp.EQUAL,
+                    CompareOperator.EQUAL,
                     aInteger,
                     0),
                 constantComparison(
-                    CompareOp.EQUAL,
+                    CompareOperator.EQUAL,
                     aString,
                     "foo")), TWO_BYTE_QUALIFIERS),
             filter);

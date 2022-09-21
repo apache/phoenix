@@ -286,7 +286,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
                     cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
                     cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                    cell.getTimestamp(), KeyValue.Type.codeToType(cell.getTypeByte()),
+                    cell.getTimestamp(), KeyValue.Type.codeToType(cell.getType().getCode()),
                     cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
             return kv;
         }
@@ -519,8 +519,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 byte[] family = CellUtil.cloneFamily(expectedCell);
                 byte[] qualifier = CellUtil.cloneQualifier(expectedCell);
                 Cell actualCell = getCell(actual, family, qualifier);
-                if (actualCell == null ||
-                        !CellUtil.matchingType(expectedCell, actualCell)) {
+                if (actualCell == null || expectedCell.getType() != actualCell.getType()) {
                     byte[] dataKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(expected.getRow()), viewConstants);
                     String errorMsg = "Missing cell (in iteration " + iteration + ") " + Bytes.toString(family) + ":" + Bytes.toString(qualifier);
                     logToIndexToolOutputTable(dataKey, expected.getRow(), getTimestamp(expected),
@@ -569,7 +568,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 byte[] qualifier = CellUtil.cloneQualifier(expectedCell);
                 Cell actualCell = getCell(actual, family, qualifier);
                 if (actualCell == null ||
-                        !CellUtil.matchingType(expectedCell, actualCell)) {
+                        expectedCell.getType() != actualCell.getType()) {
                     return false;
                 }
                 if (!CellUtil.matchingValue(actualCell, expectedCell)) {
@@ -632,7 +631,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     private boolean isDeleteFamily(Mutation mutation) {
         for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
             for (Cell cell : cells) {
-                if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.DeleteFamily) {
+                if (cell.getType() == Cell.Type.DeleteFamily) {
                     return true;
                 }
             }
@@ -1113,7 +1112,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         Put put = null;
         Delete del = null;
         for (Cell cell : indexRow.rawCells()) {
-            if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
+            if (cell.getType() == Cell.Type.Put) {
                 if (put == null) {
                     put = new Put(CellUtil.cloneRow(cell));
                 }
@@ -1122,7 +1121,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 if (del == null) {
                     del = new Delete(CellUtil.cloneRow(cell));
                 }
-                del.addDeleteMarker(cell);
+                del.add(cell);
             }
         }
         return getMutationsWithSameTS(put, del, MUTATION_TS_DESC_COMPARATOR);
@@ -1271,7 +1270,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     private static void applyDeleteOnPut(Delete del, Put put) throws IOException {
         for (List<Cell> cells : del.getFamilyCellMap().values()) {
             for (Cell cell : cells) {
-                switch ((KeyValue.Type.codeToType(cell.getTypeByte()))) {
+                switch (cell.getType()) {
                     case DeleteFamily:
                         put.getFamilyCellMap().remove(CellUtil.cloneFamily(cell));
                         break;
@@ -1469,7 +1468,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             }
             adjustScanFilter(incrScan);
             if(nextStartKey != null) {
-                incrScan.setStartRow(nextStartKey);
+                incrScan.withStartRow(nextStartKey);
             }
             List<KeyRange> keys = new ArrayList<>();
             try (RegionScanner scanner = new PagedRegionScanner(region, region.getScanner(incrScan), incrScan)) {

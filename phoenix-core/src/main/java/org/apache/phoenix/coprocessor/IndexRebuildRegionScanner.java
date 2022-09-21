@@ -87,7 +87,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         super(innerScanner, region, scan, env, ungroupedAggregateRegionObserver);
 
         indexHTable = hTableFactory.getTable(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
-        indexTableTTL = indexHTable.getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
+        indexTableTTL = indexHTable.getDescriptor().getColumnFamilies()[0].getTimeToLive();
         indexRowKeyforReadRepair = scan.getAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY);
         if (indexRowKeyforReadRepair != null) {
             setReturnCodeForSingleRowRebuild();

@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.expression.Expression;
@@ -686,7 +686,7 @@ public class ParseNodeFactory {
         return literalNode;
     }
 
-    public ComparisonParseNode comparison(CompareOp op, ParseNode lhs, ParseNode rhs) {
+    public ComparisonParseNode comparison(CompareOperator op, ParseNode lhs, ParseNode rhs) {
         switch (op){
         case LESS:
             return lt(lhs,rhs);
@@ -713,11 +713,11 @@ public class ParseNodeFactory {
         return new ArrayAllComparisonNode(rhs, compareNode);
     }
 
-    public ArrayAnyComparisonNode wrapInAny(CompareOp op, ParseNode lhs, ParseNode rhs) {
+    public ArrayAnyComparisonNode wrapInAny(CompareOperator op, ParseNode lhs, ParseNode rhs) {
         return new ArrayAnyComparisonNode(rhs, comparison(op, lhs, elementRef(Arrays.<ParseNode>asList(rhs, literal(1)))));
     }
 
-    public ArrayAllComparisonNode wrapInAll(CompareOp op, ParseNode lhs, ParseNode rhs) {
+    public ArrayAllComparisonNode wrapInAll(CompareOperator op, ParseNode lhs, ParseNode rhs) {
         return new ArrayAllComparisonNode(rhs, comparison(op, lhs, elementRef(Arrays.<ParseNode>asList(rhs, literal(1)))));
     }
 

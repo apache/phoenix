@@ -27,7 +27,6 @@ import java.util.UUID;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
@@ -45,6 +44,8 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil.toRegionInfo;
 
 /**
  * Iterator to scan over an HBase snapshot based on input HBase Scan object.
@@ -117,7 +118,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
       this.regions = new ArrayList<>(regionManifests.size());
       this.htd = manifest.getTableDescriptor();
       for (SnapshotProtos.SnapshotRegionManifest srm : regionManifests) {
-        HRegionInfo hri = HRegionInfo.convert(srm.getRegionInfo());
+        RegionInfo hri = toRegionInfo(srm.getRegionInfo());
         if (isValidRegion(hri)) {
           regions.add(hri);
         }

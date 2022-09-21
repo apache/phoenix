@@ -50,7 +50,7 @@ import junit.framework.TestCase;
 //reset()
 //filterAllRemaining() -> true indicates scan is over, false, keep going on.
 //filterRowKey(byte[],int,int) -> true to drop this row, if false, we will also call
-//filterKeyValue(KeyValue) -> true to drop this key/value
+//filterCell(KeyValue) -> true to drop this key/value
 //filterRow(List) -> allows direct modification of the final list to be submitted
 //filterRow() -> last chance to drop entire row based on the sequence of filterValue() calls. Eg: filter a row if it doesn't contain a specified column.
 @RunWith(Parameterized.class)
@@ -648,7 +648,7 @@ public class SkipScanFilterTest extends TestCase {
             assertFalse(skipper.filterAllRemaining());
             assertFalse(skipper.filterRowKey(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength()));
 
-            assertEquals(ReturnCode.SEEK_NEXT_USING_HINT, skipper.filterKeyValue(kv));
+            assertEquals(ReturnCode.SEEK_NEXT_USING_HINT, skipper.filterCell(kv));
             assertEquals(KeyValueUtil.createFirstOnRow(hint), skipper.getNextCellHint(kv));
         }
 
@@ -673,7 +673,7 @@ public class SkipScanFilterTest extends TestCase {
             skipper.reset();
             assertFalse(skipper.filterAllRemaining());
             assertFalse(skipper.filterRowKey(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength()));
-            assertEquals(kv.toString(), ReturnCode.INCLUDE_AND_NEXT_COL, skipper.filterKeyValue(kv));
+            assertEquals(kv.toString(), ReturnCode.INCLUDE_AND_NEXT_COL, skipper.filterCell(kv));
         }
 
         @Override public String toString() {
@@ -694,7 +694,7 @@ public class SkipScanFilterTest extends TestCase {
         @Override public void examine(SkipScanFilter skipper) throws IOException {
             KeyValue kv = KeyValueUtil.createFirstOnRow(rowkey);
             skipper.reset();
-            assertEquals(ReturnCode.NEXT_ROW,skipper.filterKeyValue(kv));
+            assertEquals(ReturnCode.NEXT_ROW,skipper.filterCell(kv));
             skipper.reset();
             assertTrue(skipper.filterAllRemaining());
         }

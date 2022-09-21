@@ -215,9 +215,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     ServerName mockServerName = Mockito.mock(ServerName.class);
     when(mockServerName.getServerName()).thenReturn(tableNameStr + ",1234");
     when(mockRS.getServerName()).thenReturn(mockServerName);
-    HRegion region = spy(new HRegion(basedir, wal, this.fs, this.conf, hri, htd, mockRS));
-    region.initialize();
-
+    HRegion region = spy(HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd, wal, true, mockRS));
 
     //make an attempted write to the primary that should also be indexed
     byte[] rowkey = Bytes.toBytes("indexed_row_key");
@@ -235,10 +233,8 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     // run the WAL split and setup the region
     runWALSplit(this.conf, walFactory);
     WAL wal2 = createWAL(this.conf, walFactory);
-    HRegion region1 = new HRegion(basedir, wal2, this.fs, this.conf, hri, htd, mockRS);
+    HRegion region1 = HRegion.createHRegion(hri, hbaseRootDir, this.conf, htd, wal, true, mockRS);
 
-    // initialize the region - this should replay the WALEdits from the WAL
-    region1.initialize();
     org.apache.hadoop.hbase.client.Connection hbaseConn =
             ConnectionFactory.createConnection(UTIL.getConfiguration());
 
@@ -265,11 +261,11 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
   private TableDescriptor createBasic3FamilyHTD(final String tableName) {
     TableDescriptorBuilder tableBuilder = TableDescriptorBuilder.newBuilder(TableName.valueOf(tableName));
     ColumnFamilyDescriptor  a = ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("a"));
-    tableBuilder.addColumnFamily(a);
+    tableBuilder.setColumnFamily(a);
     ColumnFamilyDescriptor b = ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("b"));
-    tableBuilder.addColumnFamily(b);
+    tableBuilder.setColumnFamily(b);
     ColumnFamilyDescriptor c = ColumnFamilyDescriptorBuilder.of(Bytes.toBytes("c"));
-    tableBuilder.addColumnFamily(c);
+    tableBuilder.setColumnFamily(c);
     return tableBuilder.build();
   }
 

@@ -19,10 +19,12 @@ package org.apache.phoenix.schema.tool;
 
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -120,7 +122,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             populateDefaultProperties(indexPTable);
             setPTableProperties(indexPTable);
             ConnectionQueryServices cqsi = getCQSIObject();
-            HTableDescriptor htd = getTableDescriptor(cqsi, table);
+            TableDescriptor htd = getTableDescriptor(cqsi, table);
             setHTableProperties(htd);
         }
 
@@ -292,8 +294,8 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         String pTableName = table.getTableName().getString();
 
         ConnectionQueryServices cqsi = getCQSIObject();
-        HTableDescriptor htd = getTableDescriptor(cqsi, table);
-        HColumnDescriptor[] hcds = htd.getColumnFamilies();
+        TableDescriptor htd = getTableDescriptor(cqsi, table);
+        ColumnFamilyDescriptor[] hcds = htd.getColumnFamilies();
         populateDefaultProperties(table);
         setPTableProperties(table);
         setHTableProperties(htd);
@@ -315,31 +317,31 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
     }
 
     private void populateDefaultProperties(PTable table) {
-        Map<String, String> propsMap = HColumnDescriptor.getDefaultValues();
+        Map<String, String> propsMap = ColumnFamilyDescriptorBuilder.getDefaultValues();
         for (Map.Entry<String, String> entry : propsMap.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
             defaultProps.put(key, value);
-            if (key.equalsIgnoreCase(HColumnDescriptor.BLOOMFILTER)) {
+            if (key.equalsIgnoreCase(ColumnFamilyDescriptorBuilder.BLOOMFILTER)) {
                 defaultProps.put(key, "ROW");
             }
-            if (key.equalsIgnoreCase(HColumnDescriptor.COMPRESSION)) {
+            if (key.equalsIgnoreCase(ColumnFamilyDescriptorBuilder.COMPRESSION)) {
                 defaultProps.put(key, "NONE");
             }
-            if(key.equalsIgnoreCase(HColumnDescriptor.DATA_BLOCK_ENCODING)) {
+            if(key.equalsIgnoreCase(ColumnFamilyDescriptorBuilder.DATA_BLOCK_ENCODING)) {
                 defaultProps.put(key, String.valueOf(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING));
             }
         }
         defaultProps.putAll(table.getDefaultPropertyValues());
     }
 
-    private void setHTableProperties(HTableDescriptor htd) {
+    private void setHTableProperties(TableDescriptor htd) {
         Map<Bytes, Bytes> propsMap = htd.getValues();
         for (Map.Entry<Bytes, Bytes> entry : propsMap.entrySet()) {
             Bytes key = entry.getKey();
             Bytes value = entry.getValue();
             if(Bytes.toString(key.get()).contains("coprocessor") || Bytes.toString(key.get()).contains(
-                    HTableDescriptor.IS_META)) {
+                    TableDescriptorBuilder.IS_META)) {
                 continue;
             }
             defaultProps.put(Bytes.toString(key.get()), "false");
@@ -347,14 +349,14 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         }
     }
 
-    private void setHColumnFamilyProperties(HColumnDescriptor[] columnDescriptors) {
+    private void setHColumnFamilyProperties(ColumnFamilyDescriptor[] columnDescriptors) {
         Map<Bytes, Bytes> propsMap = columnDescriptors[0].getValues();
         for(Map.Entry<Bytes, Bytes> entry : propsMap.entrySet()) {
             Bytes key = entry.getKey();
             Bytes globalValue = entry.getValue();
             Map<String, String> cfToPropertyValueMap = new HashMap<String, String>();
             Set<Bytes> cfPropertyValueSet = new HashSet<>();
-            for(HColumnDescriptor columnDescriptor: columnDescriptors) {
+            for(ColumnFamilyDescriptor columnDescriptor: columnDescriptors) {
                 String columnFamilyName = Bytes.toString(columnDescriptor.getName());
                 Bytes value = columnDescriptor.getValues().get(key);
                 // check if it is universal properties
@@ -386,10 +388,10 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         }
     }
 
-    private HTableDescriptor getTableDescriptor(ConnectionQueryServices cqsi, PTable table)
+    private TableDescriptor getTableDescriptor(ConnectionQueryServices cqsi, PTable table)
             throws SQLException, IOException {
         try (Admin admin = cqsi.getAdmin()) {
-            return admin.getTableDescriptor(TableName.valueOf(
+            return admin.getDescriptor(TableName.valueOf(
                 table.getPhysicalName().getString()));
         }
     }

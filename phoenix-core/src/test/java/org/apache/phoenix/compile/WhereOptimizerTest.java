@@ -50,9 +50,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.FilterList.Operator;
@@ -2558,10 +2558,10 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
             assertEquals(
                     TestUtil.singleKVFilter(
                         TestUtil.or(
-                                TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL, pk1Expression, 2),
+                                TestUtil.constantComparison(CompareOperator.GREATER_OR_EQUAL, pk1Expression, 2),
                                 TestUtil.and(
-                                        TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL, dataExpression, 4),
-                                        TestUtil.constantComparison(CompareOp.LESS, dataExpression, 9)
+                                        TestUtil.constantComparison(CompareOperator.GREATER_OR_EQUAL, dataExpression, 4),
+                                        TestUtil.constantComparison(CompareOperator.LESS, dataExpression, 9)
                                         )
                                 )
                     ),
@@ -2588,11 +2588,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
                       TestUtil.rowKeyFilter(
                             TestUtil.or(
                                     TestUtil.and(
-                                            TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL,pk1Expression, 2),
-                                            TestUtil.constantComparison(CompareOp.LESS,pk1Expression, 5)),
+                                            TestUtil.constantComparison(CompareOperator.GREATER_OR_EQUAL,pk1Expression, 2),
+                                            TestUtil.constantComparison(CompareOperator.LESS,pk1Expression, 5)),
                                     TestUtil.or(
-                                            TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL,pk2Expression, 7),
-                                            TestUtil.constantComparison(CompareOp.LESS,pk2Expression, 9))
+                                            TestUtil.constantComparison(CompareOperator.GREATER_OR_EQUAL,pk2Expression, 7),
+                                            TestUtil.constantComparison(CompareOperator.LESS,pk2Expression, 9))
                                     )
                               ),
                      scan.getFilter());
@@ -2608,11 +2608,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
                       TestUtil.rowKeyFilter(
                             TestUtil.or(
                                     TestUtil.and(
-                                            TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL,pk2Expression, 4),
-                                            TestUtil.constantComparison(CompareOp.LESS,pk2Expression, 6)),
+                                            TestUtil.constantComparison(CompareOperator.GREATER_OR_EQUAL,pk2Expression, 4),
+                                            TestUtil.constantComparison(CompareOperator.LESS,pk2Expression, 6)),
                                     TestUtil.and(
-                                            TestUtil.constantComparison(CompareOp.GREATER_OR_EQUAL,pk2Expression, 8),
-                                            TestUtil.constantComparison(CompareOp.LESS,pk2Expression, 9))
+                                            TestUtil.constantComparison(CompareOperator.GREATER_OR_EQUAL,pk2Expression, 8),
+                                            TestUtil.constantComparison(CompareOperator.LESS,pk2Expression, 9))
                                     )
                               ),
                      scan.getFilter());
@@ -2646,8 +2646,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
                 assertEquals(
                       TestUtil.rowKeyFilter(
                             TestUtil.or(
-                                    TestUtil.constantComparison(CompareOp.LESS_OR_EQUAL,pk2Expression, 7),
-                                    TestUtil.constantComparison(CompareOp.GREATER,pk2Expression, 9))),
+                                    TestUtil.constantComparison(CompareOperator.LESS_OR_EQUAL,pk2Expression, 7),
+                                    TestUtil.constantComparison(CompareOperator.GREATER,pk2Expression, 9))),
                      scan.getFilter());
             assertArrayEquals(scan.getStartRow(), HConstants.EMPTY_START_ROW);
             assertArrayEquals(scan.getStopRow(), HConstants.EMPTY_END_ROW);

@@ -101,7 +101,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         Put put = null;
         Delete del = null;
         for (Cell cell : dataRow.rawCells()) {
-            if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
+            if (cell.getType() == Cell.Type.Put) {
                 if (put == null) {
                     put = new Put(CellUtil.cloneRow(cell));
                 }
@@ -110,7 +110,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
                 if (del == null) {
                     del = new Delete(CellUtil.cloneRow(cell));
                 }
-                del.addDeleteMarker(cell);
+                del.add(cell);
             }
         }
         List<Mutation> indexMutations = prepareIndexMutationsForRebuild(indexMaintainer, put, del);
@@ -152,7 +152,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
         dataScan.setFilter(new SkipScanFilter(skipScanFilter, true));
         dataScan.setRaw(true);
-        dataScan.setMaxVersions();
+        dataScan.readAllVersions();
         dataScan.setCacheBlocks(false);
         try (ResultScanner resultScanner = dataHTable.getScanner(dataScan)) {
             for (Result result = resultScanner.next(); (result != null); result = resultScanner.next()) {
@@ -188,7 +188,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         Scan indexScan = new Scan();
         indexScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
         indexScan.setRaw(true);
-        indexScan.setMaxVersions();
+        indexScan.readAllVersions();
         indexScan.setCacheBlocks(false);
         try (RegionScanner regionScanner = region.getScanner(indexScan)) {
             do {
@@ -359,7 +359,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         Put put = null;
         Delete del = null;
         for (Cell cell : row) {
-            if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
+            if (cell.getType() == Cell.Type.Put) {
                 if (put == null) {
                     put = new Put(CellUtil.cloneRow(cell));
                 }
@@ -368,7 +368,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
                 if (del == null) {
                     del = new Delete(CellUtil.cloneRow(cell));
                 }
-                del.addDeleteMarker(cell);
+                del.add(cell);
             }
         }
         byte[] indexRowKey;

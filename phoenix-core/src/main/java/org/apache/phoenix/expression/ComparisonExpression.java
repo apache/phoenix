@@ -27,8 +27,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
@@ -61,7 +61,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * @since 0.1
  */
 public class ComparisonExpression extends BaseCompoundExpression {
-    private CompareOp op;
+    private CompareOperator op;
     
     private static void addEqualityExpression(Expression lhs, Expression rhs, List<Expression> andNodes, ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
         boolean isLHSNull = ExpressionUtil.isNull(lhs, ptr);
@@ -73,7 +73,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
         } else if (isRHSNull) { // AND lhs IS NULL
             andNodes.add(IsNullExpression.create(lhs, false, ptr));
         } else { // AND lhs = rhs
-            andNodes.add(ComparisonExpression.create(CompareOp.EQUAL, Arrays.asList(lhs, rhs), ptr, rowKeyOrderOptimizable));
+            andNodes.add(ComparisonExpression.create(CompareOperator.EQUAL, Arrays.asList(lhs, rhs), ptr, rowKeyOrderOptimizable));
         }
     }
     
@@ -110,18 +110,18 @@ public class ComparisonExpression extends BaseCompoundExpression {
         }
     }
     
-    public static Expression create(CompareOp op, List<Expression> children, ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
+    public static Expression create(CompareOperator op, List<Expression> children, ImmutableBytesWritable ptr, boolean rowKeyOrderOptimizable) throws SQLException {
         Expression lhsExpr = children.get(0);
         Expression rhsExpr = children.get(1);
         PDataType lhsExprDataType = lhsExpr.getDataType();
         PDataType rhsExprDataType = rhsExpr.getDataType();
 
         if ((lhsExpr instanceof RowValueConstructorExpression || rhsExpr instanceof RowValueConstructorExpression) && !(lhsExpr instanceof ArrayElemRefExpression) && !(rhsExpr instanceof ArrayElemRefExpression)) {
-            if (op == CompareOp.EQUAL || op == CompareOp.NOT_EQUAL) {
+            if (op == CompareOperator.EQUAL || op == CompareOperator.NOT_EQUAL) {
                 List<Expression> andNodes = Lists.<Expression>newArrayListWithExpectedSize(Math.max(lhsExpr.getChildren().size(), rhsExpr.getChildren().size()));
                 rewriteRVCAsEqualityExpression(lhsExpr, rhsExpr, andNodes, ptr, rowKeyOrderOptimizable);
                 Expression expr = AndExpression.create(andNodes);
-                if (op == CompareOp.NOT_EQUAL) {
+                if (op == CompareOperator.NOT_EQUAL) {
                     expr = NotExpression.create(expr, ptr);
                 }
                 return expr;
@@ -187,9 +187,9 @@ public class ComparisonExpression extends BaseCompoundExpression {
                 if (rhsExprDataType.isCoercibleTo(lhsExprDataType, rhsValue)) { // will convert 2.0 -> 2
                     children = Arrays.asList(children.get(0), LiteralExpression.newConstant(rhsValue, lhsExprDataType, 
                             lhsExpr.getMaxLength(), null, lhsExpr.getSortOrder(), determinism, rowKeyOrderOptimizable));
-                } else if (op == CompareOp.EQUAL) {
+                } else if (op == CompareOperator.EQUAL) {
                     return LiteralExpression.newConstant(false, PBoolean.INSTANCE, Determinism.ALWAYS);
-                } else if (op == CompareOp.NOT_EQUAL) {
+                } else if (op == CompareOperator.NOT_EQUAL) {
                     return LiteralExpression.newConstant(true, PBoolean.INSTANCE, Determinism.ALWAYS);
                 } else { // TODO: generalize this with PDataType.getMinValue(), PDataTypeType.getMaxValue() methods
                   if (rhsExprDataType == PDecimal.INSTANCE) {
@@ -278,7 +278,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
     public ComparisonExpression() {
     }
 
-    public ComparisonExpression(List<Expression> children, CompareOp op) {
+    public ComparisonExpression(List<Expression> children, CompareOperator op) {
         super(children);
         if (op == null) {
             throw new NullPointerException();
@@ -355,7 +355,7 @@ public class ComparisonExpression extends BaseCompoundExpression {
     
     @Override
     public void readFields(DataInput input) throws IOException {
-        op = CompareOp.values()[WritableUtils.readVInt(input)];
+        op = CompareOperator.values()[WritableUtils.readVInt(input)];
         super.readFields(input);
     }
 
@@ -375,11 +375,11 @@ public class ComparisonExpression extends BaseCompoundExpression {
         return t;
     }
 
-    public CompareOp getFilterOp() {
+    public CompareOperator getFilterOp() {
         return op;
     }
     
-    public static String toString(CompareOp op, List<Expression> children) {
+    public static String toString(CompareOperator op, List<Expression> children) {
         return (children.get(0) + " " + QueryUtil.toSQL(op) + " " + children.get(1));
     }
     

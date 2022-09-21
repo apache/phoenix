@@ -303,7 +303,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
             createViewIndex(conn, schemaName, globalViewIdx, globalView, "K1");
             //now check that the right coprocs are installed
             Admin admin = conn.getQueryServices().getAdmin();
-            TableDescriptor td = admin.getTableDescriptor(TableName.valueOf(
+            TableDescriptor td = admin.getDescriptor(TableName.valueOf(
                 MetaDataUtil.getViewIndexPhysicalName(SchemaUtil.getPhysicalHBaseTableName(
                     schemaName, baseTable, isNamespaceMapped).getString())));
             assertTrue(td.hasCoprocessor(GlobalIndexChecker.class.getName()));

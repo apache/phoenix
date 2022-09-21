@@ -42,6 +42,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
@@ -57,7 +58,7 @@ import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.io.hfile.HFileContext;
 import org.apache.hadoop.hbase.io.hfile.HFileContextBuilder;
 import org.apache.hadoop.hbase.io.hfile.HFileWriterImpl;
-import org.apache.hadoop.hbase.mapreduce.KeyValueSerialization;
+import org.apache.hadoop.hbase.mapreduce.CellSerialization;
 import org.apache.hadoop.hbase.mapreduce.MutationSerialization;
 import org.apache.hadoop.hbase.mapreduce.ResultSerialization;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
@@ -161,7 +162,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
                 // phoenix-2216: start : extract table name from the rowkey
                 String tableName = row.getTableName();
                 byte [] rowKey = row.getRowkey().get();
-                int length = (CellUtil.estimatedSerializedSizeOf(kv)) - Bytes.SIZEOF_INT;
+                int length = (PrivateCellUtil.estimatedSerializedSizeOf(kv)) - Bytes.SIZEOF_INT;
                 byte [] family = CellUtil.cloneFamily(kv);
                 byte[] tableAndFamily = join(tableName, Bytes.toString(family));
                 WriterLength wl = this.writers.get(tableAndFamily);
@@ -672,7 +673,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
         job.setOutputFormatClass(MultiHfileOutputFormat.class);
         conf.setStrings("io.serializations", conf.get("io.serializations"),
                 MutationSerialization.class.getName(), ResultSerialization.class.getName(),
-                KeyValueSerialization.class.getName());
+                CellSerialization.class.getName());
 
         // tableStartKeys for all tables.
         Set<TableRowkeyPair> tablesStartKeys = Sets.newTreeSet();

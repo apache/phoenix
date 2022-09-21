@@ -32,7 +32,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.function.CeilDateExpression;
@@ -181,7 +181,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         KeyRange expectedKeyRange = KeyRange.getKeyRange(lowerBound, upperBound);
 
         KeyPart keyPart = roundDecimalExpression.newKeyPart(baseKeyPart);
-        assertEquals(expectedKeyRange, keyPart.getKeyRange(CompareOp.EQUAL, LiteralExpression.newConstant(new BigDecimal("1.238"), PDecimal.INSTANCE)));
+        assertEquals(expectedKeyRange, keyPart.getKeyRange(CompareOperator.EQUAL, LiteralExpression.newConstant(new BigDecimal("1.238"), PDecimal.INSTANCE)));
     }
 
     @Test
@@ -194,7 +194,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         KeyRange expectedKeyRange = KeyRange.getKeyRange(lowerBound, true, upperBound, false);
 
         KeyPart keyPart = floorDecimalExpression.newKeyPart(baseKeyPart);
-        assertEquals(expectedKeyRange, keyPart.getKeyRange(CompareOp.EQUAL, LiteralExpression.newConstant(new BigDecimal("1.238"), PDecimal.INSTANCE)));
+        assertEquals(expectedKeyRange, keyPart.getKeyRange(CompareOperator.EQUAL, LiteralExpression.newConstant(new BigDecimal("1.238"), PDecimal.INSTANCE)));
     }
 
     @Test
@@ -207,7 +207,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         KeyRange expectedKeyRange = KeyRange.getKeyRange(lowerBound, false, upperBound, true);
 
         KeyPart keyPart = ceilDecimalExpression.newKeyPart(baseKeyPart);
-        assertEquals(expectedKeyRange, keyPart.getKeyRange(CompareOp.EQUAL, LiteralExpression.newConstant(new BigDecimal("1.238"), PDecimal.INSTANCE)));
+        assertEquals(expectedKeyRange, keyPart.getKeyRange(CompareOperator.EQUAL, LiteralExpression.newConstant(new BigDecimal("1.238"), PDecimal.INSTANCE)));
     }
 
     // KeyRange complex / generated tests
@@ -230,7 +230,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             KeyPart baseKeyPart = new KeyPart() {
     
                 @Override
-                public KeyRange getKeyRange(CompareOp op, Expression rhs) {
+                public KeyRange getKeyRange(CompareOperator op, Expression rhs) {
                     return KeyRange.EVERYTHING_RANGE;
                 }
     
@@ -316,16 +316,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
      * representation and a method for actually comparing comparables.
      */
     private enum Relation {
-        EQUAL(CompareOp.EQUAL, "="),
-        GREATER(CompareOp.GREATER, ">"),
-        GREATER_OR_EQUAL(CompareOp.GREATER_OR_EQUAL, ">="),
-        LESS(CompareOp.LESS, "<"),
-        LESS_OR_EQUAL(CompareOp.LESS_OR_EQUAL, "<=");
+        EQUAL(CompareOperator.EQUAL, "="),
+        GREATER(CompareOperator.GREATER, ">"),
+        GREATER_OR_EQUAL(CompareOperator.GREATER_OR_EQUAL, ">="),
+        LESS(CompareOperator.LESS, "<"),
+        LESS_OR_EQUAL(CompareOperator.LESS_OR_EQUAL, "<=");
 
-        public final CompareOp compareOp;
+        public final CompareOperator compareOp;
         public final String symbol;
 
-        Relation(CompareOp compareOp, String symbol) {
+        Relation(CompareOperator compareOp, String symbol) {
             this.compareOp = compareOp;
             this.symbol = symbol;
         }

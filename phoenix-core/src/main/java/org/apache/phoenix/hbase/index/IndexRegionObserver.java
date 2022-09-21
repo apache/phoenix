@@ -42,6 +42,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -50,6 +51,7 @@ import org.apache.hadoop.hbase.HConstants.OperationStatusCode;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Increment;
@@ -688,7 +690,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
         for (List<Cell> cells : delete.getFamilyCellMap().values()) {
             for (Cell cell : cells) {
-                switch (KeyValue.Type.codeToType(cell.getTypeByte())) {
+                switch (cell.getType()) {
                     case DeleteFamily:
                     case DeleteFamilyVersion:
                         nextDataRowState.getFamilyCellMap().remove(CellUtil.cloneFamily(cell));
@@ -1383,7 +1385,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       properties = new HashMap<String, String>();
     }
     properties.put(Indexer.INDEX_BUILDER_CONF_KEY, builder.getName());
-     descBuilder.addCoprocessor(IndexRegionObserver.class.getName(), null, priority, properties);
+     descBuilder.setCoprocessor(
+                     CoprocessorDescriptorBuilder
+                             .newBuilder(IndexRegionObserver.class.getName())
+                             .setPriority(priority)
+                             .setProperties(properties)
+                             .build());
   }
 
   private void extractExpressionsAndColumns(DataInputStream input,
@@ -1504,7 +1511,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
               // Sort the list of cells (if they've been flattened in which case they're
               // not necessarily ordered correctly).
               if (flattenedCells != null) {
-                  Collections.sort(flattenedCells, KeyValue.COMPARATOR);
+                  Collections.sort(flattenedCells, CellComparator.getInstance());
               }
               PRow row = table.newRow(GenericKeyValueBuilder.INSTANCE, ts, ptr, false);
               int adjust = table.getBucketNum() == null ? 1 : 2;
@@ -1542,7 +1549,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
       for (int i = 0; i < tuple.size(); i++) {
           Cell cell = tuple.getValue(i);
-          if (Type.codeToType(cell.getTypeByte()) == Type.Put) {
+          if (cell.getType() == Cell.Type.Put) {
               if (put == null) {
                   put = new Put(rowKey);
                   transferAttributes(atomicPut, put);
@@ -1555,7 +1562,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                   transferAttributes(atomicPut, delete);
                   mutations.add(delete);
               }
-              delete.addDeleteMarker(cell);
+              delete.add(cell);
           }
       }
       return mutations;

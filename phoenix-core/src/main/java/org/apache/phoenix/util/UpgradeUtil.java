@@ -88,11 +88,13 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
+import java.util.regex.Pattern;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -101,8 +103,11 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.CheckAndMutate;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
@@ -236,7 +241,7 @@ public class UpgradeUtil {
     private static void createSequenceSnapshot(Admin admin, PhoenixConnection conn) throws SQLException {
         byte[] tableName = getSequenceSnapshotName();
         TableDescriptor desc = TableDescriptorBuilder.newBuilder(TableName.valueOf(tableName))
-                .addColumnFamily(ColumnFamilyDescriptorBuilder.of(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES))
+                .setColumnFamily(ColumnFamilyDescriptorBuilder.of(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES))
                 .build();
         try {
             admin.createTable(desc);
@@ -269,7 +274,7 @@ public class UpgradeUtil {
 
         Scan scan = new Scan();
         scan.setRaw(true);
-        scan.setMaxVersions();
+        scan.readAllVersions();
         ResultScanner scanner = null;
         Table source = null;
         Table target = null;
@@ -280,18 +285,18 @@ public class UpgradeUtil {
             Result result;
              while ((result = scanner.next()) != null) {
                 for (Cell keyValue : result.rawCells()) {
-                    sizeBytes += CellUtil.estimatedSerializedSizeOf(keyValue);
-                    if (KeyValue.Type.codeToType(keyValue.getTypeByte()) == KeyValue.Type.Put) {
+                    sizeBytes += PrivateCellUtil.estimatedSerializedSizeOf(keyValue);
+                    if (keyValue.getType() == Cell.Type.Put) {
                         // Put new value
                         Put put = new Put(keyValue.getRowArray(), keyValue.getRowOffset(), keyValue.getRowLength());
                         put.add(keyValue);
                         mutations.add(put);
-                    } else if (KeyValue.Type.codeToType(keyValue.getTypeByte()) == KeyValue.Type.Delete){
+                    } else if (keyValue.getType() == Cell.Type.Delete){
                         // Copy delete marker using new key so that it continues
                         // to delete the key value preceding it that will be updated
                         // as well.
                         Delete delete = new Delete(keyValue.getRowArray(), keyValue.getRowOffset(), keyValue.getRowLength());
-                        delete.addDeleteMarker(keyValue);
+                        delete.add(keyValue);
                         mutations.add(delete);
                     }
                 }
@@ -424,7 +429,8 @@ public class UpgradeUtil {
             boolean droppedLocalIndexes = false;
             while (rs.next()) {
                 if (!droppedLocalIndexes) {
-                    TableDescriptor[] localIndexTables = admin.listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
+                    List<TableDescriptor> localIndexTables = admin.listTableDescriptors(
+                            Pattern.compile(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*"));
                     String localIndexSplitter = LocalIndexSplitter.class.getName();
                     for (TableDescriptor table : localIndexTables) {
                         TableDescriptor dataTableDesc = admin.getDescriptor(TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(table.getTableName().getNameAsString())));
@@ -439,13 +445,13 @@ public class UpgradeUtil {
                                 for (Entry<Bytes, Bytes> keyValue: cf.getValues().entrySet()){
                                     colDefBuilder.setValue(keyValue.getKey().copyBytes(), keyValue.getValue().copyBytes());
                                 }
-                                dataTableDescBuilder.addColumnFamily(colDefBuilder.build());
+                                dataTableDescBuilder.setColumnFamily(colDefBuilder.build());
                                 modifyTable = true;
                             }
                         }
-                        Collection<String> coprocessors = dataTableDesc.getCoprocessors();
-                        for (String coprocessor:  coprocessors) {
-                            if (coprocessor.equals(localIndexSplitter)) {
+                        Collection<CoprocessorDescriptor> coprocessors = dataTableDesc.getCoprocessorDescriptors();
+                        for (CoprocessorDescriptor coprocessor:  coprocessors) {
+                            if (coprocessor.getClassName().equals(localIndexSplitter)) {
                                 dataTableDescBuilder.removeCoprocessor(localIndexSplitter);
                                 modifyTable = true;
                             }
@@ -454,8 +460,11 @@ public class UpgradeUtil {
                             admin.modifyTable(dataTableDescBuilder.build());
                         }
                     }
-                    admin.disableTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
-                    admin.deleteTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
+                    Pattern pattern = Pattern.compile(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
+                    for(TableDescriptor tableDescriptor : admin.listTableDescriptors(pattern)){
+                        admin.disableTable(tableDescriptor.getTableName());
+                        admin.deleteTable(tableDescriptor.getTableName());
+                    }
                     droppedLocalIndexes = true;
                 }
                 String schemaName = rs.getString(1);
@@ -737,9 +746,11 @@ public class UpgradeUtil {
             Put saltPut = new Put(seqTableKey);
             saltPut.add(saltKV);
             // Prevent multiple clients from doing this upgrade
-            if (!sysTable.checkAndPut(seqTableKey,
-                    PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                    PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES, null, saltPut)) {
+            CheckAndMutate checkAndMutate = CheckAndMutate.newBuilder(seqTableKey)
+                    .ifNotExists(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES)
+                    .build(saltPut);
+
+            if (!sysTable.checkAndMutate(checkAndMutate).isSuccess()) {
                 if (oldTable == null) { // Unexpected, but to be safe just run pre-split code
                     preSplitSequenceTable(conn, nSaltBuckets);
                     return true;
@@ -757,9 +768,12 @@ public class UpgradeUtil {
                     seqNumPut.add(seqNumKV);
                     // Increment TABLE_SEQ_NUM in checkAndPut as semaphore so that only single client
                     // pre-splits the sequence table.
-                    if (sysTable.checkAndPut(seqTableKey,
-                            PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                            PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES, oldSeqNum, seqNumPut)) {
+                    checkAndMutate = CheckAndMutate.newBuilder(seqTableKey)
+                            .ifEquals(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                    PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES,oldSeqNum)
+                            .build(seqNumPut);
+
+                    if (sysTable.checkAndMutate(checkAndMutate).isSuccess()) {
                         preSplitSequenceTable(conn, nSaltBuckets);
                         return true;
                     }
@@ -778,7 +792,7 @@ public class UpgradeUtil {
                 boolean success = false;
                 Scan scan = new Scan();
                 scan.setRaw(true);
-                scan.setMaxVersions();
+                scan.readAllVersions();
                 Table seqTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
                 try {
                     boolean committed = false;
@@ -800,7 +814,7 @@ public class UpgradeUtil {
                                                 buf, keyValue.getQualifierOffset(), keyValue.getQualifierLength(),
                                                 keyValue.getTimestamp(), KeyValue.Type.Delete,
                                                 ByteUtil.EMPTY_BYTE_ARRAY,0,0);
-                                        delete.addDeleteMarker(deleteKeyValue);
+                                        delete.add(deleteKeyValue);
                                         mutations.add(delete);
                                         sizeBytes += deleteKeyValue.getLength();
                                         // Put new value
@@ -812,7 +826,7 @@ public class UpgradeUtil {
                                         // to delete the key value preceding it that will be updated
                                         // as well.
                                         Delete delete = new Delete(newKeyValue.getRowArray(), newKeyValue.getRowOffset(), newKeyValue.getRowLength());
-                                        delete.addDeleteMarker(newKeyValue);
+                                        delete.add(newKeyValue);
                                         mutations.add(delete);
                                     }
                                 }
@@ -916,7 +930,7 @@ public class UpgradeUtil {
         return new KeyValue(newBuf, 0, newBuf.length,
                 buf, keyValue.getFamilyOffset(), keyValue.getFamilyLength(),
                 buf, keyValue.getQualifierOffset(), keyValue.getQualifierLength(),
-                keyValue.getTimestamp(), KeyValue.Type.codeToType(keyValue.getTypeByte()),
+                keyValue.getTimestamp(), KeyValue.Type.codeToType(keyValue.getType().getCode()),
                 buf, keyValue.getValueOffset(), keyValue.getValueLength());
     }
     
@@ -1265,7 +1279,7 @@ public class UpgradeUtil {
                 // Push down the filter to hbase to avoid transfer
                 SingleColumnValueFilter childLinkFilter = new SingleColumnValueFilter(
                         DEFAULT_COLUMN_FAMILY_BYTES,
-                        LINK_TYPE_BYTES, CompareFilter.CompareOp.EQUAL,
+                        LINK_TYPE_BYTES, CompareOperator.EQUAL,
                         new byte[]{ PTable.LinkType.CHILD_TABLE.getSerializedValue()});
 
                 childLinkFilter.setFilterIfMissing(true);
@@ -2214,12 +2228,14 @@ public class UpgradeUtil {
 
             // check for null in UPGRADE_TO_4_7_COLUMN_NAME in checkAndPut so that only single client
             // drop the rows of SYSTEM.STATS
-            if (metaTable.checkAndPut(statsTableKey, PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                    UPGRADE_TO_4_7_COLUMN_NAME, null, upgradePut)) {
+            CheckAndMutate checkAndMutate = CheckAndMutate.newBuilder(statsTableKey)
+                    .ifNotExists(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, UPGRADE_TO_4_7_COLUMN_NAME)
+                    .build(upgradePut);
+            if (metaTable.checkAndMutate(checkAndMutate).isSuccess()) {
                 List<Mutation> mutations = Lists.newArrayListWithExpectedSize(1000);
                 Scan scan = new Scan();
                 scan.setRaw(true);
-                scan.setMaxVersions();
+                scan.readAllVersions();
                 ResultScanner statsScanner = statsTable.getScanner(scan);
                 Result r;
                 mutations.clear();
@@ -2227,7 +2243,7 @@ public class UpgradeUtil {
                 while ((r = statsScanner.next()) != null) {
                     Delete delete = null;
                     for (Cell keyValue : r.rawCells()) {
-                        if (KeyValue.Type.codeToType(keyValue.getTypeByte()) == KeyValue.Type.Put) {
+                        if (keyValue.getType() == Cell.Type.Put) {
                             if (delete == null) {
                                 delete = new Delete(keyValue.getRowArray(), keyValue.getRowOffset(), keyValue.getRowLength());
                             }
@@ -2236,7 +2252,7 @@ public class UpgradeUtil {
                                     keyValue.getFamilyLength(), keyValue.getQualifierArray(),
                                     keyValue.getQualifierOffset(), keyValue.getQualifierLength(),
                                     keyValue.getTimestamp(), KeyValue.Type.Delete, ByteUtil.EMPTY_BYTE_ARRAY, 0, 0);
-                            delete.addDeleteMarker(deleteKeyValue);
+                            delete.add(deleteKeyValue);
                         }
                     }
                     if (delete != null) {

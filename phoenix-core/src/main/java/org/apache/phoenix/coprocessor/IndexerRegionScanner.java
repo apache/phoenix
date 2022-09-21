@@ -93,7 +93,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
                           UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver) throws IOException {
         super(innerScanner, region, scan, env, ungroupedAggregateRegionObserver);
         indexHTable = hTableFactory.getTable(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
-        indexTableTTL = indexHTable.getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
+        indexTableTTL = indexHTable.getDescriptor().getColumnFamilies()[0].getTimeToLive();
         pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(
                 new ThreadPoolBuilder("IndexVerify",
                         env.getConfiguration()).setMaxThread(NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY,

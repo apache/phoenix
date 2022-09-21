@@ -818,7 +818,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           // PHOENIX-4980
           // When there is a flush after a data table update of non-indexed columns, the
           // index gets out of sync on the next write
-          getUtility().getHBaseAdmin().flush(TableName.valueOf(fullTableName));
+          getUtility().getAdmin().flush(TableName.valueOf(fullTableName));
           conn.createStatement().executeUpdate("UPSERT INTO " + fullTableName + "(k,v1,v2) VALUES ('testKey','v1_4','v2_3')");
           conn.commit();
           IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);

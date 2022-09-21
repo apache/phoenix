@@ -545,7 +545,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
     }
     
     private static void assertTTL(Admin admin, String tableName, int ttl) throws Exception {
-        TableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(tableName));
+        TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(tableName));
         for (ColumnFamilyDescriptor colDesc : tableDesc.getColumnFamilies()) {
             assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL,colDesc.getTimeToLive());
         }

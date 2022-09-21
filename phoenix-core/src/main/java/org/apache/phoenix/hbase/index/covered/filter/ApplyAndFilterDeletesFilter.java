@@ -104,8 +104,13 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
 
   @Override
   public ReturnCode filterKeyValue(Cell next) {
+    return this.filterCell(next);
+  }
+
+  @Override
+  public ReturnCode filterCell(Cell next) {
     KeyValue nextKV = PhoenixKeyValueUtil.maybeCopyCell(next);
-    switch (KeyValue.Type.codeToType(next.getTypeByte())) {
+    switch (next.getType()) {
     /*
      * DeleteFamily will always sort first because those KVs (we assume) don't have qualifiers (or
      * rather are null). Therefore, we have to keep a hold of all the delete families until we get

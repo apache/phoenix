@@ -307,8 +307,8 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
         throws IOException {
         Scan scan = new Scan();
         byte[] partialKey = generatePartialOutputTableRowKey(ts, indexName);
-        scan.setStartRow(partialKey);
-        scan.setStopRow(ByteUtil.calculateTheClosestNextRowKeyForPrefix(partialKey));
+        scan.withStartRow(partialKey);
+        scan.withStopRow(ByteUtil.calculateTheClosestNextRowKeyForPrefix(partialKey));
         ResultScanner scanner = outputTable.getScanner(scan);
         return new IndexVerificationOutputRowIterator(scanner.iterator());
     }

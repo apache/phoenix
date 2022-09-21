@@ -27,7 +27,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -205,7 +205,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         ParseNode rhsNode = node.getChildren().get(1);
         Expression lhsExpr = children.get(0);
         Expression rhsExpr = children.get(1);
-        CompareOp op = node.getFilterOp();
+        CompareOperator op = node.getFilterOp();
 
         if (lhsNode instanceof RowValueConstructorParseNode && rhsNode instanceof RowValueConstructorParseNode) {
             int i = 0;
@@ -514,13 +514,13 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             if (index == -1) {
                 String rhsLiteral = LikeExpression.unescapeLike(pattern);
                 if (node.getLikeType() == LikeType.CASE_SENSITIVE) {
-                  CompareOp op = node.isNegate() ? CompareOp.NOT_EQUAL : CompareOp.EQUAL;
-                  if (pattern.equals(rhsLiteral)) {
-                      return new ComparisonExpression(children, op);
-                  } else {
-                      rhs = LiteralExpression.newConstant(rhsLiteral, PChar.INSTANCE, rhs.getDeterminism());
-                      return new ComparisonExpression(Arrays.asList(lhs,rhs), op);
-                  }
+                    CompareOperator op = node.isNegate() ? CompareOperator.NOT_EQUAL : CompareOperator.EQUAL;
+                    if (pattern.equals(rhsLiteral)) {
+                        return new ComparisonExpression(children, op);
+                    } else {
+                        rhs = LiteralExpression.newConstant(rhsLiteral, PChar.INSTANCE, rhs.getDeterminism());
+                        return new ComparisonExpression(Arrays.asList(lhs, rhs), op);
+                    }
                 }
             } else {
                 byte[] wildcardString = new byte[pattern.length()];
@@ -528,7 +528,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 StringUtil.fill(wildcardString, 0, pattern.length(), wildcard, 0, 1, false);
                 if (pattern.equals(new String(wildcardString, StandardCharsets.UTF_8))) {
                     List<Expression> compareChildren = Arrays.asList(lhs, NOT_NULL_STRING);
-                    return new ComparisonExpression(compareChildren, node.isNegate() ? CompareOp.LESS : CompareOp.GREATER_OR_EQUAL);
+                    return new ComparisonExpression(compareChildren, node.isNegate() ? CompareOperator.LESS : CompareOperator.GREATER_OR_EQUAL);
                 }
             }
         }

@@ -83,7 +83,7 @@ public final class CursorUtil {
             ((CursorResultIterator)fetchPlan.iterator()).setFetchSize(fetchSize);
             if (!isAggregate) { 
                 if (row!=null){
-                    scan.setStartRow(row.get());
+                    scan.withStartRow(row.get());
                 }
             }
             return this.fetchPlan;

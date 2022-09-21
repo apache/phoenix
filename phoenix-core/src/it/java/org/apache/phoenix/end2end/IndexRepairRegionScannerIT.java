@@ -223,10 +223,10 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
     }
 
     private void truncateIndexToolTables() throws IOException {
-        getUtility().getHBaseAdmin().disableTable(TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
-        getUtility().getHBaseAdmin().truncateTable(TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME), true);
-        getUtility().getHBaseAdmin().disableTable(TableName.valueOf(RESULT_TABLE_NAME));
-        getUtility().getHBaseAdmin().truncateTable(TableName.valueOf(RESULT_TABLE_NAME), true);
+        getUtility().getAdmin().disableTable(TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+        getUtility().getAdmin().truncateTable(TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME), true);
+        getUtility().getAdmin().disableTable(TableName.valueOf(RESULT_TABLE_NAME));
+        getUtility().getAdmin().truncateTable(TableName.valueOf(RESULT_TABLE_NAME), true);
     }
 
     private void dumpIndexToolMRJobCounters(IndexTool indexTool) throws IOException {

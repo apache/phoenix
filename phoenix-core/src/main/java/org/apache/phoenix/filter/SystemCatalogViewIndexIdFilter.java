@@ -56,6 +56,11 @@ public class SystemCatalogViewIndexIdFilter extends FilterBase implements Writab
 
     @Override
     public ReturnCode filterKeyValue(Cell keyValue) {
+        return filterCell(keyValue);
+    }
+
+    @Override
+    public ReturnCode filterCell(Cell keyValue) {
         return ReturnCode.INCLUDE_AND_NEXT_COL;
     }
 
