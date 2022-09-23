@@ -46,6 +46,23 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testShowCreateTableQualifier() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = "lowercasetbl1";
+        String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER, INT2 INTEGER, INT3 INTEGER, C VARCHAR)";
+        conn.createStatement().execute(ddl);
+
+        conn.createStatement().execute("ALTER TABLE \"" + tableName + "\" DROP COLUMN INT2");
+
+        ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE \"" + tableName + "\"");
+        assertTrue(rs.next());
+//        assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
+//                rs.getString(1).contains(ddl));
+    }
+
+    @Test
     public void testShowCreateTableLowerCase() throws Exception {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);

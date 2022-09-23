@@ -49,6 +49,8 @@ import java.util.Set;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
@@ -468,13 +470,41 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         return getColumnInfoString(table, colInfo, columns, pkColumns);
     }
 
+    private boolean shouldContainQualifier(PTable table,
+                                            List<PColumn> columns,
+                                            List<PColumn> pkColumns)
+    {
+        if (columns.size() == 0) return false;
+
+        PTable.QualifierEncodingScheme scheme = table.getEncodingScheme();
+        List<Integer> decodedQualifiers = columns.stream().filter(c -> !pkColumns.contains(c))
+                .map(PColumn::getColumnQualifierBytes)
+                .map(b -> scheme.decode(b))
+                .collect(Collectors.toList());
+        if (decodedQualifiers.get(0) != QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE ||
+            decodedQualifiers.get(decodedQualifiers.size() - 1)
+                    != table.getEncodedCQCounter().values().size())
+            return true;
+
+        for (int i = 0; i < decodedQualifiers.size() - 1; i++) {
+            if (decodedQualifiers.get(i) + 1 != decodedQualifiers.get(i+1))
+                return true;
+        }
+        return false;
+    }
+
     private String getColumnInfoString(PTable table, StringBuilder colInfo, List<PColumn> columns,
             List<PColumn> pkColumns) {
+        boolean appendQualifier = true; //shouldContainQualifier(table, columns, pkColumns);
         ArrayList<String> colDefs = new ArrayList<>(columns.size());
         for (PColumn col : columns) {
             String def = extractColumn(col);
             if (pkColumns.size() == 1 && pkColumns.contains(col)) {
                 def += " PRIMARY KEY" + extractPKColumnAttributes(col);
+            }
+            if (appendQualifier && !pkColumns.contains(col)) {
+                def += " COLUMN_QUALIFIER " +
+                        table.getEncodingScheme().decode(col.getColumnQualifierBytes());
             }
             colDefs.add(def);
         }
