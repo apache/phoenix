@@ -448,6 +448,14 @@ public enum SQLExceptionCode {
     + "Table not in this region."),
     UNABLE_TO_UPSERT_TASK(1146, "XCL46",
         "Error upserting records in SYSTEM.TASK table"),
+    INVALID_CQ(1148, "XCL48",
+            "ENCODED_QUALIFIER is less than INITIAL_VALUE."),
+    DUPLICATE_CQ(1149, "XCL49",
+            "Duplicate ENCODED_QUALIFIER."),
+    MISSING_CQ(1150, "XCL49",
+            "Missing ENCODED_QUALIFIER."),
+
+
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
      */

@@ -2452,6 +2452,9 @@ public class MetaDataClient {
             int pkPositionOffset = pkColumns.size();
             int position = positionOffset;
             EncodedCQCounter cqCounter = NULL_COUNTER;
+            Map<String, Integer> changedCqCounters = new HashMap<>(colDefs.size());
+            // Check for duplicate column qualifiers
+            Map<String, Set<Integer>> inputCqCounters = new HashMap<>();
             PTable viewPhysicalTable = null;
             if (tableType == PTableType.VIEW) {
                 /*
@@ -2497,7 +2500,8 @@ public class MetaDataClient {
                     if (immutableStorageSchemeProp == null) {
                         immutableStorageScheme = parent.getImmutableStorageScheme();
                     } else {
-                        immutableStorageScheme = getImmutableStorageSchemeForIndex(immutableStorageSchemeProp, schemaName, tableName, transactionProvider);
+                        checkImmutableStorageSchemeForIndex(immutableStorageSchemeProp, schemaName, tableName, transactionProvider);
+                        immutableStorageScheme = immutableStorageSchemeProp;
                     }
 
                     if (immutableStorageScheme == SINGLE_CELL_ARRAY_WITH_OFFSETS) {
@@ -2558,11 +2562,11 @@ public class MetaDataClient {
                             }
                         }
                     } else {
-                        immutableStorageScheme = getImmutableStorageSchemeForIndex(immutableStorageSchemeProp, schemaName, tableName, transactionProvider);
+                        immutableStorageScheme = isImmutableRows ? immutableStorageSchemeProp : ONE_CELL_PER_COLUMN;
+                        checkImmutableStorageSchemeForIndex(immutableStorageScheme, schemaName, tableName, transactionProvider);
                     }
                     if (immutableStorageScheme != ONE_CELL_PER_COLUMN
                             && encodingScheme == NON_ENCODED_QUALIFIERS) {
-                        getEncodingScheme(tableProps, schemaName, tableName, transactionProvider);
                         throw new SQLExceptionInfo.Builder(
                                 SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES)
                                 .setSchemaName(schemaName).setTableName(tableName).build()
@@ -2570,9 +2574,21 @@ public class MetaDataClient {
                     }
                 }
                 cqCounter = encodingScheme != NON_ENCODED_QUALIFIERS ? new EncodedCQCounter() : NULL_COUNTER;
+                if (encodingScheme != NON_ENCODED_QUALIFIERS && statement.getFamilyCQCounters() != null)
+                {
+                    for (Map.Entry<String, Integer> cq : statement.getFamilyCQCounters().entrySet()) {
+                        if (cq.getValue() < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_CQ)
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException();
+                        }
+                        cqCounter.setValue(cq.getKey(), cq.getValue());
+                        changedCqCounters.put(cq.getKey(), cqCounter.getNextQualifier(cq.getKey()));
+                        inputCqCounters.putIfAbsent(cq.getKey(), new HashSet<Integer>());
+                    }
+                }
             }
 
-            Map<String, Integer> changedCqCounters = new HashMap<>(colDefs.size());
             boolean wasPKDefined = false;
             // Keep track of all columns that are newly added to a view
             Set<Integer> viewNewColumnPositions =
@@ -2614,7 +2630,54 @@ public class MetaDataClient {
                 }
                 // Use position as column qualifier if APPEND_ONLY_SCHEMA to prevent gaps in
                 // the column encoding (PHOENIX-4737).
-                Integer encodedCQ =  isPkColumn ? null : isAppendOnlySchema ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position) : cqCounter.getNextQualifier(cqCounterFamily);
+                Integer encodedCQ = null;
+                if (!isPkColumn) {
+                    if (colDef.getEncodedQualifier() != null && encodingScheme != NON_ENCODED_QUALIFIERS) {
+                        if (cqCounter.getNextQualifier(cqCounterFamily) > ENCODED_CQ_COUNTER_INITIAL_VALUE &&
+                                !inputCqCounters.containsKey(cqCounterFamily)) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_CQ)
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException();
+                        }
+
+                        if (statement.getFamilyCQCounters() == null ||
+                                statement.getFamilyCQCounters().get(cqCounterFamily) == null) {
+                            if (colDef.getEncodedQualifier() >= cqCounter.getNextQualifier(cqCounterFamily)) {
+                                cqCounter.setValue(cqCounterFamily, colDef.getEncodedQualifier());
+                                cqCounter.increment(cqCounterFamily);
+                            }
+                            changedCqCounters.put(cqCounterFamily, cqCounter.getNextQualifier(cqCounterFamily));
+                        }
+
+                        encodedCQ = colDef.getEncodedQualifier();
+                        if (encodedCQ < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE ||
+                                encodedCQ >= cqCounter.getNextQualifier(cqCounterFamily)) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_CQ)
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException();
+                        }
+
+                        inputCqCounters.putIfAbsent(cqCounterFamily, new HashSet<Integer>());
+                        Set<Integer> familyCounters = inputCqCounters.get(cqCounterFamily);
+                        if (!familyCounters.add(encodedCQ)) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.DUPLICATE_CQ)
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException();
+                        }
+                    } else {
+                        if (inputCqCounters.containsKey(cqCounterFamily)) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_CQ)
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException();
+                        }
+
+                        if (isAppendOnlySchema) {
+                            encodedCQ = Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position);
+                        } else {
+                            encodedCQ = cqCounter.getNextQualifier(cqCounterFamily);
+                        }
+                    }
+                }
                 byte[] columnQualifierBytes = null;
                 try {
                     columnQualifierBytes = EncodedColumnsUtil.getColumnQualifierBytes(columnDefName.getColumnName(), encodedCQ, encodingScheme, isPkColumn);
@@ -2625,7 +2688,8 @@ public class MetaDataClient {
                     .setTableName(tableName).build().buildException();
                 }
                 PColumn column = newColumn(position++, colDef, pkConstraint, defaultFamilyName, false, columnQualifierBytes, isImmutableRows);
-                if (!isAppendOnlySchema && cqCounter.increment(cqCounterFamily)) {
+                if (!isAppendOnlySchema && colDef.getEncodedQualifier() == null
+                        && cqCounter.increment(cqCounterFamily)) {
                     changedCqCounters.put(cqCounterFamily, cqCounter.getNextQualifier(cqCounterFamily));
                 }
                 if (SchemaUtil.isPKColumn(column)) {
@@ -3222,7 +3286,7 @@ public class MetaDataClient {
         return encodingScheme;
     }
 
-    private ImmutableStorageScheme getImmutableStorageSchemeForIndex(ImmutableStorageScheme immutableStorageSchemeProp, String schemaName, String tableName, TransactionFactory.Provider transactionProvider)
+    private void checkImmutableStorageSchemeForIndex(ImmutableStorageScheme immutableStorageSchemeProp, String schemaName, String tableName, TransactionFactory.Provider transactionProvider)
             throws SQLException {
         if (immutableStorageSchemeProp != ONE_CELL_PER_COLUMN && transactionProvider != null && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.COLUMN_ENCODING) ) {
             throw new SQLExceptionInfo.Builder(
@@ -3232,7 +3296,6 @@ public class MetaDataClient {
                     .build()
                     .buildException();
         }
-        return immutableStorageSchemeProp;
     }
 
     /* This method handles mutation codes sent by phoenix server, except for TABLE_NOT_FOUND which
