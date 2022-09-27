@@ -254,7 +254,6 @@ import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PMetaDataImpl;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PSynchronizedMetaData;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
@@ -415,7 +414,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private QueryLoggerDisruptor queryDisruptor;
 
     private PMetaData newEmptyMetaData() {
-        return new PSynchronizedMetaData(new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, getProps()));
+        return new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY,
+                (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
+                getProps().get(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB)),
+                        getProps());
     }
 
     /**
@@ -743,6 +745,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    public PMetaData getMetaDataCache() {
+        return latestMetaData;
+    }
+
     @Override
     public void addTable(PTable table, long resolvedTime) throws SQLException {
         synchronized (latestMetaDataLock) {
@@ -754,7 +760,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         table.getTenantId(), table.getName().getString()));
                 PTable existingTable = existingTableRef.getTable();
                 if (existingTable.getTimeStamp() > table.getTimeStamp()) {
-                    existingTableRef.setLastAccessTime(TimeKeeper.SYSTEM.getCurrentTime());
                     return;
                 }
             } catch (TableNotFoundException e) {}
@@ -874,12 +879,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public PhoenixConnection connect(String url, Properties info) throws SQLException {
         checkClosed();
-        PMetaData metadata = latestMetaData;
         throwConnectionClosedIfNullMetaData();
         validateConnectionProperties(info);
-        metadata = metadata.clone();
 
-        return new PhoenixConnection(this, url, info, metadata);
+        return new PhoenixConnection(this, url, info);
     }
 
     private ColumnFamilyDescriptor generateColumnFamilyDescriptor(Pair<byte[],Map<String,Object>> family, PTableType tableType) throws SQLException {
@@ -3422,7 +3425,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
                             String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
                             try (PhoenixConnection metaConnection = new PhoenixConnection(ConnectionQueryServicesImpl.this, globalUrl,
-                                         scnProps, newEmptyMetaData())) {
+                                         scnProps)) {
                                 try (Statement statement =
                                         metaConnection.createStatement()) {
                                     metaConnection.setRunningUpgrade(true);
@@ -3772,8 +3775,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             p.remove(PhoenixRuntime.CURRENT_SCN_ATTRIB);
             p.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
             PhoenixConnection conn = new PhoenixConnection(
-              ConnectionQueryServicesImpl.this, metaConnection.getURL(), p,
-              metaConnection.getMetaDataCache());
+              ConnectionQueryServicesImpl.this, metaConnection.getURL(), p);
             try {
                 List<String> tablesNeedingUpgrade = UpgradeUtil
                   .getPhysicalTablesWithDescRowKey(conn);
@@ -4055,7 +4057,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
             String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
             metaConnection = new PhoenixConnection(ConnectionQueryServicesImpl.this, globalUrl,
-                    scnProps, latestMetaData);
+                    scnProps);
             metaConnection.setRunningUpgrade(true);
             // Always try to create SYSTEM.MUTEX table first since we need it to acquire the
             // upgrade mutex. Upgrade or migration is not possible without the upgrade mutex
@@ -4120,7 +4122,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     //to avoid collisions. See PHOENIX-5132 and PHOENIX-5138
                     try (PhoenixConnection conn = new PhoenixConnection(
                             ConnectionQueryServicesImpl.this, globalUrl,
-                            props, newEmptyMetaData())) {
+                            props)) {
                         UpgradeUtil.mergeViewIndexIdSequences(metaConnection);
                     } catch (Exception mergeViewIndeIdException) {
                         LOGGER.warn("Merge view index id sequence failed! If possible, " +

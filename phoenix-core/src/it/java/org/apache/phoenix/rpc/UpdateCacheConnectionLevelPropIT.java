@@ -85,14 +85,16 @@ public class UpdateCacheConnectionLevelPropIT extends ParallelStatsDisabledIT {
         setUpTableAndConnections(fullTableName, null,
                 String.valueOf(connUpdateCacheFrequency));
 
-        // There should only be a single call to getTable() for fetching the table's metadata
+        // There should only be no call to getTable() for fetching the table's metadata since
+        // it will be in the CQSI cache
         int numExecutions = 2;
-        int numExpectedGetTableCalls = 1;
+        int numExpectedGetTableCalls = 0;
         verifyExpectedGetTableCalls(fullTableName, numExecutions, numExpectedGetTableCalls);
 
         // Wait for a period of 'connUpdateCacheFrequency' and verify that there was one new call to
         // getTable() for fetching the table's metadata
         Thread.sleep(connUpdateCacheFrequency);
+        numExpectedGetTableCalls = 1;
         verifyExpectedGetTableCalls(fullTableName, numExecutions, numExpectedGetTableCalls);
     }
 
@@ -106,15 +108,17 @@ public class UpdateCacheConnectionLevelPropIT extends ParallelStatsDisabledIT {
         String fullTableName = DEFAULT_SCHEMA_NAME + QueryConstants.NAME_SEPARATOR +
                 generateUniqueName();
 
-        // There should only be a single call to getTable() for fetching the table's metadata
+        // There should only be no call to getTable() for fetching the table's metadata since
+        // it will be in the CQSI cache
         int numExecutions = 2;
-        int numExpectedGetTableCalls = 1;
+        int numExpectedGetTableCalls = 0;
         setUpTableAndConnections(fullTableName, String.valueOf(tableUpdateCacheFrequency), null);
         verifyExpectedGetTableCalls(fullTableName, numExecutions, numExpectedGetTableCalls);
 
         // Wait for a period of 'tableUpdateCacheFrequency' and verify that there was one new call
         // to getTable() for fetching the table's metadata
         Thread.sleep(tableUpdateCacheFrequency);
+        numExpectedGetTableCalls = 1;
         verifyExpectedGetTableCalls(fullTableName, numExecutions, numExpectedGetTableCalls);
     }
 
@@ -147,9 +151,10 @@ public class UpdateCacheConnectionLevelPropIT extends ParallelStatsDisabledIT {
         String fullTableName = DEFAULT_SCHEMA_NAME + QueryConstants.NAME_SEPARATOR +
                 generateUniqueName();
 
-        // There should only be a single call to getTable() for fetching the table's metadata
+        // There should only be no call to getTable() for fetching the table's metadata since
+        // it will be in the CQSI cache
         int numExecutions = 2;
-        int numExpectedGetTableCalls = 1;
+        int numExpectedGetTableCalls = 0;
         setUpTableAndConnections(fullTableName, String.valueOf(tableUpdateCacheFrequency),
                 String.valueOf(connUpdateCacheFrequency));
         verifyExpectedGetTableCalls(fullTableName, numExecutions, numExpectedGetTableCalls);

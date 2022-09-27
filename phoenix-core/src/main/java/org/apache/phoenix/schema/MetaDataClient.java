@@ -592,7 +592,7 @@ public class MetaDataClient {
                 tableRef = connection.getTableRef(new PTableKey(tenantId, fullTableName));
                 table = tableRef.getTable();
                 tableTimestamp = table.getTimeStamp();
-                tableResolvedTimestamp = tableRef.getResolvedTimeStamp();
+                tableResolvedTimestamp = table.getTimeStamp();
                 break;
             } catch (TableNotFoundException e) {
                 tenantId = null;

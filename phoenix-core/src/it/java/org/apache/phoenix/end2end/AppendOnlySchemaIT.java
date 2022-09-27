@@ -58,8 +58,10 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.mockito.AdditionalMatchers;
 import org.mockito.Mockito;
 
 @Category(ParallelStatsDisabledTest.class)
@@ -112,9 +114,9 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
             }
             
             // verify getTable rpcs
-            verify(connectionQueryServices, sameClient ? never() : times(1))
-                    .getTable((PName) isNull(), eq(new byte[0]),
-                            eq(Bytes.toBytes(viewName)), anyLong(), anyLong());
+            verify(connectionQueryServices, never())
+                    .getTable((PName) isNull(), AdditionalMatchers.aryEq(new byte[0]),
+                            AdditionalMatchers.aryEq(Bytes.toBytes(viewName)), anyLong(), anyLong());
             
             // verify no create table rpcs
             verify(connectionQueryServices, never()).createTable(anyListOf(Mutation.class),
@@ -324,7 +326,11 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
             assertEquals(1000, view.getUpdateCacheFrequency());
         }
     }
-    
+
+    /*
+    In PHOENIX-6761, connection level cache is removed so the dropped view will not be found when trying to upsert to it.
+     */
+    @Ignore
     @Test
     public void testUpsertRowToDeletedTable() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
