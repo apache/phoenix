@@ -23,6 +23,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.PrivateCellUtil;
 
 /**
  * ScannerContext has all methods package visible. To properly update the context progress for our scanners we
@@ -31,12 +32,8 @@ import org.apache.hadoop.hbase.CellUtil;
 public class ScannerContextUtil {
     public static void incrementSizeProgress(ScannerContext sc, List<Cell> cells) {
         for (Cell cell : cells) {
-            sc.incrementSizeProgress(CellUtil.estimatedSerializedSizeOf(cell),
-                    CellUtil.estimatedHeapSizeOf(cell));
+            sc.incrementSizeProgress(PrivateCellUtil.estimatedSerializedSizeOf(cell),
+                    cell.heapSize());
         }
-    }
-
-    public static void updateTimeProgress(ScannerContext sc) {
-        sc.updateTimeProgress();
     }
 }

@@ -30,8 +30,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
@@ -56,7 +56,34 @@ public class ByteUtil {
             EMPTY_BYTE_ARRAY);
     public static final ImmutableBytesWritable EMPTY_IMMUTABLE_BYTE_ARRAY = new ImmutableBytesWritable(
             EMPTY_BYTE_ARRAY);
-    
+
+
+    /** Mask for bit 0 of a byte. */
+    private static final int BIT_0 = 0x01;
+
+    /** Mask for bit 1 of a byte. */
+    private static final int BIT_1 = 0x02;
+
+    /** Mask for bit 2 of a byte. */
+    private static final int BIT_2 = 0x04;
+
+    /** Mask for bit 3 of a byte. */
+    private static final int BIT_3 = 0x08;
+
+    /** Mask for bit 4 of a byte. */
+    private static final int BIT_4 = 0x10;
+
+    /** Mask for bit 5 of a byte. */
+    private static final int BIT_5 = 0x20;
+
+    /** Mask for bit 6 of a byte. */
+    private static final int BIT_6 = 0x40;
+
+    /** Mask for bit 7 of a byte. */
+    private static final int BIT_7 = 0x80;
+
+    private static final int[] BITS = {BIT_7, BIT_6, BIT_5, BIT_4, BIT_3, BIT_2, BIT_1, BIT_0};
+
     public static final Comparator<ImmutableBytesPtr> BYTES_PTR_COMPARATOR = new Comparator<ImmutableBytesPtr>() {
 
         @Override
@@ -307,11 +334,7 @@ public class ByteUtil {
     }
 
     public static int vintFromBytes(byte[] buffer, int offset) {
-        try {
-            return (int)Bytes.readVLong(buffer, offset);
-        } catch (IOException e) { // Impossible
-            throw new RuntimeException(e);
-        }
+        return (int)Bytes.readAsVLong(buffer, offset);
     }
 
     /**
@@ -523,7 +546,7 @@ public class ByteUtil {
         return count;
     }
 
-    public static boolean isInclusive(CompareOp op) {
+    public static boolean isInclusive(CompareOperator op) {
         switch (op) {
             case LESS:
             case GREATER:
@@ -537,7 +560,7 @@ public class ByteUtil {
               throw new RuntimeException("Unknown Compare op " + op.name());
         }
     }
-    public static boolean compare(CompareOp op, int compareResult) {
+    public static boolean compare(CompareOperator op, int compareResult) {
         switch (op) {
             case LESS:
               return compareResult < 0;
@@ -566,7 +589,7 @@ public class ByteUtil {
         return ptr.copyBytes();
     }
     
-    public static KeyRange getKeyRange(byte[] key, CompareOp op, PDataType type) {
+    public static KeyRange getKeyRange(byte[] key, CompareOperator op, PDataType type) {
         switch (op) {
         case EQUAL:
             return type.getKeyRange(key, true, key, true);
@@ -651,5 +674,26 @@ public class ByteUtil {
                 previousSepartor +1, src.length - previousSepartor -1);
         }
         return dst;
+    }
+
+    // Adapted from the Commons Codec BinaryCodec, but treat the input as a byte sequence, without
+    // the endinanness reversion in the original code
+    public static byte[] fromAscii(final char[] ascii) {
+        if (ascii == null || ascii.length == 0) {
+            return EMPTY_BYTE_ARRAY;
+        }
+        final int asciiLength = ascii.length;
+        // get length/8 times bytes with 3 bit shifts to the right of the length
+        final byte[] l_raw = new byte[asciiLength >> 3];
+        // We incr index jj by 8 as we go along to not recompute indices using multiplication every
+        // time inside the loop.
+        for (int ii = 0, jj = 0; ii < l_raw.length; ii++, jj += 8) {
+            for (int bits = 0; bits < BITS.length; ++bits) {
+                if (ascii[jj + bits] == '1') {
+                    l_raw[ii] |= BITS[bits];
+                }
+            }
+        }
+        return l_raw;
     }
 }

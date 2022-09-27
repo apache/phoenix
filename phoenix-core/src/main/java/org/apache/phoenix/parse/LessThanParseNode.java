@@ -17,8 +17,7 @@
  */
 package org.apache.phoenix.parse;
 
-import org.apache.hadoop.hbase.filter.CompareFilter;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 
 
 /**
@@ -35,12 +34,12 @@ public class LessThanParseNode extends ComparisonParseNode {
     }
 
     @Override
-    public CompareOp getFilterOp() {
-        return CompareFilter.CompareOp.LESS;
+    public CompareOperator getFilterOp() {
+        return CompareOperator.LESS;
     }
 
     @Override
-    public CompareOp getInvertFilterOp() {
-        return CompareOp.GREATER;
+    public CompareOperator getInvertFilterOp() {
+        return CompareOperator.GREATER;
     }
 }

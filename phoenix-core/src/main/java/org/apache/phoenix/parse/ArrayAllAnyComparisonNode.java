@@ -19,7 +19,7 @@ package org.apache.phoenix.parse;
 
 import java.util.List;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.util.QueryUtil;
 
@@ -37,7 +37,7 @@ public abstract class ArrayAllAnyComparisonNode extends CompoundParseNode {
         ParseNode rhs = children.get(0);
         ComparisonParseNode comp = (ComparisonParseNode)children.get(1);
         ParseNode lhs = comp.getLHS();
-        CompareOp op = comp.getFilterOp();
+        CompareOperator op = comp.getFilterOp();
         buf.append(' ');
         lhs.toSQL(resolver, buf);
         buf.append(" " + QueryUtil.toSQL(op) + " ");

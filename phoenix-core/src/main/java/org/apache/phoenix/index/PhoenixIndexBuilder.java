@@ -261,7 +261,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
         List<Mutation> mutations = Lists.newArrayListWithExpectedSize(2);
         for (int i = 0; i < tuple.size(); i++) {
             Cell cell = tuple.getValue(i);
-            if (Type.codeToType(cell.getTypeByte()) == Type.Put) {
+            if (cell.getType() == Cell.Type.Put) {
                 if (put == null) {
                     put = new Put(rowKey);
                     transferAttributes(inc, put);

@@ -4949,12 +4949,12 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             QueryPlan plan = stmt.optimizeQuery(query);
             plan.iterator();
             //Fail since we have 3 rows in pointLookup
-            assertFalse(plan.getContext().getScan().isSmall());
+            assertEquals(Scan.ReadType.DEFAULT, plan.getContext().getScan().getReadType());
             query = "select * from foo where a = 'a' and b = 'b' and c = 'c'";
             plan = stmt.compileQuery(query);
             plan.iterator();
             //Should be small scan, query is for single row pointLookup
-            assertTrue(plan.getContext().getScan().isSmall());
+            assertEquals(Scan.ReadType.PREAD, plan.getContext().getScan().getReadType());
         }
     }
 

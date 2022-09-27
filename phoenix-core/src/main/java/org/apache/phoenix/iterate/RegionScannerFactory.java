@@ -359,7 +359,6 @@ public abstract class RegionScannerFactory {
           throws IOException {
         boolean res = next(result);
         ScannerContextUtil.incrementSizeProgress(scannerContext, result);
-        ScannerContextUtil.updateTimeProgress(scannerContext);
         return res;
       }
 
@@ -430,7 +429,7 @@ public abstract class RegionScannerFactory {
             QueryConstants.ARRAY_VALUE_COLUMN_FAMILY, 0, QueryConstants.ARRAY_VALUE_COLUMN_FAMILY.length,
             QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER, 0,
             QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER.length, HConstants.LATEST_TIMESTAMP,
-            KeyValue.Type.codeToType(rowKv.getTypeByte()), value, 0, value.length));
+            KeyValue.Type.codeToType(rowKv.getType().getCode()), value, 0, value.length));
         return getArrayCellPosition(result);
       }
 

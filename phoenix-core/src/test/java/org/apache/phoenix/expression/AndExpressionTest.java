@@ -18,8 +18,8 @@
 package org.apache.phoenix.expression;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.CellBuilderType;
+import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
@@ -136,13 +136,14 @@ public class AndExpressionTest {
 
     private Cell createCell(String name, Boolean value) {
         byte[] valueBytes = value == null ? null : value ? PBoolean.TRUE_BYTES : PBoolean.FALSE_BYTES;
-        return CellUtil.createCell(
-            Bytes.toBytes("row"),
-            QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-            Bytes.toBytes(name),
-            1,
-            KeyValue.Type.Put.getCode(),
-            valueBytes);
+        return CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                .setRow(Bytes.toBytes("row"))
+                .setFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)
+                .setQualifier(Bytes.toBytes(name))
+                .setTimestamp(1)
+                .setType(Cell.Type.Put)
+                .setValue(valueBytes)
+                .build();
     }
 
     private void testPartialOneSideFirst(Boolean expected, Boolean lhs, Boolean rhs, boolean leftFirst) {

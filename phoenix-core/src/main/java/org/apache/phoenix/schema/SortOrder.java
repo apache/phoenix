@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
@@ -51,7 +51,7 @@ public enum SortOrder {
 
 	ASC(2) {
 		@Override
-		public CompareOp transform(CompareOp op) {
+		public CompareOperator transform(CompareOperator op) {
 			return op;
 		}
 
@@ -63,15 +63,15 @@ public enum SortOrder {
 
 	DESC(1) {
 		@Override
-		public CompareOp transform(CompareOp op) {
+		public CompareOperator transform(CompareOperator op) {
 			switch (op) {
 				case EQUAL: return op;
 				case NOT_EQUAL: return op;
 				case NO_OP: return op;
-				case GREATER: return CompareOp.LESS;
-				case GREATER_OR_EQUAL: return CompareOp.LESS_OR_EQUAL;
-				case LESS: return CompareOp.GREATER;
-				case LESS_OR_EQUAL: return CompareOp.GREATER_OR_EQUAL;
+				case GREATER: return CompareOperator.LESS;
+				case GREATER_OR_EQUAL: return CompareOperator.LESS_OR_EQUAL;
+				case LESS: return CompareOperator.GREATER;
+				case LESS_OR_EQUAL: return CompareOperator.GREATER_OR_EQUAL;
 			}
 			throw new IllegalArgumentException("Add the missing case statement!");
 		}
@@ -145,6 +145,6 @@ public enum SortOrder {
 		return serializationId;
 	}
 
-	public abstract CompareOp transform(CompareOp op);
+	public abstract CompareOperator transform(CompareOperator op);
     public abstract byte normalize(byte b);
 }

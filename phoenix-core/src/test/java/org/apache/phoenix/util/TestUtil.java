@@ -57,16 +57,20 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.CompactionState;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptor;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
 
 import org.apache.hadoop.hbase.client.Get;
@@ -342,7 +346,7 @@ public class TestUtil {
         return BigDecimal.valueOf(sum).divide(BigDecimal.valueOf(count), PDataType.DEFAULT_MATH_CONTEXT);
     }
 
-    public static Expression constantComparison(CompareOp op, PColumn c, Object o) {
+    public static Expression constantComparison(CompareOperator op, PColumn c, Object o) {
         return new ComparisonExpression(Arrays.<Expression>asList(new KeyValueColumnExpression(c), LiteralExpression.newConstant(o)), op);
     }
 
@@ -354,7 +358,7 @@ public class TestUtil {
         return new RowKeyColumnExpression(c, new RowKeyValueAccessor(columns, columns.indexOf(c)));
     }
 
-    public static Expression constantComparison(CompareOp op, Expression e, Object o) {
+    public static Expression constantComparison(CompareOperator op, Expression e, Object o) {
         return new ComparisonExpression(Arrays.asList(e, LiteralExpression.newConstant(o)), op);
     }
 
@@ -388,7 +392,7 @@ public class TestUtil {
         return new SubstrFunction(Arrays.asList(e, LiteralExpression.newConstant(offset), LiteralExpression.newConstant(null)));
     }
 
-    public static Expression columnComparison(CompareOp op, Expression c1, Expression c2) {
+    public static Expression columnComparison(CompareOperator op, Expression c1, Expression c2) {
         return new ComparisonExpression(Arrays.<Expression>asList(c1, c2), op);
     }
 
@@ -810,14 +814,23 @@ public class TestUtil {
     public static void majorCompact(HBaseTestingUtility utility, TableName table)
         throws IOException, InterruptedException {
         long compactionRequestedSCN = EnvironmentEdgeManager.currentTimeMillis();
-        Admin admin = utility.getHBaseAdmin();
+        Admin admin = utility.getAdmin();
         admin.majorCompact(table);
         long lastCompactionTimestamp;
         CompactionState state = null;
-        while ((lastCompactionTimestamp = admin.getLastMajorCompactionTimestamp(table))
-            < compactionRequestedSCN
-            || (state = admin.getCompactionState(table)).equals(CompactionState.MAJOR)
-            || admin.getCompactionState(table).equals(CompactionState.MAJOR_AND_MINOR)){
+        CompactionState previousState = null;
+        while ((state = admin.getCompactionState(table)).equals(CompactionState.MAJOR)
+                || state.equals(CompactionState.MAJOR_AND_MINOR)
+                || (lastCompactionTimestamp =
+                        admin.getLastMajorCompactionTimestamp(table)) < compactionRequestedSCN) {
+            // In HBase 2.5 getLastMajorCompactionTimestamp doesn't seem to get updated when the
+            // clock is stopped, so check for the state going to NONE instead
+            if (state.equals(CompactionState.NONE) && (previousState != null
+                    && previousState.equals(CompactionState.MAJOR_AND_MINOR)
+                    || previousState.equals(CompactionState.MAJOR))) {
+                break;
+            }
+            previousState = state;
             Thread.sleep(100);
         }
     }
@@ -869,8 +882,8 @@ public class TestUtil {
             while (!compactionDone) {
                 Thread.sleep(6000L);
                 Scan scan = new Scan();
-                scan.setStartRow(markerRowKey);
-                scan.setStopRow(Bytes.add(markerRowKey, new byte[]{0}));
+                scan.withStartRow(markerRowKey);
+                scan.withStopRow(Bytes.add(markerRowKey, new byte[]{0}));
                 scan.setRaw(true);
         
                 try (Table htableForRawScan = services.getTable(Bytes.toBytes(tableName))) {
@@ -937,7 +950,7 @@ public class TestUtil {
         Scan s = new Scan();
         s.setRaw(isRaw);
         ;
-        s.setMaxVersions();
+        s.readAllVersions();
         int rows = 0;
         try (ResultScanner scanner = table.getScanner(s)) {
             Result result = null;
@@ -957,7 +970,7 @@ public class TestUtil {
         Scan s = new Scan();
         s.setRaw(isRaw);
         ;
-        s.setMaxVersions();
+        s.readAllVersions();
 
         CellCount cellCount = new CellCount();
         try (ResultScanner scanner = table.getScanner(s)) {
@@ -1000,10 +1013,10 @@ public class TestUtil {
             System.out.println("************ dumping index status for " + indexName + " **************");
             Scan s = new Scan();
             s.setRaw(true);
-            s.setMaxVersions();
+            s.readAllVersions();
             byte[] startRow = SchemaUtil.getTableKeyFromFullName(indexName);
-            s.setStartRow(startRow);
-            s.setStopRow(ByteUtil.nextKey(ByteUtil.concat(startRow, QueryConstants.SEPARATOR_BYTE_ARRAY)));
+            s.withStartRow(startRow);
+            s.withStopRow(ByteUtil.nextKey(ByteUtil.concat(startRow, QueryConstants.SEPARATOR_BYTE_ARRAY)));
             try (ResultScanner scanner = table.getScanner(s)) {
                 Result result = null;
                 while ((result = scanner.next()) != null) {
@@ -1176,9 +1189,11 @@ public class TestUtil {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         TableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
         TableDescriptorBuilder descriptorBuilder = null;
-		if (!descriptor.getCoprocessors().contains(coprocessorClass.getName())) {
+		if (!descriptor.getCoprocessorDescriptors().stream().map(CoprocessorDescriptor::getClassName)
+                .collect(Collectors.toList()).contains(coprocessorClass.getName())) {
 		    descriptorBuilder=TableDescriptorBuilder.newBuilder(descriptor);
-		    descriptorBuilder.addCoprocessor(coprocessorClass.getName(), null, priority, null);
+		    descriptorBuilder.setCoprocessor(
+                    CoprocessorDescriptorBuilder.newBuilder(coprocessorClass.getName()).setPriority(priority).build());
 		}else{
 			return;
 		}
@@ -1204,7 +1219,8 @@ public class TestUtil {
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         TableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
         TableDescriptorBuilder descriptorBuilder = null;
-        if (descriptor.getCoprocessors().contains(coprocessorClass.getName())) {
+        if (descriptor.getCoprocessorDescriptors().stream().map(CoprocessorDescriptor::getClassName)
+                .collect(Collectors.toList()).contains(coprocessorClass.getName())) {
             descriptorBuilder=TableDescriptorBuilder.newBuilder(descriptor);
             descriptorBuilder.removeCoprocessor(coprocessorClass.getName());
         }else{
@@ -1228,7 +1244,7 @@ public class TestUtil {
         }
     }
 
-    public static boolean compare(CompareOp op, ImmutableBytesWritable lhsOutPtr, ImmutableBytesWritable rhsOutPtr) {
+    public static boolean compare(CompareOperator op, ImmutableBytesWritable lhsOutPtr, ImmutableBytesWritable rhsOutPtr) {
         int compareResult = Bytes.compareTo(lhsOutPtr.get(), lhsOutPtr.getOffset(), lhsOutPtr.getLength(), rhsOutPtr.get(), rhsOutPtr.getOffset(), rhsOutPtr.getLength());
         return ByteUtil.compare(op, compareResult);
     }

@@ -88,6 +88,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.INDEX_TOOL_RUN_STATUS_BYTES;
@@ -310,15 +312,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
                 admin.getDescriptor(indexTable).getColumnFamilies()[0];
             ColumnFamilyDescriptor newDesc =
                 ColumnFamilyDescriptorBuilder.newBuilder(desc).setTimeToLive(1).build();
-            admin.modifyColumnFamily(indexTable, newDesc);
-            Thread.sleep(1000);
-            Pair<Integer, Integer> status = admin.getAlterStatus(indexTable);
-            int retry = 0;
-            while (retry < 20 && status.getFirst() != 0) {
-                Thread.sleep(2000);
-                status = admin.getAlterStatus(indexTable);
-            }
-            assertEquals(0, (int) status.getFirst());
+            Future<Void> modifyColumnFams = admin.modifyColumnFamilyAsync(indexTable, newDesc);
+            modifyColumnFams.get(41000, TimeUnit.MILLISECONDS);
 
             TableName indexToolOutputTable = TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES);
             admin.disableTable(indexToolOutputTable);

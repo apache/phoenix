@@ -87,7 +87,7 @@ public class TestIndexManagementUtil {
    * @param index descriptor to update before creating table
    */
   public static void createIndexTable(Admin admin, TableDescriptorBuilder indexBuilder) throws IOException {
-        indexBuilder.addColumnFamily(
+        indexBuilder.setColumnFamily(
                 ColumnFamilyDescriptorBuilder.newBuilder(CoveredColumnIndexCodec.INDEX_ROW_COLUMN_FAMILY)
                         .setKeepDeletedCells(KeepDeletedCells.TRUE).build());
     admin.createTable(indexBuilder.build());

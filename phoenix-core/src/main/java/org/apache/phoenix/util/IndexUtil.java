@@ -858,7 +858,7 @@ public class IndexUtil {
             // Clear and add new Cells to the Mutation.
             for (Cell cell : updatedCells) {
                 Delete d = (Delete) m;
-                d.addDeleteMarker(cell);
+                d.add(cell);
             }
         }
     }

@@ -80,7 +80,7 @@ public class FilteredKeyValueScanner implements ReseekableScanner {
             if (peeked == null) { return false; }
 
             // filter the peeked value to see if it should be served
-            ReturnCode code = filter.filterKeyValue(peeked);
+            ReturnCode code = filter.filterCell(peeked);
             switch (code) {
             // included, so we are done
             case INCLUDE:

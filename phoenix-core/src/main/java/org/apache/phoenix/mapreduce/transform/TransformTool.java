@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.mapreduce.transform;
 
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.mapreduce.PhoenixTTLTool;
 import org.apache.phoenix.schema.PIndexState;
@@ -29,11 +30,10 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.filter.CompareFilter;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
@@ -652,7 +652,7 @@ public class TransformTool extends Configured implements Tool {
         SingleColumnValueFilter filter = new SingleColumnValueFilter(
                 transformMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
                 transformMaintainer.getEmptyKeyValueQualifier(),
-                CompareFilter.CompareOp.EQUAL,
+                CompareOperator.EQUAL,
                 UNVERIFIED_BYTES
         );
         scan.setFilter(filter);
@@ -745,7 +745,7 @@ public class TransformTool extends Configured implements Tool {
             // do the split
             // drop table and recreate with appropriate splits
             TableName newTableSplitted = TableName.valueOf(newTable.getPhysicalName().getBytes());
-            HTableDescriptor descriptor = admin.getTableDescriptor(newTableSplitted);
+            TableDescriptor descriptor = admin.getDescriptor(newTableSplitted);
             admin.disableTable(newTableSplitted);
             admin.deleteTable(newTableSplitted);
             admin.createTable(descriptor, newSplitPoints);

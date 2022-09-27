@@ -289,7 +289,7 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
     
     private static Collection<?> foreach(ScanRanges scanRanges, int[] widths, KeyRange[] expectedSplits) {
          SkipScanFilter filter = new SkipScanFilter(scanRanges.getRanges(), buildSchema(widths));
-        Scan scan = new Scan().setFilter(filter).setStartRow(KeyRange.UNBOUND).setStopRow(KeyRange.UNBOUND);
+        Scan scan = new Scan().setFilter(filter).withStartRow(KeyRange.UNBOUND).withStopRow(KeyRange.UNBOUND, true);
         List<Object> ret = Lists.newArrayList();
         ret.add(new Object[] {scan, scanRanges, Arrays.<KeyRange>asList(expectedSplits)});
         return ret;

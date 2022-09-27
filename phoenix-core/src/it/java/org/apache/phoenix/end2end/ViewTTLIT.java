@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -143,10 +144,10 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             long minTimestamp, boolean rawScan, int expectedRows) throws IOException, SQLException {
 
         FilterList filterList = new FilterList(FilterList.Operator.MUST_PASS_ALL);
-        RowFilter schemaNameFilter = new RowFilter(CompareFilter.CompareOp.EQUAL,
+        RowFilter schemaNameFilter = new RowFilter(CompareOperator.EQUAL,
                 new SubstringComparator(schemaName));
         QualifierFilter phoenixTTLQualifierFilter = new QualifierFilter(
-                CompareFilter.CompareOp.EQUAL,
+                CompareOperator.EQUAL,
                 new BinaryComparator(PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES));
         filterList.addFilter(schemaNameFilter);
         filterList.addFilter(phoenixTTLQualifierFilter);

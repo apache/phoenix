@@ -74,8 +74,8 @@ public class CachedLocalTable implements LocalHBaseState {
         byte[] rowKey = mutation.getRow();
         // need to use a scan here so we can get raw state, which Get doesn't provide.
         Scan scan = IndexManagementUtil.newLocalStateScan(Collections.singletonList(columnReferences));
-        scan.setStartRow(rowKey);
-        scan.setStopRow(rowKey);
+        scan.withStartRow(rowKey);
+        scan.withStopRow(rowKey, true);
 
         // Provides a means of client indicating that newer cells should not be considered,
         // enabling mutations to be replayed to partially rebuild the index when a write fails.
@@ -163,7 +163,7 @@ public class CachedLocalTable implements LocalHBaseState {
             scan.setFilter(new SkipScanFilter(skipScanFilter, true));
         } else {
             assert scan.isRaw();
-            scan.setMaxVersions(1);
+            scan.readVersions(1);
             scan.setFilter(skipScanFilter);
         }
 

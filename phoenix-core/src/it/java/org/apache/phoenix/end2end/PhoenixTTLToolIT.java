@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.Result;
@@ -68,7 +69,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
                         SchemaUtil.getSchemaNameFromFullName(tableName),
                         SchemaUtil.getTableNameFromFullName(tableName)))) {
             Filter filter =
-                    new RowFilter(CompareFilter.CompareOp.EQUAL, new RegexStringComparator(regrex));
+                    new RowFilter(CompareOperator.EQUAL, new RegexStringComparator(regrex));
             Scan scan = new Scan();
             scan.setFilter(filter);
             assertEquals(expectedRows, getRowCount(table,scan));

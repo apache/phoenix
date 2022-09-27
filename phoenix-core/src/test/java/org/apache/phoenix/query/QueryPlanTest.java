@@ -248,7 +248,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             String queryPlan = QueryUtil.getExplainPlan(rs);
             assertEquals(
-                    "CLIENT PARALLEL 20-WAY RANGE SCAN OVER FOO [0,'a',~'2016-01-28 23:59:59.999'] - [19,'a',~'2016-01-28 00:00:00.000']\n" + 
+                    "CLIENT PARALLEL 20-WAY RANGE SCAN OVER FOO [X'00','a',~'2016-01-28 23:59:59.999'] - [X'13','a',~'2016-01-28 00:00:00.000']\n" +
                     "    SERVER FILTER BY FIRST KEY ONLY\n" + 
                     "CLIENT MERGE SORT", queryPlan);
         } finally {
@@ -274,7 +274,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             String queryPlan = QueryUtil.getExplainPlan(rs);
             assertEquals(
-                    "CLIENT PARALLEL 20-WAY ROUND ROBIN RANGE SCAN OVER " + tableName + " [0,'a',~'2016-01-28 23:59:59.999'] - [19,'a',~'2016-01-28 00:00:00.000']\n" + 
+                    "CLIENT PARALLEL 20-WAY ROUND ROBIN RANGE SCAN OVER " + tableName + " [X'00','a',~'2016-01-28 23:59:59.999'] - [X'13','a',~'2016-01-28 00:00:00.000']\n" +
                     "    SERVER FILTER BY FIRST KEY ONLY", queryPlan);
         } finally {
             conn.close();

@@ -26,12 +26,14 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.util.Collections;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -153,7 +155,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
             assertTrue(rs.next());
             
             Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            int numRegions = admin.getTableRegions(physicalTableName).size();
+            int numRegions = admin.getRegions(physicalTableName).size();
             
             String query = "SELECT * FROM " + tableName +" where v1 like 'a%'";
 
@@ -336,8 +338,8 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         for (int i = 0; i < startKeys.length; i++) {
             Scan s = new Scan();
             s.addFamily(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
-            s.setStartRow(startKeys[i]);
-            s.setStopRow(endKeys[i]);
+            s.withStartRow(startKeys[i]);
+            s.withStopRow(endKeys[i]);
             ResultScanner scanner = indexTable.getScanner(s);
             int count = 0;
             for(Result r:scanner){
@@ -374,8 +376,12 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         conn1.commit();
         Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         TableDescriptor tableDescriptor = admin.getDescriptor(physicalTableName);
-        tableDescriptor=TableDescriptorBuilder.newBuilder(tableDescriptor).addCoprocessor(DeleyOpenRegionObserver.class.getName(), null,
-            QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY - 1, null).build();
+        tableDescriptor = TableDescriptorBuilder.newBuilder(tableDescriptor).setCoprocessor(
+                CoprocessorDescriptorBuilder
+                        .newBuilder(DeleyOpenRegionObserver.class.getName())
+                        .setPriority(QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY - 1)
+                        .setProperties(Collections.emptyMap())
+                        .build()).build();
         admin.disableTable(physicalTableName);
         admin.modifyTable(tableDescriptor);
         admin.enableTable(physicalTableName);

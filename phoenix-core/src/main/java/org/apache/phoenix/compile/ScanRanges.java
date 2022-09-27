@@ -203,8 +203,8 @@ public class ScanRanges {
     }
     
     public void initializeScan(Scan scan) {
-        scan.setStartRow(scanRange.getLowerRange());
-        scan.setStopRow(scanRange.getUpperRange());
+        scan.withStartRow(scanRange.getLowerRange());
+        scan.withStopRow(scanRange.getUpperRange());
     }
     
     public static byte[] prefixKey(byte[] key, int keyOffset, byte[] prefixKey, int prefixKeyOffset) {
@@ -401,8 +401,8 @@ public class ScanRanges {
             return null; 
         }
         newScan.setAttribute(SCAN_ACTUAL_START_ROW, scanStartKey);
-        newScan.setStartRow(scanStartKey);
-        newScan.setStopRow(scanStopKey);
+        newScan.withStartRow(scanStartKey);
+        newScan.withStopRow(scanStopKey);
         return newScan;
     }
 
@@ -679,7 +679,7 @@ public class ScanRanges {
                 high = upperRange;
             }
         }
-        return new TimeRange(low, high);
+        return TimeRange.between(low, high);
     }
     
     public static TimeRange getDescTimeRange(KeyRange lowestKeyRange, KeyRange highestKeyRange, Field f) throws IOException {
@@ -695,19 +695,19 @@ public class ScanRanges {
         if (!lowerUnbound && !upperUnbound) {
             newHigh = lowerInclusive ? safelyIncrement(low) : low;
             newLow = upperInclusive ? high : safelyIncrement(high);
-            return new TimeRange(newLow, newHigh);
+            return TimeRange.between(newLow, newHigh);
         } else if (!lowerUnbound && upperUnbound) {
             newHigh = lowerInclusive ? safelyIncrement(low) : low;
             newLow = 0;
-            return new TimeRange(newLow, newHigh);
+            return TimeRange.between(newLow, newHigh);
         } else if (lowerUnbound && !upperUnbound) {
             newLow = upperInclusive ? high : safelyIncrement(high);
             newHigh = HConstants.LATEST_TIMESTAMP;
-            return new TimeRange(newLow, newHigh);
+            return TimeRange.between(newLow, newHigh);
         } else {
             newLow = 0;
             newHigh = HConstants.LATEST_TIMESTAMP;
-            return new TimeRange(newLow, newHigh);
+            return TimeRange.between(newLow, newHigh);
         }
     }
     

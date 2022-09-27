@@ -104,6 +104,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDecimal;
@@ -362,6 +363,21 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
             formatters.put(PDecimal.INSTANCE,
                     FunctionArgumentType.NUMERIC.getFormatter(numberPattern));
             formatters.put(PVarbinary.INSTANCE, VarBinaryFormatter.INSTANCE);
+            formatters.put(PBinary.INSTANCE, VarBinaryFormatter.INSTANCE);
+
+            // We do not limit the metaData on a connection less than the global
+            // one,
+            // as there's not much that will be cached here.
+            Pruner pruner = new Pruner() {
+
+                @Override
+                public boolean prune(PTable table) {
+                    long maxTimestamp = scn == null ? HConstants.LATEST_TIMESTAMP
+                            : scn;
+                    return (table.getType() != PTableType.SYSTEM && (table
+                            .getTimeStamp() >= maxTimestamp || (table.getTenantId() != null && !Objects
+                            .equal(tenantId, table.getTenantId()))));
+                }
 
             this.logLevel = LogLevel.valueOf(this.services.getProps().get(QueryServices.LOG_LEVEL,
                     QueryServicesOptions.DEFAULT_LOGGING_LEVEL));

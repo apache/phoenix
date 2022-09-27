@@ -25,7 +25,7 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.KeyPart;
@@ -250,7 +250,7 @@ public class RoundDateExpression extends ScalarFunction {
             }
 
             @Override
-            public KeyRange getKeyRange(CompareOp op, Expression rhs) {
+            public KeyRange getKeyRange(CompareOperator op, Expression rhs) {
                 PDataType type = getColumn().getDataType();
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 rhs.evaluate(null, ptr);

@@ -62,7 +62,7 @@ import java.util.List;
 import java.util.Arrays;
 
 import org.apache.commons.lang3.time.FastDateFormat;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.StatementContext;
@@ -1917,8 +1917,8 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         stmt.execute();
         upsertConn.close();
         
-        assertTrue(TestUtil.compare(CompareOp.GREATER, new ImmutableBytesWritable(ts2), new ImmutableBytesWritable(ts1)));
-        assertFalse(TestUtil.compare(CompareOp.GREATER, new ImmutableBytesWritable(ts1), new ImmutableBytesWritable(ts1)));
+        assertTrue(TestUtil.compare(CompareOperator.GREATER, new ImmutableBytesWritable(ts2), new ImmutableBytesWritable(ts1)));
+        assertFalse(TestUtil.compare(CompareOperator.GREATER, new ImmutableBytesWritable(ts1), new ImmutableBytesWritable(ts1)));
 
         String query = "SELECT entity_id, a_timestamp, a_time FROM " + tableName + " WHERE organization_id=? and a_timestamp > ?";
         Connection conn = DriverManager.getConnection(url, props);
