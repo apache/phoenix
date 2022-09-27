@@ -368,7 +368,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
             // We do not limit the metaData on a connection less than the global
             // one,
             // as there's not much that will be cached here.
-            Pruner pruner = new Pruner() {
+            PMetaData.Pruner pruner = new PMetaData.Pruner() {
 
                 @Override
                 public boolean prune(PTable table) {
@@ -378,6 +378,16 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                             .getTimeStamp() >= maxTimestamp || (table.getTenantId() != null && !Objects
                             .equal(tenantId, table.getTenantId()))));
                 }
+
+                @Override
+                public boolean prune(PFunction function) {
+                    long maxTimestamp = scn == null ? HConstants.LATEST_TIMESTAMP
+                            : scn;
+                    return (function.getTimeStamp() >= maxTimestamp || (function
+                            .getTenantId() != null && !Objects.equal(tenantId,
+                            function.getTenantId())));
+                }
+            };
 
             this.logLevel = LogLevel.valueOf(this.services.getProps().get(QueryServices.LOG_LEVEL,
                     QueryServicesOptions.DEFAULT_LOGGING_LEVEL));
@@ -719,7 +729,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                 ? reasonForClose
                 : new SQLExceptionInfo.Builder(SQLExceptionCode.CONNECTION_CLOSED)
                     .build()
-        
+
             .buildException();
         }
     }
@@ -769,7 +779,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
             } finally {
                 services.removeConnection(this);
             }
-            
+
         } finally {
             isClosed = true;
             if(isInternalConnection()){
@@ -840,7 +850,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
 
     /**
      * Back-door way to inject processing into walking through a result set
-     * 
+     *
      * @param statementFactory
      * @return PhoenixStatement
      * @throws SQLException
@@ -1287,7 +1297,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
      * {@link PreparedStatement}s that were created from this connection before
      * commit or rollback. 0-based. Used to associate partial save errors with
      * SQL statements invoked by users.
-     * 
+     *
      * @see CommitException
      * @see #incrementStatementExecutionCounter()
      */
@@ -1331,7 +1341,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     /**
      * Returns true if this connection is being used to upgrade the data due to
      * PHOENIX-2067 and false otherwise.
-     * 
+     *
      * @return
      */
     public boolean isDescVarLengthRowKeyUpgrade() {
@@ -1397,7 +1407,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     public LogLevel getAuditLogLevel(){
         return this.auditLogLevel;
     }
-    
+
     public Double getLogSamplingRate(){
         return this.logSamplingRate;
     }
