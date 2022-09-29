@@ -22,6 +22,7 @@ import static org.apache.phoenix.util.TestUtil.assertResultSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.StringReader;
 import java.math.BigDecimal;
@@ -811,6 +812,158 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
             } while (rs.next());
             assertEquals(3, rowCnt);
         }
+    }
+
+    @Test
+    public void testRvcInListDelete() throws Exception {
+        String tableName = "TBL_" + generateUniqueName();
+        String viewName = "VW_" + generateUniqueName();
+        String baseTableDDL = "CREATE TABLE IF NOT EXISTS "+ tableName + " (\n" +
+                "    ORG_ID CHAR(15) NOT NULL,\n" +
+                "    KEY_PREFIX CHAR(3) NOT NULL,\n" +
+                "    DATE1 DATE,\n" +
+                "    CONSTRAINT PK PRIMARY KEY (\n" +
+                "        ORG_ID,\n" +
+                "        KEY_PREFIX\n" +
+                "    )\n" +
+                ") VERSIONS=1, MULTI_TENANT=true, IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=0";
+        String globalViewDDL = "CREATE VIEW  " + viewName +  "(\n" +
+                "    DOUBLE1 DECIMAL(12, 3) NOT NULL,\n" +
+                "    INT1 BIGINT NOT NULL,\n" +
+                "    DATE_TIME1 DATE,\n" +
+                "    COS_ID CHAR(15),\n" +
+                "    TEXT1 VARCHAR,\n" +
+                "    CONSTRAINT PKVIEW PRIMARY KEY\n" +
+                "    (\n" +
+                "        DOUBLE1 DESC, INT1\n" +
+                "    )\n" +
+                ")\n" +
+                "AS SELECT * FROM " + tableName + " WHERE KEY_PREFIX = '08K'";
+        String tenantViewName = tableName + ".\"08K\"";
+        String tenantViewDDL = "CREATE VIEW " + tenantViewName + " AS SELECT * FROM " + viewName;
+        createTestTable(getUrl(), baseTableDDL);
+        createTestTable(getUrl(), globalViewDDL);
+
+        Properties tenantProps = new Properties();
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "tenant1");
+        String upsertOne = "UPSERT INTO " + tenantViewName + " (DOUBLE1, INT1) VALUES (10.0,10)";
+        String upsertTwo = "UPSERT INTO " + tenantViewName + " (DOUBLE1, INT1) VALUES (20.0,20)";
+        String deletion = "DELETE FROM " + tenantViewName + " WHERE (DOUBLE1,INT1) IN ((10.0, 10),(20.0, 20))";
+        String deletionNotPkOrder = "DELETE FROM " + tenantViewName + " WHERE (INT1,DOUBLE1) IN ((10, 10.0),(20, 20.0))";
+
+        try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+            tenantConn.createStatement().execute(tenantViewDDL);
+            tenantConn.createStatement().execute(upsertOne);
+            tenantConn.createStatement().execute(upsertTwo);
+            tenantConn.commit();
+
+            ResultSet rs = tenantConn.createStatement().executeQuery("SELECT COUNT(*) FROM " + tenantViewName);
+            if (rs.next()) {
+                int count = rs.getInt(1);
+                assertEquals(2, count);
+            } else {
+                fail();
+            }
+            tenantConn.createStatement().execute(deletion);
+            tenantConn.commit();
+            rs = tenantConn.createStatement().executeQuery("SELECT COUNT(*) FROM " + tenantViewName);
+            if (rs.next()) {
+                int count = rs.getInt(1);
+                assertEquals(0, count);
+            } else {
+                fail();
+            }
+
+            tenantConn.createStatement().execute(upsertOne);
+            tenantConn.createStatement().execute(upsertTwo);
+            tenantConn.commit();
+            tenantConn.createStatement().execute(deletionNotPkOrder);
+            tenantConn.commit();
+            rs = tenantConn.createStatement().executeQuery("SELECT COUNT(*) FROM " + tenantViewName);
+            if (rs.next()) {
+                int count = rs.getInt(1);
+                assertEquals(0, count);
+            } else {
+                fail();
+            }
+        }
+
+    }
+
+    @Test
+    public void testRvcInListDeleteBothDesc() throws Exception {
+        String tableName = "TBL_" + generateUniqueName();
+        String viewName = "VW_" + generateUniqueName();
+        String baseTableDDL = "CREATE TABLE IF NOT EXISTS "+ tableName + " (\n" +
+                "    ORG_ID CHAR(15) NOT NULL,\n" +
+                "    KEY_PREFIX CHAR(3) NOT NULL,\n" +
+                "    DATE1 DATE,\n" +
+                "    CONSTRAINT PK PRIMARY KEY (\n" +
+                "        ORG_ID,\n" +
+                "        KEY_PREFIX\n" +
+                "    )\n" +
+                ") VERSIONS=1, MULTI_TENANT=true, IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=0";
+        String globalViewDDL = "CREATE VIEW  " + viewName +  "(\n" +
+                "    DOUBLE1 DECIMAL(12, 3) NOT NULL,\n" +
+                "    INT1 BIGINT NOT NULL,\n" +
+                "    DATE_TIME1 DATE,\n" +
+                "    COS_ID CHAR(15),\n" +
+                "    TEXT1 VARCHAR,\n" +
+                "    CONSTRAINT PKVIEW PRIMARY KEY\n" +
+                "    (\n" +
+                "        DOUBLE1 DESC, INT1 DESC\n" +
+                "    )\n" +
+                ")\n" +
+                "AS SELECT * FROM " + tableName + " WHERE KEY_PREFIX = '08K'";
+        String tenantViewName = tableName + ".\"08K\"";
+        String tenantViewDDL = "CREATE VIEW " + tenantViewName + " AS SELECT * FROM " + viewName;
+        createTestTable(getUrl(), baseTableDDL);
+        createTestTable(getUrl(), globalViewDDL);
+
+        Properties tenantProps = new Properties();
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "tenant1");
+        String upsertOne = "UPSERT INTO " + tenantViewName + " (DOUBLE1, INT1) VALUES (10.0,10)";
+        String upsertTwo = "UPSERT INTO " + tenantViewName + " (DOUBLE1, INT1) VALUES (20.0,20)";
+        String deletion = "DELETE FROM " + tenantViewName + " WHERE (DOUBLE1,INT1) IN ((10.0, 10),(20.0, 20))";
+        String deletionNotPkOrder = "DELETE FROM " + tenantViewName + " WHERE (INT1,DOUBLE1) IN ((10, 10.0),(20, 20.0))";
+
+        try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+            tenantConn.createStatement().execute(tenantViewDDL);
+            tenantConn.createStatement().execute(upsertOne);
+            tenantConn.createStatement().execute(upsertTwo);
+            tenantConn.commit();
+
+            ResultSet rs = tenantConn.createStatement().executeQuery("SELECT COUNT(*) FROM " + tenantViewName);
+            if (rs.next()) {
+                int count = rs.getInt(1);
+                assertEquals(2, count);
+            } else {
+                fail();
+            }
+            tenantConn.createStatement().execute(deletion);
+            tenantConn.commit();
+            rs = tenantConn.createStatement().executeQuery("SELECT COUNT(*) FROM " + tenantViewName);
+            if (rs.next()) {
+                int count = rs.getInt(1);
+                assertEquals(0, count);
+            } else {
+                fail();
+            }
+
+            tenantConn.createStatement().execute(upsertOne);
+            tenantConn.createStatement().execute(upsertTwo);
+            tenantConn.commit();
+            tenantConn.createStatement().execute(deletionNotPkOrder);
+            tenantConn.commit();
+            rs = tenantConn.createStatement().executeQuery("SELECT COUNT(*) FROM " + tenantViewName);
+            if (rs.next()) {
+                int count = rs.getInt(1);
+                assertEquals(0, count);
+            } else {
+                fail();
+            }
+        }
+
     }
 
     @Test

@@ -249,7 +249,7 @@ public class WhereOptimizer {
                         schema.getField(slot.getPKPosition() + slotOffset).getSortOrder();
                 if (prevSortOrder == null)  {
                     prevSortOrder = sortOrder;
-                } else if (prevSortOrder != sortOrder) {
+                } else if (prevSortOrder != sortOrder || (prevSortOrder == SortOrder.DESC && isInList)) {
                     //Consider the Universe of keys to be [0,7]+ on the leading column A
                     // and [0,7]+ on trailing column B, with a padbyte of 0 for ASC and 7 for DESC
                     //if our key range for ASC keys is leading [2,*] and trailing [3,*],
@@ -316,7 +316,7 @@ public class WhereOptimizer {
             } else {
                 if (schema.getField(
                        slot.getPKPosition() + slotOffset - 1).getSortOrder() == SortOrder.DESC) {
-                    keyRanges = invertKeyRanges(keyRanges);
+                   keyRanges = invertKeyRanges(keyRanges);
                 }
                 pkPos = slot.getPKPosition() + slotOffset;
                 slotSpanArray[cnf.size()] = clipLeftSpan-1;
@@ -2241,10 +2241,11 @@ public class WhereOptimizer {
                     // for the non-equality cases return actual sort order
                     //This work around should work
                     // but a more general approach can be taken.
-                    if(rvcElementOp == CompareOp.EQUAL ||
-                            rvcElementOp == CompareOp.NOT_EQUAL){
-                        return SortOrder.ASC;
-                    }
+                    //This optimization causes PHOENIX-6662 (when desc pk used with in clause)
+//                    if(rvcElementOp == CompareOp.EQUAL ||
+//                            rvcElementOp == CompareOp.NOT_EQUAL){
+//                        return SortOrder.ASC;
+//                    }
                     return childPart.getColumn().getSortOrder();
                 }
 
