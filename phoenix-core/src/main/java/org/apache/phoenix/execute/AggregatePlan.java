@@ -363,14 +363,16 @@ public class AggregatePlan extends BaseQueryPlan {
     }
 
     @Override
-    protected void setScanReversedIfNecessary(Scan scan) {
+    protected void setScanReversedWhenOrderByIsReversed(Scan scan) {
         /**
          * For {@link AggregatePlan}, when {@link GroupBy#isOrderPreserving} is false, we have no
          * need to set the scan as reversed scan because we have to hash-aggregate the scanned
-         * results from HBase in Coprocessor before sending them to client.
+         * results from HBase in RegionServer Coprocessor before sending them to client, only when
+         * {@link GroupBy#isOrderPreserving} is true and we depend on the original HBase scanned
+         * order to get the query result, we need to set the scan as reversed scan.
          */
         if (this.groupBy.isOrderPreserving()) {
-            super.setScanReversedIfNecessary(scan);
+            super.setScanReversedWhenOrderByIsReversed(scan);
         }
     }
 }

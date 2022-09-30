@@ -236,7 +236,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
 		return wrappedIterator;
 	}
 
-    protected void setScanReversedIfNecessary(Scan scan) {
+    protected void setScanReversedWhenOrderByIsReversed(Scan scan) {
         ScanUtil.setReversed(scan);
     }
 
@@ -274,7 +274,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
         
         if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
-            setScanReversedIfNecessary(scan);
+            setScanReversedWhenOrderByIsReversed(scan);
             // After HBASE-16296 is resolved, we no longer need to set
             // scan caching
         }
