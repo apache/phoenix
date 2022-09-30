@@ -33,7 +33,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
-import org.threeten.extra.chrono.BritishCutoverChronology;
+import org.apache.phoenix.util.chrono.GJChronology;
+
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
@@ -74,25 +75,29 @@ public class DateUtil {
     public static final String DEFAULT_TIMESTAMP_FORMAT = DEFAULT_MS_DATE_FORMAT;
     public static final Format DEFAULT_TIMESTAMP_FORMATTER = DEFAULT_MS_DATE_FORMATTER;
 
+//    todo add support for 1 len dates
     private static final DateTimeFormatter ISO_DATE_TIME_FORMATTER = new DateTimeFormatterBuilder()
+            .parseLenient()
             .append(DateTimeFormatter.ISO_DATE)
             .appendOptional(new DateTimeFormatterBuilder()
                     .appendLiteral(' ').toFormatter())
             .appendOptional(new DateTimeFormatterBuilder()
                     .append(DateTimeFormatter.ISO_TIME)
-            .toFormatter()).toFormatter().withChronology(BritishCutoverChronology.INSTANCE);
+            .toFormatter()).toFormatter().withChronology(GJChronology.INSTANCE);
 
     private static final DateTimeFormatter ISO_LOCAL_DATE_TIME_FORMATTER =
             new DateTimeFormatterBuilder()
+            .parseLenient()
             .append(DateTimeFormatter.ISO_DATE)
             .appendOptional(new DateTimeFormatterBuilder()
                     .appendLiteral('T').toFormatter())
             .appendOptional(new DateTimeFormatterBuilder()
                     .append(DateTimeFormatter.ISO_TIME)
-                    .toFormatter()).toFormatter().withChronology(BritishCutoverChronology.INSTANCE);
+                    .toFormatter()).toFormatter().withChronology(GJChronology.INSTANCE);
 
     private static final DateTimeFormatter ISO_WEEK_DATE_TIME_FORMATTER =
             new DateTimeFormatterBuilder()
+            .parseLenient()
             .append(DateTimeFormatter.ISO_WEEK_DATE).toFormatter();
     
     private DateUtil() {

@@ -60,6 +60,8 @@ import java.util.Properties;
 import java.util.TimeZone;
 import java.util.List;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Collections;
 
 import org.apache.commons.lang3.time.FastDateFormat;
 import org.apache.hadoop.hbase.CompareOperator;
@@ -594,8 +596,6 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         assertEquals(2015, callYearFunction("\"YEAR\"(TO_TIMESTAMP('2015-W10-3'))"));
 
         assertEquals(2015, callYearFunction("\"YEAR\"(TO_TIMESTAMP('2015-W05-1'))"));
-
-//        assertEquals(2015, callYearFunction("\"YEAR\"(TO_TIMESTAMP('2015-063'))"));
 
         assertEquals(2006, callYearFunction("\"YEAR\"(TO_TIMESTAMP('2006-12-13'))"));
 
@@ -1950,6 +1950,36 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
                 + String.join(":", dateList.subList(3, 6)) + "." + dateList.get(6);
     }
 
+    private void testDateHelper(List<String> dates, ResultSet rs, int diff) throws SQLException {
+        for (int i = 0; i < dates.size(); i++) {
+            assertTrue(rs.next());
+            String actualDate = dates.get(i);
+            Timestamp expectedTimestamp = DateUtil.parseTimestamp(actualDate);
+
+            System.out.println(rs.getString(1));
+            System.out.println(actualDate);
+            System.out.println(expectedTimestamp);
+            System.out.println(rs.getDate(2));
+            System.out.println(rs.getTimestamp(2));
+
+            assertEquals(i + diff, rs.getInt(1));
+            Date expectedDate = new Date(expectedTimestamp.getTime());
+            assertEquals(expectedDate, rs.getDate(2));
+            assertEquals(rs.getDate(2), rs.getObject(2));
+            assertEquals(actualDate, rs.getString(2));
+
+            Time expectedTime = new Time(expectedTimestamp.getTime());
+            assertEquals(new Timestamp(expectedTime.getTime()), new Timestamp(rs.getTime(3).getTime()));
+            assertEquals(expectedTime, rs.getTime(3));
+            assertEquals(rs.getTime(3), rs.getObject(3));
+            assertEquals(actualDate, rs.getString(3));
+
+            assertEquals(expectedTimestamp, rs.getTimestamp(4));
+            assertEquals(rs.getTimestamp(4), rs.getObject(4));
+            assertEquals(actualDate, rs.getString(4));
+        }
+    }
+
     @Test
     public void testAncientDates() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1960,12 +1990,25 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         List<String> date1list = Arrays.asList("0010", "10", "10", "10", "10", "10", "111");
         List<String> date2list = Arrays.asList("1001", "02", "03", "04", "05", "06", "000");
         List<String> date3list = Arrays.asList("0001", "12", "31", "23", "59", "59", "000");
-        List<List<String>> dateLists = Arrays.asList(date1list, date2list, date3list, date2list);
+        List<String> date4list = Arrays.asList("1601", "02", "03", "04", "05", "06", "000");
+        List<String> date5list = Arrays.asList("1701", "02", "03", "04", "05", "06", "000");
+        List<String> date6list = Arrays.asList("1582", "10", "15", "00", "00", "00", "000");
+        List<String> date7list = Arrays.asList("1752", "09", "14", "00", "00", "00", "000");
+        List<String> date8list = Arrays.asList("1582", "10", "04", "23", "00", "00", "000");
+        List<String> date9list = Arrays.asList("1582", "10", "15", "01", "00", "00", "000");
+        List<List<String>> dateLists = Arrays.asList(date1list, date2list, date3list, date2list, date4list, date5list,
+                date6list, date7list, date8list, date9list);
 
         String date1 = getFormattedDate(date1list); // 0010-10-10 10:10:10.111
         String date2 = getFormattedDate(date2list); // 1000-02-03 04:05:06.000
         String date3 = getFormattedDate(date3list); // 0001-12-31 23:59:59.000
-        List<String> dates = Arrays.asList(date1, date2, date3, date2);
+        String date4 = getFormattedDate(date4list); // 1601-02-03 04:05:06.000
+        String date5 = getFormattedDate(date5list); // 1701-02-03 04:05:06.000
+        String date6 = getFormattedDate(date6list); // 1582-10-15 00:00:00.000
+        String date7 = getFormattedDate(date7list); // 1752-09-14 00:00:00.000
+        String date8 = getFormattedDate(date8list); // 1582-10-04 23:00:00.000
+        String date9 = getFormattedDate(date9list); // 1582-10-15 01:00:00.000
+        List<String> dates = Arrays.asList(date1, date2, date3, date2, date4, date5, date6, date7, date8, date9);
 
 
         stmt.execute("CREATE TABLE " + tableName + " ( id INTEGER not null PRIMARY KEY," +
@@ -1992,31 +2035,29 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         String f = " GMT', 'yyyy-MM-dd HH:mm:ss.SSS z', 'UTC";
         stmt.execute("UPSERT INTO " + tableName + " VALUES(4, TO_DATE('" + date2 + f
                 + "'), TO_TIME('" + date2 + f + "'), TO_TIMESTAMP('" + date2 + f + "'))");
+
+        stmt.execute("UPSERT INTO " + tableName + " VALUES(5, TO_DATE('" + date4
+                + "'), TO_TIME('" + date4 + "'), TO_TIMESTAMP('" + date4 + "'))");
+
+        stmt.execute("UPSERT INTO " + tableName + " VALUES(6, TO_DATE('" + date5
+                + "'), TO_TIME('" + date5 + "'), TO_TIMESTAMP('" + date5 + "'))");
+
+        stmt.execute("UPSERT INTO " + tableName + " VALUES(7, TO_DATE('" + date6
+                + "'), TO_TIME('" + date6 + "'), TO_TIMESTAMP('" + date6 + "'))");
+
+        stmt.execute("UPSERT INTO " + tableName + " VALUES(8, TO_DATE('" + date7
+                + "'), TO_TIME('" + date7 + "'), TO_TIMESTAMP('" + date7 + "'))");
+
+        stmt.execute("UPSERT INTO " + tableName + " VALUES(9, TO_DATE('" + date8
+                + "'), TO_TIME('" + date8 + "'), TO_TIMESTAMP('" + date8 + "'))");
+
+        stmt.execute("UPSERT INTO " + tableName + " VALUES(10, TO_DATE('" + date9
+                + "'), TO_TIME('" + date9 + "'), TO_TIMESTAMP('" + date9 + "'))");
         conn.commit();
 
         ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName + " ORDER BY id");
 
-        for (int i = 0; i < dates.size(); i++) {
-            assertTrue(rs.next());
-            String actualDate = dates.get(i);
-            Timestamp expectedTimestamp = DateUtil.parseTimestamp(actualDate);
-
-            assertEquals(i + 1, rs.getInt(1));
-            Date expectedDate = new Date(expectedTimestamp.getTime());
-            assertEquals(expectedDate, rs.getDate(2));
-            assertEquals(rs.getDate(2), rs.getObject(2));
-            assertEquals(actualDate, rs.getString(2));
-
-            Time expectedTime = new Time(expectedTimestamp.getTime());
-            assertEquals(new Timestamp(expectedTime.getTime()), new Timestamp(rs.getTime(3).getTime()));
-            assertEquals(expectedTime, rs.getTime(3));
-            assertEquals(rs.getTime(3), rs.getObject(3));
-            assertEquals(actualDate, rs.getString(3));
-
-            assertEquals(expectedTimestamp, rs.getTimestamp(4));
-            assertEquals(rs.getTimestamp(4), rs.getObject(4));
-            assertEquals(actualDate, rs.getString(4));
-        }
+        testDateHelper(dates, rs, 1);
 
         String query = "SELECT year(timestamp), month(timestamp), dayofmonth(timestamp),"
                 + " hour(timestamp), minute(timestamp), second(timestamp) FROM " + tableName
@@ -2049,6 +2090,64 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         Timestamp read = rs.getTimestamp(4);
         assertEquals(inserted, read);
+    }
+
+    @Test
+    public void testCutoverDates() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        Statement stmt = conn.createStatement();
+        String tableName = generateUniqueName();
+
+       stmt.execute("CREATE TABLE " + tableName + " ( id INTEGER not null PRIMARY KEY," +
+                " date DATE, time TIME, timestamp TIMESTAMP)");
+       conn.commit();
+
+        // Dates in the middle of the cutover gap, such as the 10th October 1582,
+        // will not throw an exception. Instead, the date will be treated as a Julian date
+        // and converted to an ISO date, with the day of month shifted by 10 days.
+
+        List<List<String>> gapDateLists = new ArrayList<>(Collections.emptyList());
+        List<List<String>> expectedGapDateLists = new ArrayList<>(Collections.emptyList());
+        List<String> expectedGapDates = new ArrayList<>(Collections.emptyList());
+        for (int i = 5; i < 15;  i++) {
+            String day = i < 10 ? "0" + i : String.valueOf(i);
+            String expectedDay = String.valueOf(i+10);
+            List<String> gapdatelist = Arrays.asList("1582", "10", day, "12", "00", "00", "000");
+            gapDateLists.add(gapdatelist);
+            String gapdate = getFormattedDate(gapdatelist); // 1582-10-day 12:00:00.00
+
+            stmt.execute("UPSERT INTO " + tableName + " VALUES(" + i + ", TO_DATE('" + gapdate
+                    + "'), TO_TIME('" + gapdate + "'), TO_TIMESTAMP('" + gapdate + "'))");
+
+            List<String> expectedGapDateList = Arrays.asList("1582", "10", expectedDay, "12", "00", "00", "000");
+            expectedGapDateLists.add(expectedGapDateList);
+            String expectedGapDate = getFormattedDate(expectedGapDateList); // 1582-10-day+10 12:00:00.00
+            expectedGapDates.add(expectedGapDate);
+        }
+        conn.commit();
+
+        ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName + " WHERE id > 4 ORDER BY id");
+        testDateHelper(expectedGapDates, rs, 5);
+
+        String query = "SELECT year(timestamp), month(timestamp), dayofmonth(timestamp),"
+                + " hour(timestamp), minute(timestamp), second(timestamp) FROM " + tableName
+                + " WHERE id > 4 ORDER BY id";
+        rs = stmt.executeQuery(query);
+
+        for (int i = 0; i < expectedGapDateLists.size(); i++) {
+            assertTrue(rs.next());
+            List<String> dateList = expectedGapDateLists.get(i);
+            for (int j = 0; j < 6; j++) {
+                int expected = Integer.parseInt(dateList.get(j));
+                int value = rs.getInt(j + 1);
+                String readFunc = query.split("\\s+")[j + 1];
+                assertTrue("Expected for " + readFunc.substring(0, readFunc.length() - 1) + ": " + expected + ", got: " + value,
+                        expected == value);
+            }
+        }
+
+
     }
 
     @Test
@@ -2111,7 +2210,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         assertEquals(read.toString().split("\\s+")[0], "0010-10-10");
         assertEquals(instant.toString().split("T")[0], "0010-10-10");
 
-        // the long value that represents the the Date will be different thought
+        // the long value that represents the Date will be different thought
         // can be expected because it resulted the same output string using different chronology
         assertNotEquals(instant.toEpochMilli(), read.getTime());
 

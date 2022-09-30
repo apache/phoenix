@@ -56,7 +56,7 @@ public class ExtendedQueryExecIT extends ParallelStatsDisabledIT {
         try {
             String query = "SELECT a_date FROM " + tableName + " WHERE organization_id='" + tenantId + "' and a_date < TO_DATE(?)";
             PreparedStatement statement = conn.prepareStatement(query);
-            statement.setString(1, "1970-01-01 12:00:00");
+            statement.setString(1, "1970-1-1 12:00:00");
             ResultSet rs = statement.executeQuery();
             verifyDateResultSet(rs, date, 3);
         } finally {
@@ -104,7 +104,7 @@ public class ExtendedQueryExecIT extends ParallelStatsDisabledIT {
             ResultSet rs;
             String queryPrefix = "SELECT a_date FROM " + tableName + "  WHERE organization_id='" + tenantId + "' and ";
 
-            String queryDateArg = "a_date < TO_DATE('1970-01-01 12:00:00')";
+            String queryDateArg = "a_date < TO_DATE('1970-1-1 12:00:00')";
             rs = getResultSet(conn, queryPrefix + queryDateArg);
             verifyDateResultSet(rs, date, 3);
 
@@ -122,7 +122,7 @@ public class ExtendedQueryExecIT extends ParallelStatsDisabledIT {
 //              // expected
 //          }
             
-            queryDateArg = "a_date >= TO_DATE('1970-01-02 23:59:59') and a_date <= TO_DATE('1970-01-03 00:00:01')";
+            queryDateArg = "a_date >= TO_DATE('1970-1-2 23:59:59') and a_date <= TO_DATE('1970-1-3 0:0:1')";
             rs = getResultSet(conn, queryPrefix + queryDateArg);
             verifyDateResultSet(rs, new Date(date.getTime() + (2*60*60*24*1000)), 3);
 

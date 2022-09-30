@@ -76,6 +76,10 @@ public class DayOfWeekFunction extends DateScalarFunction {
         calendar.setTime(dt);
         int day = calendar.get(Calendar.DAY_OF_WEEK) - 1;
         day = day == 0 ? 7 : day;
+        // We adjust the day of week to make sure we return 1 for Monday and not 2
+        // because calendar.setFirstDayOfWeek(Calendar.MONDAY) doesn't work for
+        // calendar.get(Calendar.DAY_OF_WEEK)
+
         PDataType returnDataType = getDataType();
         byte[] byteValue = new byte[returnDataType.getByteSize()];
         returnDataType.getCodec().encodeInt(day, byteValue, 0);

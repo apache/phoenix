@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 
