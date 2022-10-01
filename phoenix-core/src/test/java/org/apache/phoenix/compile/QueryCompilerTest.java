@@ -6899,6 +6899,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                             + " CONSTRAINT TEST_PK PRIMARY KEY (group_id,keyword)) ";
             conn.createStatement().execute(sql);
 
+            /**
+             * Test {@link GroupBy#isOrderPreserving} is false and {@link OrderBy} is reversed.
+             */
             sql =
                     "select keyword,sum(cost) from " + tableName
                             + " group by keyword order by keyword desc";
@@ -6908,6 +6911,9 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertTrue(queryPlan.getOrderBy() == OrderBy.REV_ROW_KEY_ORDER_BY);
             assertTrue(!ScanUtil.isReversed(scan));
 
+            /**
+             * Test {@link GroupBy#isOrderPreserving} is true and {@link OrderBy} is reversed.
+             */
             sql =
                     "select keyword,sum(cost) from " + tableName
                             + " group by group_id,keyword order by group_id desc,keyword desc";
