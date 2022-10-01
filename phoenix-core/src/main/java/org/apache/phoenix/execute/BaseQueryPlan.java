@@ -28,10 +28,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
-import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -41,6 +37,9 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -77,6 +76,9 @@ import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.trace.TracingIterator;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
@@ -86,9 +88,6 @@ import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 
@@ -237,6 +236,10 @@ public abstract class BaseQueryPlan implements QueryPlan {
 		return wrappedIterator;
 	}
 
+    protected void setScanReversedWhenOrderByIsReversed(Scan scan) {
+        ScanUtil.setReversed(scan);
+    }
+
     public final ResultIterator iterator(final Map<ImmutableBytesPtr,ServerCache> caches,
             ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
          if (scan == null) {
@@ -271,7 +274,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
         
         if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
-            ScanUtil.setReversed(scan);
+            setScanReversedWhenOrderByIsReversed(scan);
             // After HBASE-16296 is resolved, we no longer need to set
             // scan caching
         }
