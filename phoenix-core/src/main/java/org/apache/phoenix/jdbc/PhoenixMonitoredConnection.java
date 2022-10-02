@@ -21,7 +21,6 @@ package org.apache.phoenix.jdbc;
 import org.apache.phoenix.monitoring.MetricType;
 
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.util.Map;
 
 /**
@@ -48,4 +47,5 @@ public interface PhoenixMonitoredConnection extends Connection {
      * metrics for individual DML.
      */
     void clearMetrics();
+
 }

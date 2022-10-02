@@ -50,12 +50,15 @@ import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Struct;
 import java.text.Format;
+
+
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -80,6 +83,8 @@ import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.iterate.TableResultIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
+import org.apache.phoenix.log.ActivityLogInfo;
+import org.apache.phoenix.log.ConnectionActivityLogger;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.monitoring.TableMetricsManager;
@@ -192,6 +197,8 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     //public interfaces.
     private final boolean isInternalConnection;
     private boolean isApplyTimeZoneDisplacement;
+    private final UUID uniqueID;
+    private ConnectionActivityLogger connectionActivityLogger = ConnectionActivityLogger.NO_OP_LOGGER;
 
     static {
         Tracing.addTraceMetricsSource();
@@ -379,7 +386,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                     this.services.getProps());
             this.mutationState = mutationState == null ? newMutationState(maxSize,
                     maxSizeBytes) : new MutationState(mutationState, this);
-
+            this.uniqueID = UUID.randomUUID();
             this.services.addConnection(this);
 
             // setup tracing, if its enabled
@@ -957,6 +964,10 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
         return new PhoenixDatabaseMetaData(this);
     }
 
+    public UUID getUniqueID() {
+        return this.uniqueID;
+    }
+
     @Override
     public int getTransactionIsolation() throws SQLException {
         boolean transactionsEnabled = getQueryServices().getProps().getBoolean(
@@ -1303,6 +1314,9 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
 
     public void incrementStatementExecutionCounter() {
         statementExecutionCounter++;
+        if (connectionActivityLogger.isLevelEnabled(ActivityLogInfo.OP_STMTS.getLogLevel())) {
+            connectionActivityLogger.log(ActivityLogInfo.OP_STMTS, String.valueOf(statementExecutionCounter));
+        }
     }
 
     public TraceScope getTraceScope() {
@@ -1430,5 +1444,17 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
 
     public boolean isApplyTimeZoneDisplacement() {
         return isApplyTimeZoneDisplacement;
+    }
+
+    public String getActivityLog() {
+        return getActivityLogger().getActivityLog();
+    }
+
+    public ConnectionActivityLogger getActivityLogger() {
+        return this.connectionActivityLogger;
+    }
+
+    public void setActivityLogger(ConnectionActivityLogger connectionActivityLogger) {
+        this.connectionActivityLogger = connectionActivityLogger;
     }
 }
