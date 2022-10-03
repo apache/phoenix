@@ -305,16 +305,19 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
 
         String columnInfoString = getColumnInfoStringForTable(table);
         String propertiesString = convertPropertiesToString(false);
+        String columnQualifierString = convertColumnQualifiersToString(table);
 
-        return generateTableDDLString(columnInfoString, propertiesString, pSchemaName, pTableName);
+        return generateTableDDLString(columnInfoString, propertiesString, columnQualifierString,
+                pSchemaName, pTableName);
     }
 
     private String generateTableDDLString(String columnInfoString, String propertiesString,
-            String pSchemaName, String pTableName) {
+                  String columnQualifierString, String pSchemaName, String pTableName) {
         String quotedTableFullName = SchemaUtil.getFullTableNameWithQuotes(pSchemaName, pTableName);
         StringBuilder outputBuilder = new StringBuilder(String.format(CREATE_TABLE,
                 quotedTableFullName));
-        outputBuilder.append(columnInfoString).append(" ").append(propertiesString);
+        outputBuilder.append(columnInfoString).append(" ").append(propertiesString)
+                .append(columnQualifierString);
         return outputBuilder.toString();
     }
 
@@ -398,6 +401,23 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         }
     }
 
+    private String convertColumnQualifiersToString(PTable table) {
+        StringBuilder cqBuilder = new StringBuilder();
+        Map<String, Integer> cqCounterValues = table.getEncodedCQCounter().values();
+        ArrayList<String> cqCounters = new ArrayList<>(cqCounterValues.size());
+        for(Map.Entry<String, Integer> entry : cqCounterValues.entrySet()) {
+            String def = "\"" + entry.getKey() + "\" " + entry.getValue().toString();
+            cqCounters.add(def);
+        }
+        if (cqCounters.size() > 0) {
+            cqBuilder.append('(');
+            cqBuilder.append("COLUMN_QUALIFIER_COUNTER ");
+            cqBuilder.append(StringUtils.join( ", ", cqCounters));
+            cqBuilder.append(')');
+        }
+        return cqBuilder.toString();
+    }
+
     private String convertPropertiesToString(boolean forIndex) {
         StringBuilder optionBuilder = new StringBuilder();
         for(Map.Entry<String, String> entry : definedProps.entrySet()) {
@@ -470,32 +490,16 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         return getColumnInfoString(table, colInfo, columns, pkColumns);
     }
 
-    private boolean shouldContainQualifier(PTable table,
-                                            List<PColumn> columns,
-                                            List<PColumn> pkColumns)
+    private boolean shouldContainQualifier(PTable table, List<PColumn> columns)
     {
         if (columns.size() == 0) return false;
 
-        PTable.QualifierEncodingScheme scheme = table.getEncodingScheme();
-        List<Integer> decodedQualifiers = columns.stream().filter(c -> !pkColumns.contains(c))
-                .map(PColumn::getColumnQualifierBytes)
-                .map(b -> scheme.decode(b))
-                .collect(Collectors.toList());
-        if (decodedQualifiers.get(0) != QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE ||
-            decodedQualifiers.get(decodedQualifiers.size() - 1)
-                    != table.getEncodedCQCounter().values().size())
-            return true;
-
-        for (int i = 0; i < decodedQualifiers.size() - 1; i++) {
-            if (decodedQualifiers.get(i) + 1 != decodedQualifiers.get(i+1))
-                return true;
-        }
-        return false;
+        return table.getEncodingScheme() != PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
     }
 
     private String getColumnInfoString(PTable table, StringBuilder colInfo, List<PColumn> columns,
             List<PColumn> pkColumns) {
-        boolean appendQualifier = true; //shouldContainQualifier(table, columns, pkColumns);
+        boolean appendQualifier = shouldContainQualifier(table, columns);
         ArrayList<String> colDefs = new ArrayList<>(columns.size());
         for (PColumn col : columns) {
             String def = extractColumn(col);
@@ -503,7 +507,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
                 def += " PRIMARY KEY" + extractPKColumnAttributes(col);
             }
             if (appendQualifier && !pkColumns.contains(col)) {
-                def += " COLUMN_QUALIFIER " +
+                def += " COLUMN_QUALIFIER_ID " +
                         table.getEncodingScheme().decode(col.getColumnQualifierBytes());
             }
             colDefs.add(def);

@@ -58,6 +58,7 @@ public class ColumnDef {
     private final boolean isArray;
     private final Integer arrSize;
     private final String expressionStr;
+    private final Integer columnQualifier;
     private final boolean isRowTimestamp;
 
     public ColumnDef(ColumnDef def, String expressionStr) {
@@ -70,12 +71,13 @@ public class ColumnDef {
         this.sortOrder = def.sortOrder;
         this.isArray = def.isArray;
         this.arrSize = def.arrSize;
+        this.columnQualifier = def.columnQualifier;
         this.isRowTimestamp = def.isRowTimestamp;
         this.expressionStr = expressionStr;
     }
 
     ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength,
-            Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
+            Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr, Integer columnQualifier, boolean isRowTimestamp) {
         try {
             Preconditions.checkNotNull(sortOrder);
             PDataType baseType;
@@ -149,6 +151,7 @@ public class ColumnDef {
             this.sortOrder = sortOrder;
             this.dataType = dataType;
             this.expressionStr = expressionStr;
+            this.columnQualifier = columnQualifier;
             this.isRowTimestamp = isRowTimestamp;
         } catch (SQLException e) {
             throw new ParseException(e);
@@ -156,8 +159,10 @@ public class ColumnDef {
     }
 
     ColumnDef(ColumnName columnDefName, String sqlTypeName, Boolean isNull, Integer maxLength,
-            Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
-        this(columnDefName, sqlTypeName, false, 0, isNull, maxLength, scale, isPK, sortOrder, expressionStr, isRowTimestamp);
+            Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr,
+            Integer columnQualifier, boolean isRowTimestamp) {
+        this(columnDefName, sqlTypeName, false, 0, isNull, maxLength,
+                scale, isPK, sortOrder, expressionStr, columnQualifier, isRowTimestamp);
     }
 
     public ColumnName getColumnDefName() {
@@ -204,6 +209,10 @@ public class ColumnDef {
 
     public String getExpression() {
         return expressionStr;
+    }
+
+    public Integer getColumnQualifier() {
+        return columnQualifier;
     }
 
     public boolean isRowTimestamp() {

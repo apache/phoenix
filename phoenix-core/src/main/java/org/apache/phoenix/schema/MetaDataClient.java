@@ -2452,6 +2452,7 @@ public class MetaDataClient {
             int pkPositionOffset = pkColumns.size();
             int position = positionOffset;
             EncodedCQCounter cqCounter = NULL_COUNTER;
+            Map<String, Integer> changedCqCounters = new HashMap<>(colDefs.size());
             PTable viewPhysicalTable = null;
             if (tableType == PTableType.VIEW) {
                 /*
@@ -2570,9 +2571,15 @@ public class MetaDataClient {
                     }
                 }
                 cqCounter = encodingScheme != NON_ENCODED_QUALIFIERS ? new EncodedCQCounter() : NULL_COUNTER;
+                if (statement.getFamilyCQCounters() != null)
+                {
+                    for (Map.Entry<String, Integer> cq : statement.getFamilyCQCounters().entrySet()) {
+                        cqCounter.setValue(cq.getKey(), cq.getValue());
+                        changedCqCounters.put(cq.getKey(), cqCounter.getNextQualifier(cq.getKey()));
+                    }
+                }
             }
 
-            Map<String, Integer> changedCqCounters = new HashMap<>(colDefs.size());
             boolean wasPKDefined = false;
             // Keep track of all columns that are newly added to a view
             Set<Integer> viewNewColumnPositions =
@@ -2614,7 +2621,15 @@ public class MetaDataClient {
                 }
                 // Use position as column qualifier if APPEND_ONLY_SCHEMA to prevent gaps in
                 // the column encoding (PHOENIX-4737).
-                Integer encodedCQ =  isPkColumn ? null : isAppendOnlySchema ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position) : cqCounter.getNextQualifier(cqCounterFamily);
+                Integer encodedCQ = null;
+                if (!isPkColumn) {
+                    if (colDef.getColumnQualifier() != null)
+                        encodedCQ = colDef.getColumnQualifier();
+                    else if (isAppendOnlySchema)
+                        encodedCQ = Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position);
+                    else
+                        encodedCQ = cqCounter.getNextQualifier(cqCounterFamily);
+                }
                 byte[] columnQualifierBytes = null;
                 try {
                     columnQualifierBytes = EncodedColumnsUtil.getColumnQualifierBytes(columnDefName.getColumnName(), encodedCQ, encodingScheme, isPkColumn);
@@ -2625,8 +2640,10 @@ public class MetaDataClient {
                     .setTableName(tableName).build().buildException();
                 }
                 PColumn column = newColumn(position++, colDef, pkConstraint, defaultFamilyName, false, columnQualifierBytes, isImmutableRows);
-                if (!isAppendOnlySchema && cqCounter.increment(cqCounterFamily)) {
-                    changedCqCounters.put(cqCounterFamily, cqCounter.getNextQualifier(cqCounterFamily));
+                if (!isAppendOnlySchema && colDef.getColumnQualifier() == null) {
+                    if (cqCounter.increment(cqCounterFamily)) {
+                        changedCqCounters.put(cqCounterFamily, cqCounter.getNextQualifier(cqCounterFamily));
+                    }
                 }
                 if (SchemaUtil.isPKColumn(column)) {
                     // TODO: remove this constraint?

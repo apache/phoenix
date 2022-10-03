@@ -51,8 +51,15 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = "lowercasetbl1";
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
-                "INT INTEGER, INT2 INTEGER, INT3 INTEGER, C VARCHAR)";
+                "INT INTEGER COLUMN_QUALIFIER_ID 11, INT2 INTEGER COLUMN_QUALIFIER_ID 12) (COLUMN_QUALIFIER_COUNTER \"0\" 13)";
         conn.createStatement().execute(ddl);
+
+
+        tableName = "lowercasetbl2";
+        ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER COLUMN_QUALIFIER_ID 11, INT2 INTEGER COLUMN_QUALIFIER_ID 12) (COLUMN_QUALIFIER_COUNTER \"0\" 13)";
+        conn.createStatement().execute(ddl);
+
 
         conn.createStatement().execute("ALTER TABLE \"" + tableName + "\" DROP COLUMN INT2");
 
