@@ -104,7 +104,7 @@
     <slf4j.version>1.7.36</slf4j.version>
     <!-- com.google repo will be used except on Aarch64 platform. -->
     <protobuf.group>com.google.protobuf</protobuf.group>
-    <protobuf-java.version>2.5.0</protobuf-java.version>
+    <protobuf-java.version>3.16.3</protobuf-java.version>
     <protoc.version>2.5.0</protoc.version>
     <commons-io.version>2.11.0</commons-io.version>
     <commons-lang.version>3.8</commons-lang.version>
