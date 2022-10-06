@@ -683,7 +683,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         ResultSet rs = stmt.executeQuery();
         assertNotNull(rs);
         assertTrue("Result set was empty!", rs.next());
-        return rs.getLong(1);
+        return rs.getTimestamp(1).getTime();
     }
 
     private long getLastTimestampForMetadata(Connection conn, String schemaName, String objectName,

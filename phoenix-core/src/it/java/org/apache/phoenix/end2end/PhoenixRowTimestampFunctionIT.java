@@ -43,6 +43,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.util.Collection;
 import java.util.List;
 
@@ -226,12 +227,11 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
             String dml = "UPSERT INTO " + tableName + " (PK1, PK2, KV1, KV2) VALUES (?, ?, ?, ?)";
 
             long rowTimestamp = EnvironmentEdgeManager.currentTimeMillis();
-            Date rowTimestampDate = new Date(rowTimestamp);
             try (PreparedStatement stmt = conn.prepareStatement(dml)) {
                 int count = NUM_ROWS;
                 for (int id = 0; id < count; ++id) {
                     stmt.setInt(1, id);
-                    stmt.setDate(2, rowTimestampDate);
+                    stmt.setDate(2, new Date(rowTimestamp + id));
                     stmt.setString(3, "KV1_" + id);
                     stmt.setString(4, "KV2_" + id);
                     stmt.executeUpdate();
@@ -240,11 +240,14 @@ public class PhoenixRowTimestampFunctionIT extends ParallelStatsDisabledIT {
                 conn.commit();
             }
 
-            String dql = "SELECT PHOENIX_ROW_TIMESTAMP() FROM " + tableName;
-            try (Statement stmt = conn.createStatement()) {
-                ResultSet rs = stmt.executeQuery(dql);
-                while (rs.next()) {
-                    assertEquals(rs.getDate(1), rowTimestampDate);
+            String dql = "SELECT PK1 FROM " + tableName + " WHERE PHOENIX_ROW_TIMESTAMP() = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(dql)) {
+                for (int expectedId = 0; expectedId < NUM_ROWS; ++expectedId) {
+                    stmt.setTimestamp(1, new Timestamp(rowTimestamp + expectedId));
+                    try (ResultSet rs = stmt.executeQuery(dql)) {
+                        assertTrue(rs.next());
+                        assertEquals(expectedId, rs.getInt(1));
+                    }
                 }
             }
         }

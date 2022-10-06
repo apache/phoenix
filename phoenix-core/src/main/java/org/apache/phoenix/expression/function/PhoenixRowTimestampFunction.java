@@ -20,7 +20,6 @@ package org.apache.phoenix.expression.function;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -28,11 +27,9 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.PhoenixRowTimestampParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTimestamp;
 
 import java.sql.Timestamp;
-import java.util.Date;
 import java.util.List;
 
 /**
@@ -63,10 +60,10 @@ public class PhoenixRowTimestampFunction extends ScalarFunction {
                             + "EMPTY_COLUMN key value expression."
             );
         }
-        if (!(children.get(0).getDataType().equals(PDate.INSTANCE))) {
+        if (!(children.get(0).getDataType().equals(PTimestamp.INSTANCE))) {
             throw new IllegalArgumentException(
                     "PhoenixRowTimestampFunction should have an "
-                            + "EMPTY_COLUMN key value expression of type PDate"
+                            + "EMPTY_COLUMN key value expression of type PTimestamp"
             );
         }
     }
@@ -110,14 +107,14 @@ public class PhoenixRowTimestampFunction extends ScalarFunction {
             ts = tuple.getValue(0).getTimestamp();
         }
 
-        Date rowTimestamp = new Date(ts);
-        ptr.set(PDate.INSTANCE.toBytes(rowTimestamp));
+        Timestamp rowTimestamp = new Timestamp(ts);
+        ptr.set(PTimestamp.INSTANCE.toBytes(rowTimestamp));
         return true;
     }
 
     @Override
     public PDataType getDataType() {
-        return PDate.INSTANCE;
+        return PTimestamp.INSTANCE;
     }
 
     @Override

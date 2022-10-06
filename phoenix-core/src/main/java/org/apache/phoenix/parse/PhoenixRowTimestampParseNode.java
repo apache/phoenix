@@ -29,7 +29,7 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.SchemaUtil;
 
 import java.sql.SQLException;
@@ -75,7 +75,7 @@ public class PhoenixRowTimestampParseNode extends FunctionParseNode {
             }
             @Override
             public PDataType getDataType() {
-                return PDate.INSTANCE;
+                return PTimestamp.INSTANCE;
             }
             @Override
             public Integer getMaxLength() {

@@ -2804,7 +2804,7 @@ public class UpgradeUtil {
         final String upsertSql =
             "UPSERT INTO " + SYSTEM_CATALOG_NAME + " (" + pkCols + ", " +
         LAST_DDL_TIMESTAMP + ")" + " " +
-            "SELECT " + pkCols + ", PHOENIX_ROW_TIMESTAMP() FROM " + SYSTEM_CATALOG_NAME + " " +
+            "SELECT " + pkCols + ", CAST(PHOENIX_ROW_TIMESTAMP() AS BIGINT) FROM " + SYSTEM_CATALOG_NAME + " " +
                 "WHERE " + TABLE_TYPE + " " + " in " + "('" + PTableType.TABLE.getSerializedValue()
                 + "', '" + PTableType.VIEW.getSerializedValue() + "')";
         LOGGER.info("Setting DDL timestamps for tables and views to row timestamps");
