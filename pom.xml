@@ -168,6 +168,9 @@
     <maven-owasp-plugin.version>6.5.3</maven-owasp-plugin.version>
     <protobuf.plugin.version>0.6.1</protobuf.plugin.version>
     <os.maven.version>1.5.0.Final</os.maven.version>
+    <!-- PHOENIX-6806 - Default protoc architecture to the detected one,
+      but allow for profile overrides -->
+    <protoc.arch>${os.detected.classifier}</protoc.arch>
   </properties>
 
   <build>
@@ -1868,6 +1871,19 @@
         <!-- PHOENIX-6475 Use custom protoc for Linux ARM64 -->
         <protobuf.group>org.openlabtesting.protobuf</protobuf.group>
         <protoc.version>2.5.0.2</protoc.version>
+      </properties>
+    </profile>
+    <profile>
+      <!-- PHOENIX-6806 Use Mac x64 version of protoc for Apple Silicon (aarch64) Macs -->
+      <id>osx-aarch64</id>
+      <activation>
+        <os>
+          <family>mac</family>
+          <arch>aarch64</arch>
+        </os>
+      </activation>
+      <properties>
+        <protoc.arch>osx-x86_64</protoc.arch>
       </properties>
     </profile>
   </profiles>
