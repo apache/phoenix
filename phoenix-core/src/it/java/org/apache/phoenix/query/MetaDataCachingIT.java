@@ -20,6 +20,7 @@ package org.apache.phoenix.query;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.schema.*;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -41,8 +42,7 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 @RunWith(RunUntilFailure.class)
 @Category(NeedsOwnMiniClusterTest.class)
@@ -133,6 +133,27 @@ public class MetaDataCachingIT extends BaseTest {
                 }
             }
         }
+    }
+
+    /*
+    The tables with zero update cache frequency should not be inserted to the cache. However, Phoenix
+    uses the cache as the temporary memory during DDL operations currently. When this behavior changes,
+    this test should be updated with the appropriate number of hits/misses.
+     */
+    @Test
+    public void testGlobalClientCacheMetrics() throws Exception {
+        int numThreads = 5;
+        int numTables = 1;
+        int numMaxDML = 1;
+        simulateWorkload("testGlobalClientCacheMetrics", numTables, numThreads, numMaxDML);
+
+        // only 1 miss when the table is created
+        assertEquals("Incorrect number of client metadata cache misses",
+                1, GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER.getMetric().getValue());
+
+        // (2 hits per upsert + 1 hit per select) per thread
+        assertEquals("Incorrect number of client metadata cache hits",
+                3*numMaxDML*numThreads, GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER.getMetric().getValue());
     }
 
     /*

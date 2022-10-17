@@ -25,6 +25,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.function.Consumer;
 
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.parse.PFunction;
@@ -49,6 +50,7 @@ public class PMetaDataImpl implements PMetaData {
     private final PTableRefFactory tableRefFactory;
     private final long updateCacheFrequency;
     private HashMap<String, PTableKey> physicalNameToLogicalTableMap = new HashMap<>();
+    private final Object metricsLock = new Object();
     
     public PMetaDataImpl(int initialCapacity, long updateCacheFrequency, ReadOnlyProps props) {
         this(initialCapacity, updateCacheFrequency, TimeKeeper.SYSTEM, props);
@@ -71,12 +73,27 @@ public class PMetaDataImpl implements PMetaData {
         this.updateCacheFrequency = updateCacheFrequency;
     }
 
+    private void updateGlobalMetric(PTableRef pTableRef) {
+        synchronized (metricsLock) {
+            if (pTableRef != null && pTableRef.getTable() != null) {
+                GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER.increment();
+            }
+            else {
+                GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER.increment();
+            }
+            metricsLock.notifyAll();
+        }
+    }
+
     @Override
     public PTableRef getTableRef(PTableKey key) throws TableNotFoundException {
         if (physicalNameToLogicalTableMap.containsKey(key.getName())) {
             key = physicalNameToLogicalTableMap.get(key.getName());
         }
         PTableRef ref = metaData.get(key);
+        if (!key.getName().contains(QueryConstants.SYSTEM_SCHEMA_NAME)) {
+            updateGlobalMetric(ref);
+        }
         if (ref == null) {
             throw new TableNotFoundException(key.getName());
         }
