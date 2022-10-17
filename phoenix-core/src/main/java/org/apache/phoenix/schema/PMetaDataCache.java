@@ -24,7 +24,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
-import org.apache.phoenix.thirdparty.com.google.common.cache.*;
+import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
+import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
+import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalListener;
+import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalNotification;
+import org.apache.phoenix.thirdparty.com.google.common.cache.Weigher;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TimeKeeper;
 
