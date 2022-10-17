@@ -327,42 +327,6 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
         }
     }
 
-    /*
-    In PHOENIX-6761, connection level cache is removed so the dropped view will not be found when trying to upsert to it.
-     */
-    @Ignore
-    @Test
-    public void testUpsertRowToDeletedTable() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn1 = DriverManager.getConnection(getUrl(), props);
-                Connection conn2 = DriverManager.getConnection(getUrl(), props)) {
-            String metricTableName = generateUniqueName();
-            String viewName = generateUniqueName();
-            String metricIdSeqTableName = generateUniqueName();
-            // create sequence for auto partition
-            conn1.createStatement().execute("CREATE SEQUENCE " + metricIdSeqTableName + "  CACHE 1");
-            // create base table
-            conn1.createStatement().execute("CREATE TABLE " + metricTableName + " (metricId INTEGER NOT NULL, metricVal DOUBLE, CONSTRAINT PK PRIMARY KEY(metricId))"
-                    + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=1, AUTO_PARTITION_SEQ=" + metricIdSeqTableName);
-            // create view
-            String ddl =
-                    "CREATE VIEW IF NOT EXISTS "
-                            + viewName + "( hostName varchar NOT NULL,"
-                            + " CONSTRAINT HOSTNAME_PK PRIMARY KEY (hostName))"
-                            + " AS SELECT * FROM " + metricTableName
-                            + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=300000";
-            conn1.createStatement().execute(ddl);
-            
-            // drop the table using a different connection
-            conn2.createStatement().execute("DROP VIEW " + viewName);
-            
-            // upsert one row
-            conn1.createStatement().execute("UPSERT INTO " + viewName + "(hostName, metricVal) VALUES('host1', 1.0)");
-            // upsert doesn't fail since base table still exists
-            conn1.commit();
-        }
-    }
-
     @Test
     public void testAlterTableOptions() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
