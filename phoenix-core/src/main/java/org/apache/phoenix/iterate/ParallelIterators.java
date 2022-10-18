@@ -32,10 +32,12 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.LogUtil;
@@ -86,7 +88,9 @@ public class ParallelIterators extends BaseResultIterators {
         // we get better utilization of the cluster since our thread executor
         // will spray the scans across machines as opposed to targeting a
         // single one since the scans are in row key order.
-        ExecutorService executor = context.getConnection().getQueryServices().getExecutor();
+        PhoenixConnection connection = context.getConnection();
+        ConnectionQueryServices queryServices = connection.getQueryServices();
+        ExecutorService executor = queryServices.getExecutor();
         List<ScanLocator> scanLocations = Lists.newArrayListWithExpectedSize(estFlattenedSize);
         for (int i = 0; i < nestedScans.size(); i++) {
             List<Scan> scans = nestedScans.get(i);
@@ -107,17 +111,17 @@ public class ParallelIterators extends BaseResultIterators {
         int numScans = scanLocations.size();
         context.getOverallQueryMetrics().updateNumParallelScans(numScans);
         GLOBAL_NUM_PARALLEL_SCANS.update(numScans);
-        final long renewLeaseThreshold = context.getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
+        final long renewLeaseThreshold = queryServices.getRenewLeaseThresholdMilliSeconds();
         for (final ScanLocator scanLocation : scanLocations) {
             final Scan scan = scanLocation.getScan();
             final ScanMetricsHolder scanMetricsHolder = ScanMetricsHolder.getInstance(readMetrics, physicalTableName,
-                scan, context.getConnection().getLogLevel());
+                scan, connection.getLogLevel());
             final TaskExecutionMetricsHolder taskMetrics = new TaskExecutionMetricsHolder(readMetrics, physicalTableName);
             final TableResultIterator tableResultItr =
-                    context.getConnection().getTableResultIteratorFactory().newIterator(
+                    connection.getTableResultIteratorFactory().newIterator(
                         mutationState, tableRef, scan, scanMetricsHolder, renewLeaseThreshold, plan,
                         scanGrouper, caches);
-            context.getConnection().addIteratorForLeaseRenewal(tableResultItr);
+            connection.addIteratorForLeaseRenewal(tableResultItr);
             Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
                 
                 @Override
@@ -165,7 +169,7 @@ public class ParallelIterators extends BaseResultIterators {
             }, "Parallel scanner for table: " + tableRef.getTable().getPhysicalName().getString()));
             // Add our future in the right place so that we can concatenate the
             // results of the inner futures versus merge sorting across all of them.
-            nestedFutures.get(scanLocation.getOuterListIndex()).set(scanLocation.getInnerListIndex(), new Pair<Scan,Future<PeekingResultIterator>>(scan,future));
+            nestedFutures.get(scanLocation.getOuterListIndex()).set(scanLocation.getInnerListIndex(), new Pair<>(scan, future));
         }
     }
 

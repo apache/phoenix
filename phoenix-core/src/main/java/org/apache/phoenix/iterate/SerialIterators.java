@@ -52,7 +52,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  *
- * Class that parallelizes the scan over a table using the ExecutorService provided.  Each region of the table will be scanned in parallel with
+ * Class that serializes the scan over a table. Each region of the table will be scanned in serial order with
  * the results accessible through {@link #getIterators()}
  *
  * 

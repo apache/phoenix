@@ -175,8 +175,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
                 } else {
                     iterator =
                             new OrderedResultIterator(iterator, keyExpressionOrderBy,
-                                    spoolingEnabled, thresholdBytes, null, null,
-                                    projector.getEstimatedRowByteSize());
+                                    spoolingEnabled, thresholdBytes).setEstimatedRowSize(projector.getEstimatedRowByteSize());
                     aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, keyExpressions);
                 }
             }

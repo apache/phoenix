@@ -52,6 +52,7 @@ import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.query.QueryConstants;
@@ -136,11 +137,12 @@ public class TableResultIterator implements ResultIterator {
         this.scanIterator = UNINITIALIZED_SCANNER;
         this.renewLeaseThreshold = renewLeaseThreshold;
         this.scanGrouper = scanGrouper;
-        this.hashCacheClient = new HashCacheClient(plan.getContext().getConnection());
+        PhoenixConnection connection = plan.getContext().getConnection();
+        this.hashCacheClient = new HashCacheClient(connection);
         this.caches = caches;
-        this.retry=plan.getContext().getConnection().getQueryServices().getProps()
+        this.retry= connection.getQueryServices().getProps()
                 .getInt(QueryConstants.HASH_JOIN_CACHE_RETRIES, QueryConstants.DEFAULT_HASH_JOIN_CACHE_RETRIES);
-        ScanUtil.setScanAttributesForClient(scan, table, plan.getContext().getConnection());
+        ScanUtil.setScanAttributesForClient(scan, table, connection);
     }
 
     @Override

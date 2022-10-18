@@ -104,8 +104,11 @@ public class ClientScanPlan extends ClientProcessingPlan {
                         QueryServicesOptions.DEFAULT_CLIENT_ORDERBY_SPOOLING_ENABLED);
             iterator =
                     new OrderedResultIterator(iterator, orderBy.getOrderByExpressions(),
-                            spoolingEnabled, thresholdBytes, limit, offset,
-                            projector.getEstimatedRowByteSize());
+                            spoolingEnabled, thresholdBytes)
+                            .setLimit(limit)
+                            .setOffset(offset)
+                            .setEstimatedRowSize(projector.getEstimatedRowByteSize())
+                            ;
         } else {
             if (offset != null) {
                 iterator = new OffsetResultIterator(iterator, offset);

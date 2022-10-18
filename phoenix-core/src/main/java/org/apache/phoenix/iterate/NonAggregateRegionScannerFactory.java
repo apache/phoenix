@@ -159,26 +159,32 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                     useNewValueColumnQualifier);
         }
         if (scanOffset != null) {
-            innerScanner = getOffsetScanner(innerScanner, new OffsetResultIterator(
-                            new RegionScannerResultIterator(innerScanner, getMinMaxQualifiersFromScan(scan), encodingScheme),
-                            scanOffset, getPageSizeMsForRegionScanner(scan)),
-                    scan.getAttribute(QueryConstants.LAST_SCAN) != null);
+            RegionScannerResultIterator delegate = new RegionScannerResultIterator(innerScanner, getMinMaxQualifiersFromScan(scan), encodingScheme);
+            OffsetResultIterator iterator = new OffsetResultIterator(
+                    delegate,
+                    scanOffset, getPageSizeMsForRegionScanner(scan));
+            boolean isLastScan = scan.getAttribute(QueryConstants.LAST_SCAN) != null;
+            innerScanner = getOffsetScanner(innerScanner, iterator, isLastScan);
         }
-        boolean spoolingEnabled =
-                env.getConfiguration().getBoolean(
-                        QueryServices.SERVER_ORDERBY_SPOOLING_ENABLED_ATTRIB,
-                        QueryServicesOptions.DEFAULT_SERVER_ORDERBY_SPOOLING_ENABLED);
-        long thresholdBytes =
-                env.getConfiguration()
-                        .getLongBytes(QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB,
-                        QueryServicesOptions.DEFAULT_SERVER_SPOOL_THRESHOLD_BYTES);
         final OrderedResultIterator iterator =
-                deserializeFromScan(scan, innerScanner, spoolingEnabled, thresholdBytes);
+                deserializeFromScan(scan, innerScanner, isSpoolingEnabled(), getSpoolThresholdBytes());
         if (iterator == null) {
             return innerScanner;
         }
         // TODO:the above wrapped scanner should be used here also
         return getTopNScanner(env, innerScanner, iterator, tenantId);
+    }
+
+    private boolean isSpoolingEnabled() {
+        return env.getConfiguration().getBoolean(
+                QueryServices.SERVER_ORDERBY_SPOOLING_ENABLED_ATTRIB,
+                QueryServicesOptions.DEFAULT_SERVER_ORDERBY_SPOOLING_ENABLED);
+    }
+
+    private long getSpoolThresholdBytes() {
+        return env.getConfiguration()
+                .getLongBytes(QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB,
+                        QueryServicesOptions.DEFAULT_SERVER_SPOOL_THRESHOLD_BYTES);
     }
 
     @VisibleForTesting
@@ -217,8 +223,12 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             }
             PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
             ResultIterator inner = new RegionScannerResultIterator(s, EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan), encodingScheme);
+            Integer limitToSet = limit >= 0 ? limit : null;
             return new OrderedResultIterator(inner, orderByExpressions, spoolingEnabled,
-                    thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize, getPageSizeMsForRegionScanner(scan));
+                    thresholdBytes)
+                    .setLimit(limitToSet)
+                    .setEstimatedRowSize(estimatedRowSize)
+                    .setPageSizeMs(getPageSizeMsForRegionScanner(scan));
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -275,7 +285,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         try {
             Tuple tuple = iterator.next();
             if (tuple == null && !isLastScan) {
-                List<Cell> kvList = new ArrayList<Cell>(1);
+                List<Cell> kvList = new ArrayList<>(1);
                 KeyValue kv = new KeyValue(QueryConstants.OFFSET_ROW_KEY_BYTES, QueryConstants.OFFSET_FAMILY,
                         QueryConstants.OFFSET_COLUMN, PInteger.INSTANCE.toBytes(iterator.getRemainingOffset()));
                 kvList.add(kv);
@@ -341,7 +351,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
 
         final Tuple firstTuple;
         TenantCache tenantCache = GlobalCache.getTenantCache(env, tenantId);
-        long estSize = iterator.getEstimatedByteSize();
+        long estSize = iterator.getEstimatedRowSize();
         final MemoryManager.MemoryChunk chunk = tenantCache.getMemoryManager().allocate(estSize);
         final Region region = getRegion();
         region.startRegionOperation();

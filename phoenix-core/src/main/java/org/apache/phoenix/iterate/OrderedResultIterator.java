@@ -131,83 +131,85 @@ public class OrderedResultIterator implements PeekingResultIterator {
     }
 
     /** Returns the expression of a given {@link OrderByExpression}. */
-    private static final Function<OrderByExpression, Expression> TO_EXPRESSION = new Function<OrderByExpression, Expression>() {
-        @Override
-        public Expression apply(OrderByExpression column) {
-            return column.getExpression();
-        }
-    };
+    private static final Function<OrderByExpression, Expression> TO_EXPRESSION = column -> column.getExpression();
 
     private final boolean spoolingEnabled;
     private final long thresholdBytes;
-    private final Integer limit;
-    private final Integer offset;
+    private Integer limit = null;
+    private Integer offset = 0;
     private final ResultIterator delegate;
     private final List<OrderByExpression> orderByExpressions;
-    private final long estimatedByteSize;
+    private long estimatedRowSize = 0;
     
     private PeekingResultIterator resultIterator;
     private boolean resultIteratorReady = false;
     private Tuple dummyTuple = null;
     private long byteSize;
-    private long pageSizeMs;
-
-    protected ResultIterator getDelegate() {
-        return delegate;
-    }
-    
-    public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions,
-            boolean spoolingEnabled, long thresholdBytes, Integer limit, Integer offset) {
-        this(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, limit, offset, 0, Long.MAX_VALUE);
-    }
-
-    public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions,
-            boolean spoolingEnabled, long thresholdBytes) throws SQLException {
-        this(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, null, null);
-    }
+    private long pageSizeMs = Long.MAX_VALUE;
 
     public OrderedResultIterator(ResultIterator delegate,
                                  List<OrderByExpression> orderByExpressions, boolean spoolingEnabled,
-                                 long thresholdBytes, Integer limit, Integer offset, int estimatedRowSize) {
-        this(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, limit, offset, estimatedRowSize, Long.MAX_VALUE);
-    }
-
-    public OrderedResultIterator(ResultIterator delegate,
-            List<OrderByExpression> orderByExpressions, boolean spoolingEnabled,
-            long thresholdBytes, Integer limit, Integer offset, int estimatedRowSize, long pageSizeMs) {
+                                 long thresholdBytes) {
         checkArgument(!orderByExpressions.isEmpty());
         this.delegate = delegate;
         this.orderByExpressions = orderByExpressions;
         this.spoolingEnabled = spoolingEnabled;
         this.thresholdBytes = thresholdBytes;
-        this.offset = offset == null ? 0 : offset;
-        if (limit != null) {
-            this.limit = limit + this.offset;
-        } else {
-            this.limit = null;
+    }
+    protected ResultIterator getDelegate() {
+        return delegate;
+    }
+
+    public OrderedResultIterator setPageSizeMs(long pageSizeMs) {
+        this.pageSizeMs = pageSizeMs;
+        return this;
+    }
+
+    public OrderedResultIterator setLimit(Integer limit) {
+        this.limit = limit;
+        return this;
+    }
+
+
+    public OrderedResultIterator setOffset(Integer offset) {
+        if (offset == null) {
+            return this;
         }
+        this.offset = offset;
+        return this;
+    }
+
+    public OrderedResultIterator setEstimatedRowSize(Integer estimatedRowSize) {
+        if (estimatedRowSize == null) {
+            return this;
+        }
+        this.estimatedRowSize = estimatedRowSize;
+        return this;
+    }
+
+
+    public Integer getLimit() {
+        if (limit != null) {
+            return limit + offset;
+        }
+        return null;
+    }
+
+    public long getEstimatedRowSize() {
         long estimatedEntrySize =
-            // ResultEntry
-            SizedUtil.OBJECT_SIZE + 
-            // ImmutableBytesWritable[]
-            SizedUtil.ARRAY_SIZE + orderByExpressions.size() * SizedUtil.IMMUTABLE_BYTES_WRITABLE_SIZE +
-            // Tuple
-            SizedUtil.OBJECT_SIZE + estimatedRowSize;
+                // ResultEntry
+                SizedUtil.OBJECT_SIZE +
+                        // ImmutableBytesWritable[]
+                        SizedUtil.ARRAY_SIZE + orderByExpressions.size() * SizedUtil.IMMUTABLE_BYTES_WRITABLE_SIZE +
+                        // Tuple
+                        SizedUtil.OBJECT_SIZE + estimatedRowSize;
 
         // Make sure we don't overflow Long, though this is really unlikely to happen.
         assert(limit == null || Long.MAX_VALUE / estimatedEntrySize >= limit + this.offset);
 
         // Both BufferedSortedQueue and SizeBoundQueue won't allocate more than thresholdBytes.
-        this.estimatedByteSize = limit == null ? 0 : Math.min((limit + this.offset) * estimatedEntrySize, thresholdBytes);
-        this.pageSizeMs = pageSizeMs;
-    }
-
-    public Integer getLimit() {
-        return limit;
-    }
-
-    public long getEstimatedByteSize() {
-        return estimatedByteSize;
+        estimatedRowSize = limit == null ? 0 : Math.min((limit + this.offset) * estimatedEntrySize, thresholdBytes);
+        return estimatedRowSize;
     }
 
     public long getByteSize() {
@@ -225,10 +227,10 @@ public class OrderedResultIterator implements PeekingResultIterator {
         int pos = 0;
         for (OrderByExpression col : orderByExpressions) {
             Expression e = col.getExpression();
-            Comparator<ImmutableBytesWritable> comparator = 
-                    e.getSortOrder() == SortOrder.DESC && !e.getDataType().isFixedWidth() 
-                    ? buildDescVarLengthComparator() 
-                    : new ImmutableBytesWritable.Comparator();
+            Comparator<ImmutableBytesWritable> comparator = new ImmutableBytesWritable.Comparator();
+            if (e.getSortOrder() == SortOrder.DESC && !e.getDataType().isFixedWidth()) {
+                comparator = buildDescVarLengthComparator();
+            }
             Ordering<ImmutableBytesWritable> o = Ordering.from(comparator);
             if(!col.isAscending()) o = o.reverse();
             o = col.isNullsLast() ? o.nullsLast() : o.nullsFirst();
@@ -243,16 +245,9 @@ public class OrderedResultIterator implements PeekingResultIterator {
      * different, returns the longer length as bigger.
      */
     private static Comparator<ImmutableBytesWritable> buildDescVarLengthComparator() {
-        return new Comparator<ImmutableBytesWritable>() {
-
-            @Override
-            public int compare(ImmutableBytesWritable o1, ImmutableBytesWritable o2) {
-                return DescVarLengthFastByteComparisons.compareTo(
-                        o1.get(), o1.getOffset(), o1.getLength(),
-                        o2.get(), o2.getOffset(), o2.getLength());
-            }
-            
-        };
+        return (o1, o2) -> DescVarLengthFastByteComparisons.compareTo(
+                o1.get(), o1.getOffset(), o1.getLength(),
+                o2.get(), o2.getOffset(), o2.getLength());
     }
     
     @Override
@@ -277,7 +272,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
         try{
             if (resultIterator == null) {
                 resultIterator = new RecordPeekingResultIterator(PhoenixQueues.newResultEntrySortedQueue(comparator,
-                        limit, spoolingEnabled, thresholdBytes));
+                        getLimit(), spoolingEnabled, thresholdBytes));
             }
             final SizeAwareQueue<ResultEntry> queueEntries = ((RecordPeekingResultIterator)resultIterator).getQueueEntries();
             long startTime = EnvironmentEdgeManager.currentTimeMillis();
@@ -335,7 +330,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
     public void explain(List<String> planSteps) {
         delegate.explain(planSteps);
         planSteps.add("CLIENT" + (offset == null || offset == 0 ? "" : " OFFSET " + offset)
-                + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S")) + " SORTED BY "
+                + (getLimit() == null ? "" : " TOP " + getLimit() + " ROW" + (getLimit() == 1 ? "" : "S")) + " SORTED BY "
                 + orderByExpressions.toString());
     }
 
@@ -344,20 +339,20 @@ public class OrderedResultIterator implements PeekingResultIterator {
             ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
         delegate.explain(planSteps, explainPlanAttributesBuilder);
         explainPlanAttributesBuilder.setClientOffset(offset);
-        explainPlanAttributesBuilder.setClientRowLimit(limit);
+        explainPlanAttributesBuilder.setClientRowLimit(getLimit());
         explainPlanAttributesBuilder.setClientSortedBy(
             orderByExpressions.toString());
         planSteps.add("CLIENT" + (offset == null || offset == 0 ? "" : " OFFSET " + offset)
-            + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
+            + (getLimit() == null ? "" : " TOP " + getLimit() + " ROW" + (getLimit() == 1 ? "" : "S"))
             + " SORTED BY " + orderByExpressions.toString());
     }
 
     @Override
     public String toString() {
         return "OrderedResultIterator [thresholdBytes=" + thresholdBytes
-                + ", limit=" + limit + ", offset=" + offset + ", delegate=" + delegate
+                + ", limit=" + getLimit() + ", offset=" + offset + ", delegate=" + delegate
                 + ", orderByExpressions=" + orderByExpressions
-                + ", estimatedByteSize=" + estimatedByteSize
+                + ", estimatedByteSize=" + estimatedRowSize
                 + ", resultIterator=" + resultIterator + ", byteSize="
                 + byteSize + "]";
     }
@@ -383,7 +378,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
                 if (entry.getResult() == null) { return null; }
                 entry = queueEntries.poll();
             }
-            if (entry == null || (limit != null && count++ > limit)) {
+            if (entry == null || (getLimit() != null && count++ > getLimit())) {
                 resultIterator.close();
                 resultIterator = PeekingResultIterator.EMPTY_ITERATOR;
                 return null;
@@ -399,7 +394,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
                 count++;
                 if (entry == null) { return null; }
             }
-            if (limit != null && count > limit) { return null; }
+            if (getLimit() != null && count > getLimit()) { return null; }
             entry = queueEntries.peek();
             if (entry == null) { return null; }
             return entry.getResult();
