@@ -1301,6 +1301,63 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testCreateTableWithColumnQualifiers() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER COLUMN_QUALIFIER_ID 11, INT2 INTEGER COLUMN_QUALIFIER_ID 12, " +
+                "INT3 INTEGER COLUMN_QUALIFIER_ID 14) (COLUMN_QUALIFIER_COUNTER \"0\" 15)";
+        conn.createStatement().execute(ddl);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable table = pconn.getTable(new PTableKey(null, tableName));
+
+        QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
+        assertNotEquals(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, encodingScheme);
+
+        PTable.EncodedCQCounter cqCounter = table.getEncodedCQCounter();
+        assertEquals(15, cqCounter.values().get("0").intValue());
+        assertEquals(11, encodingScheme.decode(table.getColumnForColumnName("INT")
+                .getColumnQualifierBytes()));
+        assertEquals(12, encodingScheme.decode(table.getColumnForColumnName("INT2")
+                .getColumnQualifierBytes()));
+        assertEquals(14, encodingScheme.decode(table.getColumnForColumnName("INT3")
+                .getColumnQualifierBytes()));
+    }
+
+    @Test
+    public void testCreateTableWithColumnQualifiersDuplicateCQ() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER COLUMN_QUALIFIER_ID 11, INT2 INTEGER COLUMN_QUALIFIER_ID 11, " +
+                "INT3 INTEGER COLUMN_QUALIFIER_ID 14) (COLUMN_QUALIFIER_COUNTER \"0\" 15)";
+        try {
+            conn.createStatement().execute(ddl);
+            fail("Duplicate Column Qualifiers");}
+        catch (SQLException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void testCreateTableWithColumnQualifiersInvalid() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER COLUMN_QUALIFIER_ID 9, INT2 INTEGER COLUMN_QUALIFIER_ID 11, " +
+                "INT3 INTEGER COLUMN_QUALIFIER_ID 14) (COLUMN_QUALIFIER_COUNTER \"0\" 15)";
+        try {
+            conn.createStatement().execute(ddl);
+            fail("Invalid Column Qualifier");}
+        catch (SQLException e) {
+            // expected
+        }
+    }
+
     public static long verifyLastDDLTimestamp(String dataTableFullName, long startTS, Connection conn) throws SQLException {
         long endTS = EnvironmentEdgeManager.currentTimeMillis();
         //Now try the PTable API

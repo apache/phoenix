@@ -410,7 +410,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             cqCounters.add(def);
         }
         if (cqCounters.size() > 0) {
-            cqBuilder.append('(');
+            cqBuilder.append(" (");
             cqBuilder.append("COLUMN_QUALIFIER_COUNTER ");
             cqBuilder.append(StringUtils.join( ", ", cqCounters));
             cqBuilder.append(')');

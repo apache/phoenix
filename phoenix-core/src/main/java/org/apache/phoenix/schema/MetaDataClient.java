@@ -2571,9 +2571,13 @@ public class MetaDataClient {
                     }
                 }
                 cqCounter = encodingScheme != NON_ENCODED_QUALIFIERS ? new EncodedCQCounter() : NULL_COUNTER;
-                if (statement.getFamilyCQCounters() != null)
+                if (encodingScheme != NON_ENCODED_QUALIFIERS && statement.getFamilyCQCounters() != null)
                 {
                     for (Map.Entry<String, Integer> cq : statement.getFamilyCQCounters().entrySet()) {
+                        if (cq.getValue() < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE)
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_COLUMNS_EXCEEDED)
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException(); // TODO
                         cqCounter.setValue(cq.getKey(), cq.getValue());
                         changedCqCounters.put(cq.getKey(), cqCounter.getNextQualifier(cq.getKey()));
                     }
@@ -2585,6 +2589,9 @@ public class MetaDataClient {
             Set<Integer> viewNewColumnPositions =
                     Sets.newHashSetWithExpectedSize(colDefs.size());
             Set<String> pkColumnNames = new HashSet<>();
+
+            // Check for duplicate column qualifiers
+            Map<String, Set<Integer>> inputCqCounters = new HashMap<>();
             for (PColumn pColumn : pkColumns) {
                 pkColumnNames.add(pColumn.getName().toString());
             }
@@ -2623,12 +2630,22 @@ public class MetaDataClient {
                 // the column encoding (PHOENIX-4737).
                 Integer encodedCQ = null;
                 if (!isPkColumn) {
-                    if (colDef.getColumnQualifier() != null)
+                    if (colDef.getColumnQualifier() != null) {
                         encodedCQ = colDef.getColumnQualifier();
-                    else if (isAppendOnlySchema)
+                        inputCqCounters.putIfAbsent(cqCounterFamily, new HashSet<Integer>());
+                        Set<Integer> familyCounters = inputCqCounters.get(cqCounterFamily);
+                        if (!familyCounters.add(encodedCQ)
+                            || encodedCQ < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE)
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_COLUMNS_EXCEEDED)
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException(); // TODO
+                    }
+                    else if (isAppendOnlySchema) {
                         encodedCQ = Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position);
-                    else
+                    }
+                    else {
                         encodedCQ = cqCounter.getNextQualifier(cqCounterFamily);
+                    }
                 }
                 byte[] columnQualifierBytes = null;
                 try {

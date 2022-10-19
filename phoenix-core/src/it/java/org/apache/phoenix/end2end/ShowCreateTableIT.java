@@ -27,6 +27,8 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.util.Properties;
 
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
 import static org.junit.Assert.assertTrue;
 
 @Category(ParallelStatsDisabledTest.class)
@@ -43,30 +45,6 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
                 rs.getString(1).contains(ddl));
-    }
-
-    @Test
-    public void testShowCreateTableQualifier() throws Exception {
-        Properties props = new Properties();
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = "lowercasetbl1";
-        String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
-                "INT INTEGER COLUMN_QUALIFIER_ID 11, INT2 INTEGER COLUMN_QUALIFIER_ID 12) (COLUMN_QUALIFIER_COUNTER \"0\" 13)";
-        conn.createStatement().execute(ddl);
-
-
-        tableName = "lowercasetbl2";
-        ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
-                "INT INTEGER COLUMN_QUALIFIER_ID 11, INT2 INTEGER COLUMN_QUALIFIER_ID 12) (COLUMN_QUALIFIER_COUNTER \"0\" 13)";
-        conn.createStatement().execute(ddl);
-
-
-        conn.createStatement().execute("ALTER TABLE \"" + tableName + "\" DROP COLUMN INT2");
-
-        ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE \"" + tableName + "\"");
-        assertTrue(rs.next());
-//        assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
-//                rs.getString(1).contains(ddl));
     }
 
     @Test
@@ -97,6 +75,93 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
                 rs.getString(1).contains(ddl));
+    }
+
+    @Test
+    public void testShowCreateTableColumnQualifierBasic() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();;
+        String ddl = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, INT INTEGER, INT2 INTEGER)";
+        conn.createStatement().execute(ddl);
+        ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE \"" + tableName + "\"");
+        assertTrue(rs.next());
+
+        String expected = "CREATE TABLE " + tableName + "[(]K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
+                ", INT2 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
+                "[)].*[(]COLUMN_QUALIFIER_COUNTER \"" + DEFAULT_COLUMN_FAMILY +"\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 2) + "[)]";
+        assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
+                rs.getString(1).matches(expected));
+    }
+
+    @Test
+    public void testShowCreateTableColumnQualifierDrop() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();;
+        String ddl = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER, INT2 INTEGER, INT3 INTEGER)";
+        conn.createStatement().execute(ddl);
+
+        String dropInt2 = "ALTER TABLE " + tableName + " DROP COLUMN INT2";
+        conn.createStatement().execute(dropInt2);
+
+        ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE \"" + tableName + "\"");
+        assertTrue(rs.next());
+
+        String expected = "CREATE TABLE " + tableName + "[(]K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
+                ", INT3 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 2) +
+                "[)].*[(]COLUMN_QUALIFIER_COUNTER \"" + DEFAULT_COLUMN_FAMILY +"\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 3) + "[)]";
+        assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
+                rs.getString(1).matches(expected));
+    }
+
+    @Test
+    public void testShowCreateTableColumnQualifierDropAndAdd() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();;
+        String ddl = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER, INT2 INTEGER, INT3 INTEGER)";
+        conn.createStatement().execute(ddl);
+
+        String dropInt3 = "ALTER TABLE " + tableName + " DROP COLUMN INT3";
+        conn.createStatement().execute(dropInt3);
+
+        String addInt4 = "ALTER TABLE " + tableName + " ADD INT4 INTEGER";
+        conn.createStatement().execute(addInt4);
+
+        ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE \"" + tableName + "\"");
+        assertTrue(rs.next());
+
+        String expected = "CREATE TABLE " + tableName + "[(]K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
+                ", INT2 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
+                ", INT4 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 3) +
+                "[)].*[(]COLUMN_QUALIFIER_COUNTER \"" + DEFAULT_COLUMN_FAMILY +"\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 4) + "[)]";
+        assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
+                rs.getString(1).matches(expected));
+    }
+
+    @Test
+    public void testShowCreateTableColumnQualifierMultipleFamilies() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();;
+        String ddl = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, a.INT INTEGER, b.INT2 INTEGER) IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS";
+        conn.createStatement().execute(ddl);
+        ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE \"" + tableName + "\"");
+        assertTrue(rs.next());
+
+//        String expected = "CREATE TABLE " + tableName + "[(]K VARCHAR NOT NULL PRIMARY KEY, " +
+//                "a.INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
+//                ", b.INT2 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
+//                "[)].*[(]COLUMN_QUALIFIER_COUNTER \"a\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
+//                " \"b\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) + "[)]";
+//        assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
+//                rs.getString(1).matches(expected));
     }
 
     @Test
