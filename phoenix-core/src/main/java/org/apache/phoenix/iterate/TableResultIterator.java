@@ -127,8 +127,10 @@ public class TableResultIterator implements ResultIterator {
         this(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, null);
     }
 
-    public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
-            long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper,Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
+    public TableResultIterator(MutationState mutationState, Scan scan,
+            ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold, QueryPlan plan,
+            ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr, ServerCache> caches)
+            throws SQLException {
         this.scan = scan;
         this.scanMetricsHolder = scanMetricsHolder;
         this.plan = plan;
@@ -140,8 +142,10 @@ public class TableResultIterator implements ResultIterator {
         PhoenixConnection connection = plan.getContext().getConnection();
         this.hashCacheClient = new HashCacheClient(connection);
         this.caches = caches;
-        this.retry= connection.getQueryServices().getProps()
-                .getInt(QueryConstants.HASH_JOIN_CACHE_RETRIES, QueryConstants.DEFAULT_HASH_JOIN_CACHE_RETRIES);
+        this.retry =
+                connection.getQueryServices().getProps().getInt(
+                    QueryConstants.HASH_JOIN_CACHE_RETRIES,
+                    QueryConstants.DEFAULT_HASH_JOIN_CACHE_RETRIES);
         ScanUtil.setScanAttributesForClient(scan, table, connection);
     }
 
@@ -180,39 +184,46 @@ public class TableResultIterator implements ResultIterator {
             } catch (SQLException e) {
                 try {
                     throw ServerUtil.parseServerException(e);
-                } catch(HashJoinCacheNotFoundException e1) {
-                    if(ScanUtil.isNonAggregateScan(scan) && plan.getContext().getAggregationManager().isEmpty()) {
-                        // For non aggregate queries if we get stale region boundary exception we can
+                } catch (HashJoinCacheNotFoundException e1) {
+                    if (ScanUtil.isNonAggregateScan(scan)
+                            && plan.getContext().getAggregationManager().isEmpty()) {
+                        // For non aggregate queries if we get stale region boundary exception we
+                        // can
                         // continue scanning from the next value of lasted fetched result.
                         Scan newScan = ScanUtil.newScan(scan);
                         newScan.withStartRow(newScan.getAttribute(SCAN_ACTUAL_START_ROW));
-                        if(lastTuple != null) {
+                        if (lastTuple != null) {
                             lastTuple.getKey(ptr);
                             byte[] startRowSuffix = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                            if(ScanUtil.isLocalIndex(newScan)) {
+                            if (ScanUtil.isLocalIndex(newScan)) {
                                 // If we just set scan start row suffix then server side we prepare
                                 // actual scan boundaries by prefixing the region start key.
-                                newScan.setAttribute(SCAN_START_ROW_SUFFIX, ByteUtil.nextKey(startRowSuffix));
+                                newScan.setAttribute(SCAN_START_ROW_SUFFIX,
+                                    ByteUtil.nextKey(startRowSuffix));
                             } else {
                                 newScan.withStartRow(ByteUtil.nextKey(startRowSuffix));
                             }
                         }
-                        plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getName());
+                        plan.getContext().getConnection().getQueryServices()
+                                .clearTableRegionCache(htable.getName());
                         LOGGER.debug(
-                                "Retrying when Hash Join cache is not found on the server ,by sending the cache again");
+                            "Retrying when Hash Join cache is not found on the server ,by sending the cache again");
                         if (retry <= 0) {
                             throw e1;
                         }
                         Long cacheId = e1.getCacheId();
                         retry--;
                         try {
-                            ServerCache cache = caches == null ? null :
-                                    caches.get(new ImmutableBytesPtr(Bytes.toBytes(cacheId)));
-                            if (!hashCacheClient.addHashCacheToServer(newScan.getStartRow(),
-                                    cache, plan.getTableRef().getTable())) {
+                            ServerCache cache =
+                                    caches == null ? null
+                                            : caches.get(
+                                                new ImmutableBytesPtr(Bytes.toBytes(cacheId)));
+                            if (!hashCacheClient.addHashCacheToServer(newScan.getStartRow(), cache,
+                                plan.getTableRef().getTable())) {
                                 throw e1;
                             }
-                            this.scanIterator = ((BaseQueryPlan) plan).iterator(caches, scanGrouper, newScan);
+                            this.scanIterator =
+                                    ((BaseQueryPlan) plan).iterator(caches, scanGrouper, newScan);
 
                         } catch (Exception ex) {
                             throw ServerUtil.parseServerException(ex);
@@ -239,7 +250,8 @@ public class TableResultIterator implements ResultIterator {
             if (delegate == UNINITIALIZED_SCANNER) {
                 try {
                     this.scanIterator =
-                            new ScanningResultIterator(htable.getScanner(scan), scan, scanMetricsHolder);
+                            new ScanningResultIterator(htable.getScanner(scan), scan,
+                                    scanMetricsHolder);
                 } catch (IOException e) {
                     Closeables.closeQuietly(htable);
                     throw ServerUtil.parseServerException(e);
@@ -252,7 +264,7 @@ public class TableResultIterator implements ResultIterator {
 
     @Override
     public String toString() {
-        return "TableResultIterator [htable=" + htable + ", scan=" + scan  + "]";
+        return "TableResultIterator [htable=" + htable + ", scan=" + scan + "]";
     }
 
     public RenewLeaseStatus renewLease() {
@@ -271,9 +283,13 @@ public class TableResultIterator implements ResultIterator {
                     return THRESHOLD_NOT_REACHED;
                 }
                 if (scanIterator instanceof ScanningResultIterator
-                        && ((ScanningResultIterator)scanIterator).getScanner() instanceof AbstractClientScanner) {
-                    // Need this explicit cast because HBase's ResultScanner doesn't have this method exposed.
-                    boolean leaseRenewed = ((AbstractClientScanner)((ScanningResultIterator)scanIterator).getScanner()).renewLease();
+                        && ((ScanningResultIterator) scanIterator)
+                                .getScanner() instanceof AbstractClientScanner) {
+                    // Need this explicit cast because HBase's ResultScanner doesn't have this
+                    // method exposed.
+                    boolean leaseRenewed =
+                            ((AbstractClientScanner) ((ScanningResultIterator) scanIterator)
+                                    .getScanner()).renewLease();
                     if (leaseRenewed) {
                         renewLeaseTime = now();
                         return RENEWED;
@@ -285,8 +301,7 @@ public class TableResultIterator implements ResultIterator {
                 }
             }
             return LOCK_NOT_ACQUIRED;
-        } 
-        finally {
+        } finally {
             if (lockAcquired) {
                 renewLeaseLock.unlock();
             }

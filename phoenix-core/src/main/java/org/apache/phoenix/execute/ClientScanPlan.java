@@ -49,6 +49,7 @@ import org.apache.phoenix.util.CostUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.util.ReadOnlyProps;
 
 public class ClientScanPlan extends ClientProcessingPlan {
 
@@ -94,21 +95,12 @@ public class ClientScanPlan extends ClientProcessingPlan {
         }
         
         if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
-            long thresholdBytes =
-                    context.getConnection().getQueryServices().getProps().getLongBytes(
-                        QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
-                        QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
-            boolean spoolingEnabled =
-                    context.getConnection().getQueryServices().getProps().getBoolean(
-                        QueryServices.CLIENT_ORDERBY_SPOOLING_ENABLED_ATTRIB,
-                        QueryServicesOptions.DEFAULT_CLIENT_ORDERBY_SPOOLING_ENABLED);
-            iterator =
-                    new OrderedResultIterator(iterator, orderBy.getOrderByExpressions(),
-                            spoolingEnabled, thresholdBytes)
-                            .setLimit(limit)
-                            .setOffset(offset)
-                            .setEstimatedRowSize(projector.getEstimatedRowByteSize())
-                            ;
+            ReadOnlyProps props = context.getConnection().getQueryServices().getProps();
+            long thresholdBytes = getSpoolThreshold(props);
+            boolean spoolingEnabled = isSpoolingEnabled(props);
+            iterator = new OrderedResultIterator(iterator, orderBy.getOrderByExpressions(), spoolingEnabled,
+                    thresholdBytes).setLimit(limit).setOffset(offset)
+                            .setEstimatedRowSize(projector.getEstimatedRowByteSize());
         } else {
             if (offset != null) {
                 iterator = new OffsetResultIterator(iterator, offset);
@@ -123,6 +115,16 @@ public class ClientScanPlan extends ClientProcessingPlan {
         }
         
         return iterator;
+    }
+
+    private static boolean isSpoolingEnabled(ReadOnlyProps props) {
+        return props.getBoolean(QueryServices.CLIENT_ORDERBY_SPOOLING_ENABLED_ATTRIB,
+                QueryServicesOptions.DEFAULT_CLIENT_ORDERBY_SPOOLING_ENABLED);
+    }
+
+    private static long getSpoolThreshold(ReadOnlyProps props) {
+        return props.getLongBytes(QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
+                QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
     }
 
     @Override
