@@ -34,8 +34,8 @@ import org.apache.phoenix.schema.tuple.Tuple;
 public class OrderedAggregatingResultIterator extends OrderedResultIterator implements AggregatingResultIterator {
 
     public OrderedAggregatingResultIterator(AggregatingResultIterator delegate,
-            List<OrderByExpression> orderByExpressions, boolean spoolingEnabled, long thresholdBytes, Integer limit,
-            Integer offset) throws SQLException {
+            List<OrderByExpression> orderByExpressions, boolean spoolingEnabled,
+            long thresholdBytes, Integer limit, Integer offset) throws SQLException {
         super(delegate, orderByExpressions, spoolingEnabled, thresholdBytes);
         this.setLimit(limit);
         this.setOffset(offset);

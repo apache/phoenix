@@ -98,9 +98,10 @@ public class ClientScanPlan extends ClientProcessingPlan {
             ReadOnlyProps props = context.getConnection().getQueryServices().getProps();
             long thresholdBytes = getSpoolThreshold(props);
             boolean spoolingEnabled = isSpoolingEnabled(props);
-            iterator = new OrderedResultIterator(iterator, orderBy.getOrderByExpressions(), spoolingEnabled,
-                    thresholdBytes).setLimit(limit).setOffset(offset)
-                            .setEstimatedRowSize(projector.getEstimatedRowByteSize());
+            iterator =
+                    new OrderedResultIterator(iterator, orderBy.getOrderByExpressions(),
+                            spoolingEnabled, thresholdBytes).setLimit(limit).setOffset(offset)
+                                    .setEstimatedRowSize(projector.getEstimatedRowByteSize());
         } else {
             if (offset != null) {
                 iterator = new OffsetResultIterator(iterator, offset);
@@ -169,13 +170,12 @@ public class ClientScanPlan extends ClientProcessingPlan {
         return new ExplainPlan(planSteps, newBuilder.build());
     }
 
-    private static List<OrderBy> convertActualOutputOrderBy(
-            OrderBy orderBy,
-            QueryPlan targetQueryPlan,
-            StatementContext statementContext) {
+    private static List<OrderBy> convertActualOutputOrderBy(OrderBy orderBy,
+            QueryPlan targetQueryPlan, StatementContext statementContext) {
 
-        if(!orderBy.isEmpty()) {
-            return Collections.singletonList(OrderBy.convertCompiledOrderByToOutputOrderBy(orderBy));
+        if (!orderBy.isEmpty()) {
+            return Collections
+                    .singletonList(OrderBy.convertCompiledOrderByToOutputOrderBy(orderBy));
         }
 
         assert orderBy != OrderBy.REV_ROW_KEY_ORDER_BY;

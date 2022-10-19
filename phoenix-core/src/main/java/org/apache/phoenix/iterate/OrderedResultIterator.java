@@ -173,31 +173,34 @@ public class OrderedResultIterator implements PeekingResultIterator {
     }
 
     public OrderedResultIterator setOffset(Integer offset) {
-        if (offset == null) { return this; }
+        if (offset == null) {
+            return this;
+        }
         this.offset = offset;
         return this;
     }
 
     public OrderedResultIterator setEstimatedRowSize(Integer estimatedRowSize) {
-        if (estimatedRowSize == null) { return this; }
+        if (estimatedRowSize == null) {
+            return this;
+        }
         this.estimatedRowSize = estimatedRowSize;
         return this;
     }
 
     public Integer getLimit() {
-        if (limit != null) { return limit + offset; }
+        if (limit != null) {
+            return limit + offset;
+        }
         return null;
     }
 
     public long getEstimatedRowSize() {
         long estimatedEntrySize =
                 // ResultEntry
-                SizedUtil.OBJECT_SIZE +
-                // ImmutableBytesWritable[]
-                        SizedUtil.ARRAY_SIZE
-                        + orderByExpressions.size() * SizedUtil.IMMUTABLE_BYTES_WRITABLE_SIZE +
-                        // Tuple
-                        SizedUtil.OBJECT_SIZE + estimatedRowSize;
+                SizedUtil.OBJECT_SIZE + SizedUtil.ARRAY_SIZE
+                        + orderByExpressions.size() * SizedUtil.IMMUTABLE_BYTES_WRITABLE_SIZE
+                        + SizedUtil.OBJECT_SIZE + estimatedRowSize;
 
         // Make sure we don't overflow Long, though this is really unlikely to happen.
         assert (limit == null || Long.MAX_VALUE / estimatedEntrySize >= limit + this.offset);
@@ -226,9 +229,11 @@ public class OrderedResultIterator implements PeekingResultIterator {
         int pos = 0;
         for (OrderByExpression col : orderByExpressions) {
             Expression e = col.getExpression();
-            Comparator<ImmutableBytesWritable> comparator = new ImmutableBytesWritable.Comparator();
+            Comparator<ImmutableBytesWritable> comparator;
             if (e.getSortOrder() == SortOrder.DESC && !e.getDataType().isFixedWidth()) {
                 comparator = buildDescVarLengthComparator();
+            } else {
+                comparator = new ImmutableBytesWritable.Comparator();
             }
             Ordering<ImmutableBytesWritable> o = Ordering.from(comparator);
             if (!col.isAscending()) o = o.reverse();
@@ -244,8 +249,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
      * bigger.
      */
     private static Comparator<ImmutableBytesWritable> buildDescVarLengthComparator() {
-        return (o1, o2) -> DescVarLengthFastByteComparisons.compareTo(o1.get(), o1.getOffset(), o1.getLength(),
-                o2.get(), o2.getOffset(), o2.getLength());
+        return (o1, o2) -> DescVarLengthFastByteComparisons.compareTo(o1.get(), o1.getOffset(),
+            o1.getLength(), o2.get(), o2.getOffset(), o2.getLength());
     }
 
     @Override
@@ -257,21 +262,24 @@ public class OrderedResultIterator implements PeekingResultIterator {
 
     private PeekingResultIterator getResultIterator() throws SQLException {
         if (resultIteratorReady) {
-            // The results have not been ordered yet. When the results are ordered then the result iterator
+            // The results have not been ordered yet. When the results are ordered then the result
+            // iterator
             // will be ready to iterate over them
             return resultIterator;
         }
 
         final int numSortKeys = orderByExpressions.size();
-        List<Expression> expressions = Lists.newArrayList(Collections2.transform(orderByExpressions, TO_EXPRESSION));
+        List<Expression> expressions =
+                Lists.newArrayList(Collections2.transform(orderByExpressions, TO_EXPRESSION));
         final Comparator<ResultEntry> comparator = buildComparator(orderByExpressions);
         try {
             if (resultIterator == null) {
-                resultIterator = new RecordPeekingResultIterator(PhoenixQueues.newResultEntrySortedQueue(comparator,
-                        getLimit(), spoolingEnabled, thresholdBytes));
+                resultIterator =
+                        new RecordPeekingResultIterator(PhoenixQueues.newResultEntrySortedQueue(
+                            comparator, getLimit(), spoolingEnabled, thresholdBytes));
             }
-            final SizeAwareQueue<ResultEntry> queueEntries = ((RecordPeekingResultIterator)resultIterator)
-                    .getQueueEntries();
+            final SizeAwareQueue<ResultEntry> queueEntries =
+                    ((RecordPeekingResultIterator) resultIterator).getQueueEntries();
             long startTime = EnvironmentEdgeManager.currentTimeMillis();
             for (Tuple result = delegate.next(); result != null; result = delegate.next()) {
                 // result might be empty if it was filtered by a local index
@@ -326,27 +334,30 @@ public class OrderedResultIterator implements PeekingResultIterator {
     public void explain(List<String> planSteps) {
         delegate.explain(planSteps);
         planSteps.add("CLIENT" + (offset == null || offset == 0 ? "" : " OFFSET " + offset)
-                + (getLimit() == null ? "" : " TOP " + getLimit() + " ROW" + (getLimit() == 1 ? "" : "S"))
+                + (getLimit() == null ? ""
+                        : " TOP " + getLimit() + " ROW" + (getLimit() == 1 ? "" : "S"))
                 + " SORTED BY " + orderByExpressions.toString());
     }
 
     @Override
-    public void explain(List<String> planSteps, ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+    public void explain(List<String> planSteps,
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
         delegate.explain(planSteps, explainPlanAttributesBuilder);
         explainPlanAttributesBuilder.setClientOffset(offset);
         explainPlanAttributesBuilder.setClientRowLimit(getLimit());
         explainPlanAttributesBuilder.setClientSortedBy(orderByExpressions.toString());
         planSteps.add("CLIENT" + (offset == null || offset == 0 ? "" : " OFFSET " + offset)
-                + (getLimit() == null ? "" : " TOP " + getLimit() + " ROW" + (getLimit() == 1 ? "" : "S"))
+                + (getLimit() == null ? ""
+                        : " TOP " + getLimit() + " ROW" + (getLimit() == 1 ? "" : "S"))
                 + " SORTED BY " + orderByExpressions.toString());
     }
 
     @Override
     public String toString() {
-        return "OrderedResultIterator [thresholdBytes=" + thresholdBytes + ", limit=" + getLimit() + ", offset="
-                + offset + ", delegate=" + delegate + ", orderByExpressions=" + orderByExpressions
-                + ", estimatedByteSize=" + estimatedRowSize + ", resultIterator=" + resultIterator + ", byteSize="
-                + byteSize + "]";
+        return "OrderedResultIterator [thresholdBytes=" + thresholdBytes + ", limit=" + getLimit()
+                + ", offset=" + offset + ", delegate=" + delegate + ", orderByExpressions="
+                + orderByExpressions + ", estimatedByteSize=" + estimatedRowSize
+                + ", resultIterator=" + resultIterator + ", byteSize=" + byteSize + "]";
     }
 
     private class RecordPeekingResultIterator implements PeekingResultIterator {
@@ -396,7 +407,9 @@ public class OrderedResultIterator implements PeekingResultIterator {
         public void explain(List<String> planSteps) {}
 
         @Override
-        public void explain(List<String> planSteps, ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {}
+        public void explain(List<String> planSteps,
+                ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        }
 
         @Override
         public void close() throws SQLException {
