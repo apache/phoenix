@@ -57,10 +57,10 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
     public void testPreMatureScannerAbortForCount() throws Exception {
 
         try (Connection conn = DriverManager.getConnection(getUniqueUrl())) {
-            conn.createStatement().execute("CREATE TABLE LONG_BUG (ID INTEGER PRIMARY KEY, AMOUNT DECIMAL)");
+            conn.createStatement().execute("CREATE TABLE LONG_BUG (ID INTEGER PRIMARY KEY, AMOUNT DECIMAL) SALT_BUCKETS = 16");
         }
         try (Connection conn = DriverManager.getConnection(getUniqueUrl())) {
-            for (int i = 0; i<200000 ; i++) {
+            for (int i = 0; i<500000 ; i++) {
                 int amount = -50000 + i;
                 String s = "UPSERT INTO LONG_BUG (ID, AMOUNT) VALUES( " + i + ", " + amount + ")";
                 conn.createStatement().execute(s);
@@ -90,7 +90,7 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
                             fail();
                         }
                     } catch (Exception e) {
-                        LOG.error("Error" +e);
+                        LOG.error("Error", e);
                         fail();
                     }
                 }
@@ -105,7 +105,7 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
                         }
                         Thread.sleep(1000);
                         conn.close();
-                    } catch (SQLException | InterruptedException e) {
+                    } catch (InterruptedException | SQLException e) {
                         fail();
                     }
                 }
@@ -113,7 +113,7 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
             Thread t = new Thread(runnable);
             Thread t1 = new Thread(runnable1);
             t.start();
-            Thread.sleep(1000);
+            Thread.sleep(1500);
             t1.start();
             t.join();
             t1.join();
