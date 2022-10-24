@@ -63,6 +63,7 @@ import org.apache.phoenix.schema.export.DefaultSchemaRegistryRepository;
 import org.apache.phoenix.schema.export.DefaultSchemaWriter;
 import org.apache.phoenix.schema.export.SchemaRegistryRepository;
 import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
@@ -107,10 +108,10 @@ public class ViewIT extends SplitSystemCatalogIT {
     // name is used by failsafe as file name in reports
     @Parameters(name="ViewIT_transactionProvider={0}, columnEncoded={1}")
     public static synchronized Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
-            { "TEPHRA", false }, { "TEPHRA", true },
-            { "OMID", false }, 
-            { null, false }, { null, true }}),0);
+        return Arrays.asList(new Object[][] {
+            // OMID does not support column encoding
+            { "OMID", false },
+            { null, false }, { null, true }});
     }
     
     @BeforeClass
@@ -1083,8 +1084,9 @@ public class ViewIT extends SplitSystemCatalogIT {
                 } else {
                     assertEquals("PARALLEL " + saltBuckets + "-WAY",
                         explainPlanAttributes.getIteratorTypeAndScanSize());
-                    assertEquals(" [0," + Short.MIN_VALUE + ",51] - ["
-                        + (saltBuckets - 1) + "," + Short.MIN_VALUE + ",51]",
+                    assertEquals(" [X'00'," + Short.MIN_VALUE + ",51] - ["
+                        + PVarbinary.INSTANCE.toStringLiteral(new byte[] {(byte)(saltBuckets - 1)})
+                        + "," + Short.MIN_VALUE + ",51]",
                         explainPlanAttributes.getKeyRanges());
                     assertEquals("CLIENT MERGE SORT",
                         explainPlanAttributes.getClientSortAlgo());
@@ -1149,8 +1151,9 @@ public class ViewIT extends SplitSystemCatalogIT {
                 } else {
                     assertEquals("PARALLEL " + saltBuckets + "-WAY",
                         explainPlanAttributes.getIteratorTypeAndScanSize());
-                    assertEquals(" [0," + (Short.MIN_VALUE + 1) + ",'foo'] - ["
-                        + (saltBuckets - 1) + "," + (Short.MIN_VALUE + 1)
+                    assertEquals(" [X'00'," + (Short.MIN_VALUE + 1) + ",'foo'] - ["
+                        + PVarbinary.INSTANCE.toStringLiteral(new byte[] {(byte)(saltBuckets - 1)})
+                        + "," + (Short.MIN_VALUE + 1)
                         + ",'foo']", explainPlanAttributes.getKeyRanges());
                     assertEquals("CLIENT MERGE SORT",
                         explainPlanAttributes.getClientSortAlgo());

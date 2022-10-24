@@ -422,7 +422,7 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
 
             Scan scan = new Scan();
             scan.setRaw(true);
-            scan.setMaxVersions();
+            scan.readAllVersions();
             int count=0;
             ResultScanner scanner = table.getScanner(scan);
             for (Result result = scanner.next(); result != null; result = scanner.next()) {

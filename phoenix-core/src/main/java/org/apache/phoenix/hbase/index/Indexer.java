@@ -37,9 +37,8 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HConstants.OperationStatusCode;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Increment;
@@ -766,7 +765,8 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
       properties = new HashMap<String, String>();
     }
     properties.put(Indexer.INDEX_BUILDER_CONF_KEY, builder.getName());
-     descBuilder.addCoprocessor(Indexer.class.getName(), null, priority, properties);
+    descBuilder.setCoprocessor(CoprocessorDescriptorBuilder.newBuilder(Indexer.class.getName())
+            .setPriority(priority).setProperties(properties).build());
   }
 }
 

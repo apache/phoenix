@@ -166,7 +166,6 @@
                   <!-- Phoenix classes -->
                   <exclude>org/apache/phoenix/**</exclude>
                   <exclude>org/apache/omid/**</exclude>
-                  <!-- Do want/need to expose Tephra as well ? -->
                 </excludes>
               </relocation>
               <relocation>
@@ -240,11 +239,6 @@
                 <shadedPattern>${shaded.package}.okio.</shadedPattern>
               </relocation>
               <!-- Phoenix specific relocations -->
-              <relocation>
-                <!-- Tephra -->
-                <pattern>co/</pattern>
-                <shadedPattern>${shaded.package}.co.</shadedPattern>
-              </relocation>
               <relocation>
                 <pattern>it/</pattern>
                 <shadedPattern>${shaded.package}.it.</shadedPattern>

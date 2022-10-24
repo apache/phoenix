@@ -82,17 +82,15 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testUpdateCacheForTxnTable() throws Exception {
-        for (TransactionFactory.Provider provider : TransactionFactory.Provider.values()) {
-            if (provider.runTests()) {
-                String tableName = generateUniqueName();
-                String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + tableName;
-                Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
-                conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'");
-                helpTestUpdateCache(fullTableName, new int[] {1, 1}, false);
-            }
+        for (TransactionFactory.Provider provider : TransactionFactory.Provider.available()) {
+            String tableName = generateUniqueName();
+            String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + tableName;
+            Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+            conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'");
+            helpTestUpdateCache(fullTableName, new int[] {1, 1}, false);
         }
     }
-    
+
     @Test
     public void testUpdateCacheForNonTxnTable() throws Exception {
         String tableName = generateUniqueName();

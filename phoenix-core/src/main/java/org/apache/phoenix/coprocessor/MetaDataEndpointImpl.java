@@ -1260,7 +1260,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             transactionalKv.getValueOffset(),
                             transactionalKv.getValueLength()))) {
                 // For backward compat, prior to client setting TRANSACTION_PROVIDER
-                transactionProvider = TransactionFactory.Provider.TEPHRA;
+                transactionProvider = TransactionFactory.Provider.NOTAVAILABLE;
             }
         } else {
             transactionProvider = TransactionFactory.Provider.fromCode(

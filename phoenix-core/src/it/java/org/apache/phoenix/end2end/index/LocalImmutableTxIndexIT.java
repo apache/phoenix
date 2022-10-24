@@ -21,23 +21,24 @@ import java.util.Arrays;
 import java.util.Collection;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
-import org.apache.phoenix.util.TestUtil;
+import org.junit.Ignore;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
 @Category(ParallelStatsDisabledTest.class)
+@Ignore("No transactionProviders with local index support currently available")
 public class LocalImmutableTxIndexIT extends BaseIndexIT {
 
     public LocalImmutableTxIndexIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded) {
         super(localIndex, mutable, transactionProvider, columnEncoded);
     }
 
-    @Parameters(name="LocalImmutableTxIndexIT_localIndex={0},mutable={1},transactionProvider={2},columnEncoded={3}") // name is used by failsafe as file name in reports
+    // name is used by failsafe as file name in reports
+    @Parameters(name="LocalImmutableTxIndexIT_localIndex={0},mutable={1},transactionProvider={2},columnEncoded={3}")
     public static synchronized Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(
-                Arrays.asList(new Object[][] {
-                    { true, false, "TEPHRA", false }, { true, false, "TEPHRA", true },
-               }), 2);
+        return Arrays.asList(new Object[][] {
+            // OMID does not support local indexes
+        });
     }
 
 }

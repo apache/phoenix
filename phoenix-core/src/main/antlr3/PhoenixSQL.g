@@ -110,7 +110,7 @@ tokens
     CYCLE='cycle';
     CASCADE='cascade';
     UPDATE='update';
-    STATISTICS='statistics';    
+    STATISTICS='statistics';
     COLUMNS='columns';
     TRACE='trace';
     ASYNC='async';
@@ -177,8 +177,8 @@ package org.apache.phoenix.parse;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import java.lang.Boolean;
 import java.math.BigDecimal;
 import java.util.Arrays;
@@ -844,7 +844,7 @@ limit returns [LimitNode ret]
 offset returns [OffsetNode ret]
 	: b=bind_expression (ROW | ROWS)? {  try { $ret = factory.offset(b); } catch (SQLException e) { throw new RuntimeException(e); } }
     | l=int_or_long_literal (ROW | ROWS)? { try { $ret = factory.offset(l); } catch (SQLException e) { throw new RuntimeException(e); } }
-    | LPAREN lhs=one_or_more_expressions RPAREN EQ LPAREN rhs=one_or_more_expressions RPAREN { try { $ret = factory.offset(factory.comparison(CompareOp.EQUAL,factory.rowValueConstructor(lhs),factory.rowValueConstructor(rhs)));  } catch (SQLException e) { throw new RuntimeException(e); } }
+    | LPAREN lhs=one_or_more_expressions RPAREN EQ LPAREN rhs=one_or_more_expressions RPAREN { try { $ret = factory.offset(factory.comparison(CompareOperator.EQUAL,factory.rowValueConstructor(lhs),factory.rowValueConstructor(rhs)));  } catch (SQLException e) { throw new RuntimeException(e); } }
     ;
 
 sampling_rate returns [LiteralParseNode ret]
@@ -950,13 +950,13 @@ not_expression returns [ParseNode ret]
     |   n=NOT? LPAREN e=expression RPAREN { $ret = n == null ? e : factory.not(e); }
     ;
 
-comparison_op returns [CompareOp ret]
-	: EQ { $ret = CompareOp.EQUAL; }
-	| LT { $ret = CompareOp.LESS; }
-	| GT { $ret = CompareOp.GREATER; }
-	| LT EQ { $ret = CompareOp.LESS_OR_EQUAL; }
-	| GT EQ { $ret = CompareOp.GREATER_OR_EQUAL; }
-	| (NOEQ1 | NOEQ2) { $ret = CompareOp.NOT_EQUAL; }
+comparison_op returns [CompareOperator ret]
+	: EQ { $ret = CompareOperator.EQUAL; }
+	| LT { $ret = CompareOperator.LESS; }
+	| GT { $ret = CompareOperator.GREATER; }
+	| LT EQ { $ret = CompareOperator.LESS_OR_EQUAL; }
+	| GT EQ { $ret = CompareOperator.GREATER_OR_EQUAL; }
+	| (NOEQ1 | NOEQ2) { $ret = CompareOperator.NOT_EQUAL; }
 	;
 	
 boolean_expression returns [ParseNode ret]
@@ -1152,7 +1152,10 @@ literal_or_bind returns [ParseNode ret]
 
 // Get a string, integer, double, date, boolean, or NULL value.
 literal returns [LiteralParseNode ret]
-    :   s=STRING_LITERAL {
+    :
+    h=hex_literal { ret = h; }
+    |   b=bin_literal { ret = b; }
+    |   s=STRING_LITERAL {
             ret = factory.literal(s.getText()); 
         }
     |   n=NUMBER {
@@ -1163,7 +1166,7 @@ literal returns [LiteralParseNode ret]
         }
     |   dbl=DOUBLE  {
             ret = factory.literal(Double.valueOf(dbl.getText()));
-        }    
+        }
     |   NULL {ret = factory.literal(null);}
     |   TRUE {ret = factory.literal(Boolean.TRUE);} 
     |   FALSE {ret = factory.literal(Boolean.FALSE);}
@@ -1175,11 +1178,31 @@ literal returns [LiteralParseNode ret]
             }
         }
     ;
-    
+
 int_or_long_literal returns [LiteralParseNode ret]
     :   n=NUMBER {
             ret = factory.intOrLong(n.getText());
         }
+    ;
+
+hex_literal returns [LiteralParseNode ret]
+@init {StringBuilder sb = new StringBuilder();}
+    :
+    (
+    h=HEX_LITERAL { sb.append(h.getText()); }
+    (s=STRING_LITERAL { sb.append(factory.stringToHexLiteral(s.getText())); } )*
+    )
+    { ret = factory.hexLiteral(sb.toString()); }
+    ;
+
+bin_literal returns [LiteralParseNode ret]
+@init {StringBuilder sb = new StringBuilder();}
+    :
+    (
+    b=BIN_LITERAL { sb.append(b.getText()); }
+    (s=STRING_LITERAL { sb.append(factory.stringToBinLiteral(s.getText())); } )*
+    )
+    { ret = factory.binLiteral(sb.toString()); }
     ;
 
 // Bind names are a colon followed by 1+ letter/digits/underscores, or '?' (unclear how Oracle acutally deals with this, but we'll just treat it as a special bind)
@@ -1215,6 +1238,28 @@ SL_COMMENT2: '--';
 // Bind names start with a colon and followed by 1 or more letter/digit/underscores
 BIND_NAME
     : COLON (DIGIT)+
+    ;
+
+HEX_LITERAL
+@init{ StringBuilder sb = new StringBuilder();}
+    :
+    X { $type = NAME;}
+    (
+    (FIELDCHAR) => FIELDCHAR+
+    | ('\'') => '\'' ' '* ( d=HEX_DIGIT { sb.append(d.getText()); } ' '* )* '\'' { $type=HEX_LITERAL; }
+    )?
+    { if ($type == HEX_LITERAL) { setText(sb.toString()); } }
+    ;
+
+BIN_LITERAL
+@init{ StringBuilder sb = new StringBuilder();}
+    :
+    B { $type = NAME;}
+    (
+    (FIELDCHAR) => FIELDCHAR+
+    | ('\'') =>  '\'' ' '* ( d=BIN_DIGIT { sb.append(d.getText()); } ' '* )* '\'' { $type=BIN_LITERAL; }
+    )?
+    { if ($type == BIN_LITERAL) { setText(sb.toString()); } }
     ;
 
 NAME
@@ -1371,6 +1416,16 @@ DIGIT
     :    '0'..'9'
     ;
 
+fragment
+HEX_DIGIT
+    :   ('0'..'9' | 'a'..'f' | 'A'..'F')
+    ;
+
+fragment
+BIN_DIGIT
+    :   ('0' | '1')
+    ;
+
 // string literals
 STRING_LITERAL
 @init{ StringBuilder sb = new StringBuilder(); }
@@ -1388,6 +1443,16 @@ CHAR
 fragment
 DBL_QUOTE_CHAR
     :   ( ~('\"') )+
+    ;
+
+fragment
+X
+    : ( 'X' | 'x' )
+    ;
+
+fragment
+B
+    : ( 'B' | 'b' )
     ;
 
 // escape sequence inside a string literal
@@ -1413,7 +1478,7 @@ CHAR_ESC
 WS
     :   ( ' ' | '\t' | '\u2002' ) { $channel=HIDDEN; }
     ;
-    
+
 EOL
     :  ('\r' | '\n')
     { skip(); }
@@ -1439,7 +1504,7 @@ SL_COMMENT
 DOT
     : '.'
     ;
-    
+
 OTHER      
     : . { if (true) // to prevent compile error
               throw new RuntimeException("Unexpected char: '" + $text + "'"); } 

@@ -78,7 +78,7 @@ public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
         Admin admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
         try {
             admin.createTable(TableDescriptorBuilder.newBuilder(TableName.valueOf(tableBytes))
-                    .addColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(familyName)
+                    .setColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(familyName)
                             .setKeepDeletedCells(KeepDeletedCells.TRUE).build())
                     .build(), splits);
         } finally {

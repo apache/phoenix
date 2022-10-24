@@ -124,7 +124,7 @@ java_cmd = java + ' $PHOENIX_OPTS ' + \
     #'" -Dotel.traces.exporter=zipkin -Dotel.metrics.exporter=none -Dotel.resource.attributes=service.name=phoenix' + \
     #'-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=9900' + \
     #' -javaagent:' + phoenix_utils.opentelemetry_javaagent_jar + \
-    '" -Dlog4j.configuration=file:' + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
+    '" -Dlog4j2.configurationFile=file:' + os.path.join(phoenix_utils.current_dir, "log4j2.properties") + \
     disable_jna + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver" + \
     " -u jdbc:phoenix:" + phoenix_utils.shell_quote([zookeeper]) + \

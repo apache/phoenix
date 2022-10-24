@@ -24,7 +24,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.junit.Test;
@@ -36,7 +36,7 @@ public class SortOrderTest {
 	
 	@Test
 	public void ascSortOrderDoesNotTransformOp() {
-	    for (CompareOp op : CompareOp.values()) {
+	    for (CompareOperator op : CompareOperator.values()) {
 	    	assertSame(op, SortOrder.ASC.transform(op));
 	    }
 	}
@@ -63,29 +63,29 @@ public class SortOrderTest {
 
 	@Test
 	public void descSortOrderTransformsOp() {
-	    for (CompareOp op : CompareOp.values()) {
-	    	CompareOp oppositeOp = SortOrder.DESC.transform(op);
+	    for (CompareOperator op : CompareOperator.values()) {
+			CompareOperator oppositeOp = SortOrder.DESC.transform(op);
 	    	switch (op) {
 			case EQUAL:
-				assertSame(CompareOp.EQUAL, oppositeOp);
+				assertSame(CompareOperator.EQUAL, oppositeOp);
 				break;
 			case GREATER:
-				assertSame(CompareOp.LESS, oppositeOp);
+				assertSame(CompareOperator.LESS, oppositeOp);
 				break;
 			case GREATER_OR_EQUAL:
-				assertSame(CompareOp.LESS_OR_EQUAL, oppositeOp);
+				assertSame(CompareOperator.LESS_OR_EQUAL, oppositeOp);
 				break;
 			case LESS:
-				assertSame(CompareOp.GREATER, oppositeOp);
+				assertSame(CompareOperator.GREATER, oppositeOp);
 				break;
 			case LESS_OR_EQUAL:
-				assertSame(CompareOp.GREATER_OR_EQUAL, oppositeOp);
+				assertSame(CompareOperator.GREATER_OR_EQUAL, oppositeOp);
 				break;
 			case NOT_EQUAL:
-				assertSame(CompareOp.NOT_EQUAL, oppositeOp);
+				assertSame(CompareOperator.NOT_EQUAL, oppositeOp);
 				break;
 			case NO_OP:
-				assertSame(CompareOp.NO_OP, oppositeOp);
+				assertSame(CompareOperator.NO_OP, oppositeOp);
 				break;
 	    	}
 	    }		

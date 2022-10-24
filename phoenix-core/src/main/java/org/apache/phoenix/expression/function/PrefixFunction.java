@@ -21,7 +21,8 @@ package org.apache.phoenix.expression.function;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.query.KeyRange;
@@ -74,7 +75,7 @@ abstract public class PrefixFunction extends ScalarFunction {
         }
 
         @Override
-        public KeyRange getKeyRange(CompareOp op, Expression rhs) {
+        public KeyRange getKeyRange(CompareOperator op, Expression rhs) {
             byte[] lowerRange = KeyRange.UNBOUND;
             byte[] upperRange = KeyRange.UNBOUND;
             boolean lowerInclusive = true;

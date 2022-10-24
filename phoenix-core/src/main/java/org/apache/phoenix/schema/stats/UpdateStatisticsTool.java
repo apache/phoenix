@@ -223,7 +223,6 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         } catch (Throwable t) {
             //Tephra is excluded
         }
-
         LOGGER.info("UpdateStatisticsTool running for: " + tableName
                 + " on snapshot: " + snapshotName + " with restore dir: " + restoreDir);
     }

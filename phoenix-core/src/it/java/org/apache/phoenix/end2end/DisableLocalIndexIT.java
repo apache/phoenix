@@ -62,7 +62,7 @@ public class DisableLocalIndexIT extends ParallelStatsDisabledIT {
         admin.close();
         try {
             Table t = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName));
-            t.getTableDescriptor(); // Exception no longer thrown by getTable, but instead need to force an RPC
+            t.getDescriptor(); // Exception no longer thrown by getTable, but instead need to force an RPC
             fail("Local index table should not have been created");
         } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
             //expected

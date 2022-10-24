@@ -17,36 +17,23 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import java.io.IOException;
-import java.util.Optional;
-
-import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
-import org.apache.tephra.hbase.coprocessor.TransactionProcessor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class TephraTransactionalProcessor extends DelegateRegionObserver implements RegionCoprocessor {
+/**
+ * Tephra support has been removed, see PHOENIX-6627. However we preserve a class
+ * of this name for now with a no-op implementation, in case the user has not
+ * followed proper upgrade or migration procedure for former Tephra managed transactional
+ * tables. Although expected but unavailable functionality will be missing, regionservers
+ * will not crash due to a failure to load a coprocessor of this name.
+ */
+public class TephraTransactionalProcessor implements RegionObserver, RegionCoprocessor {
 
-    public TephraTransactionalProcessor() {
-        super(new TransactionProcessor());
-    }
+  private static final Logger LOG = LoggerFactory.getLogger(TephraTransactionalProcessor.class);
+  static {
+    LOG.error("Tephra support has been removed, see https://issues.apache.org/jira/browse/PHOENIX-6627.");
+  }
 
-    @Override
-    public Optional<RegionObserver> getRegionObserver() {
-        return Optional.of(this);
-    }
-
-    @Override
-    public void start(CoprocessorEnvironment env) throws IOException {
-        if (delegate instanceof RegionCoprocessor) {
-            ((RegionCoprocessor)delegate).start(env);
-        }
-    }
-
-    @Override
-    public void stop(CoprocessorEnvironment env) throws IOException {
-        if (delegate instanceof RegionCoprocessor) {
-            ((RegionCoprocessor)delegate).stop(env);
-        }
-    }
 }

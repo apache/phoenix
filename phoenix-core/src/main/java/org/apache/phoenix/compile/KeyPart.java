@@ -19,7 +19,7 @@ package org.apache.phoenix.compile;
 
 import java.util.List;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PColumn;
@@ -48,7 +48,7 @@ public interface KeyPart {
      *  
      * @see org.apache.phoenix.expression.function.ScalarFunction#newKeyPart(KeyPart)
      */
-    public KeyRange getKeyRange(CompareOp op, Expression rhs);
+    public KeyRange getKeyRange(CompareOperator op, Expression rhs);
     
     /**
      * Determines whether an expression gets extracted from the

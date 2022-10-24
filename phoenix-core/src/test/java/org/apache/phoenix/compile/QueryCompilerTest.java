@@ -99,6 +99,7 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -110,8 +111,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 
@@ -4949,12 +4948,12 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             QueryPlan plan = stmt.optimizeQuery(query);
             plan.iterator();
             //Fail since we have 3 rows in pointLookup
-            assertFalse(plan.getContext().getScan().isSmall());
+            assertEquals(Scan.ReadType.DEFAULT, plan.getContext().getScan().getReadType());
             query = "select * from foo where a = 'a' and b = 'b' and c = 'c'";
             plan = stmt.compileQuery(query);
             plan.iterator();
             //Should be small scan, query is for single row pointLookup
-            assertTrue(plan.getContext().getScan().isSmall());
+            assertEquals(Scan.ReadType.PREAD, plan.getContext().getScan().getReadType());
         }
     }
 
@@ -6887,4 +6886,44 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    @Test
+    public void testEliminateUnnecessaryReversedScanBug6798() throws Exception {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl());
+            String tableName = generateUniqueName();
+
+            String sql =
+                    "create table " + tableName + "(group_id integer not null, "
+                            + " keyword varchar not null, " + " cost integer, "
+                            + " CONSTRAINT TEST_PK PRIMARY KEY (group_id,keyword)) ";
+            conn.createStatement().execute(sql);
+
+            /**
+             * Test {@link GroupBy#isOrderPreserving} is false and {@link OrderBy} is reversed.
+             */
+            sql =
+                    "select keyword,sum(cost) from " + tableName
+                            + " group by keyword order by keyword desc";
+            QueryPlan queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            Scan scan = queryPlan.getContext().getScan();
+            assertTrue(!queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == OrderBy.REV_ROW_KEY_ORDER_BY);
+            assertTrue(!ScanUtil.isReversed(scan));
+
+            /**
+             * Test {@link GroupBy#isOrderPreserving} is true and {@link OrderBy} is reversed.
+             */
+            sql =
+                    "select keyword,sum(cost) from " + tableName
+                            + " group by group_id,keyword order by group_id desc,keyword desc";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            scan = queryPlan.getContext().getScan();
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == OrderBy.REV_ROW_KEY_ORDER_BY);
+            assertTrue(ScanUtil.isReversed(scan));
+        } finally {
+            conn.close();
+        }
+    }
 }

@@ -66,6 +66,7 @@ import io.opentelemetry.api.trace.Span;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.call.CallRunner;
+import org.apache.phoenix.exception.FailoverSQLException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.CommitException;
@@ -100,6 +101,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDecimal;
@@ -140,7 +142,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * 
  * @since 0.1
  */
-public class PhoenixConnection implements Connection, MetaDataMutated, SQLCloseable {
+public class PhoenixConnection implements MetaDataMutated, SQLCloseable, PhoenixMonitoredConnection {
     private final String url;
     private String schema;
     private final ConnectionQueryServices services;
@@ -175,6 +177,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private LogLevel auditLogLevel;
     private Double logSamplingRate;
     private String sourceOfOperation;
+    private volatile SQLException reasonForClose;
     private static final String[] CONNECTION_PROPERTIES;
 
     private final ConcurrentLinkedQueue<PhoenixConnection> childConnections =
@@ -251,8 +254,6 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
             Properties info, PMetaData metaData, MutationState mutationState,
             boolean isDescVarLengthRowKeyUpgrade, boolean isRunningUpgrade,
             boolean buildingIndex, boolean isInternalConnection) throws SQLException {
-        try {
-            GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.increment();
             this.url = url;
             this.isDescVarLengthRowKeyUpgrade = isDescVarLengthRowKeyUpgrade;
             this.isInternalConnection = isInternalConnection;
@@ -357,6 +358,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
             formatters.put(PDecimal.INSTANCE,
                     FunctionArgumentType.NUMERIC.getFormatter(numberPattern));
             formatters.put(PVarbinary.INSTANCE, VarBinaryFormatter.INSTANCE);
+            formatters.put(PBinary.INSTANCE, VarBinaryFormatter.INSTANCE);
+
             // We do not limit the metaData on a connection less than the global
             // one,
             // as there's not much that will be cached here.
@@ -409,17 +412,6 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
             }
             this.sourceOfOperation =
                     this.services.getProps().get(QueryServices.SOURCE_OPERATION_ATTRIB, null);
-        } catch (SQLException sqlException) {
-            if (!isInternalConnection && sqlException.getErrorCode() != SQLExceptionCode.NEW_CONNECTION_THROTTLED.getErrorCode()) {
-                GLOBAL_FAILED_PHOENIX_CONNECTIONS.increment();
-            }
-            throw sqlException;
-        } catch (Exception e) {
-            if (!isInternalConnection) {
-                GLOBAL_FAILED_PHOENIX_CONNECTIONS.increment();
-            }
-            throw e;
-        }
     }
 
     private static void checkScn(Long scnParam) throws SQLException {
@@ -478,6 +470,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     /**
      * Add connection to the internal childConnections queue
+     * This method is thread safe
      * @param connection
      */
     public void addChildConnection(PhoenixConnection connection) {
@@ -694,28 +687,59 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         }
     }
 
-    private void checkOpen() throws SQLException {
+    void checkOpen() throws SQLException {
         if (isClosed) {
-            throw new SQLExceptionInfo.Builder(
-                    SQLExceptionCode.CONNECTION_CLOSED).build()
-                    .buildException();
+            throw reasonForClose != null
+                ? reasonForClose
+                : new SQLExceptionInfo.Builder(SQLExceptionCode.CONNECTION_CLOSED)
+                    .build()
+        
+            .buildException();
         }
     }
 
-    @Override
-    public void close() throws SQLException {
+    /**
+     * Close the Phoenix connection and also store the reason for it getting closed.
+     *
+     * @param reasonForClose The reason for closing the phoenix connection to be set as state
+     *                        in phoenix connection.
+     * @throws SQLException if error happens when closing.
+     * @see #close()
+     */
+    public void close(SQLException reasonForClose) throws SQLException {
         if (isClosed) {
             return;
         }
+        this.reasonForClose = reasonForClose;
+        close();
+    }
+
+    // A connection can be closed by calling thread, or by the high availability (HA) framework.
+    // Making this logic synchronized will enforce a connection is closed only once.
+    //Does this need to be synchronized?
+    @Override
+    synchronized public void close() throws SQLException {
+        if (isClosed) {
+            return;
+        }
+
         try {
             TableMetricsManager.pushMetricsFromConnInstanceMethod(getMutationMetrics());
-            clearMetrics();
+            if(!(reasonForClose instanceof FailoverSQLException)) {
+                // If the reason for close is because of failover, the metrics will be kept for
+                // consolidation by the wrapper PhoenixFailoverConnection object.
+                clearMetrics();
+            }
             try {
                 if (span != null) {
                     span.end();
                 }
                 closeStatements();
-                SQLCloseables.closeAllQuietly(childConnections);
+                if (childConnections != null) {
+                    SQLCloseables.closeAllQuietly(childConnections);
+                }
+
+
             } finally {
                 services.removeConnection(this);
             }

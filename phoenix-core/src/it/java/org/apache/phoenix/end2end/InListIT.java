@@ -1889,6 +1889,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
     public void testWithVariousPKTypes() throws Exception {
 
         SortOrder[][] sortOrders = new SortOrder[][] {
@@ -2189,4 +2190,81 @@ public class InListIT extends ParallelStatsDisabledIT {
 
         }
     }
+
+    @Test
+    public void testSkipScanCardinalityOverflow() throws SQLException {
+        if (!checkMaxSkipScanCardinality) {
+            return;
+        }
+
+        final String baseTableName = generateUniqueName();
+        final String viewName = String.format("Z_%s", baseTableName);
+        int tenantId = 1;
+
+        try (Connection globalConnection = DriverManager.getConnection(getUrl())) {
+            try (Statement cstmt = globalConnection.createStatement()) {
+                String createDDL = "CREATE TABLE IF NOT EXISTS " + baseTableName +
+                    "(OID CHAR(15) NOT NULL, KP CHAR(3) NOT NULL, CREATED_DATE DATE, CREATED_BY CHAR(15), SYSTEM_MODSTAMP DATE " +
+                    "CONSTRAINT PK PRIMARY KEY (OID, KP)) MULTI_TENANT=true,COLUMN_ENCODED_BYTES=0";
+                cstmt.execute(createDDL);
+            }
+        }
+
+        String tenantConnectionUrl = String.format("%s;%s=%s%06d", getUrl(), TENANT_ID_ATTRIB, TENANT_PREFIX, tenantId);
+        try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
+            try (Statement cstmt = tenantConnection.createStatement()) {
+                // DESC order in PK causes key explosion when creating skip scan
+                String TENANT_VIEW_TEMPLATE = "CREATE VIEW IF NOT EXISTS %s " +
+                    "(ID1 INTEGER not null, ID2 INTEGER not null, ID3 INTEGER not null, ID4 INTEGER not null, ID5 INTEGER not null, COL1 VARCHAR(15) " +
+                    "CONSTRAINT pk PRIMARY KEY (ID1 DESC, ID2 DESC, ID3 DESC, ID4 DESC, ID5 DESC)) " +
+                    "AS SELECT * FROM %s WHERE KP = 'abc'";
+                cstmt.execute(String.format(TENANT_VIEW_TEMPLATE, viewName, baseTableName));
+            }
+
+            int totalRows = 100; // 100 ^ 5 ( # of pk cols in view) will cause integer overflow
+            String dml = "UPSERT INTO " + viewName +
+                "(CREATED_DATE, CREATED_BY, SYSTEM_MODSTAMP, ID1, ID2, ID3, ID4, ID5, COL1)" +
+                " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            try (PreparedStatement ustmt = tenantConnection.prepareStatement(dml)) {
+                long now = EnvironmentEdgeManager.currentTimeMillis();
+                for (int i = 0; i < totalRows; i++) {
+                    ustmt.setDate(1, new Date(now + i));
+                    ustmt.setString(2, "foo");
+                    ustmt.setDate(3, new Date(now + i));
+                    ustmt.setInt(4, i);
+                    ustmt.setInt(5, i);
+                    ustmt.setInt(6, i);
+                    ustmt.setInt(7, i);
+                    ustmt.setInt(8, i);
+                    ustmt.setString(9, "COL1_" + i);
+                    ustmt.execute();
+                }
+                tenantConnection.commit();
+            }
+
+            StringBuilder selectQuery = new StringBuilder();
+            selectQuery.append("SELECT COUNT(*) FROM " + viewName + " WHERE (ID1, ID2, ID3, ID4, ID5) IN (");
+            for (int i = 0; i < totalRows; i++) {
+                selectQuery.append("(?, ?, ?, ?, ?)");
+                selectQuery.append(",");
+            }
+            // delete the trailing ','
+            selectQuery.deleteCharAt(selectQuery.length() - 1);
+            selectQuery.append(")");
+            try (PreparedStatement selstmt = tenantConnection.prepareStatement(selectQuery.toString())) {
+                int paramIndex = 0;
+                for (int i = 0; i < totalRows; i++) {
+                    selstmt.setInt(++paramIndex, i);
+                    selstmt.setInt(++paramIndex, i);
+                    selstmt.setInt(++paramIndex, i);
+                    selstmt.setInt(++paramIndex, i);
+                    selstmt.setInt(++paramIndex, i);
+                }
+                ResultSet rs = selstmt.executeQuery();
+                assertTrue(rs.next());
+                assertEquals(totalRows, rs.getInt(1));
+            }
+        }
+    }
+
 }

@@ -22,7 +22,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.Expression;
@@ -107,7 +107,7 @@ public class RTrimFunction extends ScalarFunction {
     public KeyPart newKeyPart(final KeyPart childPart) {
         return new KeyPart() {
             @Override
-            public KeyRange getKeyRange(CompareOp op, Expression rhs) {
+            public KeyRange getKeyRange(CompareOperator op, Expression rhs) {
                 byte[] lowerRange = KeyRange.UNBOUND;
                 byte[] upperRange = KeyRange.UNBOUND;
                 boolean lowerInclusive = true;
@@ -120,7 +120,7 @@ public class RTrimFunction extends ScalarFunction {
                     lowerInclusive = false;
                 case EQUAL:
                     upperRange = evaluateExpression(rhs);
-                    if (op == CompareOp.EQUAL) {
+                    if (op == CompareOperator.EQUAL) {
                         lowerRange = upperRange;
                     }
                     if (sortOrder == SortOrder.ASC || !getTable().rowKeyOrderOptimizable()) {
@@ -129,7 +129,7 @@ public class RTrimFunction extends ScalarFunction {
                         ByteUtil.nextKey(upperRange, upperRange.length);
                     } else {
                         upperInclusive = true;
-                        if (op == CompareOp.LESS_OR_EQUAL) {
+                        if (op == CompareOperator.LESS_OR_EQUAL) {
                             // Nothing more to do here, as the biggest value for DESC
                             // will be the RHS value.
                             break;

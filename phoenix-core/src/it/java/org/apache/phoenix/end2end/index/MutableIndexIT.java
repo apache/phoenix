@@ -92,18 +92,18 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         return getConnection(props);
     }
-    
-    @Parameters(name="MutableIndexIT_localIndex={0},transactionProvider={1},columnEncoded={2}") // name is used by failsafe as file name in reports
+
+    // name is used by failsafe as file name in reports
+    @Parameters(name="MutableIndexIT_localIndex={0},transactionProvider={1},columnEncoded={2}")
     public static synchronized Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
-                { false, null, false }, { false, null, true },
-                { false, "TEPHRA", false }, { false, "TEPHRA", true },
-                { false, "OMID", false },
-                { true, null, false }, { true, null, true },
-                { true, "TEPHRA", false }, { true, "TEPHRA", true },
-                }),1);
+        return Arrays.asList(new Object[][] {
+            { false, null, false }, { false, null, true },
+            // OMID does not support local indexes or column encoding
+            { false, "OMID", false },
+            { true, null, false }, { true, null, true },
+        });
     }
-    
+
     @Test
     public void testCoveredColumnUpdates() throws Exception {
         try (Connection conn = getConnection()) {
@@ -818,7 +818,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           // PHOENIX-4980
           // When there is a flush after a data table update of non-indexed columns, the
           // index gets out of sync on the next write
-          getUtility().getHBaseAdmin().flush(TableName.valueOf(fullTableName));
+          getUtility().getAdmin().flush(TableName.valueOf(fullTableName));
           conn.createStatement().executeUpdate("UPSERT INTO " + fullTableName + "(k,v1,v2) VALUES ('testKey','v1_4','v2_3')");
           conn.commit();
           IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);

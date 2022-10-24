@@ -120,7 +120,7 @@ public class HashCacheFactory implements ServerCacheFactory {
                 offset += Bytes.SIZEOF_INT;
                 // Build Map with evaluated hash key as key and row as value
                 for (int i = 0; i < nRows; i++) {
-                    int resultSize = (int)Bytes.readVLong(hashCacheByteArray, offset);
+                    int resultSize = (int)Bytes.readAsVLong(hashCacheByteArray, offset);
                     offset += WritableUtils.decodeVIntSize(hashCacheByteArray[offset]);
                     ImmutableBytesWritable value = new ImmutableBytesWritable(hashCacheByteArray,offset,resultSize);
                     Tuple result = new ResultTuple(ResultUtil.toResult(value));

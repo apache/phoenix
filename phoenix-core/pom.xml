@@ -65,6 +65,9 @@
                     || ("${hbase.compat.version}".equals("2.4.1")
                       &amp;&amp; hbaseMinor == 4
                       &amp;&amp; hbasePatch &gt;=1)
+                    || ("${hbase.compat.version}".equals("2.5.0")
+                      &amp;&amp; hbaseMinor == 5
+                      &amp;&amp; hbasePatch &gt;=0)
                   )
                 </condition>
               </evaluateBeanshell>
@@ -233,7 +236,7 @@
               <goal>compile</goal>
             </goals>
             <configuration>
-              <protocArtifact>${protobuf.group}:protoc:${protoc.version}:exe:${os.detected.classifier}</protocArtifact>
+              <protocArtifact>${protobuf.group}:protoc:${protoc.version}:exe:${protoc.arch}</protocArtifact>
               <protoSourceRoot>${basedir}/src/main/protobuf/</protoSourceRoot>
               <clearOutputDirectory>false</clearOutputDirectory>
               <checkStaleness>true</checkStaleness>
@@ -277,7 +280,15 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-hdfs-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-annotations</artifactId>
     </dependency>
 
     <!-- Hadoop test dependencies -->
@@ -289,9 +300,16 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-hdfs</artifactId>
-      <type>test-jar</type>
-      <classifier>tests</classifier>
+      <version>${hadoop.version}</version>
       <scope>test</scope>
+      <type>test-jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-common</artifactId>
+      <version>${hadoop.version}</version>
+      <scope>test</scope>
+      <type>test-jar</type>
     </dependency>
 
     <!-- HBase dependencies -->
@@ -373,31 +391,45 @@
       <scope>test</scope>
     </dependency>
 
+    <!-- HBase Adjacent Dependencies -->
+    <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-framework</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-recipes</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.zookeeper</groupId>
+      <artifactId>zookeeper</artifactId>
+    </dependency>
+
     <!-- Transaction dependencies -->
     <!-- Omid dependencies -->
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-client-hbase2.x</artifactId>
+      <artifactId>omid-hbase-client</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-coprocessor-hbase2.x</artifactId>
+      <artifactId>omid-hbase-coprocessor</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-shims-hbase2.x</artifactId>
+      <artifactId>omid-hbase-common</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-common-hbase2.x</artifactId>
+      <artifactId>omid-timestamp-storage</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-timestamp-storage-hbase2.x</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-commit-table-hbase2.x</artifactId>
+      <artifactId>omid-hbase-commit-table</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
@@ -412,38 +444,15 @@
       <artifactId>omid-common</artifactId>
     </dependency>
 
-    <!-- Tephra dependencies (not included in shaded artifacts -->
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-api</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-core-shaded</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.tephra</groupId>
-      <artifactId>tephra-hbase-compat-${tephra.hbase.compat.version}</artifactId>
-      <classifier>shaded</classifier>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.thrift</groupId>
-      <artifactId>libthrift</artifactId>
-      <scope>provided</scope>
-    </dependency>
-
     <!-- Omid test dependencies -->
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-tso-server-hbase2.x</artifactId>
+      <artifactId>omid-tso-server</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-tso-server-hbase2.x</artifactId>
+      <artifactId>omid-tso-server</artifactId>
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
@@ -525,6 +534,11 @@
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
+      <artifactId>commons-compress</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
       <artifactId>commons-lang3</artifactId>
     </dependency>
     <dependency>
@@ -548,16 +562,8 @@
       <artifactId>disruptor</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.zookeeper</groupId>
-      <artifactId>zookeeper</artifactId>
-    </dependency>
-    <dependency>
         <groupId>org.apache.zookeeper</groupId>
         <artifactId>zookeeper-jute</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.thrift</groupId>
-      <artifactId>libthrift</artifactId>
     </dependency>
     <dependency>
       <groupId>org.jruby.joni</groupId>
@@ -571,6 +577,16 @@
       <groupId>org.hdrhistogram</groupId>
       <artifactId>HdrHistogram</artifactId>
       <version>2.1.12</version>
+    </dependency>
+    <dependency>
+      <groupId>com.sun.xml.bind</groupId>
+      <artifactId>jaxb-impl</artifactId>
+      <version>2.2.3-1</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpcore</artifactId>
+      <version>4.4.4</version>
     </dependency>
 
     <!-- Other test dependencies -->

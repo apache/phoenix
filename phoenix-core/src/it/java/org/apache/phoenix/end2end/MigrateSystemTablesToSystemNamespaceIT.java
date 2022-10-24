@@ -317,7 +317,7 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
 
     private Set<String> getHBaseTables() throws IOException {
         Set<String> tables = new HashSet<>();
-        for (TableName tn : testUtil.getHBaseAdmin().listTableNames()) {
+        for (TableName tn : testUtil.getAdmin().listTableNames()) {
             tables.add(tn.getNameAsString());
         }
         return tables;

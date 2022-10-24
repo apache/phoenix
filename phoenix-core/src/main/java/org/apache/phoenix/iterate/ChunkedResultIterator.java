@@ -153,9 +153,9 @@ public class ChunkedResultIterator implements PeekingResultIterator {
             } else if (ScanUtil.isReversed(scan)) {
                 // lastKey is the last row the previous iterator meet but not returned.
                 // for reverse scan, use prevLastKey as the new stopRow.
-                scan.setStopRow(ByteUtil.copyKeyBytesIfNecessary(prevLastKey));
+                scan.withStopRow(ByteUtil.copyKeyBytesIfNecessary(prevLastKey));
             } else {
-                scan.setStartRow(ByteUtil.copyKeyBytesIfNecessary(lastKey));
+                scan.withStartRow(ByteUtil.copyKeyBytesIfNecessary(lastKey));
             }
             if (LOGGER.isDebugEnabled()) LOGGER.debug(LogUtil.addCustomAnnotations("Get next chunked result iterator over " + tableRef.getTable().getPhysicalName().getString() + " with " + scan, ScanUtil.getCustomAnnotations(scan)));
             String tableName = tableRef.getTable().getPhysicalName().getString();

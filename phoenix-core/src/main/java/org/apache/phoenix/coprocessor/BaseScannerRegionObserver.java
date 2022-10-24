@@ -336,7 +336,6 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 overrideDelegate();
                 boolean res = super.next(result);
                 ScannerContextUtil.incrementSizeProgress(scannerContext, result);
-                ScannerContextUtil.updateTimeProgress(scannerContext);
                 return res;
             }
 
@@ -351,7 +350,6 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 overrideDelegate();
                 boolean res = super.nextRaw(result);
                 ScannerContextUtil.incrementSizeProgress(scannerContext, result);
-                ScannerContextUtil.updateTimeProgress(scannerContext);
                 return res;
             }
             

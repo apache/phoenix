@@ -139,6 +139,7 @@ import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Append;
+import org.apache.hadoop.hbase.client.CheckAndMutate;
 import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
@@ -376,7 +377,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     // List of queues instead of a single queue to provide reduced contention via lock striping
     private final List<LinkedBlockingQueue<WeakReference<PhoenixConnection>>> connectionQueues;
     private ScheduledExecutorService renewLeaseExecutor;
-    private PhoenixTransactionClient[] txClients = new PhoenixTransactionClient[TransactionFactory.Provider.values().length];;
+    // Use TransactionFactory.Provider.values() here not TransactionFactory.Provider.available()
+    // because the array will be indexed by ordinal.
+    private PhoenixTransactionClient[] txClients = new PhoenixTransactionClient[TransactionFactory.Provider.values().length];
     /*
      * We can have multiple instances of ConnectionQueryServices. By making the thread factory
      * static, renew lease thread names will be unique across them.
@@ -534,12 +537,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public Table getTableIfExists(byte[] tableName) throws SQLException {
         try (Admin admin = getAdmin()) {
-            if (!admin.tableExists(TableName.valueOf(tableName))) {
+            if (!AdminUtilWithFallback.tableExists(admin, TableName.valueOf(tableName))) {
                 throw new TableNotFoundException(
                     SchemaUtil.getSchemaNameFromFullName(tableName),
                     SchemaUtil.getTableNameFromFullName(tableName));
             }
-        } catch (IOException e) {
+        } catch (IOException | InterruptedException e) {
             throw new SQLException(e);
         }
         return getTable(tableName);
@@ -567,6 +570,26 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public ReadOnlyProps getProps() {
         return props;
     }
+
+    /**
+     * Closes all the connections it has in its connectionQueues.
+     */
+    @Override
+    public void closeAllConnections(SQLExceptionInfo.Builder reasonBuilder) {
+        for (LinkedBlockingQueue<WeakReference<PhoenixConnection>> queue : connectionQueues) {
+            for (WeakReference<PhoenixConnection> connectionReference : queue) {
+                PhoenixConnection connection = connectionReference.get();
+                try {
+                    if (connection != null && !connection.isClosed()) {
+                        connection.close(reasonBuilder.build().buildException());
+                    }
+                } catch (SQLException e) {
+                    LOGGER.warn("Exception while closing phoenix connection {}", connection, e);
+                }
+            }
+        }
+    }
+
 
     /**
      * Closes the underlying connection to zookeeper. The QueryServices
@@ -673,16 +696,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public byte[] getNextRegionStartKey(HRegionLocation regionLocation, byte[] currentKey) throws IOException {
         // in order to check the overlap/inconsistencies bad region info, we have to make sure
         // the current endKey always increasing(compare the previous endKey)
-        if (Bytes.compareTo(regionLocation.getRegionInfo().getEndKey(), currentKey) <= 0
+        if (Bytes.compareTo(regionLocation.getRegion().getEndKey(), currentKey) <= 0
                 && !Bytes.equals(currentKey, HConstants.EMPTY_START_ROW)
-                && !Bytes.equals(regionLocation.getRegionInfo().getEndKey(), HConstants.EMPTY_END_ROW)) {
+                && !Bytes.equals(regionLocation.getRegion().getEndKey(), HConstants.EMPTY_END_ROW)) {
             GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.increment();
             String regionNameString =
-                    new String(regionLocation.getRegionInfo().getRegionName(), StandardCharsets.UTF_8);
+                    new String(regionLocation.getRegion().getRegionName(), StandardCharsets.UTF_8);
             throw new IOException(String.format(
                     "HBase region information overlap/inconsistencies on region %s", regionNameString));
         }
-        return regionLocation.getRegionInfo().getEndKey();
+        return regionLocation.getRegion().getEndKey();
     }
 
     @Override
@@ -1044,21 +1067,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     if (newDesc.hasCoprocessor(IndexRegionObserver.class.getName())) {
                         builder.removeCoprocessor(IndexRegionObserver.class.getName());
                     }
-                    builder.addCoprocessor(GlobalIndexChecker.class.getName(), null, priority - 1, null);
+                    builder.setCoprocessor(CoprocessorDescriptorBuilder.newBuilder(GlobalIndexChecker.class.getName())
+                            .setPriority(priority - 1).build());
                 }
             }
 
             if (!newDesc.hasCoprocessor(ScanRegionObserver.class.getName())) {
-                builder.addCoprocessor(ScanRegionObserver.class.getName(), null, priority, null);
+                builder.setCoprocessor(CoprocessorDescriptorBuilder.newBuilder(ScanRegionObserver.class.getName())
+                        .setPriority(priority).build());
             }
             if (!newDesc.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName())) {
-                builder.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, priority, null);
+                builder.setCoprocessor(
+                        CoprocessorDescriptorBuilder.newBuilder(UngroupedAggregateRegionObserver.class.getName())
+                                .setPriority(priority).build());
             }
             if (!newDesc.hasCoprocessor(GroupedAggregateRegionObserver.class.getName())) {
-                builder.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, priority, null);
+                builder.setCoprocessor(
+                        CoprocessorDescriptorBuilder.newBuilder(GroupedAggregateRegionObserver.class.getName())
+                                .setPriority(priority).build());
             }
             if (!newDesc.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
-                builder.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, priority, null);
+                builder.setCoprocessor(
+                        CoprocessorDescriptorBuilder.newBuilder(ServerCachingEndpointImpl.class.getName())
+                                .setPriority(priority).build());
             }
 
             // TODO: better encapsulation for this
@@ -1070,7 +1101,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     && !SchemaUtil.isStatsTable(tableName)) {
                 if (isTransactional) {
                     if (!newDesc.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
-                        builder.addCoprocessor(PhoenixTransactionalIndexer.class.getName(), null, priority, null);
+                        builder.setCoprocessor(
+                                CoprocessorDescriptorBuilder.newBuilder(PhoenixTransactionalIndexer.class.getName())
+                                        .setPriority(priority).build());
                     }
                     // For alter table, remove non transactional index coprocessor
                     if (newDesc.hasCoprocessor(Indexer.class.getName())) {
@@ -1114,16 +1147,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
             if ((SchemaUtil.isStatsTable(tableName) || SchemaUtil.isMetaTable(tableName))
                     && !newDesc.hasCoprocessor(MultiRowMutationEndpoint.class.getName())) {
-                builder.addCoprocessor(MultiRowMutationEndpoint.class.getName(),
-                        null, priority, null);
+                builder.setCoprocessor(
+                        CoprocessorDescriptorBuilder
+                                .newBuilder(MultiRowMutationEndpoint.class.getName())
+                                .setPriority(priority)
+                                .setProperties(Collections.emptyMap())
+                                .build());
             }
 
             Set<byte[]> familiesKeys = builder.build().getColumnFamilyNames();
             for (byte[] family: familiesKeys) {
                 if (Bytes.toString(family).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
                     if (!newDesc.hasCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName())) {
-                        builder.addCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName(),
-                            null, priority, null);
+                        builder.setCoprocessor(
+                                CoprocessorDescriptorBuilder
+                                        .newBuilder(IndexHalfStoreFileReaderGenerator.class.getName())
+                                        .setPriority(priority)
+                                        .setProperties(Collections.emptyMap())
+                                        .build());
                         break;
                     }
                 }
@@ -1133,41 +1174,80 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // stay on the same region.
             if (SchemaUtil.isMetaTable(tableName) || SchemaUtil.isFunctionTable(tableName)) {
                 if (!newDesc.hasCoprocessor(MetaDataEndpointImpl.class.getName())) {
-                    builder.addCoprocessor(MetaDataEndpointImpl.class.getName(), null, priority, null);
+                    builder.setCoprocessor(
+                            CoprocessorDescriptorBuilder
+                                    .newBuilder(MetaDataEndpointImpl.class.getName())
+                                    .setPriority(priority)
+                                    .setProperties(Collections.emptyMap())
+                                    .build());
                 }
                 if (SchemaUtil.isMetaTable(tableName) ) {
                     if (!newDesc.hasCoprocessor(MetaDataRegionObserver.class.getName())) {
-                        builder.addCoprocessor(MetaDataRegionObserver.class.getName(), null, priority + 1, null);
+                        builder.setCoprocessor(
+                                CoprocessorDescriptorBuilder
+                                        .newBuilder(MetaDataRegionObserver.class.getName())
+                                        .setPriority(priority + 1)
+                                        .setProperties(Collections.emptyMap())
+                                        .build());
                     }
                 }
             } else if (SchemaUtil.isSequenceTable(tableName)) {
                 if (!newDesc.hasCoprocessor(SequenceRegionObserver.class.getName())) {
-                    builder.addCoprocessor(SequenceRegionObserver.class.getName(), null, priority, null);
+                    builder.setCoprocessor(
+                            CoprocessorDescriptorBuilder
+                                    .newBuilder(SequenceRegionObserver.class.getName())
+                                    .setPriority(priority)
+                                    .setProperties(Collections.emptyMap())
+                                    .build());
                 }
             } else if (SchemaUtil.isTaskTable(tableName)) {
                 if (!newDesc.hasCoprocessor(TaskRegionObserver.class.getName())) {
-                    builder.addCoprocessor(TaskRegionObserver.class.getName(), null, priority, null);
+                    builder.setCoprocessor(
+                            CoprocessorDescriptorBuilder
+                                    .newBuilder(TaskRegionObserver.class.getName())
+                                    .setPriority(priority)
+                                    .setProperties(Collections.emptyMap())
+                                    .build());
                 }
                 if (!newDesc.hasCoprocessor(
                         TaskMetaDataEndpoint.class.getName())) {
-                    builder.addCoprocessor(TaskMetaDataEndpoint.class.getName(),
-                        null, priority, null);
+                    builder.setCoprocessor(
+                            CoprocessorDescriptorBuilder
+                                    .newBuilder(TaskMetaDataEndpoint.class.getName())
+                                    .setPriority(priority)
+                                    .setProperties(Collections.emptyMap())
+                                    .build());
                 }
             } else if (SchemaUtil.isChildLinkTable(tableName)) {
                 if (!newDesc.hasCoprocessor(ChildLinkMetaDataEndpoint.class.getName())) {
-                    builder.addCoprocessor(ChildLinkMetaDataEndpoint.class.getName(), null, priority, null);
+                    builder.setCoprocessor(
+                            CoprocessorDescriptorBuilder
+                                    .newBuilder(ChildLinkMetaDataEndpoint.class.getName())
+                                    .setPriority(priority)
+                                    .setProperties(Collections.emptyMap())
+                                    .build());
                 }
             }
 
             if (isTransactional) {
                 String coprocessorClassName = provider.getTransactionProvider().getCoprocessorClassName();
                 if (!newDesc.hasCoprocessor(coprocessorClassName)) {
-                    builder.addCoprocessor(coprocessorClassName, null, priority - 10, null);
+                    builder.setCoprocessor(
+                            CoprocessorDescriptorBuilder
+                                    .newBuilder(coprocessorClassName)
+                                    .setPriority(priority - 10)
+                                    .setProperties(Collections.emptyMap())
+                                    .build());
                 }
                 String coprocessorGCClassName = provider.getTransactionProvider().getGCCoprocessorClassName();
                 if (coprocessorGCClassName != null) {
                     if (!newDesc.hasCoprocessor(coprocessorGCClassName)) {
-                        builder.addCoprocessor(coprocessorGCClassName, null, priority - 10, null);
+                        builder.setCoprocessor(
+                                CoprocessorDescriptorBuilder
+                                        .newBuilder(coprocessorGCClassName)
+                                        .setPriority(priority - 10)
+                                        .setProperties(Collections.emptyMap())
+                                        .build());
                     }
                 }
             } else {
@@ -1188,14 +1268,22 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // are intercepted by the TTLAwareRegionObserver and only the rows that are not ttl-expired are returned.
             if (!SchemaUtil.isSystemTable(tableName)) {
                 if (!newDesc.hasCoprocessor(PhoenixTTLRegionObserver.class.getName())) {
-                    builder.addCoprocessor(
-                            PhoenixTTLRegionObserver.class.getName(), null, priority-2, null);
+                    builder.setCoprocessor(
+                            CoprocessorDescriptorBuilder
+                                    .newBuilder(PhoenixTTLRegionObserver.class.getName())
+                                    .setPriority(priority - 2)
+                                    .setProperties(Collections.emptyMap())
+                                    .build());
                 }
             }
             if (Arrays.equals(tableName, SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, props).getName())) {
                 if (!newDesc.hasCoprocessor(SystemCatalogRegionObserver.class.getName())) {
-                    builder.addCoprocessor(
-                            SystemCatalogRegionObserver.class.getName(), null, priority, null);
+                    builder.setCoprocessor(
+                            CoprocessorDescriptorBuilder
+                                    .newBuilder(SystemCatalogRegionObserver.class.getName())
+                                    .setPriority(priority)
+                                    .setProperties(Collections.emptyMap())
+                                    .build());
                 }
             }
 
@@ -1367,7 +1455,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         // if the NS does not exist, we will error as expected, or
                         // if the NS does exist and tables are already mapped, the check will exit gracefully
                     }
-                    if (admin.tableExists(SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, false))) {
+                    if (AdminUtilWithFallback.tableExists(admin,
+                        SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, false))) {
                         // SYSTEM.CATALOG exists, so at this point, we have 3 cases:
                         // 1) If server-side namespace mapping is disabled, drop the SYSTEM namespace if it was created
                         //    above and throw Inconsistent namespace mapping exception
@@ -1391,7 +1480,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         // Thrown so we can force an upgrade which will just migrate SYSTEM tables to the SYSTEM namespace
                         throw new UpgradeRequiredException(MIN_SYSTEM_TABLE_TIMESTAMP);
                     }
-                } else if (admin.tableExists(SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, true))) {
+                } else if (AdminUtilWithFallback.tableExists(admin,
+                    SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, true))) {
                     // If SYSTEM:CATALOG exists, but client-side namespace mapping for SYSTEM tables is disabled, throw an exception
                     throw new SQLExceptionInfo.Builder(
                       SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES)
@@ -2610,7 +2700,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             indexColDescriptorBuilder.setMaxVersions(tableColDescriptor.getMaxVersions());
             indexColDescriptorBuilder.setValue( Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL),tableColDescriptor.getValue(Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL)));
             indexDescriptorBuilder.removeColumnFamily(familyName);
-            indexDescriptorBuilder.addColumnFamily(indexColDescriptorBuilder.build());
+            indexDescriptorBuilder.setColumnFamily(indexColDescriptorBuilder.build());
         } else {
             for (PColumnFamily family : table.getColumnFamilies()) {
                 byte[] familyName = family.getName().getBytes();
@@ -2621,7 +2711,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     indexColDescriptorBuilder.setMaxVersions(tableColDescriptor.getMaxVersions());
                     indexColDescriptorBuilder.setValue( Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL),tableColDescriptor.getValue(Bytes.toBytes(PhoenixTransactionContext.PROPERTY_TTL)));
                     indexDescriptorBuilder.removeColumnFamily(familyName);
-                    indexDescriptorBuilder.addColumnFamily(indexColDescriptorBuilder.build());
+                    indexDescriptorBuilder.setColumnFamily(indexColDescriptorBuilder.build());
                 }
             }
         }
@@ -2921,7 +3011,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                     }
                 }
-                // Set Tephra's TTL property based on HBase property if we're
+                // Set transaction context TTL property based on HBase property if we're
                 // transitioning to become transactional or setting TTL on
                 // an already transactional table.
                 int ttl = getTTL(table, newTableDescriptorBuilder.build(), newTTL);
@@ -2934,6 +3024,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         } else {
                             props = new HashMap<>(props);
                         }
+                        // Note: After PHOENIX-6627, is PhoenixTransactionContext.PROPERTY_TTL still useful?
                         props.put(PhoenixTransactionContext.PROPERTY_TTL, ttl);
                         // Remove HBase TTL if we're not transitioning an existing table to become transactional
                         // or if the existing transactional table wasn't originally non transactional.
@@ -4414,9 +4505,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     int priority = props.getInt(
                         QueryServices.COPROCESSOR_PRIORITY_ATTRIB,
                         QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
-                    tableDescriptorBuilder.addCoprocessor(
-                        TaskMetaDataEndpoint.class.getName(), null, priority,
-                        null);
+                    tableDescriptorBuilder.setCoprocessor(
+                            CoprocessorDescriptorBuilder
+                                    .newBuilder(TaskMetaDataEndpoint.class.getName())
+                                    .setPriority(priority)
+                                    .setProperties(Collections.emptyMap())
+                                    .build());
                     isTableDescUpdated=true;
                 }
                 if (isTableDescUpdated) {
@@ -4646,7 +4740,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName();
             metatable = getTable(mappedSystemTable);
             if (tableNames.contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME)) {
-                if (!admin.tableExists(TableName.valueOf(mappedSystemTable))) {
+                if (!AdminUtilWithFallback.tableExists(admin,
+                    TableName.valueOf(mappedSystemTable))) {
                     LOGGER.info("Migrating SYSTEM.CATALOG table to SYSTEM namespace.");
                     // Actual migration of SYSCAT table
                     UpgradeUtil.mapTableToNamespace(admin, metatable,
@@ -4711,8 +4806,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 byte[] value = MUTEX_LOCKED;
                 Put put = new Put(rowKey);
                 put.addColumn(family, qualifier, value);
+                CheckAndMutate checkAndMutate = CheckAndMutate.newBuilder(rowKey)
+                        .ifNotExists(family, qualifier)
+                        .build(put);
                 boolean checkAndPut =
-                        sysMutexTable.checkAndPut(rowKey, family, qualifier, null, put);
+                        sysMutexTable.checkAndMutate(checkAndMutate).isSuccess();
                 String processName = ManagementFactory.getRuntimeMXBean().getName();
                 String msg =
                         " tenantId : " + tenantId + " schemaName : " + schemaName + " tableName : "
@@ -5588,7 +5686,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return user;
     }
 
-    private void checkClosed() {
+    @VisibleForTesting
+    public void checkClosed() {
         if (closed) {
             throwConnectionClosedException();
         }
