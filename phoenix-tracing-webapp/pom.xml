@@ -127,42 +127,6 @@
           </executions>
         </plugin>
         <plugin>
-          <groupId>com.github.searls</groupId>
-          <artifactId>jasmine-maven-plugin</artifactId>
-          <executions>
-            <execution>
-              <goals>
-                <goal>test</goal>
-              </goals>
-            </execution>
-          </executions>
-          <configuration>
-            <phantomjs>
-              <version>2.1.1</version>
-            </phantomjs>
-            <!--browserVersion>FIREFOX_16</browserVersion-->
-            <preloadSources combine.children="append">
-              <source>${project.basedir}/src/main/webapp/js/lib/jquery.min.js</source>
-              <source>${project.basedir}/src/main/webapp/js/lib/angular.js</source>
-              <source>${project.basedir}/src/main/webapp/js/lib/angular-route.js</source>
-              <source>${project.basedir}/src/main/webapp/js/lib/angular-mocks.js</source>
-              <source>${project.basedir}/src/main/webapp/js/lib/ng-google-chart.js</source>
-              <source>${project.basedir}/src/main/webapp/js/lib/bootstrap.js</source>
-              <source>${project.basedir}/src/main/webapp/js/lib/ui-bootstrap-tpls.js</source>
-              <source>${project.basedir}/src/main/webapp/js/controllers/accordion-controllers.js</source>
-              <source>${project.basedir}/src/main/webapp/js/controllers/timeline-controllers.js</source>
-              <source>${project.basedir}/src/main/webapp/js/controllers/search-controllers.js</source>
-              <source>${project.basedir}/src/main/webapp/js/controllers/dependency-tree-controllers.js</source>
-              <source>${project.basedir}/src/main/webapp/js/app.js</source>
-              <source>${project.basedir}/src/main/webapp/js/controllers/list-controllers.js</source>
-              <source>${project.basedir}/src/main/webapp/js/controllers/trace-count-controllers.js</source>
-              <source>${project.basedir}/src/main/webapp/js/controllers/trace-distribution-controllers.js</source>
-          </preloadSources>
-            <!--jsSrcDir>${basedir}/src/main/webapp/js/controllers</jsSrcDir-->
-            <jsTestSrcDir>${basedir}/src/test/webapp/js/specs</jsTestSrcDir>
-          </configuration>
-        </plugin>
-        <plugin>
             <groupId>org.apache.rat</groupId>
             <artifactId>apache-rat-plugin</artifactId>
             <configuration>
@@ -175,5 +139,59 @@
         </plugin>
       </plugins>
     </build>
-
+    <profiles>
+        <profile>
+            <!-- These tests fail with recent SSL libraries. See PHOENIX-6784.
+            You need to be using an older Linux distro, or use the
+            export OPENSSL_CONF=/dev/null
+            workaround to run these tests
+            -->
+            <id>jasmin-tests</id>
+            <activation>
+                <property>
+                    <name>jasmine-tests</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.github.searls</groupId>
+                        <artifactId>jasmine-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>test</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <phantomjs>
+                                <version>2.1.1</version>
+                            </phantomjs>
+                            <!--browserVersion>FIREFOX_16</browserVersion-->
+                            <preloadSources combine.children="append">
+                                <source>${project.basedir}/src/main/webapp/js/lib/jquery.min.js</source>
+                                <source>${project.basedir}/src/main/webapp/js/lib/angular.js</source>
+                                <source>${project.basedir}/src/main/webapp/js/lib/angular-route.js</source>
+                                <source>${project.basedir}/src/main/webapp/js/lib/angular-mocks.js</source>
+                                <source>${project.basedir}/src/main/webapp/js/lib/ng-google-chart.js</source>
+                                <source>${project.basedir}/src/main/webapp/js/lib/bootstrap.js</source>
+                                <source>${project.basedir}/src/main/webapp/js/lib/ui-bootstrap-tpls.js</source>
+                                <source>${project.basedir}/src/main/webapp/js/controllers/accordion-controllers.js</source>
+                                <source>${project.basedir}/src/main/webapp/js/controllers/timeline-controllers.js</source>
+                                <source>${project.basedir}/src/main/webapp/js/controllers/search-controllers.js</source>
+                                <source>${project.basedir}/src/main/webapp/js/controllers/dependency-tree-controllers.js</source>
+                                <source>${project.basedir}/src/main/webapp/js/app.js</source>
+                                <source>${project.basedir}/src/main/webapp/js/controllers/list-controllers.js</source>
+                                <source>${project.basedir}/src/main/webapp/js/controllers/trace-count-controllers.js</source>
+                                <source>${project.basedir}/src/main/webapp/js/controllers/trace-distribution-controllers.js</source>
+                            </preloadSources>
+                            <!--jsSrcDir>${basedir}/src/main/webapp/js/controllers</jsSrcDir-->
+                            <jsTestSrcDir>${basedir}/src/test/webapp/js/specs</jsTestSrcDir>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
   </project>
