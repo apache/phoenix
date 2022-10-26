@@ -19,12 +19,15 @@ package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.iterate.ScanningResultIterator;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,7 +36,6 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
-import java.util.concurrent.locks.Lock;
 
 import static org.junit.Assert.*;
 @Category(ParallelStatsDisabledTest.class)
@@ -56,8 +58,12 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
     @Test
     public void testPreMatureScannerAbortForCount() throws Exception {
 
+        /* Not using Salt Buckets as when we close connection ConcatResultIterator closes Futures used in
+           ParallelResultIterators before we can get a dummy result for ScanningResultIterator to close Scanners in
+           between conn close call and actual closing of Scanners.
+        */
         try (Connection conn = DriverManager.getConnection(getUniqueUrl())) {
-            conn.createStatement().execute("CREATE TABLE LONG_BUG (ID INTEGER PRIMARY KEY, AMOUNT DECIMAL) SALT_BUCKETS = 16");
+            conn.createStatement().execute("CREATE TABLE LONG_BUG (ID INTEGER PRIMARY KEY, AMOUNT DECIMAL) ");
         }
         try (Connection conn = DriverManager.getConnection(getUniqueUrl())) {
             for (int i = 0; i<500000 ; i++) {
@@ -77,21 +83,19 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
                         synchronized (conn) {
                             conn.wait();
                         }
+                        ScanningResultIterator.setIsScannerClosedForceFully(true);
                         ResultSet resultSet = conn.createStatement().executeQuery(
                                     "SELECT COUNT(*) FROM LONG_BUG WHERE ID % 2 = 0");
-                        boolean result = resultSet.next();
-                        assertTrue(result);
+                        resultSet.next();
                         LOG.info("Count of modulus 2 for LONG_BUG :- " + resultSet.getInt(1));
-                        fail();
+                        fail("ResultSet should have been closed");
                     } catch (SQLException sqe) {
-                        //RESULTSET_CLOSED exception expected
-                        if (sqe.getErrorCode() != SQLExceptionCode.RESULTSET_CLOSED.getErrorCode()) {
-                            LOG.error("Error ", sqe);
-                            fail();
-                        }
+                        assertEquals(SQLExceptionCode.FAILED_KNOWINGLY_FOR_TEST.getErrorCode(), sqe.getErrorCode());
                     } catch (Exception e) {
                         LOG.error("Error", e);
                         fail();
+                    } finally {
+                        ScanningResultIterator.setIsScannerClosedForceFully(false);
                     }
                 }
             };
@@ -104,6 +108,7 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
                             conn.notify();
                         }
                         Thread.sleep(1000);
+                        LOG.info("Closing Connection");
                         conn.close();
                     } catch (InterruptedException | SQLException e) {
                         fail();

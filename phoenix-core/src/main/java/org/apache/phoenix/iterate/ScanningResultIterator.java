@@ -54,11 +54,14 @@ import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,6 +74,7 @@ public class ScanningResultIterator implements ResultIterator {
     boolean scanMetricsUpdated;
     boolean scanMetricsEnabled;
     private StatementContext context;
+    private static boolean throwExceptionIfScannerClosedForceFully = false;
 
     public ScanningResultIterator(ResultScanner scanner, Scan scan, ScanMetricsHolder scanMetricsHolder, StatementContext context) {
         this.scanner = scanner;
@@ -168,6 +172,9 @@ public class ScanningResultIterator implements ResultIterator {
             while (result != null && (result.isEmpty() || isDummy(result))) {
                 if (context.getConnection().isClosed() || context.getConnection().isClosing()) {
                     LOG.warn("Closing ResultScanner as Connection is already closed or in middle of closing");
+                    if (throwExceptionIfScannerClosedForceFully) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.FAILED_KNOWINGLY_FOR_TEST).build().buildException();
+                    }
                     close();
                     return null;
                 }
@@ -201,5 +208,10 @@ public class ScanningResultIterator implements ResultIterator {
 
     public ResultScanner getScanner() {
         return scanner;
+    }
+
+    @VisibleForTesting
+    public static void setIsScannerClosedForceFully(boolean throwException) {
+        throwExceptionIfScannerClosedForceFully = throwException;
     }
 }
