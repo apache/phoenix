@@ -136,15 +136,19 @@ public class MetaDataCachingIT extends BaseTest {
     }
 
     /*
-    The tables with zero update cache frequency should not be inserted to the cache. However, Phoenix
-    uses the cache as the temporary memory during DDL operations currently. When this behavior changes,
+    TODO: The tables with zero update cache frequency should not be inserted to the cache. However, Phoenix
+    uses the cache as the temporary memory during all operations currently. When this behavior changes,
     this test should be updated with the appropriate number of hits/misses.
      */
     @Test
     public void testGlobalClientCacheMetrics() throws Exception {
         int numThreads = 5;
         int numTables = 1;
-        int numMaxDML = 1;
+        int numMaxDML = 2;
+
+        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER.getMetric().reset();
+        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER.getMetric().reset();
+
         simulateWorkload("testGlobalClientCacheMetrics", numTables, numThreads, numMaxDML);
 
         // only 1 miss when the table is created
@@ -158,7 +162,7 @@ public class MetaDataCachingIT extends BaseTest {
 
     /*
     The tables with zero update cache frequency should not be inserted to the cache. However, Phoenix
-    uses the cache as the temporary memory during DDL operations currently. When this behavior changes,
+    uses the cache as the temporary memory during all operations currently. When this behavior changes,
     this test can be enabled.
      */
     @Ignore

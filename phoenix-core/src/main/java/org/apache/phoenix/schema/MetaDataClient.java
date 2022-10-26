@@ -609,7 +609,13 @@ public class MetaDataClient {
         if (isTransactional) {
             connection.getMutationState().startTransaction(table.getTransactionProvider());
         }
-        resolvedTimestamp = resolvedTimestamp==null ? TransactionUtil.getResolvedTimestamp(connection, isTransactional, HConstants.LATEST_TIMESTAMP) : resolvedTimestamp;
+        // this is to allow the connection to see SYSTEM tables during an upgrade since they are not cached at the connection level
+        if (connection.isRunningUpgrade() && systemTable && connection.getSCN() != null && connection.getSCN() <= MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP) {
+            resolvedTimestamp = HConstants.LATEST_TIMESTAMP;
+        }
+        else {
+            resolvedTimestamp = resolvedTimestamp==null ? TransactionUtil.getResolvedTimestamp(connection, isTransactional, HConstants.LATEST_TIMESTAMP) : resolvedTimestamp;
+        }
 
         if (avoidRpcToGetTable(alwaysHitServer, resolvedTimestamp, systemTable, table, tableRef,
                 tableResolvedTimestamp)) {

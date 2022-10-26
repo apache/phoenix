@@ -114,7 +114,7 @@ public class PMetaDataImpl implements PMetaData {
         return (int) metaData.size();
     }
     // TODO The tables with zero update cache frequency should not be inserted to the cache. However, Phoenix
-    // uses the cache as the temporary memory during DDL operations currently. When this behavior changes, we can use
+    // uses the cache as the temporary memory during all operations currently. When this behavior changes, we can use
     // useMetaDataCache to determine if a table should be inserted to the cache.
     private boolean useMetaDataCache(PTable table) {
         return table.getType() == PTableType.SYSTEM
