@@ -61,12 +61,12 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
             conn.createStatement().execute("CREATE TABLE LONG_BUG (ID INTEGER PRIMARY KEY, AMOUNT DECIMAL) SALT_BUCKETS = 16 ");
         }
         try (Connection conn = DriverManager.getConnection(getUniqueUrl())) {
-            for (int i = 0; i<5000 ; i++) {
+            for (int i = 0; i<100 ; i++) {
                 int amount = -50000 + i;
                 String s = "UPSERT INTO LONG_BUG (ID, AMOUNT) VALUES( " + i + ", " + amount + ")";
                 conn.createStatement().execute(s);
-                conn.commit();
             }
+            conn.commit();
         }
 
         try {

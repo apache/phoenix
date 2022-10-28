@@ -170,7 +170,7 @@ public class ScanningResultIterator implements ResultIterator {
         try {
             Result result = scanner.next();
             while (result != null && (result.isEmpty() || isDummy(result))) {
-                if (context.getConnection().isClosed() || context.getConnection().isClosing()) {
+                if (context.getConnection().isClosing() || context.getConnection().isClosed()) {
                     LOG.warn("Closing ResultScanner as Connection is already closed or in middle of closing");
                     if (throwExceptionIfScannerClosedForceFully) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.FAILED_KNOWINGLY_FOR_TEST).build().buildException();
