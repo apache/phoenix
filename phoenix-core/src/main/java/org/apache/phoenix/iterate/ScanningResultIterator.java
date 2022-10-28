@@ -211,7 +211,7 @@ public class ScanningResultIterator implements ResultIterator {
     }
 
     @VisibleForTesting
-    public static void setIsScannerClosedForceFully(boolean throwException) {
+    public static void setIsScannerClosedForcefully(boolean throwException) {
         throwExceptionIfScannerClosedForceFully = throwException;
     }
 }
