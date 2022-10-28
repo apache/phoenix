@@ -53,22 +53,33 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.util.ServerUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ScanningResultIterator implements ResultIterator {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ScanningResultIterator.class);
     private final ResultScanner scanner;
     private final ScanMetricsHolder scanMetricsHolder;
     boolean scanMetricsUpdated;
     boolean scanMetricsEnabled;
+    private StatementContext context;
+    private static boolean throwExceptionIfScannerClosedForceFully = false;
 
-    public ScanningResultIterator(ResultScanner scanner, Scan scan, ScanMetricsHolder scanMetricsHolder) {
+    public ScanningResultIterator(ResultScanner scanner, Scan scan, ScanMetricsHolder scanMetricsHolder, StatementContext context) {
         this.scanner = scanner;
         this.scanMetricsHolder = scanMetricsHolder;
+        this.context = context;
         scanMetricsUpdated = false;
         scanMetricsEnabled = scan.isScanMetricsEnabled();
     }
@@ -157,6 +168,14 @@ public class ScanningResultIterator implements ResultIterator {
         try {
             Result result = scanner.next();
             while (result != null && (result.isEmpty() || isDummy(result))) {
+                if (context.getConnection().isClosing() || context.getConnection().isClosed()) {
+                    LOG.warn("Closing ResultScanner as Connection is already closed or in middle of closing");
+                    if (throwExceptionIfScannerClosedForceFully) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.FAILED_KNOWINGLY_FOR_TEST).build().buildException();
+                    }
+                    close();
+                    return null;
+                }
                 result = scanner.next();
             }
             if (result == null) {
@@ -187,5 +206,10 @@ public class ScanningResultIterator implements ResultIterator {
 
     public ResultScanner getScanner() {
         return scanner;
+    }
+
+    @VisibleForTesting
+    public static void setIsScannerClosedForcefully(boolean throwException) {
+        throwExceptionIfScannerClosedForceFully = throwException;
     }
 }
