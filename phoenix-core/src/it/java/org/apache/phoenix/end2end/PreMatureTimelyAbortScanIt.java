@@ -27,7 +27,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,15 +57,11 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
     @Test
     public void testPreMatureScannerAbortForCount() throws Exception {
 
-        /* Not using Salt Buckets as when we close connection ConcatResultIterator closes Futures used in
-           ParallelResultIterators before we can get a dummy result for ScanningResultIterator to close Scanners in
-           between conn close call and actual closing of Scanners.
-        */
         try (Connection conn = DriverManager.getConnection(getUniqueUrl())) {
-            conn.createStatement().execute("CREATE TABLE LONG_BUG (ID INTEGER PRIMARY KEY, AMOUNT DECIMAL) ");
+            conn.createStatement().execute("CREATE TABLE LONG_BUG (ID INTEGER PRIMARY KEY, AMOUNT DECIMAL) SALT_BUCKETS = 16 ");
         }
         try (Connection conn = DriverManager.getConnection(getUniqueUrl())) {
-            for (int i = 0; i<500000 ; i++) {
+            for (int i = 0; i<5000 ; i++) {
                 int amount = -50000 + i;
                 String s = "UPSERT INTO LONG_BUG (ID, AMOUNT) VALUES( " + i + ", " + amount + ")";
                 conn.createStatement().execute(s);
@@ -75,55 +70,20 @@ public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
         }
 
         try {
-            Connection conn = DriverManager.getConnection(getUniqueUrl());
-            Runnable runnable = new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        synchronized (conn) {
-                            conn.wait();
-                        }
-                        ScanningResultIterator.setIsScannerClosedForceFully(true);
-                        ResultSet resultSet = conn.createStatement().executeQuery(
-                                    "SELECT COUNT(*) FROM LONG_BUG WHERE ID % 2 = 0");
-                        resultSet.next();
-                        LOG.info("Count of modulus 2 for LONG_BUG :- " + resultSet.getInt(1));
-                        fail("ResultSet should have been closed");
-                    } catch (SQLException sqe) {
-                        assertEquals(SQLExceptionCode.FAILED_KNOWINGLY_FOR_TEST.getErrorCode(), sqe.getErrorCode());
-                    } catch (Exception e) {
-                        LOG.error("Error", e);
-                        fail();
-                    } finally {
-                        ScanningResultIterator.setIsScannerClosedForceFully(false);
-                    }
-                }
-            };
-
-            Runnable runnable1 = new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        synchronized (conn) {
-                            conn.notify();
-                        }
-                        Thread.sleep(1000);
-                        LOG.info("Closing Connection");
-                        conn.close();
-                    } catch (InterruptedException | SQLException e) {
-                        fail();
-                    }
-                }
-            };
-            Thread t = new Thread(runnable);
-            Thread t1 = new Thread(runnable1);
-            t.start();
-            Thread.sleep(1500);
-            t1.start();
-            t.join();
-            t1.join();
+            PhoenixConnection conn = DriverManager.getConnection(getUniqueUrl()).unwrap(PhoenixConnection.class);
+            ScanningResultIterator.setIsScannerClosedForceFully(true);
+            ResultSet resultSet = conn.createStatement().executeQuery(
+                    "SELECT COUNT(*) FROM LONG_BUG WHERE ID % 2 = 0");
+            conn.setIsClosing(true);
+            resultSet.next();
+            LOG.info("Count of modulus 2 for LONG_BUG :- " + resultSet.getInt(1));
+            fail("ResultSet should have been closed");
+        } catch (SQLException sqe) {
+            assertEquals(SQLExceptionCode.FAILED_KNOWINGLY_FOR_TEST.getErrorCode(), sqe.getErrorCode());
+        } catch (Exception e) {
+            fail();
         } finally {
-
+            ScanningResultIterator.setIsScannerClosedForceFully(false);
         }
     }
 }

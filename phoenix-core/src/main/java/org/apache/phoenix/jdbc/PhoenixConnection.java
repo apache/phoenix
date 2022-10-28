@@ -1381,6 +1381,11 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
         this.tableResultIteratorFactory = factory;
     }
 
+    @VisibleForTesting
+    public void setIsClosing(boolean imitateIsClosing) {
+        isClosing = imitateIsClosing;
+    }
+
     @Override
     public void removeSchema(PSchema schema, long schemaTimeStamp) {
         metaData.removeSchema(schema, schemaTimeStamp);
