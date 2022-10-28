@@ -1381,6 +1381,9 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
         this.tableResultIteratorFactory = factory;
     }
 
+     /**
+     * Added for testing purposes. Do not use this elsewhere.
+     */
     @VisibleForTesting
     public void setIsClosing(boolean imitateIsClosing) {
         isClosing = imitateIsClosing;
