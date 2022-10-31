@@ -715,7 +715,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
          * all region locations from the HTable doesn't.
          */
         int retryCount = 0, maxRetryCount = 1;
-        boolean reload =false;
+        TableName table = TableName.valueOf(tableName);
         while (true) {
             try {
                 // We could surface the package projected HConnectionImplementation.getNumberOfCachedRegionLocations
@@ -725,17 +725,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 byte[] currentKey = HConstants.EMPTY_START_ROW;
                 do {
                     HRegionLocation regionLocation = ((ClusterConnection)connection).getRegionLocation(
-                            TableName.valueOf(tableName), currentKey, reload);
+                            table, currentKey, false);
                     currentKey = getNextRegionStartKey(regionLocation, currentKey);
                     locations.add(regionLocation);
                 } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW));
                 return locations;
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-                String fullName = Bytes.toString(tableName);
-                throw new TableNotFoundException(fullName);
+                throw new TableNotFoundException(table.getNameAsString());
             } catch (IOException e) {
+                LOGGER.error("Exception encountered in getAllTableRegions for table: " + table.getNameAsString(), e);
                 if (retryCount++ < maxRetryCount) { // One retry, in case split occurs while navigating
-                    reload = true;
                     continue;
                 }
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.GET_TABLE_REGIONS_FAIL)
@@ -5966,16 +5965,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
          * to which specified row belongs to.
          */
         int retryCount = 0, maxRetryCount = 1;
-        boolean reload =false;
         while (true) {
+            TableName table = TableName.valueOf(tableName);
             try {
-                return connection.getRegionLocator(TableName.valueOf(tableName)).getRegionLocation(row, reload);
+                return connection.getRegionLocator(table).getRegionLocation(row, false);
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 String fullName = Bytes.toString(tableName);
                 throw new TableNotFoundException(SchemaUtil.getSchemaNameFromFullName(fullName), SchemaUtil.getTableNameFromFullName(fullName));
             } catch (IOException e) {
+                LOGGER.error("Exception encountered in getTableRegionLocation for table:" + table.getNameAsString(), e);
                 if (retryCount++ < maxRetryCount) { // One retry, in case split occurs while navigating
-                    reload = true;
                     continue;
                 }
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.GET_TABLE_REGIONS_FAIL)
