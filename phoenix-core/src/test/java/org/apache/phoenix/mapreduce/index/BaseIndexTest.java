@@ -36,7 +36,7 @@ import org.junit.BeforeClass;
  * Creates a simple data table and index table
  *
  */
-public class BaseIndexTest extends BaseConnectionlessQueryTest {
+public class  BaseIndexTest extends BaseConnectionlessQueryTest {
     protected static final String SCHEMA_NAME = "TEST_SCHEMA";
     protected static final String DATA_TABLE_NAME = "TEST_INDEX_COLUMN_NAMES_UTIL";
     protected static final String INDEX_TABLE_NAME = "TEST_ICN_INDEX";
