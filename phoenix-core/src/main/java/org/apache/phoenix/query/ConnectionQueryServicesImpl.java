@@ -733,7 +733,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 throw new TableNotFoundException(table.getNameAsString());
             } catch (IOException e) {
-                LOGGER.error("Exception encountered in getAllTableRegions for table: " + table.getNameAsString(), e);
+                LOGGER.error("Exception encountered in getAllTableRegions for table: "
+                        + table.getNameAsString(), e);
                 if (retryCount++ < maxRetryCount) { // One retry, in case split occurs while navigating
                     continue;
                 }
@@ -5973,7 +5974,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 String fullName = Bytes.toString(tableName);
                 throw new TableNotFoundException(SchemaUtil.getSchemaNameFromFullName(fullName), SchemaUtil.getTableNameFromFullName(fullName));
             } catch (IOException e) {
-                LOGGER.error("Exception encountered in getTableRegionLocation for table:" + table.getNameAsString(), e);
+                LOGGER.error("Exception encountered in getTableRegionLocation for table:"
+                        + table.getNameAsString(), e);
                 if (retryCount++ < maxRetryCount) { // One retry, in case split occurs while navigating
                     continue;
                 }
