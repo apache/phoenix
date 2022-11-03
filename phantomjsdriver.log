@@ -1,0 +1,675 @@
+[INFO  - 2022-08-22T07:28:26.132Z] GhostDriver - Main - running on port 6361
+[INFO  - 2022-08-22T07:28:26.721Z] Session [03257ba0-21ec-11ed-9241-8536ef6f93a7] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-08-22T07:28:26.722Z] Session [03257ba0-21ec-11ed-9241-8536ef6f93a7] - page.customHeaders:  - {}
+[INFO  - 2022-08-22T07:28:26.722Z] Session [03257ba0-21ec-11ed-9241-8536ef6f93a7] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-08-22T07:28:26.722Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 03257ba0-21ec-11ed-9241-8536ef6f93a7
+[ERROR - 2022-08-22T07:28:27.307Z] Session [03257ba0-21ec-11ed-9241-8536ef6f93a7] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-08-22T07:28:27.307Z] Session [03257ba0-21ec-11ed-9241-8536ef6f93a7] - page.onError - stack:
+  specDone (http://localhost:50322/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-08-22T07:28:27.535Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-08-22T08:36:57.095Z] GhostDriver - Main - running on port 16990
+[INFO  - 2022-08-22T08:36:57.332Z] Session [95436700-21f5-11ed-8a37-73a8b9a3b7a5] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-08-22T08:36:57.332Z] Session [95436700-21f5-11ed-8a37-73a8b9a3b7a5] - page.customHeaders:  - {}
+[INFO  - 2022-08-22T08:36:57.332Z] Session [95436700-21f5-11ed-8a37-73a8b9a3b7a5] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-08-22T08:36:57.332Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 95436700-21f5-11ed-8a37-73a8b9a3b7a5
+[ERROR - 2022-08-22T08:36:57.659Z] Session [95436700-21f5-11ed-8a37-73a8b9a3b7a5] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-08-22T08:36:57.659Z] Session [95436700-21f5-11ed-8a37-73a8b9a3b7a5] - page.onError - stack:
+  specDone (http://localhost:58030/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-08-22T08:36:57.794Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-08-22T11:45:50.526Z] GhostDriver - Main - running on port 25948
+[INFO  - 2022-08-22T11:45:50.867Z] Session [f892fdb0-220f-11ed-a235-bf803a631d1d] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-08-22T11:45:50.867Z] Session [f892fdb0-220f-11ed-a235-bf803a631d1d] - page.customHeaders:  - {}
+[INFO  - 2022-08-22T11:45:50.867Z] Session [f892fdb0-220f-11ed-a235-bf803a631d1d] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-08-22T11:45:50.867Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: f892fdb0-220f-11ed-a235-bf803a631d1d
+[ERROR - 2022-08-22T11:45:51.446Z] Session [f892fdb0-220f-11ed-a235-bf803a631d1d] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-08-22T11:45:51.446Z] Session [f892fdb0-220f-11ed-a235-bf803a631d1d] - page.onError - stack:
+  specDone (http://localhost:49276/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-08-22T11:45:51.669Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-08-22T12:13:36.805Z] GhostDriver - Main - running on port 44077
+[INFO  - 2022-08-22T12:13:37.323Z] Session [d9dc4d50-2213-11ed-a0ec-7febf2cfa018] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-08-22T12:13:37.323Z] Session [d9dc4d50-2213-11ed-a0ec-7febf2cfa018] - page.customHeaders:  - {}
+[INFO  - 2022-08-22T12:13:37.323Z] Session [d9dc4d50-2213-11ed-a0ec-7febf2cfa018] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-08-22T12:13:37.323Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: d9dc4d50-2213-11ed-a0ec-7febf2cfa018
+[ERROR - 2022-08-22T12:13:37.911Z] Session [d9dc4d50-2213-11ed-a0ec-7febf2cfa018] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-08-22T12:13:37.912Z] Session [d9dc4d50-2213-11ed-a0ec-7febf2cfa018] - page.onError - stack:
+  specDone (http://localhost:49953/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-08-22T12:13:38.185Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-08-22T12:17:32.002Z] GhostDriver - Main - running on port 44422
+[INFO  - 2022-08-22T12:17:32.406Z] Session [65faf7f0-2214-11ed-807d-53a26d155aa4] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-08-22T12:17:32.406Z] Session [65faf7f0-2214-11ed-807d-53a26d155aa4] - page.customHeaders:  - {}
+[INFO  - 2022-08-22T12:17:32.406Z] Session [65faf7f0-2214-11ed-807d-53a26d155aa4] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-08-22T12:17:32.406Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 65faf7f0-2214-11ed-807d-53a26d155aa4
+[ERROR - 2022-08-22T12:17:32.932Z] Session [65faf7f0-2214-11ed-807d-53a26d155aa4] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-08-22T12:17:32.932Z] Session [65faf7f0-2214-11ed-807d-53a26d155aa4] - page.onError - stack:
+  specDone (http://localhost:50011/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-08-22T12:17:33.186Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-08-22T12:36:10.318Z] GhostDriver - Main - running on port 1200
+[INFO  - 2022-08-22T12:36:10.710Z] Session [008a9df0-2217-11ed-a874-f59479b34d04] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-08-22T12:36:10.710Z] Session [008a9df0-2217-11ed-a874-f59479b34d04] - page.customHeaders:  - {}
+[INFO  - 2022-08-22T12:36:10.710Z] Session [008a9df0-2217-11ed-a874-f59479b34d04] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-08-22T12:36:10.710Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 008a9df0-2217-11ed-a874-f59479b34d04
+[ERROR - 2022-08-22T12:36:11.163Z] Session [008a9df0-2217-11ed-a874-f59479b34d04] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-08-22T12:36:11.163Z] Session [008a9df0-2217-11ed-a874-f59479b34d04] - page.onError - stack:
+  specDone (http://localhost:50872/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-08-22T12:36:11.395Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-08-22T12:40:28.336Z] GhostDriver - Main - running on port 9644
+[INFO  - 2022-08-22T12:40:28.647Z] Session [9a48d510-2217-11ed-b952-07fdec7dce34] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-08-22T12:40:28.647Z] Session [9a48d510-2217-11ed-b952-07fdec7dce34] - page.customHeaders:  - {}
+[INFO  - 2022-08-22T12:40:28.647Z] Session [9a48d510-2217-11ed-b952-07fdec7dce34] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-08-22T12:40:28.647Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 9a48d510-2217-11ed-b952-07fdec7dce34
+[ERROR - 2022-08-22T12:40:29.155Z] Session [9a48d510-2217-11ed-b952-07fdec7dce34] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-08-22T12:40:29.155Z] Session [9a48d510-2217-11ed-b952-07fdec7dce34] - page.onError - stack:
+  specDone (http://localhost:51763/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-08-22T12:40:29.402Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-08-22T13:01:21.817Z] GhostDriver - Main - running on port 1343
+[INFO  - 2022-08-22T13:01:22.161Z] Session [85700ac0-221a-11ed-bd03-d3cc69e10564] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-08-22T13:01:22.161Z] Session [85700ac0-221a-11ed-bd03-d3cc69e10564] - page.customHeaders:  - {}
+[INFO  - 2022-08-22T13:01:22.161Z] Session [85700ac0-221a-11ed-bd03-d3cc69e10564] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-08-22T13:01:22.161Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 85700ac0-221a-11ed-bd03-d3cc69e10564
+[ERROR - 2022-08-22T13:01:22.579Z] Session [85700ac0-221a-11ed-bd03-d3cc69e10564] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-08-22T13:01:22.580Z] Session [85700ac0-221a-11ed-bd03-d3cc69e10564] - page.onError - stack:
+  specDone (http://localhost:52568/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-08-22T13:01:22.707Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-21T12:22:25.448Z] GhostDriver - Main - running on port 13342
+[INFO  - 2022-10-21T12:22:25.865Z] Session [05ae1b10-513b-11ed-b432-0f9b52364e7e] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-21T12:22:25.865Z] Session [05ae1b10-513b-11ed-b432-0f9b52364e7e] - page.customHeaders:  - {}
+[INFO  - 2022-10-21T12:22:25.866Z] Session [05ae1b10-513b-11ed-b432-0f9b52364e7e] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-21T12:22:25.866Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 05ae1b10-513b-11ed-b432-0f9b52364e7e
+[ERROR - 2022-10-21T12:22:26.293Z] Session [05ae1b10-513b-11ed-b432-0f9b52364e7e] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-21T12:22:26.294Z] Session [05ae1b10-513b-11ed-b432-0f9b52364e7e] - page.onError - stack:
+  specDone (http://localhost:59696/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-21T12:22:26.494Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-21T13:04:24.750Z] GhostDriver - Main - running on port 29301
+[INFO  - 2022-10-21T13:04:25.388Z] Session [e36ef550-5140-11ed-b52b-d12dc13177a0] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-21T13:04:25.388Z] Session [e36ef550-5140-11ed-b52b-d12dc13177a0] - page.customHeaders:  - {}
+[INFO  - 2022-10-21T13:04:25.388Z] Session [e36ef550-5140-11ed-b52b-d12dc13177a0] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-21T13:04:25.388Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: e36ef550-5140-11ed-b52b-d12dc13177a0
+[ERROR - 2022-10-21T13:04:25.945Z] Session [e36ef550-5140-11ed-b52b-d12dc13177a0] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-21T13:04:25.945Z] Session [e36ef550-5140-11ed-b52b-d12dc13177a0] - page.onError - stack:
+  specDone (http://localhost:60893/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-21T13:04:26.185Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-23T19:20:30.084Z] GhostDriver - Main - running on port 32135
+[INFO  - 2022-10-23T19:20:30.703Z] Session [c23bf860-5307-11ed-963e-b7b7440bbc8c] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-23T19:20:30.703Z] Session [c23bf860-5307-11ed-963e-b7b7440bbc8c] - page.customHeaders:  - {}
+[INFO  - 2022-10-23T19:20:30.703Z] Session [c23bf860-5307-11ed-963e-b7b7440bbc8c] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-23T19:20:30.703Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: c23bf860-5307-11ed-963e-b7b7440bbc8c
+[ERROR - 2022-10-23T19:20:31.287Z] Session [c23bf860-5307-11ed-963e-b7b7440bbc8c] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-23T19:20:31.287Z] Session [c23bf860-5307-11ed-963e-b7b7440bbc8c] - page.onError - stack:
+  specDone (http://localhost:58333/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-23T19:20:31.514Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-23T20:48:43.430Z] GhostDriver - Main - running on port 10925
+[INFO  - 2022-10-23T20:48:44.139Z] Session [155e8240-5314-11ed-a3ab-cb7c5c03286f] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-23T20:48:44.139Z] Session [155e8240-5314-11ed-a3ab-cb7c5c03286f] - page.customHeaders:  - {}
+[INFO  - 2022-10-23T20:48:44.139Z] Session [155e8240-5314-11ed-a3ab-cb7c5c03286f] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-23T20:48:44.139Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 155e8240-5314-11ed-a3ab-cb7c5c03286f
+[ERROR - 2022-10-23T20:48:44.733Z] Session [155e8240-5314-11ed-a3ab-cb7c5c03286f] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-23T20:48:44.734Z] Session [155e8240-5314-11ed-a3ab-cb7c5c03286f] - page.onError - stack:
+  specDone (http://localhost:59729/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-23T20:48:45.621Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-23T21:29:00.023Z] GhostDriver - Main - running on port 16473
+[INFO  - 2022-10-23T21:29:00.373Z] Session [b58edd00-5319-11ed-bfe4-a31b284d2437] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-23T21:29:00.373Z] Session [b58edd00-5319-11ed-bfe4-a31b284d2437] - page.customHeaders:  - {}
+[INFO  - 2022-10-23T21:29:00.374Z] Session [b58edd00-5319-11ed-bfe4-a31b284d2437] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-23T21:29:00.374Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: b58edd00-5319-11ed-bfe4-a31b284d2437
+[ERROR - 2022-10-23T21:29:00.763Z] Session [b58edd00-5319-11ed-bfe4-a31b284d2437] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-23T21:29:00.764Z] Session [b58edd00-5319-11ed-bfe4-a31b284d2437] - page.onError - stack:
+  specDone (http://localhost:60572/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-23T21:29:01.030Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-23T21:38:52.804Z] GhostDriver - Main - running on port 5566
+[INFO  - 2022-10-23T21:38:53.259Z] Session [16f1ef50-531b-11ed-8704-ab90231236b5] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-23T21:38:53.259Z] Session [16f1ef50-531b-11ed-8704-ab90231236b5] - page.customHeaders:  - {}
+[INFO  - 2022-10-23T21:38:53.259Z] Session [16f1ef50-531b-11ed-8704-ab90231236b5] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-23T21:38:53.259Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 16f1ef50-531b-11ed-8704-ab90231236b5
+[ERROR - 2022-10-23T21:38:53.739Z] Session [16f1ef50-531b-11ed-8704-ab90231236b5] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-23T21:38:53.740Z] Session [16f1ef50-531b-11ed-8704-ab90231236b5] - page.onError - stack:
+  specDone (http://localhost:60734/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-23T21:38:53.980Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-23T21:49:56.409Z] GhostDriver - Main - running on port 16835
+[INFO  - 2022-10-23T21:49:56.942Z] Session [a287c570-531c-11ed-a7e0-979fda305b71] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-23T21:49:56.942Z] Session [a287c570-531c-11ed-a7e0-979fda305b71] - page.customHeaders:  - {}
+[INFO  - 2022-10-23T21:49:56.942Z] Session [a287c570-531c-11ed-a7e0-979fda305b71] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-23T21:49:56.942Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: a287c570-531c-11ed-a7e0-979fda305b71
+[ERROR - 2022-10-23T21:49:57.581Z] Session [a287c570-531c-11ed-a7e0-979fda305b71] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-23T21:49:57.581Z] Session [a287c570-531c-11ed-a7e0-979fda305b71] - page.onError - stack:
+  specDone (http://localhost:60855/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-23T21:49:57.845Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-24T07:12:57.978Z] GhostDriver - Main - running on port 33087
+[INFO  - 2022-10-24T07:12:58.282Z] Session [49c77d50-536b-11ed-a965-67981eeddb6f] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-24T07:12:58.283Z] Session [49c77d50-536b-11ed-a965-67981eeddb6f] - page.customHeaders:  - {}
+[INFO  - 2022-10-24T07:12:58.283Z] Session [49c77d50-536b-11ed-a965-67981eeddb6f] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-24T07:12:58.283Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 49c77d50-536b-11ed-a965-67981eeddb6f
+[ERROR - 2022-10-24T07:12:58.702Z] Session [49c77d50-536b-11ed-a965-67981eeddb6f] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-24T07:12:58.702Z] Session [49c77d50-536b-11ed-a965-67981eeddb6f] - page.onError - stack:
+  specDone (http://localhost:50217/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-24T07:12:58.895Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-24T07:23:36.647Z] GhostDriver - Main - running on port 40479
+[INFO  - 2022-10-24T07:23:37.272Z] Session [c6a55210-536c-11ed-844b-1f616f89ef2e] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-24T07:23:37.273Z] Session [c6a55210-536c-11ed-844b-1f616f89ef2e] - page.customHeaders:  - {}
+[INFO  - 2022-10-24T07:23:37.273Z] Session [c6a55210-536c-11ed-844b-1f616f89ef2e] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-24T07:23:37.273Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: c6a55210-536c-11ed-844b-1f616f89ef2e
+[ERROR - 2022-10-24T07:23:37.882Z] Session [c6a55210-536c-11ed-844b-1f616f89ef2e] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-24T07:23:37.882Z] Session [c6a55210-536c-11ed-844b-1f616f89ef2e] - page.onError - stack:
+  specDone (http://localhost:50537/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-24T07:23:38.148Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-24T10:39:10.369Z] GhostDriver - Main - running on port 3889
+[INFO  - 2022-10-24T10:39:10.702Z] Session [1850a770-5388-11ed-962f-678eeffc00d9] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-24T10:39:10.702Z] Session [1850a770-5388-11ed-962f-678eeffc00d9] - page.customHeaders:  - {}
+[INFO  - 2022-10-24T10:39:10.702Z] Session [1850a770-5388-11ed-962f-678eeffc00d9] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-24T10:39:10.702Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 1850a770-5388-11ed-962f-678eeffc00d9
+[ERROR - 2022-10-24T10:39:11.236Z] Session [1850a770-5388-11ed-962f-678eeffc00d9] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-24T10:39:11.236Z] Session [1850a770-5388-11ed-962f-678eeffc00d9] - page.onError - stack:
+  specDone (http://localhost:54489/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-24T10:39:11.470Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-24T10:47:48.132Z] GhostDriver - Main - running on port 28516
+[INFO  - 2022-10-24T10:47:48.490Z] Session [4cf14a60-5389-11ed-81d3-cd5812eb7ec7] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-24T10:47:48.490Z] Session [4cf14a60-5389-11ed-81d3-cd5812eb7ec7] - page.customHeaders:  - {}
+[INFO  - 2022-10-24T10:47:48.490Z] Session [4cf14a60-5389-11ed-81d3-cd5812eb7ec7] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-24T10:47:48.491Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 4cf14a60-5389-11ed-81d3-cd5812eb7ec7
+[ERROR - 2022-10-24T10:47:48.909Z] Session [4cf14a60-5389-11ed-81d3-cd5812eb7ec7] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-24T10:47:48.909Z] Session [4cf14a60-5389-11ed-81d3-cd5812eb7ec7] - page.onError - stack:
+  specDone (http://localhost:55914/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-24T10:47:49.113Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-24T11:18:06.749Z] GhostDriver - Main - running on port 23248
+[INFO  - 2022-10-24T11:18:07.199Z] Session [88fa1ba0-538d-11ed-aa98-43b0bbf0ff18] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-24T11:18:07.199Z] Session [88fa1ba0-538d-11ed-aa98-43b0bbf0ff18] - page.customHeaders:  - {}
+[INFO  - 2022-10-24T11:18:07.199Z] Session [88fa1ba0-538d-11ed-aa98-43b0bbf0ff18] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-24T11:18:07.200Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 88fa1ba0-538d-11ed-aa98-43b0bbf0ff18
+[ERROR - 2022-10-24T11:18:07.688Z] Session [88fa1ba0-538d-11ed-aa98-43b0bbf0ff18] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-24T11:18:07.688Z] Session [88fa1ba0-538d-11ed-aa98-43b0bbf0ff18] - page.onError - stack:
+  specDone (http://localhost:56333/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-24T11:18:07.801Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-24T11:28:31.700Z] GhostDriver - Main - running on port 37038
+[INFO  - 2022-10-24T11:28:32.152Z] Session [fd7a3720-538e-11ed-86ad-19918b05d8b6] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-24T11:28:32.152Z] Session [fd7a3720-538e-11ed-86ad-19918b05d8b6] - page.customHeaders:  - {}
+[INFO  - 2022-10-24T11:28:32.152Z] Session [fd7a3720-538e-11ed-86ad-19918b05d8b6] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-24T11:28:32.152Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: fd7a3720-538e-11ed-86ad-19918b05d8b6
+[ERROR - 2022-10-24T11:28:32.610Z] Session [fd7a3720-538e-11ed-86ad-19918b05d8b6] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-24T11:28:32.610Z] Session [fd7a3720-538e-11ed-86ad-19918b05d8b6] - page.onError - stack:
+  specDone (http://localhost:56433/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-24T11:28:32.744Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-24T18:39:06.763Z] GhostDriver - Main - running on port 1618
+[INFO  - 2022-10-24T18:39:07.078Z] Session [244b3b10-53cb-11ed-912a-c969e25f1c2b] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-24T18:39:07.078Z] Session [244b3b10-53cb-11ed-912a-c969e25f1c2b] - page.customHeaders:  - {}
+[INFO  - 2022-10-24T18:39:07.078Z] Session [244b3b10-53cb-11ed-912a-c969e25f1c2b] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-24T18:39:07.079Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 244b3b10-53cb-11ed-912a-c969e25f1c2b
+[ERROR - 2022-10-24T18:39:07.576Z] Session [244b3b10-53cb-11ed-912a-c969e25f1c2b] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-24T18:39:07.577Z] Session [244b3b10-53cb-11ed-912a-c969e25f1c2b] - page.onError - stack:
+  specDone (http://localhost:49221/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-24T18:39:07.808Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-24T18:48:04.558Z] GhostDriver - Main - running on port 35697
+[INFO  - 2022-10-24T18:48:05.034Z] Session [64f0f460-53cc-11ed-9531-f58dd822371e] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-24T18:48:05.035Z] Session [64f0f460-53cc-11ed-9531-f58dd822371e] - page.customHeaders:  - {}
+[INFO  - 2022-10-24T18:48:05.035Z] Session [64f0f460-53cc-11ed-9531-f58dd822371e] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-24T18:48:05.035Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 64f0f460-53cc-11ed-9531-f58dd822371e
+[ERROR - 2022-10-24T18:48:05.544Z] Session [64f0f460-53cc-11ed-9531-f58dd822371e] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-24T18:48:05.544Z] Session [64f0f460-53cc-11ed-9531-f58dd822371e] - page.onError - stack:
+  specDone (http://localhost:54044/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-24T18:48:05.786Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-24T19:14:07.519Z] GhostDriver - Main - running on port 37396
+[INFO  - 2022-10-24T19:14:08.078Z] Session [0895ee60-53d0-11ed-b27b-072db814e2b4] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-24T19:14:08.079Z] Session [0895ee60-53d0-11ed-b27b-072db814e2b4] - page.customHeaders:  - {}
+[INFO  - 2022-10-24T19:14:08.079Z] Session [0895ee60-53d0-11ed-b27b-072db814e2b4] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-24T19:14:08.079Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 0895ee60-53d0-11ed-b27b-072db814e2b4
+[ERROR - 2022-10-24T19:14:08.641Z] Session [0895ee60-53d0-11ed-b27b-072db814e2b4] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-24T19:14:08.641Z] Session [0895ee60-53d0-11ed-b27b-072db814e2b4] - page.onError - stack:
+  specDone (http://localhost:61410/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-24T19:14:08.906Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-24T21:19:47.859Z] GhostDriver - Main - running on port 46650
+[INFO  - 2022-10-24T21:19:48.426Z] Session [96fbe130-53e1-11ed-a5b3-d975094361ee] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-24T21:19:48.426Z] Session [96fbe130-53e1-11ed-a5b3-d975094361ee] - page.customHeaders:  - {}
+[INFO  - 2022-10-24T21:19:48.426Z] Session [96fbe130-53e1-11ed-a5b3-d975094361ee] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-24T21:19:48.426Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 96fbe130-53e1-11ed-a5b3-d975094361ee
+[ERROR - 2022-10-24T21:19:48.917Z] Session [96fbe130-53e1-11ed-a5b3-d975094361ee] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-24T21:19:48.917Z] Session [96fbe130-53e1-11ed-a5b3-d975094361ee] - page.onError - stack:
+  specDone (http://localhost:63158/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-24T21:19:49.146Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-25T07:48:33.789Z] GhostDriver - Main - running on port 33107
+[INFO  - 2022-10-25T07:48:34.056Z] Session [6d36a440-5439-11ed-ba06-9b3e7079303c] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-25T07:48:34.056Z] Session [6d36a440-5439-11ed-ba06-9b3e7079303c] - page.customHeaders:  - {}
+[INFO  - 2022-10-25T07:48:34.057Z] Session [6d36a440-5439-11ed-ba06-9b3e7079303c] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-25T07:48:34.057Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 6d36a440-5439-11ed-ba06-9b3e7079303c
+[ERROR - 2022-10-25T07:48:34.481Z] Session [6d36a440-5439-11ed-ba06-9b3e7079303c] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-25T07:48:34.482Z] Session [6d36a440-5439-11ed-ba06-9b3e7079303c] - page.onError - stack:
+  specDone (http://localhost:50022/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-25T07:48:34.704Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-25T08:31:05.532Z] GhostDriver - Main - running on port 31139
+[INFO  - 2022-10-25T08:31:05.800Z] Session [5e2b9220-543f-11ed-b7d3-3377b35e1866] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-25T08:31:05.800Z] Session [5e2b9220-543f-11ed-b7d3-3377b35e1866] - page.customHeaders:  - {}
+[INFO  - 2022-10-25T08:31:05.800Z] Session [5e2b9220-543f-11ed-b7d3-3377b35e1866] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-25T08:31:05.801Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 5e2b9220-543f-11ed-b7d3-3377b35e1866
+[ERROR - 2022-10-25T08:31:06.294Z] Session [5e2b9220-543f-11ed-b7d3-3377b35e1866] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-25T08:31:06.294Z] Session [5e2b9220-543f-11ed-b7d3-3377b35e1866] - page.onError - stack:
+  specDone (http://localhost:50508/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-25T08:31:06.533Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-25T08:37:38.766Z] GhostDriver - Main - running on port 33570
+[INFO  - 2022-10-25T08:37:39.716Z] Session [48f661e0-5440-11ed-a293-9d1f86927661] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-25T08:37:39.716Z] Session [48f661e0-5440-11ed-a293-9d1f86927661] - page.customHeaders:  - {}
+[INFO  - 2022-10-25T08:37:39.717Z] Session [48f661e0-5440-11ed-a293-9d1f86927661] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-25T08:37:39.717Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 48f661e0-5440-11ed-a293-9d1f86927661
+[ERROR - 2022-10-25T08:37:40.206Z] Session [48f661e0-5440-11ed-a293-9d1f86927661] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-25T08:37:40.207Z] Session [48f661e0-5440-11ed-a293-9d1f86927661] - page.onError - stack:
+  specDone (http://localhost:50833/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-25T08:37:40.474Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-25T08:51:32.544Z] GhostDriver - Main - running on port 9183
+[INFO  - 2022-10-25T08:51:32.980Z] Session [39a039d0-5442-11ed-aafa-0d3c758f1092] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-25T08:51:32.980Z] Session [39a039d0-5442-11ed-aafa-0d3c758f1092] - page.customHeaders:  - {}
+[INFO  - 2022-10-25T08:51:32.980Z] Session [39a039d0-5442-11ed-aafa-0d3c758f1092] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-25T08:51:32.980Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 39a039d0-5442-11ed-aafa-0d3c758f1092
+[ERROR - 2022-10-25T08:51:33.476Z] Session [39a039d0-5442-11ed-aafa-0d3c758f1092] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-25T08:51:33.476Z] Session [39a039d0-5442-11ed-aafa-0d3c758f1092] - page.onError - stack:
+  specDone (http://localhost:51054/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-25T08:51:33.738Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-25T09:12:44.085Z] GhostDriver - Main - running on port 44374
+[INFO  - 2022-10-25T09:12:44.658Z] Session [2f9abca0-5445-11ed-95ea-e9e00c395316] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-25T09:12:44.658Z] Session [2f9abca0-5445-11ed-95ea-e9e00c395316] - page.customHeaders:  - {}
+[INFO  - 2022-10-25T09:12:44.658Z] Session [2f9abca0-5445-11ed-95ea-e9e00c395316] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-25T09:12:44.658Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 2f9abca0-5445-11ed-95ea-e9e00c395316
+[ERROR - 2022-10-25T09:12:45.336Z] Session [2f9abca0-5445-11ed-95ea-e9e00c395316] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-25T09:12:45.336Z] Session [2f9abca0-5445-11ed-95ea-e9e00c395316] - page.onError - stack:
+  specDone (http://localhost:51854/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-25T09:12:45.581Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-25T09:42:41.003Z] GhostDriver - Main - running on port 33955
+[INFO  - 2022-10-25T09:42:41.275Z] Session [5e795870-5449-11ed-a876-3716d58e0945] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-25T09:42:41.275Z] Session [5e795870-5449-11ed-a876-3716d58e0945] - page.customHeaders:  - {}
+[INFO  - 2022-10-25T09:42:41.276Z] Session [5e795870-5449-11ed-a876-3716d58e0945] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-25T09:42:41.276Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 5e795870-5449-11ed-a876-3716d58e0945
+[ERROR - 2022-10-25T09:42:41.572Z] Session [5e795870-5449-11ed-a876-3716d58e0945] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-25T09:42:41.572Z] Session [5e795870-5449-11ed-a876-3716d58e0945] - page.onError - stack:
+  specDone (http://localhost:52293/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-25T09:42:41.761Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-25T09:56:47.365Z] GhostDriver - Main - running on port 27479
+[INFO  - 2022-10-25T09:56:47.914Z] Session [571bbf30-544b-11ed-8b3b-e50bca5780fd] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-25T09:56:47.915Z] Session [571bbf30-544b-11ed-8b3b-e50bca5780fd] - page.customHeaders:  - {}
+[INFO  - 2022-10-25T09:56:47.915Z] Session [571bbf30-544b-11ed-8b3b-e50bca5780fd] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-25T09:56:47.915Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 571bbf30-544b-11ed-8b3b-e50bca5780fd
+[ERROR - 2022-10-25T09:56:48.435Z] Session [571bbf30-544b-11ed-8b3b-e50bca5780fd] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-25T09:56:48.435Z] Session [571bbf30-544b-11ed-8b3b-e50bca5780fd] - page.onError - stack:
+  specDone (http://localhost:52503/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-25T09:56:48.647Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-25T11:22:25.697Z] GhostDriver - Main - running on port 25279
+[INFO  - 2022-10-25T11:22:26.274Z] Session [4dcf42b0-5457-11ed-b71c-d54d8d19d74e] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-25T11:22:26.274Z] Session [4dcf42b0-5457-11ed-b71c-d54d8d19d74e] - page.customHeaders:  - {}
+[INFO  - 2022-10-25T11:22:26.274Z] Session [4dcf42b0-5457-11ed-b71c-d54d8d19d74e] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-25T11:22:26.275Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 4dcf42b0-5457-11ed-b71c-d54d8d19d74e
+[ERROR - 2022-10-25T11:22:26.817Z] Session [4dcf42b0-5457-11ed-b71c-d54d8d19d74e] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-25T11:22:26.817Z] Session [4dcf42b0-5457-11ed-b71c-d54d8d19d74e] - page.onError - stack:
+  specDone (http://localhost:54553/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-25T11:22:27.042Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-25T11:40:02.494Z] GhostDriver - Main - running on port 16984
+[INFO  - 2022-10-25T11:40:03.070Z] Session [c3b56160-5459-11ed-8f04-670c3b598257] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-25T11:40:03.070Z] Session [c3b56160-5459-11ed-8f04-670c3b598257] - page.customHeaders:  - {}
+[INFO  - 2022-10-25T11:40:03.070Z] Session [c3b56160-5459-11ed-8f04-670c3b598257] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-25T11:40:03.071Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: c3b56160-5459-11ed-8f04-670c3b598257
+[ERROR - 2022-10-25T11:40:03.658Z] Session [c3b56160-5459-11ed-8f04-670c3b598257] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-25T11:40:03.658Z] Session [c3b56160-5459-11ed-8f04-670c3b598257] - page.onError - stack:
+  specDone (http://localhost:55016/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-25T11:40:03.916Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-25T14:01:47.514Z] GhostDriver - Main - running on port 8362
+[INFO  - 2022-10-25T14:01:47.982Z] Session [910648b0-546d-11ed-a6f3-b3688a6bae12] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-25T14:01:47.982Z] Session [910648b0-546d-11ed-a6f3-b3688a6bae12] - page.customHeaders:  - {}
+[INFO  - 2022-10-25T14:01:47.982Z] Session [910648b0-546d-11ed-a6f3-b3688a6bae12] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-25T14:01:47.982Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 910648b0-546d-11ed-a6f3-b3688a6bae12
+[ERROR - 2022-10-25T14:01:48.883Z] Session [910648b0-546d-11ed-a6f3-b3688a6bae12] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-25T14:01:48.884Z] Session [910648b0-546d-11ed-a6f3-b3688a6bae12] - page.onError - stack:
+  specDone (http://localhost:55859/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-25T14:01:49.132Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-25T14:29:53.995Z] GhostDriver - Main - running on port 43460
+[INFO  - 2022-10-25T14:29:54.397Z] Session [7e367850-5471-11ed-b3b0-41040ab9f9eb] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-25T14:29:54.397Z] Session [7e367850-5471-11ed-b3b0-41040ab9f9eb] - page.customHeaders:  - {}
+[INFO  - 2022-10-25T14:29:54.397Z] Session [7e367850-5471-11ed-b3b0-41040ab9f9eb] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-25T14:29:54.397Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 7e367850-5471-11ed-b3b0-41040ab9f9eb
+[ERROR - 2022-10-25T14:29:55.021Z] Session [7e367850-5471-11ed-b3b0-41040ab9f9eb] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-25T14:29:55.021Z] Session [7e367850-5471-11ed-b3b0-41040ab9f9eb] - page.onError - stack:
+  specDone (http://localhost:56070/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-25T14:29:55.266Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-25T14:50:49.126Z] GhostDriver - Main - running on port 27859
+[INFO  - 2022-10-25T14:50:49.727Z] Session [6a72c780-5474-11ed-b898-6d9a9c173e33] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-25T14:50:49.727Z] Session [6a72c780-5474-11ed-b898-6d9a9c173e33] - page.customHeaders:  - {}
+[INFO  - 2022-10-25T14:50:49.727Z] Session [6a72c780-5474-11ed-b898-6d9a9c173e33] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-25T14:50:49.727Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 6a72c780-5474-11ed-b898-6d9a9c173e33
+[ERROR - 2022-10-25T14:50:50.276Z] Session [6a72c780-5474-11ed-b898-6d9a9c173e33] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-25T14:50:50.276Z] Session [6a72c780-5474-11ed-b898-6d9a9c173e33] - page.onError - stack:
+  specDone (http://localhost:56672/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-25T14:50:50.527Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-25T15:43:59.695Z] GhostDriver - Main - running on port 11345
+[INFO  - 2022-10-25T15:44:00.030Z] Session [d8048980-547b-11ed-9d3b-3978ae995d04] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-25T15:44:00.030Z] Session [d8048980-547b-11ed-9d3b-3978ae995d04] - page.customHeaders:  - {}
+[INFO  - 2022-10-25T15:44:00.030Z] Session [d8048980-547b-11ed-9d3b-3978ae995d04] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-25T15:44:00.031Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: d8048980-547b-11ed-9d3b-3978ae995d04
+[ERROR - 2022-10-25T15:44:00.426Z] Session [d8048980-547b-11ed-9d3b-3978ae995d04] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-25T15:44:00.426Z] Session [d8048980-547b-11ed-9d3b-3978ae995d04] - page.onError - stack:
+  specDone (http://localhost:58037/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-25T15:44:00.636Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-25T16:05:35.705Z] GhostDriver - Main - running on port 21079
+[INFO  - 2022-10-25T16:05:36.291Z] Session [dca61dc0-547e-11ed-8f9f-4fbeacf8046a] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-25T16:05:36.291Z] Session [dca61dc0-547e-11ed-8f9f-4fbeacf8046a] - page.customHeaders:  - {}
+[INFO  - 2022-10-25T16:05:36.291Z] Session [dca61dc0-547e-11ed-8f9f-4fbeacf8046a] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-25T16:05:36.292Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: dca61dc0-547e-11ed-8f9f-4fbeacf8046a
+[ERROR - 2022-10-25T16:05:36.813Z] Session [dca61dc0-547e-11ed-8f9f-4fbeacf8046a] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-25T16:05:36.813Z] Session [dca61dc0-547e-11ed-8f9f-4fbeacf8046a] - page.onError - stack:
+  specDone (http://localhost:58283/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-25T16:05:36.944Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-27T08:31:37.038Z] GhostDriver - Main - running on port 48150
+[INFO  - 2022-10-27T08:31:37.440Z] Session [c5dacc90-55d1-11ed-bad8-774dedf1d91e] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-27T08:31:37.440Z] Session [c5dacc90-55d1-11ed-bad8-774dedf1d91e] - page.customHeaders:  - {}
+[INFO  - 2022-10-27T08:31:37.441Z] Session [c5dacc90-55d1-11ed-bad8-774dedf1d91e] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-27T08:31:37.441Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: c5dacc90-55d1-11ed-bad8-774dedf1d91e
+[ERROR - 2022-10-27T08:31:37.990Z] Session [c5dacc90-55d1-11ed-bad8-774dedf1d91e] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-27T08:31:37.993Z] Session [c5dacc90-55d1-11ed-bad8-774dedf1d91e] - page.onError - stack:
+  specDone (http://localhost:52636/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-27T08:31:38.192Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-27T09:16:06.155Z] GhostDriver - Main - running on port 7716
+[INFO  - 2022-10-27T09:16:06.667Z] Session [fcd68440-55d7-11ed-9760-83d1df9c313f] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-27T09:16:06.667Z] Session [fcd68440-55d7-11ed-9760-83d1df9c313f] - page.customHeaders:  - {}
+[INFO  - 2022-10-27T09:16:06.667Z] Session [fcd68440-55d7-11ed-9760-83d1df9c313f] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-27T09:16:06.667Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: fcd68440-55d7-11ed-9760-83d1df9c313f
+[ERROR - 2022-10-27T09:16:07.170Z] Session [fcd68440-55d7-11ed-9760-83d1df9c313f] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-27T09:16:07.170Z] Session [fcd68440-55d7-11ed-9760-83d1df9c313f] - page.onError - stack:
+  specDone (http://localhost:56783/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-27T09:16:07.392Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-27T10:19:28.318Z] GhostDriver - Main - running on port 27760
+[INFO  - 2022-10-27T10:19:28.832Z] Session [d71a6560-55e0-11ed-89c5-c312a49c0297] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-27T10:19:28.832Z] Session [d71a6560-55e0-11ed-89c5-c312a49c0297] - page.customHeaders:  - {}
+[INFO  - 2022-10-27T10:19:28.832Z] Session [d71a6560-55e0-11ed-89c5-c312a49c0297] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-27T10:19:28.833Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: d71a6560-55e0-11ed-89c5-c312a49c0297
+[ERROR - 2022-10-27T10:19:29.492Z] Session [d71a6560-55e0-11ed-89c5-c312a49c0297] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-27T10:19:29.492Z] Session [d71a6560-55e0-11ed-89c5-c312a49c0297] - page.onError - stack:
+  specDone (http://localhost:63568/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-27T10:19:29.727Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-27T11:42:03.600Z] GhostDriver - Main - running on port 36726
+[INFO  - 2022-10-27T11:42:04.079Z] Session [60a96370-55ec-11ed-ac72-e35a2366dc79] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-27T11:42:04.079Z] Session [60a96370-55ec-11ed-ac72-e35a2366dc79] - page.customHeaders:  - {}
+[INFO  - 2022-10-27T11:42:04.080Z] Session [60a96370-55ec-11ed-ac72-e35a2366dc79] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-27T11:42:04.080Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 60a96370-55ec-11ed-ac72-e35a2366dc79
+[ERROR - 2022-10-27T11:42:04.875Z] Session [60a96370-55ec-11ed-ac72-e35a2366dc79] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-27T11:42:04.875Z] Session [60a96370-55ec-11ed-ac72-e35a2366dc79] - page.onError - stack:
+  specDone (http://localhost:63786/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-27T11:42:05.394Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-28T10:05:05.815Z] GhostDriver - Main - running on port 8017
+[INFO  - 2022-10-28T10:05:06.288Z] Session [ff66d590-56a7-11ed-bd66-e79b0e325288] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-28T10:05:06.289Z] Session [ff66d590-56a7-11ed-bd66-e79b0e325288] - page.customHeaders:  - {}
+[INFO  - 2022-10-28T10:05:06.289Z] Session [ff66d590-56a7-11ed-bd66-e79b0e325288] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-28T10:05:06.289Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: ff66d590-56a7-11ed-bd66-e79b0e325288
+[ERROR - 2022-10-28T10:05:06.821Z] Session [ff66d590-56a7-11ed-bd66-e79b0e325288] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-28T10:05:06.821Z] Session [ff66d590-56a7-11ed-bd66-e79b0e325288] - page.onError - stack:
+  specDone (http://localhost:64443/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-28T10:05:07.060Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-28T11:00:05.985Z] GhostDriver - Main - running on port 31943
+[INFO  - 2022-10-28T11:00:06.478Z] Session [ae780480-56af-11ed-8fd6-71ea401fdc25] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-28T11:00:06.478Z] Session [ae780480-56af-11ed-8fd6-71ea401fdc25] - page.customHeaders:  - {}
+[INFO  - 2022-10-28T11:00:06.478Z] Session [ae780480-56af-11ed-8fd6-71ea401fdc25] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-28T11:00:06.479Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: ae780480-56af-11ed-8fd6-71ea401fdc25
+[ERROR - 2022-10-28T11:00:06.972Z] Session [ae780480-56af-11ed-8fd6-71ea401fdc25] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-28T11:00:06.973Z] Session [ae780480-56af-11ed-8fd6-71ea401fdc25] - page.onError - stack:
+  specDone (http://localhost:53884/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-28T11:00:07.231Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-28T11:34:36.687Z] GhostDriver - Main - running on port 24082
+[INFO  - 2022-10-28T11:34:37.079Z] Session [80a48100-56b4-11ed-b637-b3f2b387af00] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-28T11:34:37.079Z] Session [80a48100-56b4-11ed-b637-b3f2b387af00] - page.customHeaders:  - {}
+[INFO  - 2022-10-28T11:34:37.080Z] Session [80a48100-56b4-11ed-b637-b3f2b387af00] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-28T11:34:37.080Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 80a48100-56b4-11ed-b637-b3f2b387af00
+[ERROR - 2022-10-28T11:34:37.557Z] Session [80a48100-56b4-11ed-b637-b3f2b387af00] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-28T11:34:37.557Z] Session [80a48100-56b4-11ed-b637-b3f2b387af00] - page.onError - stack:
+  specDone (http://localhost:65321/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-28T11:34:37.779Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-28T12:08:06.864Z] GhostDriver - Main - running on port 20012
+[INFO  - 2022-10-28T12:08:07.416Z] Session [2ee59610-56b9-11ed-88fe-91a625bf25b0] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-28T12:08:07.416Z] Session [2ee59610-56b9-11ed-88fe-91a625bf25b0] - page.customHeaders:  - {}
+[INFO  - 2022-10-28T12:08:07.416Z] Session [2ee59610-56b9-11ed-88fe-91a625bf25b0] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-28T12:08:07.416Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 2ee59610-56b9-11ed-88fe-91a625bf25b0
+[ERROR - 2022-10-28T12:08:07.873Z] Session [2ee59610-56b9-11ed-88fe-91a625bf25b0] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-28T12:08:07.874Z] Session [2ee59610-56b9-11ed-88fe-91a625bf25b0] - page.onError - stack:
+  specDone (http://localhost:54148/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-28T12:08:08.090Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-10-28T12:30:29.086Z] GhostDriver - Main - running on port 15199
+[INFO  - 2022-10-28T12:30:29.596Z] Session [4ee5d940-56bc-11ed-858c-ff2082eeb01e] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-10-28T12:30:29.596Z] Session [4ee5d940-56bc-11ed-858c-ff2082eeb01e] - page.customHeaders:  - {}
+[INFO  - 2022-10-28T12:30:29.596Z] Session [4ee5d940-56bc-11ed-858c-ff2082eeb01e] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-10-28T12:30:29.596Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 4ee5d940-56bc-11ed-858c-ff2082eeb01e
+[ERROR - 2022-10-28T12:30:30.266Z] Session [4ee5d940-56bc-11ed-858c-ff2082eeb01e] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-10-28T12:30:30.266Z] Session [4ee5d940-56bc-11ed-858c-ff2082eeb01e] - page.onError - stack:
+  specDone (http://localhost:56469/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-10-28T12:30:30.484Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-02T11:15:02.218Z] GhostDriver - Main - running on port 20977
+[INFO  - 2022-11-02T11:15:02.690Z] Session [98b804d0-5a9f-11ed-a3cb-27faa108c6f5] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-02T11:15:02.690Z] Session [98b804d0-5a9f-11ed-a3cb-27faa108c6f5] - page.customHeaders:  - {}
+[INFO  - 2022-11-02T11:15:02.690Z] Session [98b804d0-5a9f-11ed-a3cb-27faa108c6f5] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-02T11:15:02.690Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 98b804d0-5a9f-11ed-a3cb-27faa108c6f5
+[ERROR - 2022-11-02T11:15:03.098Z] Session [98b804d0-5a9f-11ed-a3cb-27faa108c6f5] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-02T11:15:03.098Z] Session [98b804d0-5a9f-11ed-a3cb-27faa108c6f5] - page.onError - stack:
+  specDone (http://localhost:51220/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-02T11:15:03.222Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-02T12:21:30.032Z] GhostDriver - Main - running on port 20065
+[INFO  - 2022-11-02T12:21:30.504Z] Session [e1a42530-5aa8-11ed-bc98-ef9d6deba1a5] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-02T12:21:30.504Z] Session [e1a42530-5aa8-11ed-bc98-ef9d6deba1a5] - page.customHeaders:  - {}
+[INFO  - 2022-11-02T12:21:30.505Z] Session [e1a42530-5aa8-11ed-bc98-ef9d6deba1a5] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-02T12:21:30.505Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: e1a42530-5aa8-11ed-bc98-ef9d6deba1a5
+[ERROR - 2022-11-02T12:21:31.360Z] Session [e1a42530-5aa8-11ed-bc98-ef9d6deba1a5] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-02T12:21:31.361Z] Session [e1a42530-5aa8-11ed-bc98-ef9d6deba1a5] - page.onError - stack:
+  specDone (http://localhost:51878/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-02T12:21:31.597Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-02T13:18:39.617Z] GhostDriver - Main - running on port 45755
+[INFO  - 2022-11-02T13:18:40.486Z] Session [de11b600-5ab0-11ed-a8ec-35f61fed67f8] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-02T13:18:40.487Z] Session [de11b600-5ab0-11ed-a8ec-35f61fed67f8] - page.customHeaders:  - {}
+[INFO  - 2022-11-02T13:18:40.487Z] Session [de11b600-5ab0-11ed-a8ec-35f61fed67f8] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-02T13:18:40.487Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: de11b600-5ab0-11ed-a8ec-35f61fed67f8
+[ERROR - 2022-11-02T13:18:42.189Z] Session [de11b600-5ab0-11ed-a8ec-35f61fed67f8] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-02T13:18:42.189Z] Session [de11b600-5ab0-11ed-a8ec-35f61fed67f8] - page.onError - stack:
+  specDone (http://localhost:56718/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-02T13:18:42.478Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-02T14:26:09.734Z] GhostDriver - Main - running on port 44146
+[INFO  - 2022-11-02T14:26:10.229Z] Session [4be773f0-5aba-11ed-a44f-f72043954bea] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-02T14:26:10.230Z] Session [4be773f0-5aba-11ed-a44f-f72043954bea] - page.customHeaders:  - {}
+[INFO  - 2022-11-02T14:26:10.230Z] Session [4be773f0-5aba-11ed-a44f-f72043954bea] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-02T14:26:10.230Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 4be773f0-5aba-11ed-a44f-f72043954bea
+[ERROR - 2022-11-02T14:26:10.721Z] Session [4be773f0-5aba-11ed-a44f-f72043954bea] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-02T14:26:10.726Z] Session [4be773f0-5aba-11ed-a44f-f72043954bea] - page.onError - stack:
+  specDone (http://localhost:60420/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-02T14:26:10.935Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-02T15:23:43.605Z] GhostDriver - Main - running on port 11016
+[INFO  - 2022-11-02T15:23:44.090Z] Session [56908320-5ac2-11ed-88c9-bda341f7e3be] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-02T15:23:44.090Z] Session [56908320-5ac2-11ed-88c9-bda341f7e3be] - page.customHeaders:  - {}
+[INFO  - 2022-11-02T15:23:44.090Z] Session [56908320-5ac2-11ed-88c9-bda341f7e3be] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-02T15:23:44.090Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 56908320-5ac2-11ed-88c9-bda341f7e3be
+[ERROR - 2022-11-02T15:23:44.681Z] Session [56908320-5ac2-11ed-88c9-bda341f7e3be] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-02T15:23:44.682Z] Session [56908320-5ac2-11ed-88c9-bda341f7e3be] - page.onError - stack:
+  specDone (http://localhost:64475/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-02T15:23:44.967Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-02T15:50:34.167Z] GhostDriver - Main - running on port 23207
+[INFO  - 2022-11-02T15:50:34.633Z] Session [16862d30-5ac6-11ed-bc61-85fea467f4d5] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-02T15:50:34.633Z] Session [16862d30-5ac6-11ed-bc61-85fea467f4d5] - page.customHeaders:  - {}
+[INFO  - 2022-11-02T15:50:34.634Z] Session [16862d30-5ac6-11ed-bc61-85fea467f4d5] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-02T15:50:34.634Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 16862d30-5ac6-11ed-bc61-85fea467f4d5
+[ERROR - 2022-11-02T15:50:35.482Z] Session [16862d30-5ac6-11ed-bc61-85fea467f4d5] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-02T15:50:35.483Z] Session [16862d30-5ac6-11ed-bc61-85fea467f4d5] - page.onError - stack:
+  specDone (http://localhost:55362/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-02T15:50:35.796Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-02T18:17:56.845Z] GhostDriver - Main - running on port 32424
+[INFO  - 2022-11-02T18:17:57.520Z] Session [ad4b7f90-5ada-11ed-8772-f95545528cf1] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-02T18:17:57.520Z] Session [ad4b7f90-5ada-11ed-8772-f95545528cf1] - page.customHeaders:  - {}
+[INFO  - 2022-11-02T18:17:57.520Z] Session [ad4b7f90-5ada-11ed-8772-f95545528cf1] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-02T18:17:57.520Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: ad4b7f90-5ada-11ed-8772-f95545528cf1
+[ERROR - 2022-11-02T18:17:58.036Z] Session [ad4b7f90-5ada-11ed-8772-f95545528cf1] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-02T18:17:58.036Z] Session [ad4b7f90-5ada-11ed-8772-f95545528cf1] - page.onError - stack:
+  specDone (http://localhost:50766/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-02T18:17:58.245Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-02T18:27:55.976Z] GhostDriver - Main - running on port 44594
+[INFO  - 2022-11-02T18:27:56.481Z] Session [124dd8b0-5adc-11ed-8507-dbea6088e224] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-02T18:27:56.481Z] Session [124dd8b0-5adc-11ed-8507-dbea6088e224] - page.customHeaders:  - {}
+[INFO  - 2022-11-02T18:27:56.482Z] Session [124dd8b0-5adc-11ed-8507-dbea6088e224] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-02T18:27:56.482Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 124dd8b0-5adc-11ed-8507-dbea6088e224
+[ERROR - 2022-11-02T18:27:57.084Z] Session [124dd8b0-5adc-11ed-8507-dbea6088e224] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-02T18:27:57.084Z] Session [124dd8b0-5adc-11ed-8507-dbea6088e224] - page.onError - stack:
+  specDone (http://localhost:58480/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-02T18:27:57.362Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-02T18:38:17.522Z] GhostDriver - Main - running on port 9046
+[INFO  - 2022-11-02T18:38:18.108Z] Session [84d24b40-5add-11ed-b2bd-872cd407c9c1] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-02T18:38:18.108Z] Session [84d24b40-5add-11ed-b2bd-872cd407c9c1] - page.customHeaders:  - {}
+[INFO  - 2022-11-02T18:38:18.109Z] Session [84d24b40-5add-11ed-b2bd-872cd407c9c1] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-02T18:38:18.109Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 84d24b40-5add-11ed-b2bd-872cd407c9c1
+[ERROR - 2022-11-02T18:38:18.656Z] Session [84d24b40-5add-11ed-b2bd-872cd407c9c1] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-02T18:38:18.656Z] Session [84d24b40-5add-11ed-b2bd-872cd407c9c1] - page.onError - stack:
+  specDone (http://localhost:51063/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-02T18:38:18.902Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-02T18:45:17.032Z] GhostDriver - Main - running on port 48584
+[INFO  - 2022-11-02T18:45:17.542Z] Session [7ed2d7e0-5ade-11ed-9588-23c0183215f8] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-02T18:45:17.542Z] Session [7ed2d7e0-5ade-11ed-9588-23c0183215f8] - page.customHeaders:  - {}
+[INFO  - 2022-11-02T18:45:17.542Z] Session [7ed2d7e0-5ade-11ed-9588-23c0183215f8] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-02T18:45:17.542Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 7ed2d7e0-5ade-11ed-9588-23c0183215f8
+[ERROR - 2022-11-02T18:45:18.198Z] Session [7ed2d7e0-5ade-11ed-9588-23c0183215f8] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-02T18:45:18.198Z] Session [7ed2d7e0-5ade-11ed-9588-23c0183215f8] - page.onError - stack:
+  specDone (http://localhost:55032/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-02T18:45:18.433Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-02T19:00:32.769Z] GhostDriver - Main - running on port 10523
+[INFO  - 2022-11-02T19:00:33.112Z] Session [a08c5940-5ae0-11ed-8d9e-b500cc8b96d6] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-02T19:00:33.112Z] Session [a08c5940-5ae0-11ed-8d9e-b500cc8b96d6] - page.customHeaders:  - {}
+[INFO  - 2022-11-02T19:00:33.112Z] Session [a08c5940-5ae0-11ed-8d9e-b500cc8b96d6] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-02T19:00:33.113Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: a08c5940-5ae0-11ed-8d9e-b500cc8b96d6
+[ERROR - 2022-11-02T19:00:33.413Z] Session [a08c5940-5ae0-11ed-8d9e-b500cc8b96d6] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-02T19:00:33.414Z] Session [a08c5940-5ae0-11ed-8d9e-b500cc8b96d6] - page.onError - stack:
+  specDone (http://localhost:64569/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-02T19:00:33.540Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-02T19:08:26.976Z] GhostDriver - Main - running on port 19047
+[INFO  - 2022-11-02T19:08:27.222Z] Session [bb237d00-5ae1-11ed-9fcf-49df8728d451] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-02T19:08:27.223Z] Session [bb237d00-5ae1-11ed-9fcf-49df8728d451] - page.customHeaders:  - {}
+[INFO  - 2022-11-02T19:08:27.223Z] Session [bb237d00-5ae1-11ed-9fcf-49df8728d451] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-02T19:08:27.223Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: bb237d00-5ae1-11ed-9fcf-49df8728d451
+[ERROR - 2022-11-02T19:08:27.754Z] Session [bb237d00-5ae1-11ed-9fcf-49df8728d451] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-02T19:08:27.754Z] Session [bb237d00-5ae1-11ed-9fcf-49df8728d451] - page.onError - stack:
+  specDone (http://localhost:52484/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-02T19:08:27.977Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-02T19:21:43.940Z] GhostDriver - Main - running on port 42402
+[INFO  - 2022-11-02T19:21:44.157Z] Session [962693a0-5ae3-11ed-bd26-15d895ce98d2] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-02T19:21:44.157Z] Session [962693a0-5ae3-11ed-bd26-15d895ce98d2] - page.customHeaders:  - {}
+[INFO  - 2022-11-02T19:21:44.158Z] Session [962693a0-5ae3-11ed-bd26-15d895ce98d2] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-02T19:21:44.158Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 962693a0-5ae3-11ed-bd26-15d895ce98d2
+[ERROR - 2022-11-02T19:21:44.473Z] Session [962693a0-5ae3-11ed-bd26-15d895ce98d2] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-02T19:21:44.474Z] Session [962693a0-5ae3-11ed-bd26-15d895ce98d2] - page.onError - stack:
+  specDone (http://localhost:54401/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-02T19:21:44.604Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-02T19:26:05.607Z] GhostDriver - Main - running on port 44327
+[INFO  - 2022-11-02T19:26:06.061Z] Session [3241cd90-5ae4-11ed-8a06-2fe68cbfe5a1] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-02T19:26:06.061Z] Session [3241cd90-5ae4-11ed-8a06-2fe68cbfe5a1] - page.customHeaders:  - {}
+[INFO  - 2022-11-02T19:26:06.061Z] Session [3241cd90-5ae4-11ed-8a06-2fe68cbfe5a1] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-02T19:26:06.061Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 3241cd90-5ae4-11ed-8a06-2fe68cbfe5a1
+[ERROR - 2022-11-02T19:26:06.348Z] Session [3241cd90-5ae4-11ed-8a06-2fe68cbfe5a1] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-02T19:26:06.348Z] Session [3241cd90-5ae4-11ed-8a06-2fe68cbfe5a1] - page.onError - stack:
+  specDone (http://localhost:55297/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-02T19:26:06.483Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-03T08:00:30.005Z] GhostDriver - Main - running on port 30040
+[INFO  - 2022-11-03T08:00:30.299Z] Session [95d81850-5b4d-11ed-8d05-9b4e38504c14] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-03T08:00:30.299Z] Session [95d81850-5b4d-11ed-8d05-9b4e38504c14] - page.customHeaders:  - {}
+[INFO  - 2022-11-03T08:00:30.299Z] Session [95d81850-5b4d-11ed-8d05-9b4e38504c14] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-03T08:00:30.300Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 95d81850-5b4d-11ed-8d05-9b4e38504c14
+[ERROR - 2022-11-03T08:00:30.868Z] Session [95d81850-5b4d-11ed-8d05-9b4e38504c14] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-03T08:00:30.869Z] Session [95d81850-5b4d-11ed-8d05-9b4e38504c14] - page.onError - stack:
+  specDone (http://localhost:49970/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-03T08:00:30.988Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-03T08:19:47.840Z] GhostDriver - Main - running on port 19514
+[INFO  - 2022-11-03T08:19:48.289Z] Session [480f0a90-5b50-11ed-a5a6-733a4958a2bc] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-03T08:19:48.290Z] Session [480f0a90-5b50-11ed-a5a6-733a4958a2bc] - page.customHeaders:  - {}
+[INFO  - 2022-11-03T08:19:48.290Z] Session [480f0a90-5b50-11ed-a5a6-733a4958a2bc] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-03T08:19:48.290Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 480f0a90-5b50-11ed-a5a6-733a4958a2bc
+[ERROR - 2022-11-03T08:19:48.755Z] Session [480f0a90-5b50-11ed-a5a6-733a4958a2bc] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-03T08:19:48.755Z] Session [480f0a90-5b50-11ed-a5a6-733a4958a2bc] - page.onError - stack:
+  specDone (http://localhost:50179/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-03T08:19:48.870Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-03T08:34:35.139Z] GhostDriver - Main - running on port 30372
+[INFO  - 2022-11-03T08:34:35.480Z] Session [58ddf320-5b52-11ed-a9fe-01c7d292b8f9] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-03T08:34:35.480Z] Session [58ddf320-5b52-11ed-a9fe-01c7d292b8f9] - page.customHeaders:  - {}
+[INFO  - 2022-11-03T08:34:35.481Z] Session [58ddf320-5b52-11ed-a9fe-01c7d292b8f9] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-03T08:34:35.481Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 58ddf320-5b52-11ed-a9fe-01c7d292b8f9
+[ERROR - 2022-11-03T08:34:36.022Z] Session [58ddf320-5b52-11ed-a9fe-01c7d292b8f9] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-03T08:34:36.022Z] Session [58ddf320-5b52-11ed-a9fe-01c7d292b8f9] - page.onError - stack:
+  specDone (http://localhost:50328/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-03T08:34:36.248Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-03T08:38:41.849Z] GhostDriver - Main - running on port 38572
+[INFO  - 2022-11-03T08:38:42.414Z] Session [ec0cef70-5b52-11ed-b31d-4b14e51b7a42] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-03T08:38:42.414Z] Session [ec0cef70-5b52-11ed-b31d-4b14e51b7a42] - page.customHeaders:  - {}
+[INFO  - 2022-11-03T08:38:42.414Z] Session [ec0cef70-5b52-11ed-b31d-4b14e51b7a42] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-03T08:38:42.414Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: ec0cef70-5b52-11ed-b31d-4b14e51b7a42
+[ERROR - 2022-11-03T08:38:42.932Z] Session [ec0cef70-5b52-11ed-b31d-4b14e51b7a42] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-03T08:38:42.932Z] Session [ec0cef70-5b52-11ed-b31d-4b14e51b7a42] - page.onError - stack:
+  specDone (http://localhost:50395/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-03T08:38:43.124Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-03T08:44:52.346Z] GhostDriver - Main - running on port 2360
+[INFO  - 2022-11-03T08:44:52.842Z] Session [c8d77510-5b53-11ed-8187-975c068566f3] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-03T08:44:52.842Z] Session [c8d77510-5b53-11ed-8187-975c068566f3] - page.customHeaders:  - {}
+[INFO  - 2022-11-03T08:44:52.843Z] Session [c8d77510-5b53-11ed-8187-975c068566f3] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-03T08:44:52.844Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: c8d77510-5b53-11ed-8187-975c068566f3
+[ERROR - 2022-11-03T08:44:53.322Z] Session [c8d77510-5b53-11ed-8187-975c068566f3] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-03T08:44:53.322Z] Session [c8d77510-5b53-11ed-8187-975c068566f3] - page.onError - stack:
+  specDone (http://localhost:50535/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-03T08:44:53.452Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-03T09:34:32.784Z] GhostDriver - Main - running on port 45127
+[INFO  - 2022-11-03T09:34:33.238Z] Session [b94b56a0-5b5a-11ed-9e29-e3257b235b44] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-03T09:34:33.238Z] Session [b94b56a0-5b5a-11ed-9e29-e3257b235b44] - page.customHeaders:  - {}
+[INFO  - 2022-11-03T09:34:33.238Z] Session [b94b56a0-5b5a-11ed-9e29-e3257b235b44] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-03T09:34:33.238Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: b94b56a0-5b5a-11ed-9e29-e3257b235b44
+[ERROR - 2022-11-03T09:34:33.766Z] Session [b94b56a0-5b5a-11ed-9e29-e3257b235b44] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-03T09:34:33.766Z] Session [b94b56a0-5b5a-11ed-9e29-e3257b235b44] - page.onError - stack:
+  specDone (http://localhost:50880/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-03T09:34:34.000Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-03T09:52:47.540Z] GhostDriver - Main - running on port 10287
+[INFO  - 2022-11-03T09:52:47.846Z] Session [45bc06f0-5b5d-11ed-8ee1-21f4a3752966] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-03T09:52:47.846Z] Session [45bc06f0-5b5d-11ed-8ee1-21f4a3752966] - page.customHeaders:  - {}
+[INFO  - 2022-11-03T09:52:47.846Z] Session [45bc06f0-5b5d-11ed-8ee1-21f4a3752966] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-03T09:52:47.846Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 45bc06f0-5b5d-11ed-8ee1-21f4a3752966
+[ERROR - 2022-11-03T09:52:48.292Z] Session [45bc06f0-5b5d-11ed-8ee1-21f4a3752966] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-03T09:52:48.292Z] Session [45bc06f0-5b5d-11ed-8ee1-21f4a3752966] - page.onError - stack:
+  specDone (http://localhost:51001/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-03T09:52:48.428Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-03T10:34:03.375Z] GhostDriver - Main - running on port 18970
+[INFO  - 2022-11-03T10:34:03.881Z] Session [09912330-5b63-11ed-88ef-63a31c7a6f3e] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-03T10:34:03.882Z] Session [09912330-5b63-11ed-88ef-63a31c7a6f3e] - page.customHeaders:  - {}
+[INFO  - 2022-11-03T10:34:03.882Z] Session [09912330-5b63-11ed-88ef-63a31c7a6f3e] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-03T10:34:03.882Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 09912330-5b63-11ed-88ef-63a31c7a6f3e
+[ERROR - 2022-11-03T10:34:04.324Z] Session [09912330-5b63-11ed-88ef-63a31c7a6f3e] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-03T10:34:04.325Z] Session [09912330-5b63-11ed-88ef-63a31c7a6f3e] - page.onError - stack:
+  specDone (http://localhost:51325/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-03T10:34:04.529Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-03T10:59:08.276Z] GhostDriver - Main - running on port 12235
+[INFO  - 2022-11-03T10:59:08.586Z] Session [8a713460-5b66-11ed-8a07-a30249fbc1b6] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-03T10:59:08.587Z] Session [8a713460-5b66-11ed-8a07-a30249fbc1b6] - page.customHeaders:  - {}
+[INFO  - 2022-11-03T10:59:08.587Z] Session [8a713460-5b66-11ed-8a07-a30249fbc1b6] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-03T10:59:08.587Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 8a713460-5b66-11ed-8a07-a30249fbc1b6
+[ERROR - 2022-11-03T10:59:08.921Z] Session [8a713460-5b66-11ed-8a07-a30249fbc1b6] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-03T10:59:08.921Z] Session [8a713460-5b66-11ed-8a07-a30249fbc1b6] - page.onError - stack:
+  specDone (http://localhost:51550/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-03T10:59:09.039Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-03T11:04:08.917Z] GhostDriver - Main - running on port 4334
+[INFO  - 2022-11-03T11:04:09.290Z] Session [3dad2570-5b67-11ed-af26-91effab36f63] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-03T11:04:09.290Z] Session [3dad2570-5b67-11ed-af26-91effab36f63] - page.customHeaders:  - {}
+[INFO  - 2022-11-03T11:04:09.290Z] Session [3dad2570-5b67-11ed-af26-91effab36f63] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-03T11:04:09.290Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 3dad2570-5b67-11ed-af26-91effab36f63
+[ERROR - 2022-11-03T11:04:09.577Z] Session [3dad2570-5b67-11ed-af26-91effab36f63] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-03T11:04:09.577Z] Session [3dad2570-5b67-11ed-af26-91effab36f63] - page.onError - stack:
+  specDone (http://localhost:51625/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-03T11:04:09.710Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-03T11:11:36.395Z] GhostDriver - Main - running on port 46097
+[INFO  - 2022-11-03T11:11:36.905Z] Session [48792a20-5b68-11ed-85f6-51b11de8cdee] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-03T11:11:36.905Z] Session [48792a20-5b68-11ed-85f6-51b11de8cdee] - page.customHeaders:  - {}
+[INFO  - 2022-11-03T11:11:36.905Z] Session [48792a20-5b68-11ed-85f6-51b11de8cdee] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-03T11:11:36.906Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 48792a20-5b68-11ed-85f6-51b11de8cdee
+[ERROR - 2022-11-03T11:11:37.557Z] Session [48792a20-5b68-11ed-85f6-51b11de8cdee] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-03T11:11:37.558Z] Session [48792a20-5b68-11ed-85f6-51b11de8cdee] - page.onError - stack:
+  specDone (http://localhost:51684/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-03T11:11:37.804Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-03T11:19:32.713Z] GhostDriver - Main - running on port 1961
+[INFO  - 2022-11-03T11:19:33.330Z] Session [6471b2a0-5b69-11ed-b86a-17b787481039] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-03T11:19:33.330Z] Session [6471b2a0-5b69-11ed-b86a-17b787481039] - page.customHeaders:  - {}
+[INFO  - 2022-11-03T11:19:33.331Z] Session [6471b2a0-5b69-11ed-b86a-17b787481039] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-03T11:19:33.331Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: 6471b2a0-5b69-11ed-b86a-17b787481039
+[ERROR - 2022-11-03T11:19:33.961Z] Session [6471b2a0-5b69-11ed-b86a-17b787481039] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-03T11:19:33.961Z] Session [6471b2a0-5b69-11ed-b86a-17b787481039] - page.onError - stack:
+  specDone (http://localhost:51749/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-03T11:19:34.201Z] ShutdownReqHand - _handle - About to shutdown
+[INFO  - 2022-11-03T11:30:42.970Z] GhostDriver - Main - running on port 33818
+[INFO  - 2022-11-03T11:30:43.432Z] Session [f3dbc240-5b6a-11ed-a945-bd72e43fe723] - page.settings - {"XSSAuditingEnabled":false,"javascriptCanCloseWindows":true,"javascriptCanOpenWindows":true,"javascriptEnabled":true,"loadImages":true,"localToRemoteUrlAccessEnabled":false,"userAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/538.1 (KHTML, like Gecko) PhantomJS/2.1.1 Safari/538.1","webSecurityEnabled":true}
+[INFO  - 2022-11-03T11:30:43.433Z] Session [f3dbc240-5b6a-11ed-a945-bd72e43fe723] - page.customHeaders:  - {}
+[INFO  - 2022-11-03T11:30:43.433Z] Session [f3dbc240-5b6a-11ed-a945-bd72e43fe723] - Session.negotiatedCapabilities - {"browserName":"phantomjs","version":"2.1.1","driverName":"ghostdriver","driverVersion":"1.2.0","platform":"mac-unknown-64bit","javascriptEnabled":true,"takesScreenshot":true,"handlesAlerts":false,"databaseEnabled":false,"locationContextEnabled":false,"applicationCacheEnabled":false,"browserConnectionEnabled":false,"cssSelectorsEnabled":true,"webStorageEnabled":false,"rotatable":false,"acceptSslCerts":false,"nativeEvents":true,"proxy":{"proxyType":"direct"}}
+[INFO  - 2022-11-03T11:30:43.433Z] SessionManagerReqHand - _postNewSessionCommand - New Session Created: f3dbc240-5b6a-11ed-a945-bd72e43fe723
+[ERROR - 2022-11-03T11:30:43.971Z] Session [f3dbc240-5b6a-11ed-a945-bd72e43fe723] - page.onError - msg: Spec 'TracingCtrl should fetch trace from phoenix' has no expectations.
+[ERROR - 2022-11-03T11:30:43.971Z] Session [f3dbc240-5b6a-11ed-a945-bd72e43fe723] - page.onError - stack:
+  specDone (http://localhost:51901/webjars/jasmine/jasmine-html.js:106)
+[INFO  - 2022-11-03T11:30:44.222Z] ShutdownReqHand - _handle - About to shutdown

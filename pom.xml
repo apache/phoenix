@@ -1719,19 +1719,57 @@
         </plugins>
       </build>
     </profile>
+
+    <!-- this profile runs the Jacoco code coverage analysis -->
     <profile>
-      <id>sonar</id>
+      <id>coverage</id>
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>
+      <modules>
+        <module>test-reporting</module>
+      </modules>
       <properties>
+        <!-- SONAR properties -->
+        <sonar.projectBaseDir>.</sonar.projectBaseDir>
+        <sonar.exclusions>test-reporting/**/*</sonar.exclusions>
+        <sonar.coverage.exclusions>**/phoenix-tracing-webapp/**/*</sonar.coverage.exclusions>
         <sonar.surefire.reportsPath>${project.build.directory}/surefire-reports</sonar.surefire.reportsPath>
         <sonar.coverage.jacoco.xmlReportPaths>
-          ${project.build.directory}/site/jacoco/jacoco.xml
+          ${sonar.projectBaseDir}/test-reporting/target/code-coverage/jacoco-reports/jacoco.xml
         </sonar.coverage.jacoco.xmlReportPaths>
+        <!-- JACOCO properties -->
+        <main.basedir>${project.basedir}</main.basedir>
+        <codeCoverageReportRootDir>${main.basedir}/test-reporting/target/code-coverage</codeCoverageReportRootDir>
+        <jacocoDestFile>${codeCoverageReportRootDir}/jacoco.exec</jacocoDestFile>
+        <jacocoReportDir>${codeCoverageReportRootDir}/jacoco-reports</jacocoReportDir>
       </properties>
       <build>
         <plugins>
+          <plugin>
+            <groupId>org.jacoco</groupId>
+            <artifactId>jacoco-maven-plugin</artifactId>
+            <version>${jacoco-maven-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>prepare-agent</id>
+                <phase>initialize</phase>
+                <goals>
+                  <goal>prepare-agent</goal>
+                </goals>
+                <configuration>
+                  <propertyName>jacocoArgLine</propertyName>
+                </configuration>
+              </execution>
+              <execution>
+                <id>report</id>
+                <phase>post-integration-test</phase>
+                <goals>
+                  <goal>report</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
           <plugin>
             <groupId>org.sonarsource.scanner.maven</groupId>
             <artifactId>sonar-maven-plugin</artifactId>
