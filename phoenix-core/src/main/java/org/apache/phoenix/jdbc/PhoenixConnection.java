@@ -365,30 +365,6 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
             formatters.put(PVarbinary.INSTANCE, VarBinaryFormatter.INSTANCE);
             formatters.put(PBinary.INSTANCE, VarBinaryFormatter.INSTANCE);
 
-            // We do not limit the metaData on a connection less than the global
-            // one,
-            // as there's not much that will be cached here.
-            PMetaData.Pruner pruner = new PMetaData.Pruner() {
-
-                @Override
-                public boolean prune(PTable table) {
-                    long maxTimestamp = scn == null ? HConstants.LATEST_TIMESTAMP
-                            : scn;
-                    return (table.getType() != PTableType.SYSTEM && (table
-                            .getTimeStamp() >= maxTimestamp || (table.getTenantId() != null && !Objects
-                            .equal(tenantId, table.getTenantId()))));
-                }
-
-                @Override
-                public boolean prune(PFunction function) {
-                    long maxTimestamp = scn == null ? HConstants.LATEST_TIMESTAMP
-                            : scn;
-                    return (function.getTimeStamp() >= maxTimestamp || (function
-                            .getTenantId() != null && !Objects.equal(tenantId,
-                            function.getTenantId())));
-                }
-            };
-
             this.logLevel = LogLevel.valueOf(this.services.getProps().get(QueryServices.LOG_LEVEL,
                     QueryServicesOptions.DEFAULT_LOGGING_LEVEL));
             this.auditLogLevel = LogLevel.valueOf(this.services.getProps().get(QueryServices.AUDIT_LOG_LEVEL,

@@ -161,7 +161,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private PMetaData newEmptyMetaData() {
         long updateCacheFrequency = (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
                 getProps().get(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB));
-        // We can have zero update cache frequency for connectionless query services as we need to keep the
+        // We cannot have zero update cache frequency for connectionless query services as we need to keep the
         // metadata in the cache (i.e., in memory)
         if (updateCacheFrequency == 0) {
             updateCacheFrequency = Long.MAX_VALUE;
