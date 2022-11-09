@@ -50,7 +50,6 @@ public class PMetaDataImpl implements PMetaData {
     private final PTableRefFactory tableRefFactory;
     private final long updateCacheFrequency;
     private HashMap<String, PTableKey> physicalNameToLogicalTableMap = new HashMap<>();
-    private final Object metricsLock = new Object();
     
     public PMetaDataImpl(int initialCapacity, long updateCacheFrequency, ReadOnlyProps props) {
         this(initialCapacity, updateCacheFrequency, TimeKeeper.SYSTEM, props);
@@ -74,15 +73,12 @@ public class PMetaDataImpl implements PMetaData {
     }
 
     private void updateGlobalMetric(PTableRef pTableRef) {
-        synchronized (metricsLock) {
             if (pTableRef != null && pTableRef.getTable() != null) {
                 GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER.increment();
             }
             else {
                 GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER.increment();
             }
-            metricsLock.notifyAll();
-        }
     }
 
     @Override
