@@ -124,7 +124,7 @@
     <tephra.version>0.16.1</tephra.version>
     <omid.version>1.0.2</omid.version>
     <stream.version>2.9.5</stream.version>
-    <i18n-util.version>1.0.4</i18n-util.version>
+    <icu4j.version>72.1</icu4j.version>
     <guice.version>4.0</guice.version>
     <zookeeper.version>3.4.14</zookeeper.version>
     <curator.version>4.0.0</curator.version>
@@ -1443,9 +1443,14 @@
         <version>${stream.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.salesforce.i18n</groupId>
-        <artifactId>i18n-util</artifactId>
-        <version>${i18n-util.version}</version>
+        <groupId>com.ibm.icu</groupId>
+        <artifactId>icu4j</artifactId>
+        <version>${icu4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.ibm.icu</groupId>
+        <artifactId>icu4j-localespi</artifactId>
+        <version>${icu4j.version}</version>
       </dependency>
       <dependency>
         <groupId>com.lmax</groupId>
