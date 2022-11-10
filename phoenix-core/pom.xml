@@ -549,8 +549,12 @@
       <artifactId>stream</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.salesforce.i18n</groupId>
-      <artifactId>i18n-util</artifactId>
+      <groupId>com.ibm.icu</groupId>
+      <artifactId>icu4j</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.ibm.icu</groupId>
+      <artifactId>icu4j-localespi</artifactId>
     </dependency>
     <dependency>
       <groupId>com.lmax</groupId>
