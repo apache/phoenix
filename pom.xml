@@ -1726,21 +1726,16 @@
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>
-      <modules>
-        <module>test-reporting</module>
-      </modules>
       <properties>
         <!-- SONAR properties -->
         <sonar.projectBaseDir>.</sonar.projectBaseDir>
-        <sonar.exclusions>test-reporting/**/*</sonar.exclusions>
-        <sonar.coverage.exclusions>**/phoenix-tracing-webapp/**/*</sonar.coverage.exclusions>
         <sonar.surefire.reportsPath>${project.build.directory}/surefire-reports</sonar.surefire.reportsPath>
         <sonar.coverage.jacoco.xmlReportPaths>
-          ${sonar.projectBaseDir}/test-reporting/target/code-coverage/jacoco-reports/jacoco.xml
+          ${sonar.projectBaseDir}/phoenix-assembly/target/code-coverage/jacoco-reports/jacoco.xml
         </sonar.coverage.jacoco.xmlReportPaths>
         <!-- JACOCO properties -->
         <main.basedir>${project.basedir}</main.basedir>
-        <codeCoverageReportRootDir>${main.basedir}/test-reporting/target/code-coverage</codeCoverageReportRootDir>
+        <codeCoverageReportRootDir>${main.basedir}/phoenix-assembly/target/code-coverage</codeCoverageReportRootDir>
         <jacocoDestFile>${codeCoverageReportRootDir}/jacoco.exec</jacocoDestFile>
         <jacocoReportDir>${codeCoverageReportRootDir}/jacoco-reports</jacocoReportDir>
       </properties>
