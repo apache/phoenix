@@ -24,6 +24,7 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.end2end.join.HashJoinGlobalIndexIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
+import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -50,6 +51,8 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.*;
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.INVALID_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.VALID_ROW_COUNT;
 import static org.apache.phoenix.util.MetaDataUtil.VIEW_INDEX_TABLE_PREFIX;
@@ -150,24 +153,20 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
 
         try (Connection conn = getConnection(props)) {
             try (Connection conn2 = getConnection(props)) {
-                testBaseTableWithIndex_BaseTableChange(conn, conn2, schemaName, tableName, indexName, false, createChildAfterRename);
+                HashMap<String, ArrayList<String>> expected = testBaseTableWithIndex_BaseTableChange(conn, conn2, schemaName, tableName, indexName, false, createChildAfterRename);
 
-                List<Job>
-                        completedJobs =
-                        IndexScrutinyToolBaseIT.runScrutinyTool(schemaName, tableName, indexName, 1L,
-                                IndexScrutinyTool.SourceTable.DATA_TABLE_SOURCE);
-
-                Job job = completedJobs.get(0);
-                assertTrue(job.isSuccessful());
-
-                Counters counters = job.getCounters();
+                IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, tableName,
+                        indexName, null, 0, IndexTool.IndexVerifyType.ONLY);
+                //System.out.println(indexTool.getJob().getCounters());
                 if (createChildAfterRename) {
-                    assertEquals(3, counters.findCounter(VALID_ROW_COUNT).getValue());
-                    assertEquals(0, counters.findCounter(INVALID_ROW_COUNT).getValue());
+                    assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+                    assertEquals(3, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+                    assertEquals(3, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
                 } else {
                     // Since we didn't build the index, we expect 1 missing index row
-                    assertEquals(2, counters.findCounter(VALID_ROW_COUNT).getValue());
-                    assertEquals(1, counters.findCounter(INVALID_ROW_COUNT).getValue());
+                    assertEquals(1, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+                    assertEquals(2, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+                    assertEquals(3, indexTool.getJob().getCounters().findCounter(SCANNED_DATA_ROW_COUNT).getValue());
                 }
             }
         }
