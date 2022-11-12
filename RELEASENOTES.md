@@ -16,6 +16,55 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 -->
+# PHOENIX  5.1.3 Release Notes
+
+These release notes cover new developer and user-facing incompatibilities, important issues, features, and major improvements.
+
+
+---
+
+* [PHOENIX-6751](https://issues.apache.org/jira/browse/PHOENIX-6751) | *Critical* | **Force using range scan vs skip scan when using the IN operator and large number of RVC elements**
+
+Adds a new config parameter, phoenix.max.inList.skipScan.size, which controls the size of an IN clause before it will be automatically converted from a skip scan to a range scan.
+
+
+---
+
+* [PHOENIX-6686](https://issues.apache.org/jira/browse/PHOENIX-6686) | *Major* | **Update Jackson to 2.12.6.1**
+
+The Jackson dependency in Phoenix has been updated to 2.12.6.1
+
+
+---
+
+* [PHOENIX-6665](https://issues.apache.org/jira/browse/PHOENIX-6665) | *Major* | **PreparedStatement#getMetaData() fails on parametrized "select next ? values for SEQ"**
+
+PreparedStatement#getMetaData() no longer fails on parametrized "select next ? values" sequence operations.
+This also fixes a problem where parametrized sequence operations didn't work via Phoenix Query Server.
+
+
+---
+
+* [PHOENIX-6645](https://issues.apache.org/jira/browse/PHOENIX-6645) | *Minor* | **Remove unneccessary SCN related properties from SYSTEM tables on upgrade**
+
+The KEEP\_DELETED\_CELLS property is removed, and the VERSIONS property is set to 1 for the SYSTEM.STATS and SYSTEM.LOG tables on upgrade now.
+
+
+---
+
+* [PHOENIX-6586](https://issues.apache.org/jira/browse/PHOENIX-6586) | *Critical* | **Set NORMALIZATION\_ENABLED to false on salted tables**
+
+Phoenix now automatically sets NORMALIZATION\_ENABLED=false when creating salted tables.
+
+
+---
+
+* [PHOENIX-6551](https://issues.apache.org/jira/browse/PHOENIX-6551) | *Major* | **Bump HBase version to 2.4.6 and 2.2.7**
+
+Phoenix now builds with HBase 2.4.6 and 2.2.7 for the respective hbase profiles.
+
+
+
 # PHOENIX  5.1.2 Release Notes
 
 These release notes cover new developer and user-facing incompatibilities, important issues, features, and major improvements.
