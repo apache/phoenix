@@ -35,12 +35,12 @@ artifacts are built with Hadoop 2, and are not.
 For this reason, when building Phoenix, you need to rebuild
 HBase with Hadoop 3, and install it to the local maven repo of the build host.
 
-`$ wget https://downloads.apache.org/hbase/2.4.10/hbase-2.4.10-src.tar.gz`
-`$ tar xfvz hbase-2.4.10-src.tar.gz`
-`$ cd hbase-2.4.10`
+`$ wget https://downloads.apache.org/hbase/2.4.15/hbase-2.4.15-src.tar.gz`
+`$ tar xfvz hbase-2.4.15-src.tar.gz`
+`$ cd hbase-2.4.15`
 `$ mvn install -Dhadoop.profile=3.0 -DskipTests`
 
-Replace 2.4.10 with the actual Hbase version you are using in the Phoenix build.
+Replace 2.4.15 with the actual Hbase version you are using in the Phoenix build.
 
 You can find the exact HBase version each phoenix HBase profile uses by checking <hbase.version>
 in the corresponding profile section at the end of phoenix/pom.xml, or you can specify the HBase
