@@ -583,10 +583,7 @@ public enum SQLExceptionCode {
 
     CANNOT_TRANSFORM_TABLE_WITH_APPEND_ONLY_SCHEMA(913, "43M24", "Cannot transform a table with append-only schema."),
 
-    CANNOT_TRANSFORM_TRANSACTIONAL_TABLE(914, "43M25", "Cannot transform a transactional table."),
-
-    //SQLCode for testing exceptions
-    FAILED_KNOWINGLY_FOR_TEST(7777, "TEST", "Exception was thrown to test something");
+    CANNOT_TRANSFORM_TRANSACTIONAL_TABLE(914, "43M25", "Cannot transform a transactional table.");
 
     private final int errorCode;
     private final String sqlState;

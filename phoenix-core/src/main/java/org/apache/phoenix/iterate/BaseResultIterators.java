@@ -51,7 +51,6 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -1416,8 +1415,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             }
                             
                         }
-                    } catch (CancellationException ce) {
-                        LOGGER.warn("Iterator scheduled to be executed in Future was being cancelled", ce);
                     }
                 }
                 addIterator(iterators, concatIterators);
