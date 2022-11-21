@@ -236,7 +236,7 @@ public class TableResultIterator implements ResultIterator {
             if (delegate == UNINITIALIZED_SCANNER) {
                 try {
                     this.scanIterator =
-                            new ScanningResultIterator(htable.getScanner(scan), scan, scanMetricsHolder, plan.getContext());
+                            new ScanningResultIterator(htable.getScanner(scan), scan, scanMetricsHolder);
                 } catch (IOException e) {
                     Closeables.closeQuietly(htable);
                     throw ServerUtil.parseServerException(e);

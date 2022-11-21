@@ -560,10 +560,7 @@ public enum SQLExceptionCode {
         "CASCADE INDEX feature is not supported for local index"),
 
     INVALID_REGION_SPLIT_POLICY(908, "43M19",
-        "REGION SPLIT POLICY is incorrect."),
-
-    //SQLCode for testing exceptions
-    FAILED_KNOWINGLY_FOR_TEST(7777, "TEST", "Exception was thrown to test something");
+        "REGION SPLIT POLICY is incorrect.");
 
     private final int errorCode;
     private final String sqlState;

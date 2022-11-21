@@ -161,7 +161,6 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private int statementExecutionCounter;
     private TraceScope traceScope = null;
     private volatile boolean isClosed = false;
-    private volatile boolean isClosing = false;
     private Sampler<?> sampler;
     private boolean readOnly = false;
     private Consistency consistency = Consistency.STRONG;
@@ -689,7 +688,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
 
     private void checkOpen() throws SQLException {
-        if (isClosed || isClosing) {
+        if (isClosed) {
             throw new SQLExceptionInfo.Builder(
                     SQLExceptionCode.CONNECTION_CLOSED).build()
                     .buildException();
@@ -698,11 +697,10 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     @Override
     public void close() throws SQLException {
-        if (isClosed || isClosing) {
+        if (isClosed) {
             return;
         }
         try {
-            isClosing = true;
             clearMetrics();
             try {
                 if (traceScope != null) {
@@ -713,9 +711,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
             } finally {
                 services.removeConnection(this);
             }
-
+            
         } finally {
-            isClosing = false;
             isClosed = true;
             if(isInternalConnection()){
                 GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS.decrement();
@@ -920,10 +917,6 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         return isClosed;
     }
 
-    public boolean isClosing() throws SQLException {
-        return isClosing;
-    }
-
     @Override
     public boolean isReadOnly() throws SQLException {
         return readOnly;
@@ -932,7 +925,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     @Override
     public boolean isValid(int timeout) throws SQLException {
         // TODO: run query here or ping
-        return !isClosed && !isClosing;
+        return !isClosed;
     }
 
     @Override
@@ -1331,14 +1324,6 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     public void setTableResultIteratorFactory(TableResultIteratorFactory factory) {
         checkNotNull(factory);
         this.tableResultIteratorFactory = factory;
-    }
-
-     /**
-     * Added for testing purposes. Do not use this elsewhere.
-     */
-    @VisibleForTesting
-    public void setIsClosing(boolean imitateIsClosing) {
-        isClosing = imitateIsClosing;
     }
 
     @Override
