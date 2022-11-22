@@ -20,6 +20,7 @@ package org.apache.phoenix.expression;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -37,10 +38,19 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.KeyPart;
 import org.apache.phoenix.expression.function.CeilDateExpression;
 import org.apache.phoenix.expression.function.CeilDecimalExpression;
+import org.apache.phoenix.expression.function.CeilMonthExpression;
+import org.apache.phoenix.expression.function.CeilWeekExpression;
+import org.apache.phoenix.expression.function.CeilYearExpression;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
+import org.apache.phoenix.expression.function.FloorMonthExpression;
+import org.apache.phoenix.expression.function.FloorWeekExpression;
+import org.apache.phoenix.expression.function.FloorYearExpression;
 import org.apache.phoenix.expression.function.RoundDateExpression;
 import org.apache.phoenix.expression.function.RoundDecimalExpression;
+import org.apache.phoenix.expression.function.RoundMonthExpression;
+import org.apache.phoenix.expression.function.RoundWeekExpression;
+import org.apache.phoenix.expression.function.RoundYearExpression;
 import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.function.TimeUnit;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -58,6 +68,8 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.joda.time.Chronology;
+import org.joda.time.chrono.GJChronology;
 import org.junit.Test;
 
 /**
@@ -69,6 +81,26 @@ import org.junit.Test;
  * @since 3.0.0
  */
 public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
+
+
+    private static long HALF_SEC = 500;
+    private static long SEC = 2 * HALF_SEC;
+
+    private static long HALF_MIN = 30 * 1000;
+    private static long MIN = 2 * HALF_MIN;
+
+    private static long HALF_HOUR = 30 * 60 * 1000;
+    private static long HOUR = 2 * HALF_HOUR;
+
+    private static long HALF_DAY = 12 * 60 * 60 * 1000;
+    private static long DAY = 2 * HALF_DAY;
+
+    private static long HALF_WEEK = 7 * 12 * 60 * 60 * 1000;
+    private static long WEEK = 2 * HALF_WEEK;
+
+    // Note that without the "l" the integer arithmetic below would overflow
+    private static long HALF_YEAR = 365l * 12 * 60 * 60 * 1000;
+    private static long YEAR = 2l * HALF_YEAR;
 
     // Decimal Expression Tests
 
@@ -688,4 +720,1207 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         Date resultDate = (Date)result;
         assertEquals(DateUtil.parseDate("2016-01-04 00:00:00"), resultDate);
     }
+
+    private RoundDateExpression getRoundMsExpression(String s, TimeUnit u, int m) throws SQLException {
+        return (RoundDateExpression)RoundDateExpression.create(LiteralExpression.newConstant(s), u, m );
+    }
+
+    // The three tests below are backported from PHOENIX-5066.
+    // When PHOENIX-5066 lands, these can be removed as redundant.
+
+    @Test
+    public void testRoundingGMT() throws SQLException {
+        // We operate on Instants for time units up to Days, simply counting millis
+
+        RoundDateExpression oddWholeSecondExp =
+                getRoundMsExpression("2022-11-11 11:11:11", TimeUnit.SECOND, 1);
+        java.sql.Timestamp oddWholeSecond =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:11:11").getTime());
+        long lowerBoundaryOddWholeSecond = oddWholeSecond.getTime() - HALF_SEC;
+        long upperBoundaryOddWholeSecond = oddWholeSecond.getTime() + HALF_SEC - 1;
+        assertEquals(lowerBoundaryOddWholeSecond,
+            oddWholeSecondExp.rangeLower(oddWholeSecond.getTime()));
+        assertEquals(upperBoundaryOddWholeSecond,
+            oddWholeSecondExp.rangeUpper(oddWholeSecond.getTime()));
+        assertEquals(oddWholeSecond,
+            new java.sql.Timestamp(oddWholeSecondExp.roundTime(lowerBoundaryOddWholeSecond)));
+        assertNotEquals(oddWholeSecond,
+            new java.sql.Timestamp(oddWholeSecondExp.roundTime(lowerBoundaryOddWholeSecond - 1)));
+        assertEquals(oddWholeSecond,
+            new java.sql.Timestamp(oddWholeSecondExp.roundTime(upperBoundaryOddWholeSecond)));
+        assertNotEquals(oddWholeSecond,
+            new java.sql.Timestamp(oddWholeSecondExp.roundTime(upperBoundaryOddWholeSecond + 1)));
+
+        // 10 sec range
+        RoundDateExpression oddWholeSecondRound10Exp =
+                getRoundMsExpression("2022-11-11 11:11:10", TimeUnit.SECOND, 10);
+        java.sql.Timestamp oddWholeSecondRound10 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:11:10").getTime());
+        long lowerBoundaryOddWholeSecondRound10 = oddWholeSecondRound10.getTime() - 5 * SEC;
+        long upperBoundaryOddWholeSecondRound10 = oddWholeSecondRound10.getTime() + 5 * SEC - 1;
+        assertEquals(lowerBoundaryOddWholeSecondRound10,
+            oddWholeSecondRound10Exp.rangeLower(oddWholeSecond.getTime()));
+        assertEquals(upperBoundaryOddWholeSecondRound10,
+            oddWholeSecondRound10Exp.rangeUpper(oddWholeSecond.getTime()));
+        assertEquals(oddWholeSecondRound10, new java.sql.Timestamp(
+                oddWholeSecondRound10Exp.roundTime(lowerBoundaryOddWholeSecondRound10)));
+        assertNotEquals(oddWholeSecondRound10, new java.sql.Timestamp(
+                oddWholeSecondRound10Exp.roundTime(lowerBoundaryOddWholeSecondRound10 - 1)));
+        assertEquals(oddWholeSecondRound10, new java.sql.Timestamp(
+                oddWholeSecondRound10Exp.roundTime(upperBoundaryOddWholeSecondRound10)));
+        assertNotEquals(oddWholeSecondRound10, new java.sql.Timestamp(
+                oddWholeSecondRound10Exp.roundTime(upperBoundaryOddWholeSecondRound10 + 1)));
+
+        // 15 sec range
+        RoundDateExpression oddWholeSecondRound15Exp =
+                getRoundMsExpression("2022-11-11 11:11:15", TimeUnit.SECOND, 15);
+        java.sql.Timestamp oddWholeSecondRound15 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:11:15").getTime());
+        long lowerBoundaryOddWholeSecondRound15 = oddWholeSecondRound15.getTime() - 15 * HALF_SEC;
+        long upperBoundaryOddWholeSecondRound15 =
+                oddWholeSecondRound15.getTime() + 15 * HALF_SEC - 1;
+        assertEquals(lowerBoundaryOddWholeSecondRound15,
+            oddWholeSecondRound15Exp.rangeLower(oddWholeSecond.getTime()));
+        assertEquals(upperBoundaryOddWholeSecondRound15,
+            oddWholeSecondRound15Exp.rangeUpper(oddWholeSecond.getTime()));
+        assertEquals(oddWholeSecondRound15, new java.sql.Timestamp(
+                oddWholeSecondRound15Exp.roundTime(lowerBoundaryOddWholeSecondRound15)));
+        assertNotEquals(oddWholeSecondRound15, new java.sql.Timestamp(
+                oddWholeSecondRound15Exp.roundTime(lowerBoundaryOddWholeSecondRound15 - 1)));
+        assertEquals(oddWholeSecondRound15, new java.sql.Timestamp(
+                oddWholeSecondRound15Exp.roundTime(upperBoundaryOddWholeSecondRound15)));
+        assertNotEquals(oddWholeSecondRound15, new java.sql.Timestamp(
+                oddWholeSecondRound15Exp.roundTime(upperBoundaryOddWholeSecondRound15 + 1)));
+
+        RoundDateExpression evenWholeSecondExp =
+                getRoundMsExpression("2022-11-11 11:11:12", TimeUnit.SECOND, 1);
+        java.sql.Timestamp evenWholeSecond =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:11:12").getTime());
+        long lowerBoundaryEvenWholeSecond = evenWholeSecond.getTime() - HALF_SEC;
+        long upperBoundaryEvenWholeSecond = evenWholeSecond.getTime() + HALF_SEC - 1;
+        assertEquals(lowerBoundaryEvenWholeSecond,
+            evenWholeSecondExp.rangeLower(evenWholeSecond.getTime()));
+        assertEquals(upperBoundaryEvenWholeSecond,
+            evenWholeSecondExp.rangeUpper(evenWholeSecond.getTime()));
+        assertEquals(evenWholeSecond,
+            new java.sql.Timestamp(evenWholeSecondExp.roundTime(lowerBoundaryEvenWholeSecond)));
+        assertNotEquals(evenWholeSecond,
+            new java.sql.Timestamp(evenWholeSecondExp.roundTime(lowerBoundaryEvenWholeSecond - 1)));
+        assertEquals(evenWholeSecond,
+            new java.sql.Timestamp(evenWholeSecondExp.roundTime(upperBoundaryEvenWholeSecond)));
+        assertNotEquals(evenWholeSecond,
+            new java.sql.Timestamp(evenWholeSecondExp.roundTime(upperBoundaryEvenWholeSecond + 1)));
+
+        RoundDateExpression oddWholeMinuteExp =
+                getRoundMsExpression("2022-11-11 11:11:0", TimeUnit.MINUTE, 1);
+        java.sql.Timestamp oddWholeMinute =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:11:0").getTime());
+        long lowerBoundaryOddWholeMinute = oddWholeMinute.getTime() - HALF_MIN;
+        long upperBoundaryOddWholeMinute = oddWholeMinute.getTime() + HALF_MIN - 1;
+        assertEquals(lowerBoundaryOddWholeMinute,
+            oddWholeMinuteExp.rangeLower(oddWholeMinute.getTime()));
+        assertEquals(upperBoundaryOddWholeMinute,
+            oddWholeMinuteExp.rangeUpper(oddWholeMinute.getTime()));
+        assertEquals(oddWholeMinute,
+            new java.sql.Timestamp(oddWholeMinuteExp.roundTime(lowerBoundaryOddWholeMinute)));
+        assertNotEquals(oddWholeMinute,
+            new java.sql.Timestamp(oddWholeMinuteExp.roundTime(lowerBoundaryOddWholeMinute - 1)));
+        assertEquals(oddWholeMinute,
+            new java.sql.Timestamp(oddWholeMinuteExp.roundTime(upperBoundaryOddWholeMinute)));
+        assertNotEquals(oddWholeMinute,
+            new java.sql.Timestamp(oddWholeMinuteExp.roundTime(upperBoundaryOddWholeMinute + 1)));
+
+        RoundDateExpression oddWholeMinuteRound20Exp =
+                getRoundMsExpression("2022-11-11 11:20:0", TimeUnit.MINUTE, 20);
+        java.sql.Timestamp oddWholeMinuteRound20 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:20:0").getTime());
+        long lowerBoundaryOddWholeMinute20 = oddWholeMinuteRound20.getTime() - 10 * MIN;
+        long upperBoundaryOddWholeMinute20 = oddWholeMinuteRound20.getTime() + 10 * MIN - 1;
+        assertEquals(lowerBoundaryOddWholeMinute20,
+            oddWholeMinuteRound20Exp.rangeLower(oddWholeMinute.getTime()));
+        assertEquals(upperBoundaryOddWholeMinute20,
+            oddWholeMinuteRound20Exp.rangeUpper(oddWholeMinute.getTime()));
+        assertEquals(oddWholeMinuteRound20, new java.sql.Timestamp(
+                oddWholeMinuteRound20Exp.roundTime(lowerBoundaryOddWholeMinute20)));
+        assertNotEquals(oddWholeMinuteRound20, new java.sql.Timestamp(
+                oddWholeMinuteRound20Exp.roundTime(lowerBoundaryOddWholeMinute20 - 1)));
+        assertEquals(oddWholeMinuteRound20, new java.sql.Timestamp(
+                oddWholeMinuteRound20Exp.roundTime(upperBoundaryOddWholeMinute20)));
+        assertNotEquals(oddWholeMinuteRound20, new java.sql.Timestamp(
+                oddWholeMinuteRound20Exp.roundTime(upperBoundaryOddWholeMinute20 + 1)));
+
+        // Minutes since epoch, don't expect the rounded value to be "round"
+
+        RoundDateExpression oddWholeMinuteRound17Exp =
+                getRoundMsExpression("2022-11-11 11:12:0", TimeUnit.MINUTE, 17);
+        java.sql.Timestamp oddWholeMinuteRound17 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:12:00").getTime());
+        long lowerBoundaryOddWholeMinute17 = oddWholeMinuteRound17.getTime() - 17 * HALF_MIN;
+        long upperBoundaryOddWholeMinute17 = oddWholeMinuteRound17.getTime() + 17 * HALF_MIN - 1;
+        assertEquals(lowerBoundaryOddWholeMinute17,
+            oddWholeMinuteRound17Exp.rangeLower(oddWholeMinute.getTime()));
+        assertEquals(upperBoundaryOddWholeMinute17,
+            oddWholeMinuteRound17Exp.rangeUpper(oddWholeMinute.getTime()));
+        assertEquals(oddWholeMinuteRound17, new java.sql.Timestamp(
+                oddWholeMinuteRound17Exp.roundTime(lowerBoundaryOddWholeMinute17)));
+        assertNotEquals(oddWholeMinuteRound17, new java.sql.Timestamp(
+                oddWholeMinuteRound17Exp.roundTime(lowerBoundaryOddWholeMinute17 - 1)));
+        assertEquals(oddWholeMinuteRound17, new java.sql.Timestamp(
+                oddWholeMinuteRound17Exp.roundTime(upperBoundaryOddWholeMinute17)));
+        assertNotEquals(oddWholeMinuteRound17, new java.sql.Timestamp(
+                oddWholeMinuteRound17Exp.roundTime(upperBoundaryOddWholeMinute17 + 1)));
+
+        RoundDateExpression evenWholeMinuteExp =
+                getRoundMsExpression("2022-11-11 11:12:0", TimeUnit.MINUTE, 1);
+        java.sql.Timestamp evenWholeMinute =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:12:0").getTime());
+        long lowerBoundaryEvenWholeMinute = evenWholeMinute.getTime() - HALF_MIN;
+        long upperBoundaryEvenWholeMinute = evenWholeMinute.getTime() + HALF_MIN - 1;
+        assertEquals(lowerBoundaryEvenWholeMinute,
+            evenWholeMinuteExp.rangeLower(evenWholeMinute.getTime()));
+        assertEquals(upperBoundaryEvenWholeMinute,
+            evenWholeMinuteExp.rangeUpper(evenWholeMinute.getTime()));
+        assertEquals(evenWholeMinute,
+            new java.sql.Timestamp(evenWholeMinuteExp.roundTime(lowerBoundaryEvenWholeMinute)));
+        assertNotEquals(evenWholeMinute,
+            new java.sql.Timestamp(evenWholeMinuteExp.roundTime(lowerBoundaryEvenWholeMinute - 1)));
+        assertEquals(evenWholeMinute,
+            new java.sql.Timestamp(evenWholeMinuteExp.roundTime(upperBoundaryEvenWholeMinute)));
+        assertNotEquals(evenWholeMinute,
+            new java.sql.Timestamp(evenWholeMinuteExp.roundTime(upperBoundaryEvenWholeMinute + 1)));
+
+        RoundDateExpression oddWholeHourExp =
+                getRoundMsExpression("2022-11-11 11:0:0", TimeUnit.HOUR, 1);
+        java.sql.Timestamp oddWholeHour =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:0:0").getTime());
+        long lowerBoundaryOddWholeHour = oddWholeHour.getTime() - HALF_HOUR;
+        long upperBoundaryOddWholeHour = oddWholeHour.getTime() + HALF_HOUR - 1;
+        assertEquals(lowerBoundaryOddWholeHour, oddWholeHourExp.rangeLower(oddWholeHour.getTime()));
+        assertEquals(upperBoundaryOddWholeHour, oddWholeHourExp.rangeUpper(oddWholeHour.getTime()));
+        assertEquals(oddWholeHour,
+            new java.sql.Timestamp(oddWholeHourExp.roundTime(lowerBoundaryOddWholeHour)));
+        assertNotEquals(oddWholeHour,
+            new java.sql.Timestamp(oddWholeHourExp.roundTime(lowerBoundaryOddWholeHour - 1)));
+        assertEquals(oddWholeHour,
+            new java.sql.Timestamp(oddWholeHourExp.roundTime(upperBoundaryOddWholeHour)));
+        assertNotEquals(oddWholeHour,
+            new java.sql.Timestamp(oddWholeHourExp.roundTime(upperBoundaryOddWholeHour + 1)));
+
+        // Not rounding to hourOfDay
+        RoundDateExpression oddWholeHour10Exp =
+                getRoundMsExpression("2022-11-11 12:0:0", TimeUnit.HOUR, 10);
+        java.sql.Timestamp oddWholeHour10 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 12:0:0").getTime());
+        long lowerBoundaryOddWholeHour10 = oddWholeHour10.getTime() - HALF_HOUR * 10;
+        long upperBoundaryOddWholeHour10 = oddWholeHour10.getTime() + HALF_HOUR * 10 - 1;
+        assertEquals(lowerBoundaryOddWholeHour10,
+            oddWholeHour10Exp.rangeLower(oddWholeHour.getTime()));
+        assertEquals(upperBoundaryOddWholeHour10,
+            oddWholeHour10Exp.rangeUpper(oddWholeHour.getTime()));
+        assertEquals(oddWholeHour10,
+            new java.sql.Timestamp(oddWholeHour10Exp.roundTime(lowerBoundaryOddWholeHour10)));
+        assertNotEquals(oddWholeHour10,
+            new java.sql.Timestamp(oddWholeHour10Exp.roundTime(lowerBoundaryOddWholeHour10 - 1)));
+        assertEquals(oddWholeHour10,
+            new java.sql.Timestamp(oddWholeHour10Exp.roundTime(upperBoundaryOddWholeHour10)));
+        assertNotEquals(oddWholeHour10,
+            new java.sql.Timestamp(oddWholeHour10Exp.roundTime(upperBoundaryOddWholeHour10 + 1)));
+
+        // Not rounding to hourOfDay
+        RoundDateExpression oddWholeHour11Exp =
+                getRoundMsExpression("2022-11-11 07:0:0", TimeUnit.HOUR, 11);
+        java.sql.Timestamp oddWholeHour11 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 07:0:0").getTime());
+        long lowerBoundaryOddWholeHour11 = oddWholeHour11.getTime() - HALF_HOUR * 11;
+        long upperBoundaryOddWholeHour11 = oddWholeHour11.getTime() + HALF_HOUR * 11 - 1;
+        assertEquals(lowerBoundaryOddWholeHour11,
+            oddWholeHour11Exp.rangeLower(oddWholeHour.getTime()));
+        assertEquals(upperBoundaryOddWholeHour11,
+            oddWholeHour11Exp.rangeUpper(oddWholeHour.getTime()));
+        assertEquals(oddWholeHour11,
+            new java.sql.Timestamp(oddWholeHour11Exp.roundTime(lowerBoundaryOddWholeHour11)));
+        assertNotEquals(oddWholeHour11,
+            new java.sql.Timestamp(oddWholeHour11Exp.roundTime(lowerBoundaryOddWholeHour11 - 1)));
+        assertEquals(oddWholeHour11,
+            new java.sql.Timestamp(oddWholeHour11Exp.roundTime(upperBoundaryOddWholeHour11)));
+        assertNotEquals(oddWholeHour11,
+            new java.sql.Timestamp(oddWholeHour11Exp.roundTime(upperBoundaryOddWholeHour11 + 1)));
+
+        RoundDateExpression evenwholeHourExp =
+                getRoundMsExpression("2022-11-11 12:0:0", TimeUnit.HOUR, 1);
+        java.sql.Timestamp evenwholeHour =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 12:0:0").getTime());
+        long lowerBoundaryEvenWholeHour = evenwholeHour.getTime() - HALF_HOUR;
+        long upperBoundaryEvenWholeHour = evenwholeHour.getTime() + HALF_HOUR - 1;
+        assertEquals(lowerBoundaryEvenWholeHour,
+            evenwholeHourExp.rangeLower(evenwholeHour.getTime()));
+        assertEquals(upperBoundaryEvenWholeHour,
+            evenwholeHourExp.rangeUpper(evenwholeHour.getTime()));
+        assertEquals(evenwholeHour,
+            new java.sql.Timestamp(evenwholeHourExp.roundTime(lowerBoundaryEvenWholeHour)));
+        assertNotEquals(evenwholeHour,
+            new java.sql.Timestamp(evenwholeHourExp.roundTime(lowerBoundaryEvenWholeHour - 1)));
+        assertEquals(evenwholeHour,
+            new java.sql.Timestamp(evenwholeHourExp.roundTime(upperBoundaryEvenWholeHour)));
+        assertNotEquals(evenwholeHour,
+            new java.sql.Timestamp(evenwholeHourExp.roundTime(upperBoundaryEvenWholeHour + 1)));
+
+        // No DST switchover
+        RoundDateExpression oddWholeDayExp =
+                getRoundMsExpression("2022-11-11 0:0:0", TimeUnit.DAY, 1);
+        java.sql.Timestamp oddWholeDay =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 0:0:0").getTime());
+        long lowerBoundaryOddWholeDay = oddWholeDay.getTime() - HALF_DAY;
+        long upperBoundaryOddWholeDay = oddWholeDay.getTime() + HALF_DAY - 1;
+        assertEquals(lowerBoundaryOddWholeDay, oddWholeDayExp.rangeLower(oddWholeDay.getTime()));
+        assertEquals(upperBoundaryOddWholeDay, oddWholeDayExp.rangeUpper(oddWholeDay.getTime()));
+        assertEquals(oddWholeDay,
+            new java.sql.Timestamp(oddWholeDayExp.roundTime(lowerBoundaryOddWholeDay)));
+        assertNotEquals(oddWholeDay,
+            new java.sql.Timestamp(oddWholeDayExp.roundTime(lowerBoundaryOddWholeDay - 1)));
+        assertEquals(oddWholeDay,
+            new java.sql.Timestamp(oddWholeDayExp.roundTime(upperBoundaryOddWholeDay)));
+        assertNotEquals(oddWholeDay,
+            new java.sql.Timestamp(oddWholeDayExp.roundTime(upperBoundaryOddWholeDay + 1)));
+
+        RoundDateExpression oddWholeDay10Exp =
+                getRoundMsExpression("2022-11-14 0:0:0", TimeUnit.DAY, 10);
+        java.sql.Timestamp oddWholeDay10 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-14 0:0:0").getTime());
+        long lowerBoundaryOddWholeDay10 = oddWholeDay10.getTime() - 10 * HALF_DAY;
+        long upperBoundaryOddWholeDay10 = oddWholeDay10.getTime() + 10 * HALF_DAY - 1;
+        assertEquals(lowerBoundaryOddWholeDay10,
+            oddWholeDay10Exp.rangeLower(oddWholeDay.getTime()));
+        assertEquals(upperBoundaryOddWholeDay10,
+            oddWholeDay10Exp.rangeUpper(oddWholeDay.getTime()));
+        assertEquals(oddWholeDay10,
+            new java.sql.Timestamp(oddWholeDay10Exp.roundTime(lowerBoundaryOddWholeDay10)));
+        assertNotEquals(oddWholeDay10,
+            new java.sql.Timestamp(oddWholeDay10Exp.roundTime(lowerBoundaryOddWholeDay10 - 1)));
+        assertEquals(oddWholeDay10,
+            new java.sql.Timestamp(oddWholeDay10Exp.roundTime(upperBoundaryOddWholeDay10)));
+        assertNotEquals(oddWholeDay10,
+            new java.sql.Timestamp(oddWholeDay10Exp.roundTime(upperBoundaryOddWholeDay10 + 1)));
+
+        RoundDateExpression oddWholeDay3Exp =
+                getRoundMsExpression("2022-11-12 0:0:0", TimeUnit.DAY, 3);
+        java.sql.Timestamp oddWholeDay3 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-12 0:0:0").getTime());
+        long lowerBoundaryOddWholeDay3 = oddWholeDay3.getTime() - 3 * HALF_DAY;
+        long upperBoundaryOddWholeDay3 = oddWholeDay3.getTime() + 3 * HALF_DAY - 1;
+        assertEquals(lowerBoundaryOddWholeDay3, oddWholeDay3Exp.rangeLower(oddWholeDay.getTime()));
+        assertEquals(upperBoundaryOddWholeDay3, oddWholeDay3Exp.rangeUpper(oddWholeDay.getTime()));
+        assertEquals(oddWholeDay3,
+            new java.sql.Timestamp(oddWholeDay3Exp.roundTime(lowerBoundaryOddWholeDay3)));
+        assertNotEquals(oddWholeDay3,
+            new java.sql.Timestamp(oddWholeDay3Exp.roundTime(lowerBoundaryOddWholeDay3 - 1)));
+        assertEquals(oddWholeDay3,
+            new java.sql.Timestamp(oddWholeDay3Exp.roundTime(upperBoundaryOddWholeDay3)));
+        assertNotEquals(oddWholeDay3,
+            new java.sql.Timestamp(oddWholeDay3Exp.roundTime(upperBoundaryOddWholeDay3 + 1)));
+
+        RoundDateExpression evenWholeDayExp =
+                getRoundMsExpression("2022-11-12 0:0:0", TimeUnit.DAY, 1);
+        java.sql.Timestamp evenWholeDay =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-12 0:0:0").getTime());
+        long lowerBoundaryEvenWholeDay = evenWholeDay.getTime() - HALF_DAY;
+        long upperBoundaryEvenWholeDay = evenWholeDay.getTime() + HALF_DAY - 1;
+        assertEquals(lowerBoundaryEvenWholeDay, evenWholeDayExp.rangeLower(evenWholeDay.getTime()));
+        assertEquals(upperBoundaryEvenWholeDay, evenWholeDayExp.rangeUpper(evenWholeDay.getTime()));
+        assertEquals(evenWholeDay,
+            new java.sql.Timestamp(evenWholeDayExp.roundTime(lowerBoundaryEvenWholeDay)));
+        assertNotEquals(evenWholeDay,
+            new java.sql.Timestamp(evenWholeDayExp.roundTime(lowerBoundaryEvenWholeDay - 1)));
+        assertEquals(evenWholeDay,
+            new java.sql.Timestamp(evenWholeDayExp.roundTime(upperBoundaryEvenWholeDay)));
+        assertNotEquals(evenWholeDay,
+            new java.sql.Timestamp(evenWholeDayExp.roundTime(upperBoundaryEvenWholeDay + 1)));
+
+        // Stateless, we can reuse it for every week test
+        RoundWeekExpression roundWeekExpression = new RoundWeekExpression();
+        java.sql.Timestamp wholeWeekOdd =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-10-10 0:0:0").getTime());
+        long lowerBoundaryWholeWeekOdd = wholeWeekOdd.getTime() - (HALF_WEEK - 1);
+        long upperBoundaryWholeWeekOdd = wholeWeekOdd.getTime() + HALF_WEEK - 1;
+        assertEquals(lowerBoundaryWholeWeekOdd,
+            roundWeekExpression.rangeLower(wholeWeekOdd.getTime()));
+        assertEquals(upperBoundaryWholeWeekOdd,
+            roundWeekExpression.rangeUpper(wholeWeekOdd.getTime()));
+        assertEquals(wholeWeekOdd,
+            new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeWeekOdd, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeWeekOdd,
+            new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeWeekOdd - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeWeekOdd,
+            new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeWeekOdd, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeWeekOdd,
+            new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeWeekOdd + 1, GJChronology.getInstanceUTC()))));
+
+        java.sql.Timestamp wholeWeekEven =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-10-17 0:0:0").getTime());
+        long lowerBoundaryWholeWeekEven = wholeWeekEven.getTime() - HALF_WEEK;
+        long upperBoundaryWholeWeekEven = wholeWeekEven.getTime() + HALF_WEEK;
+        assertEquals(lowerBoundaryWholeWeekEven,
+            roundWeekExpression.rangeLower(wholeWeekEven.getTime()));
+        assertEquals(upperBoundaryWholeWeekEven,
+            roundWeekExpression.rangeUpper(wholeWeekEven.getTime()));
+        assertEquals(wholeWeekEven,
+            new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeWeekEven, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeWeekEven,
+            new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeWeekEven - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeWeekEven,
+            new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeWeekEven, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeWeekEven,
+            new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeWeekEven + 1, GJChronology.getInstanceUTC()))));
+
+        RoundMonthExpression roundMonthExpression = new RoundMonthExpression();
+        // We're still using roundHalfEven here for backwards compatibility
+        java.sql.Timestamp wholeMonthEven =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-06-1 0:0:0").getTime());
+        // May is 31 days
+        long lowerBoundaryWholeMonthEven = wholeMonthEven.getTime() - 31 * HALF_DAY;
+        // June is 30 days
+        long upperBoundaryWholeMonthEven = wholeMonthEven.getTime() + 30 * HALF_DAY;
+        assertEquals(lowerBoundaryWholeMonthEven,
+            roundMonthExpression.rangeLower(wholeMonthEven.getTime()));
+        assertEquals(upperBoundaryWholeMonthEven,
+            roundMonthExpression.rangeUpper(wholeMonthEven.getTime()));
+        assertEquals(wholeMonthEven,
+            new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeMonthEven, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeMonthEven,
+            new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeMonthEven - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeMonthEven,
+            new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeMonthEven, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeMonthEven,
+            new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeMonthEven + 1, GJChronology.getInstanceUTC()))));
+
+        // We're still using roundHalfEven here for backwards compatibility
+        java.sql.Timestamp wholeMonthOdd =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-07-1 0:0:0").getTime());
+        // June is 30 days
+        long lowerBoundaryWholeMonthOdd = wholeMonthOdd.getTime() - 30 * HALF_DAY + 1;
+        // July is 31 days
+        long upperBoundaryWholeMonthOdd = wholeMonthOdd.getTime() + 31 * HALF_DAY - 1;
+        assertEquals(lowerBoundaryWholeMonthOdd,
+            roundMonthExpression.rangeLower(wholeMonthOdd.getTime()));
+        assertEquals(upperBoundaryWholeMonthOdd,
+            roundMonthExpression.rangeUpper(wholeMonthOdd.getTime()));
+        assertEquals(wholeMonthOdd,
+            new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeMonthOdd, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeMonthOdd,
+            new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeMonthOdd - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeMonthOdd,
+            new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeMonthOdd, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeMonthOdd,
+            new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeMonthOdd + 1, GJChronology.getInstanceUTC()))));
+
+        // We're still using roundHalfEven here for backwards compatibility
+        java.sql.Timestamp wholeMonthLeap =
+                new java.sql.Timestamp(DateUtil.parseDate("2024-02-1 0:0:0").getTime());
+        // January is 31 days
+        long lowerBoundaryWholeMonthLeap = wholeMonthLeap.getTime() - 31 * HALF_DAY;
+        // February is 29 days
+        long upperBoundaryWholeMonthLeap = wholeMonthLeap.getTime() + 29 * HALF_DAY;
+        assertEquals(lowerBoundaryWholeMonthLeap,
+            roundMonthExpression.rangeLower(wholeMonthLeap.getTime()));
+        assertEquals(upperBoundaryWholeMonthLeap,
+            roundMonthExpression.rangeUpper(wholeMonthLeap.getTime()));
+        assertEquals(wholeMonthLeap,
+            new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeMonthLeap, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeMonthLeap,
+            new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeMonthLeap - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeMonthLeap,
+            new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeMonthLeap, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeMonthLeap,
+            new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeMonthLeap + 1, GJChronology.getInstanceUTC()))));
+
+        // We're still using roundHalfEven here for backwards compatibility
+        RoundYearExpression roundYearExpression = new RoundYearExpression();
+        java.sql.Timestamp wholeYearEven =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-1-1 0:0:0").getTime());
+        long lowerBoundaryWholeYearEven = wholeYearEven.getTime() - HALF_YEAR;
+        long upperBoundaryWholeYearEven = wholeYearEven.getTime() + HALF_YEAR;
+        assertEquals(lowerBoundaryWholeYearEven,
+            roundYearExpression.rangeLower(wholeYearEven.getTime()));
+        assertEquals(upperBoundaryWholeYearEven,
+            roundYearExpression.rangeUpper(wholeYearEven.getTime()));
+        assertEquals(wholeYearEven,
+            new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeYearEven, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeYearEven,
+            new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeYearEven - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeYearEven,
+            new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeYearEven, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeYearEven,
+            new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeYearEven + 1, GJChronology.getInstanceUTC()))));
+
+        // We're still using roundHalfEven here for backwards compatibility
+        java.sql.Timestamp wholeYearOdd =
+                new java.sql.Timestamp(DateUtil.parseDate("2023-1-1 0:0:0").getTime());
+        long lowerBoundaryWholeYearOdd = wholeYearOdd.getTime() - HALF_YEAR + 1;
+        long upperBoundaryWholeYearOdd = wholeYearOdd.getTime() + HALF_YEAR - 1;
+        assertEquals(lowerBoundaryWholeYearOdd,
+            roundYearExpression.rangeLower(wholeYearOdd.getTime()));
+        assertEquals(upperBoundaryWholeYearOdd,
+            roundYearExpression.rangeUpper(wholeYearOdd.getTime()));
+        assertEquals(wholeYearOdd,
+            new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeYearOdd, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeYearOdd,
+            new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeYearOdd - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeYearOdd,
+            new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeYearOdd, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeYearOdd,
+            new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeYearOdd + 1, GJChronology.getInstanceUTC()))));
+
+        // We're still using roundHalfEven here for backwards compatibility
+        java.sql.Timestamp wholeYearLeapEven =
+                new java.sql.Timestamp(DateUtil.parseDate("2024-1-1 0:0:0").getTime());
+        long lowerBoundaryWholeYearLeapEven = wholeYearLeapEven.getTime() - HALF_YEAR;
+        long upperBoundaryWholeYearLeapEven = wholeYearLeapEven.getTime() + HALF_YEAR + HALF_DAY;
+        assertEquals(lowerBoundaryWholeYearLeapEven,
+            roundYearExpression.rangeLower(wholeYearLeapEven.getTime()));
+        assertEquals(upperBoundaryWholeYearLeapEven,
+            roundYearExpression.rangeUpper(wholeYearLeapEven.getTime()));
+        assertEquals(wholeYearLeapEven,
+            new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeYearLeapEven, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeYearLeapEven,
+            new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeYearLeapEven - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeYearLeapEven,
+            new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeYearLeapEven, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeYearLeapEven,
+            new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeYearLeapEven + 1, GJChronology.getInstanceUTC()))));
+    }
+
+    private FloorDateExpression getFloorMsExpression(String s, TimeUnit u, int m)
+            throws SQLException {
+        return (FloorDateExpression) FloorDateExpression.create(LiteralExpression.newConstant(s), u,
+            m);
+    }
+
+    @Test
+    public void testFloorGMT() throws SQLException {
+
+        // No need to repeat odd / even cases
+        // The logic for upper and lower scan ranges is always
+        // [floor(ts), ceil(ts+1)-1]
+
+        RoundDateExpression oddWholeSecondExp =
+                getFloorMsExpression("2022-11-11 11:11:11", TimeUnit.SECOND, 1);
+        java.sql.Timestamp oddWholeSecond =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:11:11").getTime());
+        long lowerBoundaryOddWholeSecond = oddWholeSecond.getTime();
+        long upperBoundaryOddWholeSecond = oddWholeSecond.getTime() + SEC - 1;
+        assertEquals(lowerBoundaryOddWholeSecond,
+            oddWholeSecondExp.rangeLower(oddWholeSecond.getTime()));
+        assertEquals(upperBoundaryOddWholeSecond,
+            oddWholeSecondExp.rangeUpper(oddWholeSecond.getTime()));
+        assertEquals(oddWholeSecond,
+            new java.sql.Timestamp(oddWholeSecondExp.roundTime(lowerBoundaryOddWholeSecond)));
+        assertNotEquals(oddWholeSecond,
+            new java.sql.Timestamp(oddWholeSecondExp.roundTime(lowerBoundaryOddWholeSecond - 1)));
+        assertEquals(oddWholeSecond,
+            new java.sql.Timestamp(oddWholeSecondExp.roundTime(upperBoundaryOddWholeSecond)));
+        assertNotEquals(oddWholeSecond,
+            new java.sql.Timestamp(oddWholeSecondExp.roundTime(upperBoundaryOddWholeSecond + 1)));
+
+        // 10 sec range
+        RoundDateExpression oddWholeSecondFloor10Exp =
+                getFloorMsExpression("2022-11-11 11:11:10", TimeUnit.SECOND, 10);
+        java.sql.Timestamp oddWholeSecondFloor10 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:11:10").getTime());
+        long lowerBoundaryOddWholeSecondFloor10 = oddWholeSecondFloor10.getTime();
+        long upperBoundaryOddWholeSecondFloor10 = oddWholeSecondFloor10.getTime() + 10 * SEC - 1;
+        assertEquals(lowerBoundaryOddWholeSecondFloor10,
+            oddWholeSecondFloor10Exp.rangeLower(oddWholeSecond.getTime()));
+        assertEquals(upperBoundaryOddWholeSecondFloor10,
+            oddWholeSecondFloor10Exp.rangeUpper(oddWholeSecond.getTime()));
+        assertEquals(oddWholeSecondFloor10, new java.sql.Timestamp(
+                oddWholeSecondFloor10Exp.roundTime(lowerBoundaryOddWholeSecondFloor10)));
+        assertNotEquals(oddWholeSecondFloor10, new java.sql.Timestamp(
+                oddWholeSecondFloor10Exp.roundTime(lowerBoundaryOddWholeSecondFloor10 - 1)));
+        assertEquals(oddWholeSecondFloor10, new java.sql.Timestamp(
+                oddWholeSecondFloor10Exp.roundTime(upperBoundaryOddWholeSecondFloor10)));
+        assertNotEquals(oddWholeSecondFloor10, new java.sql.Timestamp(
+                oddWholeSecondFloor10Exp.roundTime(upperBoundaryOddWholeSecondFloor10 + 1)));
+
+        // 15 sec range
+        RoundDateExpression oddWholeSecondFloor15Exp =
+                getFloorMsExpression("2022-11-11 11:11:0", TimeUnit.SECOND, 15);
+        java.sql.Timestamp oddWholeSecondFloor15 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:11:0").getTime());
+        long lowerBoundaryOddWholeSecondFloor15 = oddWholeSecondFloor15.getTime();
+        long upperBoundaryOddWholeSecondFloor15 = oddWholeSecondFloor15.getTime() + 15 * SEC - 1;
+        assertEquals(lowerBoundaryOddWholeSecondFloor15,
+            oddWholeSecondFloor15Exp.rangeLower(oddWholeSecond.getTime()));
+        assertEquals(upperBoundaryOddWholeSecondFloor15,
+            oddWholeSecondFloor15Exp.rangeUpper(oddWholeSecond.getTime()));
+        assertEquals(oddWholeSecondFloor15, new java.sql.Timestamp(
+                oddWholeSecondFloor15Exp.roundTime(lowerBoundaryOddWholeSecondFloor15)));
+        assertNotEquals(oddWholeSecondFloor15, new java.sql.Timestamp(
+                oddWholeSecondFloor15Exp.roundTime(lowerBoundaryOddWholeSecondFloor15 - 1)));
+        assertEquals(oddWholeSecondFloor15, new java.sql.Timestamp(
+                oddWholeSecondFloor15Exp.roundTime(upperBoundaryOddWholeSecondFloor15)));
+        assertNotEquals(oddWholeSecondFloor15, new java.sql.Timestamp(
+                oddWholeSecondFloor15Exp.roundTime(upperBoundaryOddWholeSecondFloor15 + 1)));
+
+        RoundDateExpression evenWholeMinuteExp =
+                getFloorMsExpression("2022-11-11 11:12:0", TimeUnit.MINUTE, 1);
+        java.sql.Timestamp evenWholeMinute =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:12:0").getTime());
+        long lowerBoundaryEvenWholeMinute = evenWholeMinute.getTime();
+        long upperBoundaryEvenWholeMinute = evenWholeMinute.getTime() + MIN - 1;
+        assertEquals(lowerBoundaryEvenWholeMinute,
+            evenWholeMinuteExp.rangeLower(evenWholeMinute.getTime()));
+        assertEquals(upperBoundaryEvenWholeMinute,
+            evenWholeMinuteExp.rangeUpper(evenWholeMinute.getTime()));
+        assertEquals(evenWholeMinute,
+            new java.sql.Timestamp(evenWholeMinuteExp.roundTime(lowerBoundaryEvenWholeMinute)));
+        assertNotEquals(evenWholeMinute,
+            new java.sql.Timestamp(evenWholeMinuteExp.roundTime(lowerBoundaryEvenWholeMinute - 1)));
+        assertEquals(evenWholeMinute,
+            new java.sql.Timestamp(evenWholeMinuteExp.roundTime(upperBoundaryEvenWholeMinute)));
+        assertNotEquals(evenWholeMinute,
+            new java.sql.Timestamp(evenWholeMinuteExp.roundTime(upperBoundaryEvenWholeMinute + 1)));
+
+        RoundDateExpression evenWholeMinuteFloor20Exp =
+                getFloorMsExpression("2022-11-11 11:00:0", TimeUnit.MINUTE, 20);
+        java.sql.Timestamp evenWholeMinuteFloor20 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:00:0").getTime());
+        long lowerBoundaryEvenWholeMinuteFloor20 = evenWholeMinuteFloor20.getTime();
+        long upperBoundaryEvenWholeMinuteFloor20 = evenWholeMinuteFloor20.getTime() + 20 * MIN - 1;
+        assertEquals(lowerBoundaryEvenWholeMinuteFloor20,
+            evenWholeMinuteFloor20Exp.rangeLower(evenWholeMinute.getTime()));
+        assertEquals(upperBoundaryEvenWholeMinuteFloor20,
+            evenWholeMinuteFloor20Exp.rangeUpper(evenWholeMinute.getTime()));
+        assertEquals(evenWholeMinuteFloor20, new java.sql.Timestamp(
+                evenWholeMinuteFloor20Exp.roundTime(lowerBoundaryEvenWholeMinuteFloor20)));
+        assertNotEquals(evenWholeMinuteFloor20, new java.sql.Timestamp(
+                evenWholeMinuteFloor20Exp.roundTime(lowerBoundaryEvenWholeMinuteFloor20 - 1)));
+        assertEquals(evenWholeMinuteFloor20, new java.sql.Timestamp(
+                evenWholeMinuteFloor20Exp.roundTime(upperBoundaryEvenWholeMinuteFloor20)));
+        assertNotEquals(evenWholeMinuteFloor20, new java.sql.Timestamp(
+                evenWholeMinuteFloor20Exp.roundTime(upperBoundaryEvenWholeMinuteFloor20 + 1)));
+
+        // Minutes since epoch, don't expect the rounded value to be "round"
+        RoundDateExpression evenWholeMinuteFloor17Exp =
+                getFloorMsExpression("2022-11-11 11:12:00", TimeUnit.MINUTE, 17);
+        java.sql.Timestamp evenWholeMinuteFloor17 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:12:00").getTime());
+        long lowerBoundaryEvenWholeMinute17 = evenWholeMinuteFloor17.getTime();
+        long upperBoundaryEvenWholeMinute17 = evenWholeMinuteFloor17.getTime() + 17 * MIN - 1;
+        assertEquals(lowerBoundaryEvenWholeMinute17,
+            evenWholeMinuteFloor17Exp.rangeLower(evenWholeMinute.getTime()));
+        assertEquals(upperBoundaryEvenWholeMinute17,
+            evenWholeMinuteFloor17Exp.rangeUpper(evenWholeMinute.getTime()));
+        assertEquals(evenWholeMinuteFloor17, new java.sql.Timestamp(
+                evenWholeMinuteFloor17Exp.roundTime(lowerBoundaryEvenWholeMinute17)));
+        assertNotEquals(evenWholeMinuteFloor17, new java.sql.Timestamp(
+                evenWholeMinuteFloor17Exp.roundTime(lowerBoundaryEvenWholeMinute17 - 1)));
+        assertEquals(evenWholeMinuteFloor17, new java.sql.Timestamp(
+                evenWholeMinuteFloor17Exp.roundTime(upperBoundaryEvenWholeMinute17)));
+        assertNotEquals(evenWholeMinuteFloor17, new java.sql.Timestamp(
+                evenWholeMinuteFloor17Exp.roundTime(upperBoundaryEvenWholeMinute17 + 1)));
+
+        RoundDateExpression oddWholeHourExp =
+                getFloorMsExpression("2022-11-11 11:0:0", TimeUnit.HOUR, 1);
+        java.sql.Timestamp oddWholeHour =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:0:0").getTime());
+        long lowerBoundaryOddWholeHour = oddWholeHour.getTime();
+        long upperBoundaryOddWholeHour = oddWholeHour.getTime() + HOUR - 1;
+        assertEquals(lowerBoundaryOddWholeHour, oddWholeHourExp.rangeLower(oddWholeHour.getTime()));
+        assertEquals(upperBoundaryOddWholeHour, oddWholeHourExp.rangeUpper(oddWholeHour.getTime()));
+        assertEquals(oddWholeHour,
+            new java.sql.Timestamp(oddWholeHourExp.roundTime(lowerBoundaryOddWholeHour)));
+        assertNotEquals(oddWholeHour,
+            new java.sql.Timestamp(oddWholeHourExp.roundTime(lowerBoundaryOddWholeHour - 1)));
+        assertEquals(oddWholeHour,
+            new java.sql.Timestamp(oddWholeHourExp.roundTime(upperBoundaryOddWholeHour)));
+        assertNotEquals(oddWholeHour,
+            new java.sql.Timestamp(oddWholeHourExp.roundTime(upperBoundaryOddWholeHour + 1)));
+
+        // Not rounding to hourOfDay
+        RoundDateExpression oddWholeHour10Exp =
+                getFloorMsExpression("2022-11-11 02:0:0", TimeUnit.HOUR, 10);
+        java.sql.Timestamp oddWholeHour10 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 02:0:0").getTime());
+        long lowerBoundaryOddWholeHour10 = oddWholeHour10.getTime();
+        long upperBoundaryOddWholeHour10 = oddWholeHour10.getTime() + HOUR * 10 - 1;
+        assertEquals(lowerBoundaryOddWholeHour10,
+            oddWholeHour10Exp.rangeLower(oddWholeHour.getTime()));
+        assertEquals(upperBoundaryOddWholeHour10,
+            oddWholeHour10Exp.rangeUpper(oddWholeHour.getTime()));
+        assertEquals(oddWholeHour10,
+            new java.sql.Timestamp(oddWholeHour10Exp.roundTime(lowerBoundaryOddWholeHour10)));
+        assertNotEquals(oddWholeHour10,
+            new java.sql.Timestamp(oddWholeHour10Exp.roundTime(lowerBoundaryOddWholeHour10 - 1)));
+        assertEquals(oddWholeHour10,
+            new java.sql.Timestamp(oddWholeHour10Exp.roundTime(upperBoundaryOddWholeHour10)));
+        assertNotEquals(oddWholeHour10,
+            new java.sql.Timestamp(oddWholeHour10Exp.roundTime(upperBoundaryOddWholeHour10 + 1)));
+
+        // Not rounding to hourOfDay
+        RoundDateExpression oddWholeHour11Exp =
+                getFloorMsExpression("2022-11-11 07:0:0", TimeUnit.HOUR, 11);
+        java.sql.Timestamp oddWholeHour11 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 07:0:0").getTime());
+        long lowerBoundaryOddWholeHour11 = oddWholeHour11.getTime();
+        long upperBoundaryOddWholeHour11 = oddWholeHour11.getTime() + HOUR * 11 - 1;
+        assertEquals(lowerBoundaryOddWholeHour11,
+            oddWholeHour11Exp.rangeLower(oddWholeHour.getTime()));
+        assertEquals(upperBoundaryOddWholeHour11,
+            oddWholeHour11Exp.rangeUpper(oddWholeHour.getTime()));
+        assertEquals(oddWholeHour11,
+            new java.sql.Timestamp(oddWholeHour11Exp.roundTime(lowerBoundaryOddWholeHour11)));
+        assertNotEquals(oddWholeHour11,
+            new java.sql.Timestamp(oddWholeHour11Exp.roundTime(lowerBoundaryOddWholeHour11 - 1)));
+        assertEquals(oddWholeHour11,
+            new java.sql.Timestamp(oddWholeHour11Exp.roundTime(upperBoundaryOddWholeHour11)));
+        assertNotEquals(oddWholeHour11,
+            new java.sql.Timestamp(oddWholeHour11Exp.roundTime(upperBoundaryOddWholeHour11 + 1)));
+
+        // No DST switchover
+        RoundDateExpression evenWholeDayExp =
+                getFloorMsExpression("2022-11-12 0:0:0", TimeUnit.DAY, 1);
+        java.sql.Timestamp evenWholeDay =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-12 0:0:0").getTime());
+        long lowerBoundaryEvenWholeDay = evenWholeDay.getTime();
+        long upperBoundaryEvenWholeDay = evenWholeDay.getTime() + DAY - 1;
+        assertEquals(lowerBoundaryEvenWholeDay, evenWholeDayExp.rangeLower(evenWholeDay.getTime()));
+        assertEquals(upperBoundaryEvenWholeDay, evenWholeDayExp.rangeUpper(evenWholeDay.getTime()));
+        assertEquals(evenWholeDay,
+            new java.sql.Timestamp(evenWholeDayExp.roundTime(lowerBoundaryEvenWholeDay)));
+        assertNotEquals(evenWholeDay,
+            new java.sql.Timestamp(evenWholeDayExp.roundTime(lowerBoundaryEvenWholeDay - 1)));
+        assertEquals(evenWholeDay,
+            new java.sql.Timestamp(evenWholeDayExp.roundTime(upperBoundaryEvenWholeDay)));
+        assertNotEquals(evenWholeDay,
+            new java.sql.Timestamp(evenWholeDayExp.roundTime(upperBoundaryEvenWholeDay + 1)));
+
+        RoundDateExpression evenWholeDay2Exp =
+                getFloorMsExpression("2022-11-12 0:0:0", TimeUnit.DAY, 2);
+        java.sql.Timestamp evenWholeDay2 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-12 0:0:0").getTime());
+        long lowerBoundaryEvenWholeDay2 = evenWholeDay2.getTime();
+        long upperBoundaryEvenWholeDay2 = evenWholeDay2.getTime() + 2 * DAY - 1;
+        assertEquals(lowerBoundaryEvenWholeDay2,
+            evenWholeDay2Exp.rangeLower(evenWholeDay.getTime()));
+        assertEquals(upperBoundaryEvenWholeDay2,
+            evenWholeDay2Exp.rangeUpper(evenWholeDay.getTime()));
+        assertEquals(evenWholeDay2,
+            new java.sql.Timestamp(evenWholeDay2Exp.roundTime(lowerBoundaryEvenWholeDay2)));
+        assertNotEquals(evenWholeDay2,
+            new java.sql.Timestamp(evenWholeDay2Exp.roundTime(lowerBoundaryEvenWholeDay2 - 1)));
+        assertEquals(evenWholeDay2,
+            new java.sql.Timestamp(evenWholeDay2Exp.roundTime(upperBoundaryEvenWholeDay2)));
+        assertNotEquals(evenWholeDay2,
+            new java.sql.Timestamp(evenWholeDay2Exp.roundTime(upperBoundaryEvenWholeDay2 + 1)));
+
+        RoundDateExpression evenWholeDay3Exp =
+                getFloorMsExpression("2022-11-12 0:0:0", TimeUnit.DAY, 3);
+        java.sql.Timestamp evenWholeDay3 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-12 0:0:0").getTime());
+        long lowerBoundaryEvenWholeDay3 = evenWholeDay3.getTime();
+        long upperBoundaryEvenWholeDay3 = evenWholeDay3.getTime() + 3 * DAY - 1;
+        assertEquals(lowerBoundaryEvenWholeDay3,
+            evenWholeDay3Exp.rangeLower(evenWholeDay.getTime()));
+        assertEquals(upperBoundaryEvenWholeDay3,
+            evenWholeDay3Exp.rangeUpper(evenWholeDay.getTime()));
+        assertEquals(evenWholeDay3,
+            new java.sql.Timestamp(evenWholeDay3Exp.roundTime(lowerBoundaryEvenWholeDay3)));
+        assertNotEquals(evenWholeDay3,
+            new java.sql.Timestamp(evenWholeDay3Exp.roundTime(lowerBoundaryEvenWholeDay3 - 1)));
+        assertEquals(evenWholeDay3,
+            new java.sql.Timestamp(evenWholeDay3Exp.roundTime(upperBoundaryEvenWholeDay3)));
+        assertNotEquals(evenWholeDay3,
+            new java.sql.Timestamp(evenWholeDay3Exp.roundTime(upperBoundaryEvenWholeDay3 + 1)));
+
+        FloorWeekExpression floorWeekExpression = new FloorWeekExpression();
+        java.sql.Timestamp wholeWeekOdd =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-10-10 0:0:0").getTime());
+        long lowerBoundaryWholeWeekOdd = wholeWeekOdd.getTime();
+        long upperBoundaryWholeWeekOdd = wholeWeekOdd.getTime() + WEEK - 1;
+        assertEquals(lowerBoundaryWholeWeekOdd,
+            floorWeekExpression.rangeLower(wholeWeekOdd.getTime()));
+        assertEquals(upperBoundaryWholeWeekOdd,
+            floorWeekExpression.rangeUpper(wholeWeekOdd.getTime()));
+        assertEquals(wholeWeekOdd,
+            new java.sql.Timestamp(floorWeekExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeWeekOdd, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeWeekOdd,
+            new java.sql.Timestamp(floorWeekExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeWeekOdd - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeWeekOdd,
+            new java.sql.Timestamp(floorWeekExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeWeekOdd, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeWeekOdd,
+            new java.sql.Timestamp(floorWeekExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeWeekOdd + 1, GJChronology.getInstanceUTC()))));
+
+        FloorMonthExpression floorMonthExpression = new FloorMonthExpression();
+        java.sql.Timestamp wholeMonthOdd =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-07-1 0:0:0").getTime());
+        long lowerBoundaryWholeMonthOdd = wholeMonthOdd.getTime();
+        // July is 31 days
+        long upperBoundaryWholeMonthOdd = wholeMonthOdd.getTime() + 31 * DAY - 1;
+        assertEquals(lowerBoundaryWholeMonthOdd,
+            floorMonthExpression.rangeLower(wholeMonthOdd.getTime()));
+        assertEquals(upperBoundaryWholeMonthOdd,
+            floorMonthExpression.rangeUpper(wholeMonthOdd.getTime()));
+        assertEquals(wholeMonthOdd,
+            new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeMonthOdd, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeMonthOdd,
+            new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeMonthOdd - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeMonthOdd,
+            new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeMonthOdd, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeMonthOdd,
+            new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeMonthOdd + 1, GJChronology.getInstanceUTC()))));
+
+        java.sql.Timestamp wholeMonthLeap =
+                new java.sql.Timestamp(DateUtil.parseDate("2024-02-1 0:0:0").getTime());
+        long lowerBoundaryWholeMonthLeap = wholeMonthLeap.getTime();
+        // February is 29 days
+        long upperBoundaryWholeMonthLeap = wholeMonthLeap.getTime() + 29 * DAY - 1;
+        assertEquals(lowerBoundaryWholeMonthLeap,
+            floorMonthExpression.rangeLower(wholeMonthLeap.getTime()));
+        assertEquals(upperBoundaryWholeMonthLeap,
+            floorMonthExpression.rangeUpper(wholeMonthLeap.getTime()));
+        assertEquals(wholeMonthLeap,
+            new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeMonthLeap, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeMonthLeap,
+            new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeMonthLeap - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeMonthLeap,
+            new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeMonthLeap, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeMonthLeap,
+            new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeMonthLeap + 1, GJChronology.getInstanceUTC()))));
+
+        FloorYearExpression floorYearExpression = new FloorYearExpression();
+        java.sql.Timestamp wholeYearEven =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-1-1 0:0:0").getTime());
+        long lowerBoundaryWholeYearEven = wholeYearEven.getTime();
+        long upperBoundaryWholeYearEven = wholeYearEven.getTime() + YEAR - 1;
+        assertEquals(lowerBoundaryWholeYearEven,
+            floorYearExpression.rangeLower(wholeYearEven.getTime()));
+        assertEquals(upperBoundaryWholeYearEven,
+            floorYearExpression.rangeUpper(wholeYearEven.getTime()));
+        assertEquals(wholeYearEven,
+            new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeYearEven, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeYearEven,
+            new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeYearEven - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeYearEven,
+            new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeYearEven, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeYearEven,
+            new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeYearEven + 1, GJChronology.getInstanceUTC()))));
+
+        java.sql.Timestamp wholeYearLeapEven =
+                new java.sql.Timestamp(DateUtil.parseDate("2024-1-1 0:0:0").getTime());
+        long lowerBoundaryWholeYearLeapEven = wholeYearLeapEven.getTime();
+        long upperBoundaryWholeYearLeapEven = wholeYearLeapEven.getTime() + YEAR + DAY - 1;
+        assertEquals(lowerBoundaryWholeYearLeapEven,
+            floorYearExpression.rangeLower(wholeYearLeapEven.getTime()));
+        assertEquals(upperBoundaryWholeYearLeapEven,
+            floorYearExpression.rangeUpper(wholeYearLeapEven.getTime()));
+        assertEquals(wholeYearLeapEven,
+            new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeYearLeapEven, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeYearLeapEven,
+            new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeYearLeapEven - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeYearLeapEven,
+            new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeYearLeapEven, GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeYearLeapEven,
+            new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeYearLeapEven + 1, GJChronology.getInstanceUTC()))));
+    }
+
+    private CeilDateExpression getCeilMsExpression(String s, TimeUnit u, int m)
+            throws SQLException {
+        return (CeilDateExpression) CeilDateExpression.create(LiteralExpression.newConstant(s), u,
+            m);
+    }
+
+    @Test
+    public void testCeilGMT() throws SQLException {
+
+        // No need to repeat odd / even cases
+        // The logic for upper and lower scan ranges is always
+        // [floor(ts-1)+1, ceil(ts)]
+
+        RoundDateExpression oddWholeSecondExp =
+                getCeilMsExpression("2022-11-11 11:11:11", TimeUnit.SECOND, 1);
+        java.sql.Timestamp oddWholeSecond =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:11:11").getTime());
+        long lowerBoundaryOddWholeSecond = oddWholeSecond.getTime() - SEC + 1;
+        long upperBoundaryOddWholeSecond = oddWholeSecond.getTime();
+        assertEquals(lowerBoundaryOddWholeSecond,
+            oddWholeSecondExp.rangeLower(oddWholeSecond.getTime()));
+        assertEquals(upperBoundaryOddWholeSecond,
+            oddWholeSecondExp.rangeUpper(oddWholeSecond.getTime()));
+        assertEquals(oddWholeSecond,
+            new java.sql.Timestamp(oddWholeSecondExp.roundTime(lowerBoundaryOddWholeSecond)));
+        assertNotEquals(oddWholeSecond,
+            new java.sql.Timestamp(oddWholeSecondExp.roundTime(lowerBoundaryOddWholeSecond - 1)));
+        assertEquals(oddWholeSecond,
+            new java.sql.Timestamp(oddWholeSecondExp.roundTime(upperBoundaryOddWholeSecond)));
+        assertNotEquals(oddWholeSecond,
+            new java.sql.Timestamp(oddWholeSecondExp.roundTime(upperBoundaryOddWholeSecond + 1)));
+
+        // 10 sec range
+        RoundDateExpression oddWholeSecondCeil10Exp =
+                getCeilMsExpression("2022-11-11 11:11:20", TimeUnit.SECOND, 10);
+        java.sql.Timestamp oddWholeSecondCeil10 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:11:20").getTime());
+        long lowerBoundaryOddWholeSecondCeil10 = oddWholeSecondCeil10.getTime() - 10 * SEC + 1;
+        long upperBoundaryOddWholeSecondCeil10 = oddWholeSecondCeil10.getTime();
+        assertEquals(lowerBoundaryOddWholeSecondCeil10,
+            oddWholeSecondCeil10Exp.rangeLower(oddWholeSecond.getTime()));
+        assertEquals(upperBoundaryOddWholeSecondCeil10,
+            oddWholeSecondCeil10Exp.rangeUpper(oddWholeSecond.getTime()));
+        assertEquals(oddWholeSecondCeil10, new java.sql.Timestamp(
+                oddWholeSecondCeil10Exp.roundTime(lowerBoundaryOddWholeSecondCeil10)));
+        assertNotEquals(oddWholeSecondCeil10, new java.sql.Timestamp(
+                oddWholeSecondCeil10Exp.roundTime(lowerBoundaryOddWholeSecondCeil10 - 1)));
+        assertEquals(oddWholeSecondCeil10, new java.sql.Timestamp(
+                oddWholeSecondCeil10Exp.roundTime(upperBoundaryOddWholeSecondCeil10)));
+        assertNotEquals(oddWholeSecondCeil10, new java.sql.Timestamp(
+                oddWholeSecondCeil10Exp.roundTime(upperBoundaryOddWholeSecondCeil10 + 1)));
+
+        // 15 sec range
+        RoundDateExpression oddWholeSecondCeil15Exp =
+                getCeilMsExpression("2022-11-11 11:11:15", TimeUnit.SECOND, 15);
+        java.sql.Timestamp oddWholeSecondCeil15 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:11:15").getTime());
+        long lowerBoundaryOddWholeSecondFloor15 = oddWholeSecondCeil15.getTime() - 15 * SEC + 1;
+        long upperBoundaryOddWholeSecondFloor15 = oddWholeSecondCeil15.getTime();
+        assertEquals(lowerBoundaryOddWholeSecondFloor15,
+            oddWholeSecondCeil15Exp.rangeLower(oddWholeSecond.getTime()));
+        assertEquals(upperBoundaryOddWholeSecondFloor15,
+            oddWholeSecondCeil15Exp.rangeUpper(oddWholeSecond.getTime()));
+        assertEquals(oddWholeSecondCeil15, new java.sql.Timestamp(
+                oddWholeSecondCeil15Exp.roundTime(lowerBoundaryOddWholeSecondFloor15)));
+        assertNotEquals(oddWholeSecondCeil15, new java.sql.Timestamp(
+                oddWholeSecondCeil15Exp.roundTime(lowerBoundaryOddWholeSecondFloor15 - 1)));
+        assertEquals(oddWholeSecondCeil15, new java.sql.Timestamp(
+                oddWholeSecondCeil15Exp.roundTime(upperBoundaryOddWholeSecondFloor15)));
+        assertNotEquals(oddWholeSecondCeil15, new java.sql.Timestamp(
+                oddWholeSecondCeil15Exp.roundTime(upperBoundaryOddWholeSecondFloor15 + 1)));
+
+        RoundDateExpression evenWholeMinuteExp =
+                getCeilMsExpression("2022-11-11 11:12:0", TimeUnit.MINUTE, 1);
+        java.sql.Timestamp evenWholeMinute =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:12:0").getTime());
+        long lowerBoundaryEvenWholeMinute = evenWholeMinute.getTime() - MIN + 1;
+        long upperBoundaryEvenWholeMinute = evenWholeMinute.getTime();
+        assertEquals(lowerBoundaryEvenWholeMinute,
+            evenWholeMinuteExp.rangeLower(evenWholeMinute.getTime()));
+        assertEquals(upperBoundaryEvenWholeMinute,
+            evenWholeMinuteExp.rangeUpper(evenWholeMinute.getTime()));
+        assertEquals(evenWholeMinute,
+            new java.sql.Timestamp(evenWholeMinuteExp.roundTime(lowerBoundaryEvenWholeMinute)));
+        assertNotEquals(evenWholeMinute,
+            new java.sql.Timestamp(evenWholeMinuteExp.roundTime(lowerBoundaryEvenWholeMinute - 1)));
+        assertEquals(evenWholeMinute,
+            new java.sql.Timestamp(evenWholeMinuteExp.roundTime(upperBoundaryEvenWholeMinute)));
+        assertNotEquals(evenWholeMinute,
+            new java.sql.Timestamp(evenWholeMinuteExp.roundTime(upperBoundaryEvenWholeMinute + 1)));
+
+        RoundDateExpression evenWholeMinuteCeil20Exp =
+                getCeilMsExpression("2022-11-11 11:20:0", TimeUnit.MINUTE, 20);
+        java.sql.Timestamp evenWholeMinuteCeil20 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:20:0").getTime());
+        long lowerBoundaryEvenWholeMinuteCeil20 = evenWholeMinuteCeil20.getTime() - 20 * MIN + 1;
+        long upperBoundaryEvenWholeMinuteCeil20 = evenWholeMinuteCeil20.getTime();
+        assertEquals(lowerBoundaryEvenWholeMinuteCeil20,
+            evenWholeMinuteCeil20Exp.rangeLower(evenWholeMinute.getTime()));
+        assertEquals(upperBoundaryEvenWholeMinuteCeil20,
+            evenWholeMinuteCeil20Exp.rangeUpper(evenWholeMinute.getTime()));
+        assertEquals(evenWholeMinuteCeil20, new java.sql.Timestamp(
+                evenWholeMinuteCeil20Exp.roundTime(lowerBoundaryEvenWholeMinuteCeil20)));
+        assertNotEquals(evenWholeMinuteCeil20, new java.sql.Timestamp(
+                evenWholeMinuteCeil20Exp.roundTime(lowerBoundaryEvenWholeMinuteCeil20 - 1)));
+        assertEquals(evenWholeMinuteCeil20, new java.sql.Timestamp(
+                evenWholeMinuteCeil20Exp.roundTime(upperBoundaryEvenWholeMinuteCeil20)));
+        assertNotEquals(evenWholeMinuteCeil20, new java.sql.Timestamp(
+                evenWholeMinuteCeil20Exp.roundTime(upperBoundaryEvenWholeMinuteCeil20 + 1)));
+
+        // Minutes since epoch, don't expect the rounded value to be "round"
+        RoundDateExpression evenWholeMinuteCeil17Exp =
+                getCeilMsExpression("2022-11-11 11:12:00", TimeUnit.MINUTE, 17);
+        java.sql.Timestamp evenWholeMinuteCeil17 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:12:00").getTime());
+        long lowerBoundaryEvenWholeMinute17 = evenWholeMinuteCeil17.getTime() - 17 * MIN + 1;
+        long upperBoundaryEvenWholeMinute17 = evenWholeMinuteCeil17.getTime();
+        assertEquals(lowerBoundaryEvenWholeMinute17,
+            evenWholeMinuteCeil17Exp.rangeLower(evenWholeMinute.getTime()));
+        assertEquals(upperBoundaryEvenWholeMinute17,
+            evenWholeMinuteCeil17Exp.rangeUpper(evenWholeMinute.getTime()));
+        assertEquals(evenWholeMinuteCeil17, new java.sql.Timestamp(
+                evenWholeMinuteCeil17Exp.roundTime(lowerBoundaryEvenWholeMinute17)));
+        assertNotEquals(evenWholeMinuteCeil17, new java.sql.Timestamp(
+                evenWholeMinuteCeil17Exp.roundTime(lowerBoundaryEvenWholeMinute17 - 1)));
+        assertEquals(evenWholeMinuteCeil17, new java.sql.Timestamp(
+                evenWholeMinuteCeil17Exp.roundTime(upperBoundaryEvenWholeMinute17)));
+        assertNotEquals(evenWholeMinuteCeil17, new java.sql.Timestamp(
+                evenWholeMinuteCeil17Exp.roundTime(upperBoundaryEvenWholeMinute17 + 1)));
+
+        RoundDateExpression oddWholeHourExp =
+                getCeilMsExpression("2022-11-11 11:0:0", TimeUnit.HOUR, 1);
+        java.sql.Timestamp oddWholeHour =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 11:0:0").getTime());
+        long lowerBoundaryOddWholeHour = oddWholeHour.getTime() - HOUR + 1;
+        long upperBoundaryOddWholeHour = oddWholeHour.getTime();
+        assertEquals(lowerBoundaryOddWholeHour,
+            oddWholeHourExp.rangeLower(oddWholeHour.getTime() - 1));
+        assertEquals(upperBoundaryOddWholeHour, oddWholeHourExp.rangeUpper(oddWholeHour.getTime()));
+        assertEquals(oddWholeHour,
+            new java.sql.Timestamp(oddWholeHourExp.roundTime(lowerBoundaryOddWholeHour)));
+        assertNotEquals(oddWholeHour,
+            new java.sql.Timestamp(oddWholeHourExp.roundTime(lowerBoundaryOddWholeHour - 1)));
+        assertEquals(oddWholeHour,
+            new java.sql.Timestamp(oddWholeHourExp.roundTime(upperBoundaryOddWholeHour)));
+        assertNotEquals(oddWholeHour,
+            new java.sql.Timestamp(oddWholeHourExp.roundTime(upperBoundaryOddWholeHour + 1)));
+
+        // Not rounding to hourOfDay
+        RoundDateExpression oddWholeHour10Exp =
+                getCeilMsExpression("2022-11-11 12:0:0", TimeUnit.HOUR, 10);
+        java.sql.Timestamp oddWholeHour10 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 12:0:0").getTime());
+        long lowerBoundaryOddWholeHour10 = oddWholeHour10.getTime() - 10 * HOUR + 1;
+        long upperBoundaryOddWholeHour10 = oddWholeHour10.getTime();
+        assertEquals(lowerBoundaryOddWholeHour10,
+            oddWholeHour10Exp.rangeLower(oddWholeHour.getTime()));
+        assertEquals(upperBoundaryOddWholeHour10,
+            oddWholeHour10Exp.rangeUpper(oddWholeHour.getTime()));
+        assertEquals(oddWholeHour10,
+            new java.sql.Timestamp(oddWholeHour10Exp.roundTime(lowerBoundaryOddWholeHour10)));
+        assertNotEquals(oddWholeHour10,
+            new java.sql.Timestamp(oddWholeHour10Exp.roundTime(lowerBoundaryOddWholeHour10 - 1)));
+        assertEquals(oddWholeHour10,
+            new java.sql.Timestamp(oddWholeHour10Exp.roundTime(upperBoundaryOddWholeHour10)));
+        assertNotEquals(oddWholeHour10,
+            new java.sql.Timestamp(oddWholeHour10Exp.roundTime(upperBoundaryOddWholeHour10 + 1)));
+
+        // Not rounding to hourOfDay
+        RoundDateExpression oddWholeHour11Exp =
+                getCeilMsExpression("2022-11-11 12:0:0", TimeUnit.HOUR, 11);
+        java.sql.Timestamp oddWholeHour11 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-11 18:0:0").getTime());
+        long lowerBoundaryOddWholeHour11 = oddWholeHour11.getTime() - 11 * HOUR + 1;
+        long upperBoundaryOddWholeHour11 = oddWholeHour11.getTime();
+        assertEquals(lowerBoundaryOddWholeHour11,
+            oddWholeHour11Exp.rangeLower(oddWholeHour.getTime()));
+        assertEquals(upperBoundaryOddWholeHour11,
+            oddWholeHour11Exp.rangeUpper(oddWholeHour.getTime()));
+        assertEquals(oddWholeHour11,
+            new java.sql.Timestamp(oddWholeHour11Exp.roundTime(lowerBoundaryOddWholeHour11)));
+        assertNotEquals(oddWholeHour11,
+            new java.sql.Timestamp(oddWholeHour11Exp.roundTime(lowerBoundaryOddWholeHour11 - 1)));
+        assertEquals(oddWholeHour11,
+            new java.sql.Timestamp(oddWholeHour11Exp.roundTime(upperBoundaryOddWholeHour11)));
+        assertNotEquals(oddWholeHour11,
+            new java.sql.Timestamp(oddWholeHour11Exp.roundTime(upperBoundaryOddWholeHour11 + 1)));
+
+        RoundDateExpression evenWholeDayExp =
+                getCeilMsExpression("2022-11-12 0:0:0", TimeUnit.DAY, 1);
+        java.sql.Timestamp evenWholeDay =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-12 0:0:0").getTime());
+        long lowerBoundaryEvenWholeDay = evenWholeDay.getTime() - DAY + 1;
+        long upperBoundaryEvenWholeDay = evenWholeDay.getTime();
+        assertEquals(lowerBoundaryEvenWholeDay, evenWholeDayExp.rangeLower(evenWholeDay.getTime()));
+        assertEquals(upperBoundaryEvenWholeDay, evenWholeDayExp.rangeUpper(evenWholeDay.getTime()));
+        assertEquals(evenWholeDay,
+            new java.sql.Timestamp(evenWholeDayExp.roundTime(lowerBoundaryEvenWholeDay)));
+        assertNotEquals(evenWholeDay,
+            new java.sql.Timestamp(evenWholeDayExp.roundTime(lowerBoundaryEvenWholeDay - 1)));
+        assertEquals(evenWholeDay,
+            new java.sql.Timestamp(evenWholeDayExp.roundTime(upperBoundaryEvenWholeDay)));
+        assertNotEquals(evenWholeDay,
+            new java.sql.Timestamp(evenWholeDayExp.roundTime(upperBoundaryEvenWholeDay + 1)));
+
+        RoundDateExpression evenWholeDay2Exp =
+                getCeilMsExpression("2022-11-12 0:0:0", TimeUnit.DAY, 2);
+        java.sql.Timestamp evenWholeDay2 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-12 0:0:0").getTime());
+        long lowerBoundaryEvenWholeDay2 = evenWholeDay2.getTime() - 2 * DAY + 1;
+        long upperBoundaryEvenWholeDay2 = evenWholeDay2.getTime();
+        assertEquals(lowerBoundaryEvenWholeDay2,
+            evenWholeDay2Exp.rangeLower(evenWholeDay.getTime()));
+        assertEquals(upperBoundaryEvenWholeDay2,
+            evenWholeDay2Exp.rangeUpper(evenWholeDay.getTime()));
+        assertEquals(evenWholeDay2,
+            new java.sql.Timestamp(evenWholeDay2Exp.roundTime(lowerBoundaryEvenWholeDay2)));
+        assertNotEquals(evenWholeDay2,
+            new java.sql.Timestamp(evenWholeDay2Exp.roundTime(lowerBoundaryEvenWholeDay2 - 1)));
+        assertEquals(evenWholeDay2,
+            new java.sql.Timestamp(evenWholeDay2Exp.roundTime(upperBoundaryEvenWholeDay2)));
+        assertNotEquals(evenWholeDay2,
+            new java.sql.Timestamp(evenWholeDay2Exp.roundTime(upperBoundaryEvenWholeDay2 + 1)));
+
+        RoundDateExpression evenWholeDay3Exp =
+                getCeilMsExpression("2022-11-12 0:0:0", TimeUnit.DAY, 3);
+        java.sql.Timestamp evenWholeDay3 =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-11-12 0:0:0").getTime());
+        long lowerBoundaryEvenWholeDay3 = evenWholeDay3.getTime() - 3 * DAY + 1;
+        long upperBoundaryEvenWholeDay3 = evenWholeDay3.getTime();
+        assertEquals(lowerBoundaryEvenWholeDay3,
+            evenWholeDay3Exp.rangeLower(evenWholeDay.getTime()));
+        assertEquals(upperBoundaryEvenWholeDay3,
+            evenWholeDay3Exp.rangeUpper(evenWholeDay.getTime()));
+        assertEquals(evenWholeDay3,
+            new java.sql.Timestamp(evenWholeDay3Exp.roundTime(lowerBoundaryEvenWholeDay3)));
+        assertNotEquals(evenWholeDay3,
+            new java.sql.Timestamp(evenWholeDay3Exp.roundTime(lowerBoundaryEvenWholeDay3 - 1)));
+        assertEquals(evenWholeDay3,
+            new java.sql.Timestamp(evenWholeDay3Exp.roundTime(upperBoundaryEvenWholeDay3)));
+        assertNotEquals(evenWholeDay3,
+            new java.sql.Timestamp(evenWholeDay3Exp.roundTime(upperBoundaryEvenWholeDay3 + 1)));
+
+        CeilWeekExpression ceilWeekExp = new CeilWeekExpression();
+        java.sql.Timestamp wholeWeekOdd =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-10-10 0:0:0").getTime());
+        long lowerBoundaryWholeWeekOdd = wholeWeekOdd.getTime() - WEEK + 1;
+        long upperBoundaryWholeWeekOdd = wholeWeekOdd.getTime();
+        assertEquals(lowerBoundaryWholeWeekOdd, ceilWeekExp.rangeLower(wholeWeekOdd.getTime()));
+        assertEquals(upperBoundaryWholeWeekOdd, ceilWeekExp.rangeUpper(wholeWeekOdd.getTime()));
+        assertEquals(wholeWeekOdd, new java.sql.Timestamp(
+                ceilWeekExp.roundDateTime(new org.joda.time.DateTime(lowerBoundaryWholeWeekOdd,
+                        GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeWeekOdd, new java.sql.Timestamp(
+                ceilWeekExp.roundDateTime(new org.joda.time.DateTime(lowerBoundaryWholeWeekOdd - 1,
+                        GJChronology.getInstanceUTC()))));
+        assertEquals(wholeWeekOdd, new java.sql.Timestamp(
+                ceilWeekExp.roundDateTime(new org.joda.time.DateTime(upperBoundaryWholeWeekOdd,
+                        GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeWeekOdd, new java.sql.Timestamp(
+                ceilWeekExp.roundDateTime(new org.joda.time.DateTime(upperBoundaryWholeWeekOdd + 1,
+                        GJChronology.getInstanceUTC()))));
+
+        CeilMonthExpression ceilMonthExp = new CeilMonthExpression();
+        java.sql.Timestamp wholeMonthOdd =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-08-1 0:0:0").getTime());
+        // July is 31 days
+        long lowerBoundaryWholeMonthOdd = wholeMonthOdd.getTime() - 31 * DAY + 1;
+        long upperBoundaryWholeMonthOdd = wholeMonthOdd.getTime();
+        assertEquals(lowerBoundaryWholeMonthOdd, ceilMonthExp.rangeLower(wholeMonthOdd.getTime()));
+        assertEquals(upperBoundaryWholeMonthOdd, ceilMonthExp.rangeUpper(wholeMonthOdd.getTime()));
+        assertEquals(wholeMonthOdd, new java.sql.Timestamp(
+                ceilMonthExp.roundDateTime(new org.joda.time.DateTime(lowerBoundaryWholeMonthOdd,
+                        GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeMonthOdd,
+            new java.sql.Timestamp(ceilMonthExp.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeMonthOdd - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeMonthOdd, new java.sql.Timestamp(
+                ceilMonthExp.roundDateTime(new org.joda.time.DateTime(upperBoundaryWholeMonthOdd,
+                        GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeMonthOdd,
+            new java.sql.Timestamp(ceilMonthExp.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeMonthOdd + 1, GJChronology.getInstanceUTC()))));
+
+        java.sql.Timestamp wholeMonthLeap =
+                new java.sql.Timestamp(DateUtil.parseDate("2024-03-1 0:0:0").getTime());
+        // February is 29 days
+        long lowerBoundaryWholeMonthLeap = wholeMonthLeap.getTime() - 29 * DAY + 1;
+        long upperBoundaryWholeMonthLeap = wholeMonthLeap.getTime();
+        assertEquals(lowerBoundaryWholeMonthLeap,
+            ceilMonthExp.rangeLower(wholeMonthLeap.getTime()));
+        assertEquals(upperBoundaryWholeMonthLeap,
+            ceilMonthExp.rangeUpper(wholeMonthLeap.getTime()));
+        assertEquals(wholeMonthLeap, new java.sql.Timestamp(
+                ceilMonthExp.roundDateTime(new org.joda.time.DateTime(lowerBoundaryWholeMonthLeap,
+                        GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeMonthLeap,
+            new java.sql.Timestamp(ceilMonthExp.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeMonthLeap - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeMonthLeap, new java.sql.Timestamp(
+                ceilMonthExp.roundDateTime(new org.joda.time.DateTime(upperBoundaryWholeMonthLeap,
+                        GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeMonthLeap,
+            new java.sql.Timestamp(ceilMonthExp.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeMonthLeap + 1, GJChronology.getInstanceUTC()))));
+
+        CeilYearExpression ceilYearExp = new CeilYearExpression();
+        java.sql.Timestamp wholeYearEven =
+                new java.sql.Timestamp(DateUtil.parseDate("2022-1-1 0:0:0").getTime());
+        long lowerBoundaryWholeYearEven = wholeYearEven.getTime() - YEAR + 1;
+        long upperBoundaryWholeYearEven = wholeYearEven.getTime();
+        assertEquals(lowerBoundaryWholeYearEven, ceilYearExp.rangeLower(wholeYearEven.getTime()));
+        assertEquals(upperBoundaryWholeYearEven, ceilYearExp.rangeUpper(wholeYearEven.getTime()));
+        assertEquals(wholeYearEven, new java.sql.Timestamp(
+                ceilYearExp.roundDateTime(new org.joda.time.DateTime(lowerBoundaryWholeYearEven,
+                        GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeYearEven, new java.sql.Timestamp(
+                ceilYearExp.roundDateTime(new org.joda.time.DateTime(lowerBoundaryWholeYearEven - 1,
+                        GJChronology.getInstanceUTC()))));
+        assertEquals(wholeYearEven, new java.sql.Timestamp(
+                ceilYearExp.roundDateTime(new org.joda.time.DateTime(upperBoundaryWholeYearEven,
+                        GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeYearEven, new java.sql.Timestamp(
+                ceilYearExp.roundDateTime(new org.joda.time.DateTime(upperBoundaryWholeYearEven + 1,
+                        GJChronology.getInstanceUTC()))));
+
+        java.sql.Timestamp wholeYearLeapEven =
+                new java.sql.Timestamp(DateUtil.parseDate("2025-1-1 0:0:0").getTime());
+        long lowerBoundaryWholeYearLeapEven = wholeYearLeapEven.getTime() - (YEAR + DAY) + 1;
+        long upperBoundaryWholeYearLeapEven = wholeYearLeapEven.getTime();
+        assertEquals(lowerBoundaryWholeYearLeapEven,
+            ceilYearExp.rangeLower(wholeYearLeapEven.getTime()));
+        assertEquals(upperBoundaryWholeYearLeapEven,
+            ceilYearExp.rangeUpper(wholeYearLeapEven.getTime()));
+        assertEquals(wholeYearLeapEven, new java.sql.Timestamp(
+                ceilYearExp.roundDateTime(new org.joda.time.DateTime(lowerBoundaryWholeYearLeapEven,
+                        GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeYearLeapEven,
+            new java.sql.Timestamp(ceilYearExp.roundDateTime(new org.joda.time.DateTime(
+                    lowerBoundaryWholeYearLeapEven - 1, GJChronology.getInstanceUTC()))));
+        assertEquals(wholeYearLeapEven, new java.sql.Timestamp(
+                ceilYearExp.roundDateTime(new org.joda.time.DateTime(upperBoundaryWholeYearLeapEven,
+                        GJChronology.getInstanceUTC()))));
+        assertNotEquals(wholeYearLeapEven,
+            new java.sql.Timestamp(ceilYearExp.roundDateTime(new org.joda.time.DateTime(
+                    upperBoundaryWholeYearLeapEven + 1, GJChronology.getInstanceUTC()))));
+    }
+
 }

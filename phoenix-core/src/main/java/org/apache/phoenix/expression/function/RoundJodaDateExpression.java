@@ -25,7 +25,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.joda.time.DateTime;
-import org.joda.time.chrono.ISOChronology;
+import org.joda.time.chrono.GJChronology;
 
 /**
  * 
@@ -48,7 +48,7 @@ public abstract class RoundJodaDateExpression extends RoundDateExpression{
             }
             PDataType dataType = getDataType();
             long time = dataType.getCodec().decodeLong(ptr, children.get(0).getSortOrder());
-            DateTime dt = new DateTime(time, ISOChronology.getInstanceUTC());
+            DateTime dt = new DateTime(time, GJChronology.getInstanceUTC());
             long value = roundDateTime(dt);
             Date d = new Date(value);
             byte[] byteValue = dataType.toBytes(d);
@@ -63,4 +63,10 @@ public abstract class RoundJodaDateExpression extends RoundDateExpression{
      * @return Time in millis.
      */
     public abstract long roundDateTime(DateTime dateTime);
+
+    @Override
+    // We need a working roundTime() for the RowKey pushdown logic.
+    public long roundTime(long time) {
+        return roundDateTime(new DateTime(time, GJChronology.getInstanceUTC()));
+    }
 }
