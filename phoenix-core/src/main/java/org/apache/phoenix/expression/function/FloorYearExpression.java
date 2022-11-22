@@ -21,6 +21,7 @@ import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
 import org.joda.time.DateTime;
+import org.joda.time.chrono.ISOChronology;
 
 /**
  * 
@@ -41,4 +42,16 @@ public class FloorYearExpression extends RoundJodaDateExpression {
         return datetime.year().roundFloorCopy().getMillis();
     }
 
+    @Override
+    public long rangeLower(long time) {
+        // floor
+        return roundDateTime(new DateTime(time, ISOChronology.getInstanceUTC()));
+    }
+
+    @Override
+    public long rangeUpper(long time) {
+        // ceil(time + 1) -1
+        return (new DateTime(time + 1, ISOChronology.getInstanceUTC())).year().roundCeilingCopy()
+                .getMillis() - 1;
+    }
 }

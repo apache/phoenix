@@ -63,4 +63,10 @@ public abstract class RoundJodaDateExpression extends RoundDateExpression{
      * @return Time in millis.
      */
     public abstract long roundDateTime(DateTime dateTime);
+
+    @Override
+    // We need a working roundTime() for the RowKey pushdown logic.
+    public long roundTime(long time) {
+        return roundDateTime(new DateTime(time, ISOChronology.getInstanceUTC()));
+    }
 }

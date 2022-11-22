@@ -46,7 +46,7 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
-
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
@@ -148,8 +148,8 @@ public class RoundDateExpression extends ScalarFunction {
         return divBy/2;
     }
     
-    
-    protected long roundTime(long time) {
+    @VisibleForTesting
+    public long roundTime(long time) {
         long value;
         long roundUpAmount = getRoundUpAmount();
         if (time <= Long.MAX_VALUE - roundUpAmount) { // If no overflow, add
@@ -159,7 +159,21 @@ public class RoundDateExpression extends ScalarFunction {
         }
         return value * divBy;
     }
-    
+
+    @VisibleForTesting
+    public long rangeLower(long time) {
+        // This is for the ms based intervals. This needs to be separately implemented for the
+        // joda based intervals
+        return roundTime(time) - getRoundUpAmount();
+    }
+
+    @VisibleForTesting
+    public long rangeUpper(long time) {
+        // This is for the ms based intervals. This needs to be separately implemented for the
+        // joda based intervals
+        return roundTime(time) + (divBy - getRoundUpAmount()) -1;
+    }
+
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (children.get(0).evaluate(tuple, ptr)) {
@@ -260,7 +274,8 @@ public class RoundDateExpression extends ScalarFunction {
                 PDataCodec codec = getKeyRangeCodec(type);
                 int offset = ByteUtil.isInclusive(op) ? 1 : 0;
                 long value = codec.decodeLong(key, 0, SortOrder.getDefault());
-                byte[] nextKey = new byte[type.getByteSize()];
+                byte[] lowerKey = new byte[type.getByteSize()];
+                byte[] upperKey = new byte[type.getByteSize()];
                 KeyRange range;
                 switch (op) {
                 case EQUAL:
@@ -269,21 +284,34 @@ public class RoundDateExpression extends ScalarFunction {
                     // had ROUND(dateCol,'DAY') = TO_DATE('2013-01-01 23:00:00')
                     // it could never be equal, since date constant isn't at a day
                     // boundary.
-                    if (value % divBy != 0) {
+                    if (value != roundTime(value)) {
                         return KeyRange.EMPTY_RANGE;
                     }
-                    codec.encodeLong(value + divBy, nextKey, 0);
-                    range = type.getKeyRange(key, true, nextKey, false);
+                    codec.encodeLong(rangeLower(value), lowerKey, 0);
+                    codec.encodeLong(rangeUpper(value), upperKey, 0);
+                    range = type.getKeyRange(lowerKey, true, upperKey, true);
                     break;
                 case GREATER:
+                    if (value == roundTime(value)) {
+                        codec.encodeLong(rangeUpper(value), lowerKey, 0);
+                        range = type.getKeyRange(lowerKey, false, KeyRange.UNBOUND, false);
+                        break;
+                    }
+                    //fallthrough intended
                 case GREATER_OR_EQUAL:
-                    codec.encodeLong((value + divBy - offset)/divBy*divBy, nextKey, 0);
-                    range = type.getKeyRange(nextKey, true, KeyRange.UNBOUND, false);
+                    codec.encodeLong(rangeLower(value), lowerKey, 0);
+                    range = type.getKeyRange(lowerKey, true, KeyRange.UNBOUND, false);
                     break;
                 case LESS:
+                    if (value == roundTime(value)) {
+                        codec.encodeLong(rangeLower(value), upperKey, 0);
+                        range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, false);
+                        break;
+                    }
+                    //fallthrough intended
                 case LESS_OR_EQUAL:
-                    codec.encodeLong((value + divBy - (1 -offset))/divBy*divBy, nextKey, 0);
-                    range = type.getKeyRange(KeyRange.UNBOUND, false, nextKey, false);
+                    codec.encodeLong(rangeUpper(value), upperKey, 0);
+                    range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, true);
                     break;
                 default:
                     return childPart.getKeyRange(op, rhs);
