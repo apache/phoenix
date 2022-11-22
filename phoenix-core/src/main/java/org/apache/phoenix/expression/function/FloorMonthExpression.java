@@ -44,13 +44,14 @@ public class FloorMonthExpression extends RoundJodaDateExpression {
 
     @Override
     public long rangeLower(long time) {
-        //floor
+        // floor
         return roundDateTime(new DateTime(time, GJChronology.getInstanceUTC()));
     }
 
     @Override
     public long rangeUpper(long time) {
-        //ceil(time + 1) -1
-        return (new DateTime(time + 1, GJChronology.getInstanceUTC())).monthOfYear().roundCeilingCopy().getMillis() -1;
+        // ceil(time + 1) -1
+        return (new DateTime(time + 1, GJChronology.getInstanceUTC())).monthOfYear()
+                .roundCeilingCopy().getMillis() - 1;
     }
 }

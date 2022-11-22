@@ -40,16 +40,14 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeFieldType;
 import org.joda.time.DateTimeZone;
 import org.joda.time.chrono.GJChronology;
-import org.joda.time.chrono.GJChronology;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.DateTimeFormatterBuilder;
 import org.joda.time.format.ISODateTimeFormat;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
@@ -156,7 +154,7 @@ public class DateUtil {
         if (pattern == null || pattern.length() == 0) {
             pattern = defaultPattern;
         }
-        if(defaultPattern.equals(pattern)) {
+        if (defaultPattern.equals(pattern)) {
             return JulianDateFormatParserFactory.getParser(timeZone);
         } else {
             return new SimpleDateFormatParser(pattern, timeZone);
@@ -208,7 +206,7 @@ public class DateUtil {
             String nanosStr = timestampValue.substring(period + 1);
             if (nanosStr.length() > 9)
                 throw new IllegalDataException("nanos > 999999999 or < 0");
-            if(nanosStr.length() > 3 ) {
+            if (nanosStr.length() > 3 ) {
                 int nanos = Integer.parseInt(nanosStr);
                 for (int i = 0; i < 9 - nanosStr.length(); i++) {
                     nanos *= 10;

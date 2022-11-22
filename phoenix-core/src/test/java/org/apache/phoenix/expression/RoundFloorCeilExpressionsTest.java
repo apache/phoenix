@@ -98,7 +98,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
     private static long HALF_WEEK = 7 * 12 * 60 * 60 * 1000;
     private static long WEEK = 2 * HALF_WEEK;
 
-    // Note that without the "l" the integer arithmetics below would overflow
+    // Note that without the "l" the integer arithmetic below would overflow
     private static long HALF_YEAR = 365l * 12 * 60 * 60 * 1000;
     private static long YEAR = 2l * HALF_YEAR;
 

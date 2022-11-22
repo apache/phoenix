@@ -45,9 +45,9 @@ import org.apache.phoenix.schema.types.PDataType.PDataCodec;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.util.ByteUtil;
 
 /**
  * Function used to bucketize date/time values by rounding them to
@@ -105,7 +105,7 @@ public class RoundDateExpression extends ScalarFunction {
     
     public static Expression create(List<Expression> children) throws SQLException {
         int numChildren = children.size();
-        if(numChildren < 2 || numChildren > 3) {
+        if (numChildren < 2 || numChildren > 3) {
             throw new IllegalArgumentException("Wrong number of arguments : " + numChildren);
         }
         Object timeUnitValue = ((LiteralExpression)children.get(1)).getValue();
@@ -138,7 +138,7 @@ public class RoundDateExpression extends ScalarFunction {
         Object multiplierValue = numChildren > 2 ? ((LiteralExpression)children.get(2)).getValue() : null;
         int multiplier = multiplierValue == null ? 1 :((Number)multiplierValue).intValue();
         TimeUnit timeUnit = TimeUnit.getTimeUnit(timeUnitValue != null ? timeUnitValue.toString() : null);
-        if(timeUnit.ordinal() < TIME_UNIT_MS.length) {
+        if (timeUnit.ordinal() < TIME_UNIT_MS.length) {
             divBy = multiplier * TIME_UNIT_MS[timeUnit.ordinal()];
         }
     }
@@ -171,7 +171,7 @@ public class RoundDateExpression extends ScalarFunction {
     public long rangeUpper(long time) {
         // This is for the ms based intervals. This needs to be separately implemented for the
         // joda based intervals
-        return roundTime(time) + (divBy - getRoundUpAmount()) -1;
+        return roundTime(time) + (divBy - getRoundUpAmount()) - 1;
     }
 
     @Override
