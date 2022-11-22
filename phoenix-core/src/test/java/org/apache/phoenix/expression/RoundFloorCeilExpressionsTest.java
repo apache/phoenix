@@ -69,7 +69,7 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.joda.time.Chronology;
-import org.joda.time.chrono.ISOChronology;
+import org.joda.time.chrono.GJChronology;
 import org.junit.Test;
 
 /**
@@ -1048,16 +1048,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             roundWeekExpression.rangeUpper(wholeWeekOdd.getTime()));
         assertEquals(wholeWeekOdd,
             new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeWeekOdd, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeWeekOdd, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeWeekOdd,
             new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeWeekOdd - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeWeekOdd - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeWeekOdd,
             new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeWeekOdd, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeWeekOdd, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeWeekOdd,
             new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeWeekOdd + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeWeekOdd + 1, GJChronology.getInstanceUTC()))));
 
         java.sql.Timestamp wholeWeekEven =
                 new java.sql.Timestamp(DateUtil.parseDate("2022-10-17 0:0:0").getTime());
@@ -1069,16 +1069,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             roundWeekExpression.rangeUpper(wholeWeekEven.getTime()));
         assertEquals(wholeWeekEven,
             new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeWeekEven, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeWeekEven, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeWeekEven,
             new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeWeekEven - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeWeekEven - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeWeekEven,
             new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeWeekEven, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeWeekEven, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeWeekEven,
             new java.sql.Timestamp(roundWeekExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeWeekEven + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeWeekEven + 1, GJChronology.getInstanceUTC()))));
 
         RoundMonthExpression roundMonthExpression = new RoundMonthExpression();
         // We're still using roundHalfEven here for backwards compatibility
@@ -1094,16 +1094,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             roundMonthExpression.rangeUpper(wholeMonthEven.getTime()));
         assertEquals(wholeMonthEven,
             new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeMonthEven, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeMonthEven, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeMonthEven,
             new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeMonthEven - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeMonthEven - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeMonthEven,
             new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeMonthEven, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeMonthEven, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeMonthEven,
             new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeMonthEven + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeMonthEven + 1, GJChronology.getInstanceUTC()))));
 
         // We're still using roundHalfEven here for backwards compatibility
         java.sql.Timestamp wholeMonthOdd =
@@ -1118,16 +1118,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             roundMonthExpression.rangeUpper(wholeMonthOdd.getTime()));
         assertEquals(wholeMonthOdd,
             new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeMonthOdd, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeMonthOdd, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeMonthOdd,
             new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeMonthOdd - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeMonthOdd - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeMonthOdd,
             new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeMonthOdd, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeMonthOdd, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeMonthOdd,
             new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeMonthOdd + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeMonthOdd + 1, GJChronology.getInstanceUTC()))));
 
         // We're still using roundHalfEven here for backwards compatibility
         java.sql.Timestamp wholeMonthLeap =
@@ -1142,16 +1142,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             roundMonthExpression.rangeUpper(wholeMonthLeap.getTime()));
         assertEquals(wholeMonthLeap,
             new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeMonthLeap, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeMonthLeap, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeMonthLeap,
             new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeMonthLeap - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeMonthLeap - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeMonthLeap,
             new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeMonthLeap, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeMonthLeap, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeMonthLeap,
             new java.sql.Timestamp(roundMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeMonthLeap + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeMonthLeap + 1, GJChronology.getInstanceUTC()))));
 
         // We're still using roundHalfEven here for backwards compatibility
         RoundYearExpression roundYearExpression = new RoundYearExpression();
@@ -1165,16 +1165,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             roundYearExpression.rangeUpper(wholeYearEven.getTime()));
         assertEquals(wholeYearEven,
             new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeYearEven, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeYearEven, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeYearEven,
             new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeYearEven - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeYearEven - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeYearEven,
             new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeYearEven, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeYearEven, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeYearEven,
             new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeYearEven + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeYearEven + 1, GJChronology.getInstanceUTC()))));
 
         // We're still using roundHalfEven here for backwards compatibility
         java.sql.Timestamp wholeYearOdd =
@@ -1187,16 +1187,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             roundYearExpression.rangeUpper(wholeYearOdd.getTime()));
         assertEquals(wholeYearOdd,
             new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeYearOdd, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeYearOdd, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeYearOdd,
             new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeYearOdd - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeYearOdd - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeYearOdd,
             new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeYearOdd, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeYearOdd, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeYearOdd,
             new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeYearOdd + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeYearOdd + 1, GJChronology.getInstanceUTC()))));
 
         // We're still using roundHalfEven here for backwards compatibility
         java.sql.Timestamp wholeYearLeapEven =
@@ -1209,16 +1209,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             roundYearExpression.rangeUpper(wholeYearLeapEven.getTime()));
         assertEquals(wholeYearLeapEven,
             new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeYearLeapEven, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeYearLeapEven, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeYearLeapEven,
             new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeYearLeapEven - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeYearLeapEven - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeYearLeapEven,
             new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeYearLeapEven, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeYearLeapEven, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeYearLeapEven,
             new java.sql.Timestamp(roundYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeYearLeapEven + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeYearLeapEven + 1, GJChronology.getInstanceUTC()))));
     }
 
     private FloorDateExpression getFloorMsExpression(String s, TimeUnit u, int m)
@@ -1475,16 +1475,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             floorWeekExpression.rangeUpper(wholeWeekOdd.getTime()));
         assertEquals(wholeWeekOdd,
             new java.sql.Timestamp(floorWeekExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeWeekOdd, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeWeekOdd, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeWeekOdd,
             new java.sql.Timestamp(floorWeekExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeWeekOdd - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeWeekOdd - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeWeekOdd,
             new java.sql.Timestamp(floorWeekExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeWeekOdd, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeWeekOdd, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeWeekOdd,
             new java.sql.Timestamp(floorWeekExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeWeekOdd + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeWeekOdd + 1, GJChronology.getInstanceUTC()))));
 
         FloorMonthExpression floorMonthExpression = new FloorMonthExpression();
         java.sql.Timestamp wholeMonthOdd =
@@ -1498,16 +1498,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             floorMonthExpression.rangeUpper(wholeMonthOdd.getTime()));
         assertEquals(wholeMonthOdd,
             new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeMonthOdd, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeMonthOdd, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeMonthOdd,
             new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeMonthOdd - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeMonthOdd - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeMonthOdd,
             new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeMonthOdd, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeMonthOdd, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeMonthOdd,
             new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeMonthOdd + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeMonthOdd + 1, GJChronology.getInstanceUTC()))));
 
         java.sql.Timestamp wholeMonthLeap =
                 new java.sql.Timestamp(DateUtil.parseDate("2024-02-1 0:0:0").getTime());
@@ -1520,16 +1520,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             floorMonthExpression.rangeUpper(wholeMonthLeap.getTime()));
         assertEquals(wholeMonthLeap,
             new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeMonthLeap, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeMonthLeap, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeMonthLeap,
             new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeMonthLeap - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeMonthLeap - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeMonthLeap,
             new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeMonthLeap, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeMonthLeap, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeMonthLeap,
             new java.sql.Timestamp(floorMonthExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeMonthLeap + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeMonthLeap + 1, GJChronology.getInstanceUTC()))));
 
         FloorYearExpression floorYearExpression = new FloorYearExpression();
         java.sql.Timestamp wholeYearEven =
@@ -1542,16 +1542,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             floorYearExpression.rangeUpper(wholeYearEven.getTime()));
         assertEquals(wholeYearEven,
             new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeYearEven, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeYearEven, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeYearEven,
             new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeYearEven - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeYearEven - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeYearEven,
             new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeYearEven, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeYearEven, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeYearEven,
             new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeYearEven + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeYearEven + 1, GJChronology.getInstanceUTC()))));
 
         java.sql.Timestamp wholeYearLeapEven =
                 new java.sql.Timestamp(DateUtil.parseDate("2024-1-1 0:0:0").getTime());
@@ -1563,16 +1563,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             floorYearExpression.rangeUpper(wholeYearLeapEven.getTime()));
         assertEquals(wholeYearLeapEven,
             new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeYearLeapEven, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeYearLeapEven, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeYearLeapEven,
             new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeYearLeapEven - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeYearLeapEven - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeYearLeapEven,
             new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeYearLeapEven, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeYearLeapEven, GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeYearLeapEven,
             new java.sql.Timestamp(floorYearExpression.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeYearLeapEven + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeYearLeapEven + 1, GJChronology.getInstanceUTC()))));
     }
 
     private CeilDateExpression getCeilMsExpression(String s, TimeUnit u, int m)
@@ -1827,16 +1827,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         assertEquals(upperBoundaryWholeWeekOdd, ceilWeekExp.rangeUpper(wholeWeekOdd.getTime()));
         assertEquals(wholeWeekOdd, new java.sql.Timestamp(
                 ceilWeekExp.roundDateTime(new org.joda.time.DateTime(lowerBoundaryWholeWeekOdd,
-                        ISOChronology.getInstanceUTC()))));
+                        GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeWeekOdd, new java.sql.Timestamp(
                 ceilWeekExp.roundDateTime(new org.joda.time.DateTime(lowerBoundaryWholeWeekOdd - 1,
-                        ISOChronology.getInstanceUTC()))));
+                        GJChronology.getInstanceUTC()))));
         assertEquals(wholeWeekOdd, new java.sql.Timestamp(
                 ceilWeekExp.roundDateTime(new org.joda.time.DateTime(upperBoundaryWholeWeekOdd,
-                        ISOChronology.getInstanceUTC()))));
+                        GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeWeekOdd, new java.sql.Timestamp(
                 ceilWeekExp.roundDateTime(new org.joda.time.DateTime(upperBoundaryWholeWeekOdd + 1,
-                        ISOChronology.getInstanceUTC()))));
+                        GJChronology.getInstanceUTC()))));
 
         CeilMonthExpression ceilMonthExp = new CeilMonthExpression();
         java.sql.Timestamp wholeMonthOdd =
@@ -1848,16 +1848,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         assertEquals(upperBoundaryWholeMonthOdd, ceilMonthExp.rangeUpper(wholeMonthOdd.getTime()));
         assertEquals(wholeMonthOdd, new java.sql.Timestamp(
                 ceilMonthExp.roundDateTime(new org.joda.time.DateTime(lowerBoundaryWholeMonthOdd,
-                        ISOChronology.getInstanceUTC()))));
+                        GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeMonthOdd,
             new java.sql.Timestamp(ceilMonthExp.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeMonthOdd - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeMonthOdd - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeMonthOdd, new java.sql.Timestamp(
                 ceilMonthExp.roundDateTime(new org.joda.time.DateTime(upperBoundaryWholeMonthOdd,
-                        ISOChronology.getInstanceUTC()))));
+                        GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeMonthOdd,
             new java.sql.Timestamp(ceilMonthExp.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeMonthOdd + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeMonthOdd + 1, GJChronology.getInstanceUTC()))));
 
         java.sql.Timestamp wholeMonthLeap =
                 new java.sql.Timestamp(DateUtil.parseDate("2024-03-1 0:0:0").getTime());
@@ -1870,16 +1870,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             ceilMonthExp.rangeUpper(wholeMonthLeap.getTime()));
         assertEquals(wholeMonthLeap, new java.sql.Timestamp(
                 ceilMonthExp.roundDateTime(new org.joda.time.DateTime(lowerBoundaryWholeMonthLeap,
-                        ISOChronology.getInstanceUTC()))));
+                        GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeMonthLeap,
             new java.sql.Timestamp(ceilMonthExp.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeMonthLeap - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeMonthLeap - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeMonthLeap, new java.sql.Timestamp(
                 ceilMonthExp.roundDateTime(new org.joda.time.DateTime(upperBoundaryWholeMonthLeap,
-                        ISOChronology.getInstanceUTC()))));
+                        GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeMonthLeap,
             new java.sql.Timestamp(ceilMonthExp.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeMonthLeap + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeMonthLeap + 1, GJChronology.getInstanceUTC()))));
 
         CeilYearExpression ceilYearExp = new CeilYearExpression();
         java.sql.Timestamp wholeYearEven =
@@ -1890,16 +1890,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         assertEquals(upperBoundaryWholeYearEven, ceilYearExp.rangeUpper(wholeYearEven.getTime()));
         assertEquals(wholeYearEven, new java.sql.Timestamp(
                 ceilYearExp.roundDateTime(new org.joda.time.DateTime(lowerBoundaryWholeYearEven,
-                        ISOChronology.getInstanceUTC()))));
+                        GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeYearEven, new java.sql.Timestamp(
                 ceilYearExp.roundDateTime(new org.joda.time.DateTime(lowerBoundaryWholeYearEven - 1,
-                        ISOChronology.getInstanceUTC()))));
+                        GJChronology.getInstanceUTC()))));
         assertEquals(wholeYearEven, new java.sql.Timestamp(
                 ceilYearExp.roundDateTime(new org.joda.time.DateTime(upperBoundaryWholeYearEven,
-                        ISOChronology.getInstanceUTC()))));
+                        GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeYearEven, new java.sql.Timestamp(
                 ceilYearExp.roundDateTime(new org.joda.time.DateTime(upperBoundaryWholeYearEven + 1,
-                        ISOChronology.getInstanceUTC()))));
+                        GJChronology.getInstanceUTC()))));
 
         java.sql.Timestamp wholeYearLeapEven =
                 new java.sql.Timestamp(DateUtil.parseDate("2025-1-1 0:0:0").getTime());
@@ -1911,16 +1911,16 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
             ceilYearExp.rangeUpper(wholeYearLeapEven.getTime()));
         assertEquals(wholeYearLeapEven, new java.sql.Timestamp(
                 ceilYearExp.roundDateTime(new org.joda.time.DateTime(lowerBoundaryWholeYearLeapEven,
-                        ISOChronology.getInstanceUTC()))));
+                        GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeYearLeapEven,
             new java.sql.Timestamp(ceilYearExp.roundDateTime(new org.joda.time.DateTime(
-                    lowerBoundaryWholeYearLeapEven - 1, ISOChronology.getInstanceUTC()))));
+                    lowerBoundaryWholeYearLeapEven - 1, GJChronology.getInstanceUTC()))));
         assertEquals(wholeYearLeapEven, new java.sql.Timestamp(
                 ceilYearExp.roundDateTime(new org.joda.time.DateTime(upperBoundaryWholeYearLeapEven,
-                        ISOChronology.getInstanceUTC()))));
+                        GJChronology.getInstanceUTC()))));
         assertNotEquals(wholeYearLeapEven,
             new java.sql.Timestamp(ceilYearExp.roundDateTime(new org.joda.time.DateTime(
-                    upperBoundaryWholeYearLeapEven + 1, ISOChronology.getInstanceUTC()))));
+                    upperBoundaryWholeYearLeapEven + 1, GJChronology.getInstanceUTC()))));
     }
 
 }

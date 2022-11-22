@@ -21,7 +21,7 @@ import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
 import org.joda.time.DateTime;
-import org.joda.time.chrono.ISOChronology;
+import org.joda.time.chrono.GJChronology;
 
 /**
  * 
@@ -45,12 +45,12 @@ public class FloorMonthExpression extends RoundJodaDateExpression {
     @Override
     public long rangeLower(long time) {
         //floor
-        return roundDateTime(new DateTime(time, ISOChronology.getInstanceUTC()));
+        return roundDateTime(new DateTime(time, GJChronology.getInstanceUTC()));
     }
 
     @Override
     public long rangeUpper(long time) {
         //ceil(time + 1) -1
-        return (new DateTime(time + 1, ISOChronology.getInstanceUTC())).monthOfYear().roundCeilingCopy().getMillis() -1;
+        return (new DateTime(time + 1, GJChronology.getInstanceUTC())).monthOfYear().roundCeilingCopy().getMillis() -1;
     }
 }

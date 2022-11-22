@@ -43,7 +43,7 @@ import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeFieldType;
 import org.joda.time.DateTimeZone;
-import org.joda.time.chrono.ISOChronology;
+import org.joda.time.chrono.GJChronology;
 import org.joda.time.chrono.GJChronology;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.DateTimeFormatterBuilder;
