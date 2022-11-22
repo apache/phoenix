@@ -291,6 +291,12 @@ public class RoundDateExpression extends ScalarFunction {
                     codec.encodeLong(rangeUpper(value), upperKey, 0);
                     range = type.getKeyRange(lowerKey, true, upperKey, true);
                     break;
+                    // a simple number example (with half up rounding):
+                    // round(x) = 10 ==> [9.5, 10.5)
+                    // round(x) <= 10 ==> [-inf, 10.5)
+                    // round(x) <= 10.1 === round(x) <= 10 => [-inf, 10.5)
+                    // round(x) <= 9.9 === round(x) <= 9 => [-inf, 9.5)
+                    // round(x) < 10 ==> round(x) <= 9 ==> [-inf, 9.5)
                 case GREATER:
                     if (value == roundTime(value)) {
                         codec.encodeLong(rangeUpper(value), lowerKey, 0);
@@ -301,6 +307,15 @@ public class RoundDateExpression extends ScalarFunction {
                 case GREATER_OR_EQUAL:
                     codec.encodeLong(rangeLower(value), lowerKey, 0);
                     range = type.getKeyRange(lowerKey, true, KeyRange.UNBOUND, false);
+                    if (value <= roundTime(value)) {
+                        //always true for ceil
+                        codec.encodeLong(rangeLower(value), lowerKey, 0);
+                        range = type.getKeyRange(lowerKey, true, KeyRange.UNBOUND, false);
+                    } else {
+                        //always true for floor, except when exact
+                        codec.encodeLong(rangeUpper(value), lowerKey, 0);
+                        range = type.getKeyRange(lowerKey, false, KeyRange.UNBOUND, false);
+                    }
                     break;
                 case LESS:
                     if (value == roundTime(value)) {
@@ -312,6 +327,15 @@ public class RoundDateExpression extends ScalarFunction {
                 case LESS_OR_EQUAL:
                     codec.encodeLong(rangeUpper(value), upperKey, 0);
                     range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, true);
+                    if (value >= roundTime(value)) {
+                        //always true for floor
+                        codec.encodeLong(rangeUpper(value), upperKey, 0);
+                        range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, true);
+                    } else {
+                        //always true for ceil, except when exact
+                        codec.encodeLong(rangeLower(value), upperKey, 0);
+                        range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, false);
+                    }
                     break;
                 default:
                     return childPart.getKeyRange(op, rhs);
