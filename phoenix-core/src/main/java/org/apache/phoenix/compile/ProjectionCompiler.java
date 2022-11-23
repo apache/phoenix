@@ -19,7 +19,6 @@ package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
-import static org.apache.phoenix.util.IndexUtil.isHintedGlobalIndex;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -231,8 +230,7 @@ public class ProjectionCompiler {
                 indexColumn = index.getColumnForColumnName(indexColName);
                 ref = new ColumnRef(tableRef, indexColumn.getPosition());
             } catch (ColumnNotFoundException e) {
-                if (tableRef.getTable().getIndexType() == IndexType.LOCAL
-                        || isHintedGlobalIndex(tableRef)) {
+                if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(tableRef)) {
                     try {
                         context.setUncoveredIndex(true);
                         ref = new IndexDataColumnRef(context, tableRef, indexColName);
@@ -306,8 +304,7 @@ public class ProjectionCompiler {
                 ref = new ColumnRef(tableRef, indexColumn.getPosition());
                 indexColumnFamily = indexColumn.getFamilyName() == null ? null : indexColumn.getFamilyName().getString();
             } catch (ColumnNotFoundException e) {
-                if (tableRef.getTable().getIndexType() == IndexType.LOCAL
-                        || isHintedGlobalIndex(tableRef)) {
+                if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(tableRef)) {
                     try {
                         context.setUncoveredIndex(true);
                         ref = new IndexDataColumnRef(context, tableRef, indexColName);

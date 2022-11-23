@@ -20,6 +20,9 @@ package org.apache.phoenix.coprocessor;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
@@ -34,6 +37,8 @@ import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -51,6 +56,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME;
 import static org.apache.phoenix.query.QueryServices.INDEX_PAGE_SIZE_IN_ROWS;
 import static org.apache.phoenix.util.ScanUtil.getDummyResult;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
@@ -69,6 +76,9 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     protected final RegionCoprocessorEnvironment env;
     protected byte[][] regionEndKeys;
     protected final int pageSizeInRows;
+    protected final long ageThreshold;
+    protected byte[] emptyCF;
+    protected byte[] emptyCQ;
     protected final Scan scan;
     protected final Scan dataTableScan;
     protected final RegionScanner innerScanner;
@@ -107,7 +117,11 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                     config.getLong(INDEX_PAGE_SIZE_IN_ROWS,
                             QueryServicesOptions.DEFAULT_INDEX_PAGE_SIZE_IN_ROWS);
         }
-
+        ageThreshold = env.getConfiguration().getLong(
+                QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB,
+                QueryServicesOptions.DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS);
+        emptyCF = scan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
+        emptyCQ = scan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
         this.indexMaintainer = indexMaintainer;
         this.viewConstants = viewConstants;
         this.scan = scan;
@@ -162,7 +176,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         scanRanges.initializeScan(dataScan);
         SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
         dataScan.setFilter(new SkipScanFilter(skipScanFilter, false));
-        scan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS,
+        dataScan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS,
                 Bytes.toBytes(Long.valueOf(pageSizeMs)));
         return dataScan;
     }
@@ -244,20 +258,62 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         return scanIndexTableRows(result, startTime, null, 0);
     }
 
-    private boolean getNextCoveredIndexRow(List<Cell> result) {
+    private boolean verifyIndexRowAndRepairIfNecessary(Result dataRow, byte[] indexRowKey, long ts) throws IOException {
+        Put put = new Put(dataRow.getRow());
+        for (Cell cell : dataRow.rawCells()) {
+            put.add(cell);
+        }
+        if (indexMaintainer.checkIndexRow(indexRowKey, put)) {
+            if (IndexUtil.getMaxTimestamp(put) != ts) {
+                Mutation[] mutations;
+                Put indexPut = new Put(indexRowKey);
+                indexPut.addColumn(emptyCF, emptyCQ, ts, QueryConstants.VERIFIED_BYTES);
+                if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold) {
+                    Delete indexDelete = indexMaintainer.buildRowDeleteMutation(indexRowKey,
+                            IndexMaintainer.DeleteType.SINGLE_VERSION, ts);
+                    mutations = new Mutation[]{indexPut, indexDelete};
+                } else {
+                    mutations = new Mutation[]{indexPut};
+                }
+                region.batchMutate(mutations);
+            }
+            return true;
+        }
+        indexMaintainer.deleteRowIfAgedEnough(indexRowKey, ts, ageThreshold, false, region);
+        return false;
+    }
+
+    private boolean getNextCoveredIndexRow(List<Cell> result) throws IOException {
         if (indexRowIterator.hasNext()) {
             List<Cell> indexRow = indexRowIterator.next();
             result.addAll(indexRow);
             try {
+                byte[] indexRowKey = CellUtil.cloneRow(indexRow.get(0));
                 Result dataRow = dataRows.get(new ImmutableBytesPtr(
-                        indexToDataRowKeyMap.get(CellUtil.cloneRow(indexRow.get(0)))));
+                        indexToDataRowKeyMap.get(indexRowKey)));
                 if (dataRow != null) {
-                    IndexUtil.addTupleAsOneCell(result, new ResultTuple(dataRow),
-                            tupleProjector, ptr);
+                    long ts = indexRow.get(0).getTimestamp();
+                    if (!indexMaintainer.isUncovered()
+                            || verifyIndexRowAndRepairIfNecessary(dataRow, indexRowKey, ts)) {
+                        if (tupleProjector != null) {
+                            IndexUtil.addTupleAsOneCell(result, new ResultTuple(dataRow),
+                                    tupleProjector, ptr);
+                        }
+                    } else {
+                        result.clear();
+                    }
                 } else {
-                    // The data row satisfying the scan does not exist. This could be because
-                    // the data row may not include the columns corresponding to the uncovered
-                    // index columns either. Just return the index row. Nothing to do here
+                    if (indexMaintainer.isUncovered()) {
+                        // Since we also scan the empty column for uncovered global indexes, this mean the data row
+                        // does not exist. Delete the index row if the index is an uncovered global index
+                        indexMaintainer.deleteRowIfAgedEnough(indexRowKey, indexRow.get(0).getTimestamp(),
+                                ageThreshold, false, region);
+                        result.clear();
+                    } else {
+                        // The data row satisfying the scan does not exist. This could be because
+                        // the data row may not include the columns corresponding to the uncovered
+                        // index columns either. Just return the index row. Nothing to do here
+                    }
                 }
             } catch (Throwable e) {
                 LOGGER.error("Exception in UncoveredIndexRegionScanner for region "

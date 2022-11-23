@@ -49,8 +49,6 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HConstants.OperationStatusCode;
-import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
@@ -82,7 +80,6 @@ import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner;
-import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.SimpleValueGetter;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.expression.Expression;
@@ -242,6 +239,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // any annotations we were sent by the client, and can be used in hooks that don't get
       // passed MiniBatchOperationInProgress, like preWALAppend()
       private List<Mutation> originalMutations;
+      private boolean hasAtomic;
+      private boolean hasDelete;
+      private boolean hasUncoveredIndex;
+      private boolean hasGlobalIndex;
+      private boolean hasLocalIndex;
+      private boolean hasTransform;
       public BatchMutateContext() {
           this.clientVersion = 0;
       }
@@ -817,6 +820,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                                      BatchMutateContext context) throws IOException {
         Set<KeyRange> keys = new HashSet<KeyRange>(context.rowsToLock.size());
         context.dataRowStates = new HashMap<ImmutableBytesPtr, Pair<Put, Put>>(context.rowsToLock.size());
+        if (context.hasUncoveredIndex && !context.hasGlobalIndex && !context.hasTransform
+                && !context.hasAtomic && !context.hasDelete) {
+            return;
+        }
         for (ImmutableBytesPtr rowKeyPtr : context.rowsToLock) {
             PendingRow pendingRow = pendingRows.get(rowKeyPtr);
             if (pendingRow != null && pendingRow.getLastContext().getCurrentPhase() == BatchMutatePhase.PRE) {
@@ -889,7 +896,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 IndexMaintainer indexMaintainer = pair.getFirst();
                 HTableInterfaceReference hTableInterfaceReference = pair.getSecond();
                 if (nextDataRowState != null) {
-                    ValueGetter nextDataRowVG = new GlobalIndexRegionScanner.SimpleValueGetter(nextDataRowState);
+                    ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
                     Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
                             nextDataRowVG, rowKeyPtr, ts, null, null, false);
                     if (indexPut == null) {
@@ -909,7 +916,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                             new Pair<Mutation, byte[]>(indexPut, rowKeyPtr.get()));
                     // Delete the current index row if the new index key is different than the current one
                     if (currentDataRowState != null) {
-                        ValueGetter currentDataRowVG = new GlobalIndexRegionScanner.SimpleValueGetter(currentDataRowState);
+                        ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
                         byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
                                 null, null, ts);
                         if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
@@ -920,7 +927,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                         }
                     }
                 } else if (currentDataRowState != null) {
-                    ValueGetter currentDataRowVG = new GlobalIndexRegionScanner.SimpleValueGetter(currentDataRowState);
+                    ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
                     byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
                             null, null, ts);
                     Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
@@ -934,7 +941,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
     /**
      * This method prepares unverified index mutations which are applied to index tables before the data table is
-     * updated. In the three phase update approach, in phase 1, the status of existing index rows is set to "unverified"
+     * updated. In the three-phase update approach, in phase 1, the status of existing index rows is set to "unverified"
      * (these rows will be deleted from the index table in phase 3), and/or new put mutations are added with the
      * unverified status. In phase 2, data table mutations are applied. In phase 3, the status for an index table row is
      * either set to "verified" or the row is deleted.
@@ -1009,10 +1016,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             for (Pair<Mutation, byte[]> update : updates) {
                 Mutation m = update.getFirst();
                 if (m instanceof Put) {
-                    Put verifiedPut = new Put(m.getRow());
-                    // Set the status of the index row to "verified"
-                    verifiedPut.addColumn(emptyCF, emptyCQ, now, QueryConstants.VERIFIED_BYTES);
-                    context.postIndexUpdates.put(hTableInterfaceReference, verifiedPut);
+                    if (!indexMaintainer.isUncovered()) {
+                        Put verifiedPut = new Put(m.getRow());
+                        // Set the status of the index row to "verified"
+                        verifiedPut.addColumn(emptyCF, emptyCQ, now, QueryConstants.VERIFIED_BYTES);
+                        context.postIndexUpdates.put(hTableInterfaceReference, verifiedPut);
+                    }
                 } else {
                     context.postIndexUpdates.put(hTableInterfaceReference, m);
                 }
@@ -1021,44 +1030,38 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // all cleanup will be done in postBatchMutateIndispensably()
     }
 
-    private static boolean hasGlobalIndex(PhoenixIndexMetaData indexMetaData) {
+    private static void identifyIndexMaintainerTypes(PhoenixIndexMetaData indexMetaData, BatchMutateContext context) {
         for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
-            if (!indexMaintainer.isLocalIndex()) {
-                return true;
+            if (indexMaintainer instanceof TransformMaintainer) {
+                context.hasTransform = true;
+            } else if (indexMaintainer.isLocalIndex()) {
+                context.hasLocalIndex = true;
+            } else if (indexMaintainer.isUncovered()) {
+                context.hasUncoveredIndex = true;
+            } else {
+                context.hasGlobalIndex = true;
             }
         }
-        return false;
     }
 
-    private static boolean hasLocalIndex(PhoenixIndexMetaData indexMetaData) {
-        for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
-            if (indexMaintainer.isLocalIndex()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean hasAtomicUpdate(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+    private void identifyMutationTypes(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+                                              BatchMutateContext context) {
         for (int i = 0; i < miniBatchOp.size(); i++) {
             if (miniBatchOp.getOperationStatus(i) == IGNORE) {
                 continue;
             }
             Mutation m = miniBatchOp.getOperation(i);
             if (this.builder.isAtomicOp(m)) {
-                return true;
+                context.hasAtomic = true;
+                if (context.hasDelete) {
+                    return;
+                }
+            } else if (m instanceof Delete)
+                context.hasDelete = true;
+            if (context.hasAtomic) {
+                return;
             }
         }
-        return false;
-    }
-
-    private static boolean isTransforming(PhoenixIndexMetaData indexMetaData) {
-        for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
-            if (indexMaintainer instanceof TransformMaintainer) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private void waitForPreviousConcurrentBatch(TableName table, BatchMutateContext context)
@@ -1111,25 +1114,26 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         PhoenixIndexMetaData indexMetaData = getPhoenixIndexMetaData(c, miniBatchOp);
         BatchMutateContext context = new BatchMutateContext(indexMetaData.getClientVersion());
         setBatchMutateContext(c, context);
+        identifyIndexMaintainerTypes(indexMetaData, context);
+        identifyMutationTypes(miniBatchOp, context);
         context.populateOriginalMutations(miniBatchOp);
 
-        // Need to add cell tags to Delete Marker before we do any index processing
-        // since we add tags to tables which doesn't have indexes also.
-        IndexUtil.setDeleteAttributes(miniBatchOp);
+        if (context.hasDelete) {
+            // Need to add cell tags to Delete Marker before we do any index processing
+            // since we add tags to tables which doesn't have indexes also.
+            IndexUtil.setDeleteAttributes(miniBatchOp);
+        }
 
-        // Exclusively lock all rows so we get a consistent read while
-        // determining the index updates
+        // Exclusively lock all rows to do consistent writes over multiple tables (i.e., the data and its index tables)
         populateRowsToLock(miniBatchOp, context);
         // early exit if it turns out we don't have any update for indexes
         if (context.rowsToLock.isEmpty()) {
             return;
         }
         lockRows(context);
-
-        boolean hasAtomic = hasAtomicUpdate(miniBatchOp);
         long onDupCheckTime = 0;
 
-        if (hasAtomic || hasGlobalIndex(indexMetaData) || isTransforming(indexMetaData)) {
+        if (context.hasAtomic || context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
             // Retrieve the current row states from the data table while holding the lock.
             // This is needed for both atomic mutations and global indexes
             long start = EnvironmentEdgeManager.currentTimeMillis();
@@ -1137,7 +1141,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             onDupCheckTime += (EnvironmentEdgeManager.currentTimeMillis() - start);
         }
 
-        if (hasAtomic) {
+        if (context.hasAtomic) {
             long start = EnvironmentEdgeManager.currentTimeMillis();
             // add the mutations for conditional updates to the mini batch
             addOnDupMutationsToBatch(miniBatchOp, context);
@@ -1160,7 +1164,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         setTimestamps(miniBatchOp, builder, now);
 
         TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
-        if (hasGlobalIndex(indexMetaData) || isTransforming(indexMetaData)) {
+        if (context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
             // Prepare next data rows states for pending mutations (for global indexes)
             prepareDataRowStates(c, miniBatchOp, context, now);
             // Add the table rows in the mini batch to the collection of pending rows. This will be used to detect
@@ -1189,7 +1193,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             }
             preparePostIndexMutations(context, now, indexMetaData);
         }
-        if (hasLocalIndex(indexMetaData)) {
+        if (context.hasLocalIndex) {
             // Group all the updates for a single row into a single update to be processed (for local indexes)
             Collection<? extends Mutation> mutations = groupMutations(miniBatchOp, context);
             handleLocalIndexUpdates(table, miniBatchOp, mutations, indexMetaData);
@@ -1589,7 +1593,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             return columnValues;
         }
 
-        SimpleValueGetter valueGetter = new SimpleValueGetter(currentDataRow);
+        IndexUtil.SimpleValueGetter valueGetter = new IndexUtil.SimpleValueGetter(currentDataRow);
         for (ColumnReference colRef : cols) {
             Cell cell = valueGetter.getLatestCell(colRef, HConstants.LATEST_TIMESTAMP);
             if (cell != null) {

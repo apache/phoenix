@@ -1189,7 +1189,7 @@ public class ScanUtil {
             if (table.isTransactional() || table.getType() != PTableType.INDEX) {
                 return;
             }
-            if (indexTable.getIndexType() != PTable.IndexType.GLOBAL) {
+            if (!IndexUtil.isGlobalIndex(indexTable)) {
                 return;
             }
 
@@ -1218,7 +1218,11 @@ public class ScanUtil {
                 IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(indexTable), phoenixConnection);
                 scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
             }
-            scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
+            if (IndexUtil.isCoveredGlobalIndex(indexTable)) {
+                scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
+            } else {
+                scan.setAttribute(BaseScannerRegionObserver.UNCOVERED_GLOBAL_INDEX, TRUE_BYTES);
+            }
             scan.setAttribute(BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME, dataTable.getPhysicalName().getBytes());
             IndexMaintainer indexMaintainer = indexTable.getIndexMaintainer(dataTable, phoenixConnection);
             byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();

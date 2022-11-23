@@ -278,7 +278,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
 
     private void initializeGlobalMockitoSetup() throws IOException {
         //setup
-        when(GlobalIndexRegionScanner.getIndexRowKey(indexMaintainer, put)).thenCallRealMethod();
+        when(indexMaintainer.getIndexRowKey(put)).thenCallRealMethod();
         when(rebuildScanner.prepareIndexMutations(put, delete, indexKeyToMutationMap, mostRecentIndexRowKeys)).thenCallRealMethod();
         when(rebuildScanner.verifySingleIndexRow(Matchers.<byte[]>any(), Matchers.<List>any(),Matchers.<List>any(), Matchers.<Set>any(), Matchers.<List>any(),
                 Matchers.<IndexToolVerificationResult.PhaseResult>any(), Matchers.anyBoolean())).thenCallRealMethod();

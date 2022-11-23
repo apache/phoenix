@@ -20,7 +20,6 @@ package org.apache.phoenix.compile;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
-import static org.apache.phoenix.util.IndexUtil.isHintedGlobalIndex;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -1397,8 +1396,7 @@ public class JoinCompiler {
                 // This could be an IndexDataColumnRef. If so, the table name must have
                 // been appended by the IndexStatementRewriter, and we can convert it into.
                 TableRef tableRef = resolver.resolveTable(node.getSchemaName(), node.getTableName());
-                if (tableRef.getTable().getIndexType() == IndexType.LOCAL
-                        || isHintedGlobalIndex(tableRef)) {
+                if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(tableRef)) {
                     TableRef parentTableRef = FromCompiler.getResolver(
                             NODE_FACTORY.namedTable(null, TableName.create(tableRef.getTable()
                                     .getSchemaName().getString(), tableRef.getTable()

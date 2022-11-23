@@ -97,6 +97,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
         indexOptionBuilder = new StringBuilder();
         if (!encoded) {
             optionBuilder.append(" COLUMN_ENCODED_BYTES=0");
+        } else {
             indexOptionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
         }
         this.tableDDLOptions = optionBuilder.toString();

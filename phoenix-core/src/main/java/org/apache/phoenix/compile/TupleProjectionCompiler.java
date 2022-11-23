@@ -18,7 +18,6 @@
 package org.apache.phoenix.compile;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
-import static org.apache.phoenix.util.IndexUtil.isHintedGlobalIndex;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -256,8 +255,7 @@ public class TupleProjectionCompiler {
                     nonPkColumnRefSet.add(resolveColumn);
                 }
             } catch (ColumnNotFoundException e) {
-                if (context.getCurrentTable().getTable().getIndexType() == PTable.IndexType.LOCAL
-                        || isHintedGlobalIndex(context.getCurrentTable())) {
+                if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(context.getCurrentTable())) {
                     try {
                         context.setUncoveredIndex(true);
                         indexColumnRefSet.add(new IndexDataColumnRef(context,

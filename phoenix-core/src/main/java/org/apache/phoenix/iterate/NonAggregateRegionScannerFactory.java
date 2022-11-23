@@ -127,8 +127,10 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         byte[][] viewConstants = null;
         PhoenixTransactionContext tx = null;
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
-        if (dataColumns != null) {
-            tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
+        if (dataColumns != null || ScanUtil.isUncoveredGlobalIndex(scan)) {
+            if (dataColumns != null) {
+               tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
+            }
             dataRegion = env.getRegion();
             int clientVersion = ScanUtil.getClientVersion(scan);
             List<IndexMaintainer> indexMaintainers =

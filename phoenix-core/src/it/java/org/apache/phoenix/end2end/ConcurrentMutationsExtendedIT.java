@@ -39,9 +39,14 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.io.IOException;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
@@ -64,9 +69,10 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REB
 import static org.junit.Assert.*;
 
 @Category(NeedsOwnMiniClusterTest.class)
-@RunWith(RunUntilFailure.class)
+@RunWith(Parameterized.class)
 public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
+    private final boolean uncovered;
     private static final Random RAND = new Random(5);
     private static final String MVCC_LOCK_TEST_TABLE_PREFIX = "MVCCLOCKTEST_";
     private static final String LOCK_TEST_TABLE_PREFIX = "LOCKTEST_";
@@ -74,6 +80,9 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     private static final int MAX_LOOKBACK_AGE = 1000000;
     private final Object lock = new Object();
 
+    public ConcurrentMutationsExtendedIT(boolean uncovered) {
+        this.uncovered = uncovered;
+    }
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
@@ -81,6 +90,11 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         props.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
             Integer.toString(MAX_LOOKBACK_AGE));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+    @Parameterized.Parameters(
+            name = "uncovered={0}")
+    public static synchronized Collection<Boolean> data() {
+        return Arrays.asList(true, false);
     }
 
     static long verifyIndexTable(String tableName, String indexName,
@@ -109,9 +123,12 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
         assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
         assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
-        // The index scrutiny run will trigger index repair on all unverified rows and they rows will be made verified
+        // The index scrutiny run will trigger index repair on all unverified rows, and they will be repaired or
         // deleted (since the age threshold is set to zero ms for these tests
-        assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
+        PTable pIndexTable = PhoenixRuntime.getTable(conn, indexName);
+        if (pIndexTable.getIndexType() != PTable.IndexType.UNCOVERED) {
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
+        }
         assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
         assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).getValue());
         // Now we rebuild the entire index table and expect that it is still good after the full rebuild
@@ -124,7 +141,6 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
         assertEquals(0, indexTool.getJob().getCounters().findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
         // Truncate, rebuild and verify the index table
-        PTable pIndexTable = PhoenixRuntime.getTable(conn, indexName);
         TableName physicalTableName = TableName.valueOf(pIndexTable.getPhysicalName().getBytes());
         PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
         try (Admin admin = pConn.getQueryServices().getAdmin()) {
@@ -150,7 +166,8 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0");
         TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
-        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1)");
+        conn.createStatement().execute("CREATE "+ (uncovered ? "UNCOVERED " : " ") + "INDEX " +
+                indexName + " ON " + tableName + "(v1)");
         final CountDownLatch doneSignal = new CountDownLatch(2);
         Runnable r1 = new Runnable() {
 
@@ -223,8 +240,11 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2))");
         TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
-        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1)");
-        conn.createStatement().execute("CREATE INDEX " + singleCellindexName + " ON " + tableName + "(v1) IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+        conn.createStatement().execute("CREATE "+ (uncovered ? "UNCOVERED " : " ") + "INDEX " + indexName
+                + " ON " + tableName + "(v1)");
+        conn.createStatement().execute("CREATE "+ (uncovered ? "UNCOVERED " : " ") + "INDEX "
+                + singleCellindexName + " ON " + tableName
+                + "(v1) IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
         final CountDownLatch doneSignal = new CountDownLatch(2);
         Runnable r1 = new Runnable() {
 
@@ -290,7 +310,8 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, a.v1 INTEGER, b.v2 INTEGER, c.v3 INTEGER, d.v4 INTEGER," +
                 "CONSTRAINT pk PRIMARY KEY (k1,k2))  COLUMN_ENCODED_BYTES = 0, VERSIONS=1");
-        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v1) INCLUDE(v2, v3)");
+        conn.createStatement().execute("CREATE "+ (uncovered ? "UNCOVERED " : " ") + "INDEX " + indexName + " ON "
+                + tableName + "(v1)" + (uncovered ? "" :  "INCLUDE(v2, v3)"));
         final CountDownLatch doneSignal = new CountDownLatch(nThreads);
         Runnable[] runnables = new Runnable[nThreads];
         for (int i = 0; i < nThreads; i++) {
@@ -339,7 +360,8 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + "(k VARCHAR PRIMARY KEY, v INTEGER) COLUMN_ENCODED_BYTES = 0");
         TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
-        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v)");
+        conn.createStatement().execute("CREATE "+ (uncovered ? "UNCOVERED " : " ") + "INDEX " + indexName
+                + " ON " + tableName + "(v)");
         final CountDownLatch doneSignal = new CountDownLatch(2);
         final String[] failedMsg = new String[1];
         Runnable r1 = new Runnable() {
@@ -398,7 +420,8 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + "(k VARCHAR PRIMARY KEY, v INTEGER) COLUMN_ENCODED_BYTES = 0");
-        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(v,k)");
+        conn.createStatement().execute("CREATE "+ (uncovered ? "UNCOVERED " : " ") + "INDEX " + indexName
+                + " ON " + tableName + "(v,k)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('foo',0)");
         conn.commit();
         TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);

@@ -50,6 +50,7 @@ import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -59,6 +60,7 @@ import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexExpressionCompiler;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo;
 import org.apache.phoenix.expression.CoerceExpression;
@@ -105,16 +107,7 @@ import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.schema.tuple.ValueGetterTuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
-import org.apache.phoenix.util.BitSet;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.EncodedColumnsUtil;
-import org.apache.phoenix.util.ExpressionUtil;
-import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TransactionUtil;
-import org.apache.phoenix.util.TrustedByteArrayOutputStream;
+import org.apache.phoenix.util.*;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.base.Predicate;
@@ -429,6 +422,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     //**** START: New member variables added in 4.16 ****/
     private String logicalIndexName;
 
+    private boolean isUncovered;
+
     protected IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
         this.dataRowKeySchema = dataRowKeySchema;
         this.isDataTableSalted = isDataTableSalted;
@@ -441,6 +436,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.viewIndexId = index.getViewIndexId() == null ? null : index.getviewIndexIdType().toBytes(index.getViewIndexId());
         this.viewIndexIdType = index.getviewIndexIdType();
         this.isLocalIndex = index.getIndexType() == IndexType.LOCAL;
+        this.isUncovered = index.getIndexType() == IndexType.UNCOVERED;
         this.encodingScheme = index.getEncodingScheme();
       
         // null check for b/w compatibility
@@ -908,7 +904,37 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
         }
     }
-    
+
+    public  byte[] getIndexRowKey(final Put dataRow) {
+        ValueGetter valueGetter = new IndexUtil.SimpleValueGetter(dataRow);
+        return buildRowKey(valueGetter, new ImmutableBytesWritable(dataRow.getRow()),
+                null, null, IndexUtil.getMaxTimestamp(dataRow));
+    }
+    public boolean checkIndexRow(final byte[] indexRowKey,
+                                        final Put dataRow) {
+        byte[] builtIndexRowKey = getIndexRowKey(dataRow);
+        if (Bytes.compareTo(builtIndexRowKey, 0, builtIndexRowKey.length,
+                indexRowKey, 0, indexRowKey.length) != 0) {
+            return false;
+        }
+        return true;
+    }
+
+    public void deleteRowIfAgedEnough(byte[] indexRowKey, long ts, long ageThreshold,
+                                      boolean singleVersion, Region region) throws IOException {
+        if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold) {
+            Delete del;
+            if (singleVersion) {
+                del = buildRowDeleteMutation(indexRowKey,
+                        IndexMaintainer.DeleteType.SINGLE_VERSION, ts);
+            } else {
+                del = buildRowDeleteMutation(indexRowKey,
+                        IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+            }
+            Mutation[] mutations = new Mutation[]{del};
+            region.batchMutate(mutations);
+        }
+    }
     /*
      * return the view index id from the index row key
      */
@@ -1656,6 +1682,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             maintainer.coveredColumnsMap.put(dataTableColRef, indexTableColRef);
         }
         maintainer.logicalIndexName = proto.getLogicalIndexName();
+        if (proto.hasIsUncovered()) {
+            maintainer.isUncovered = proto.getIsUncovered();
+        } else {
+            maintainer.isUncovered = false;
+        }
         maintainer.initCachedState();
         return maintainer;
     }
@@ -1782,6 +1813,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         builder.setLogicalIndexName(maintainer.logicalIndexName);
         builder.setDataEncodingScheme(maintainer.dataEncodingScheme.getSerializedMetadataValue());
         builder.setDataImmutableStorageScheme(maintainer.dataImmutableStorageScheme.getSerializedMetadataValue());
+        builder.setIsUncovered(maintainer.isUncovered);
         return builder.build();
     }
 
@@ -2094,6 +2126,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     
     public boolean isLocalIndex() {
         return isLocalIndex;
+    }
+
+    public boolean isUncovered() {
+        return isUncovered;
     }
     
     public boolean isImmutableRows() {

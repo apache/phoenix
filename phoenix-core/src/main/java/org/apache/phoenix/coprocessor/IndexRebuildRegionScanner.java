@@ -34,6 +34,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -116,22 +117,13 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                 for (Cell cell : row) {
                     put.add(cell);
                 }
-                if (checkIndexRow(indexRowKeyforReadRepair, put)) {
+                if (indexMaintainer.checkIndexRow(indexRowKeyforReadRepair, put)) {
                     singleRowRebuildReturnCode = GlobalIndexChecker.RebuildReturnCode.INDEX_ROW_EXISTS.getValue();
                 } else {
                     singleRowRebuildReturnCode = GlobalIndexChecker.RebuildReturnCode.NO_INDEX_ROW.getValue();
                 }
             }
         }
-    }
-
-    private boolean checkIndexRow(final byte[] indexRowKey, final Put put) throws IOException {
-        byte[] builtIndexRowKey = getIndexRowKey(indexMaintainer, put);
-        if (Bytes.compareTo(builtIndexRowKey, 0, builtIndexRowKey.length,
-                indexRowKey, 0, indexRowKey.length) != 0) {
-            return false;
-        }
-        return true;
     }
 
 

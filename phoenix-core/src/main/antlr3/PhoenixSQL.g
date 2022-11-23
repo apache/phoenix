@@ -151,6 +151,7 @@ tokens
     GRANT = 'grant';
     REVOKE = 'revoke';
     SHOW = 'show';
+    UNCOVERED = 'uncovered';
 }
 
 
@@ -518,13 +519,20 @@ create_view_node returns [CreateTableStatement ret]
 
 // Parse a create index statement.
 create_index_node returns [CreateIndexStatement ret]
-    :   CREATE l=LOCAL? INDEX (IF NOT ex=EXISTS)? i=index_name ON t=from_table_name
+    :   CREATE u=UNCOVERED? l=LOCAL? INDEX (IF NOT ex=EXISTS)? i=index_name ON t=from_table_name
         (LPAREN ik=ik_constraint RPAREN)
-        (INCLUDE (LPAREN icrefs=column_names RPAREN))?
+        (in=INCLUDE (LPAREN icrefs=column_names RPAREN))?
         (async=ASYNC)?
         (p=fam_properties)?
         (SPLIT ON v=value_expression_list)?
-        {ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, v, p, ex!=null, l==null ? IndexType.getDefault() : IndexType.LOCAL, async != null, getBindCount(), new HashMap<String, UDFParseNode>(udfParseNodes)); }
+        {
+            if (u !=null && in != null) {
+                throw new RuntimeException("UNCOVERED indexes cannot have the INCLUDE clause");
+            }
+            ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, v, p, ex!=null,
+                    l==null ? (u==null ? IndexType.getDefault() : IndexType.UNCOVERED) : IndexType.LOCAL,
+                    async != null, getBindCount(), new HashMap<String, UDFParseNode>(udfParseNodes));
+        }
     ;
 
 // Parse a create sequence statement.

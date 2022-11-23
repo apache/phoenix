@@ -262,7 +262,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
                                 .equals(qualifiedIndexTableName);
                 if (hasLocalIndexes && hasGlobalIndexes) break;
             }
-            if (index.getIndexType() == IndexType.GLOBAL) {
+            if (IndexUtil.isGlobalIndex(index)) {
                 hasGlobalIndexes = true;
                 if (hasLocalIndexes && hasGlobalIndexes) break;
             }

@@ -72,15 +72,14 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.ExpressionUtil;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
-
 
 /**
  *
@@ -279,7 +278,7 @@ public class WhereCompiler {
         if (LiteralExpression.isBooleanFalseOrNull(whereClause)) {
             context.setScanRanges(ScanRanges.NOTHING);
         } else if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL
-                || (context.getCurrentTable().getTable().getIndexType() == IndexType.GLOBAL
+                || (IndexUtil.isGlobalIndex(context.getCurrentTable().getTable())
                 && context.isUncoveredIndex())) {
             if (whereClause != null && !ExpressionUtil.evaluatesToTrue(whereClause)) {
                 // pass any extra where as scan attribute so it can be evaluated after all

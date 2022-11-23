@@ -43,8 +43,12 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.ArrayBackedTag;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.PhoenixTagType;
 import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.RawCell;
@@ -57,9 +61,6 @@ import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Increment;
@@ -863,13 +864,74 @@ public class IndexUtil {
         }
     }
 
-    public static boolean isHintedGlobalIndex(final TableRef tableRef) {
-        PTable table = tableRef.getTable();
-        return table.getType() == PTableType.INDEX
-                && table.getIndexType() == PTable.IndexType.GLOBAL
-                && tableRef.isHinted();
+    public static boolean isCoveredGlobalIndex(final PTable table) {
+        return table.getIndexType() == PTable.IndexType.GLOBAL;
+    }
+    public static boolean isGlobalIndex(final PTable table) {
+        return table.getIndexType() == PTable.IndexType.GLOBAL || table.getIndexType() == PTable.IndexType.UNCOVERED;
     }
 
+    public static boolean shouldIndexBeUsedForUncoveredQuery(final TableRef tableRef) {
+        PTable table = tableRef.getTable();
+        return table.getType() == PTableType.INDEX
+                && (table.getIndexType() == PTable.IndexType.LOCAL
+                || table.getIndexType() == PTable.IndexType.UNCOVERED
+                || tableRef.isHinted());
+    }
+
+    public static long getMaxTimestamp(Mutation m) {
+        long ts = 0;
+        for (List<Cell> cells : m.getFamilyCellMap().values()) {
+            if (cells == null) {
+                continue;
+            }
+            for (Cell cell : cells) {
+                if (ts < cell.getTimestamp()) {
+                    ts = cell.getTimestamp();
+                }
+            }
+        }
+        return ts;
+    }
+    public static class SimpleValueGetter implements ValueGetter {
+        final ImmutableBytesWritable valuePtr = new ImmutableBytesWritable();
+        final Put put;
+        public SimpleValueGetter (final Put put) {
+            this.put = put;
+        }
+        @Override
+        public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) {
+            Cell cell = getLatestCell(ref, ts);
+            if (cell == null) {
+                return null;
+            }
+            valuePtr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+            return valuePtr;
+        }
+        public Cell getLatestCell(ColumnReference ref, long ts) {
+            List<Cell> cellList = put.get(ref.getFamily(), ref.getQualifier());
+            if (cellList == null || cellList.isEmpty()) {
+                return null;
+            }
+            return cellList.get(0);
+        }
+        @Override
+        public KeyValue getLatestKeyValue(ColumnReference ref, long ts) {
+            Cell cell = getLatestCell(ref, ts);
+            KeyValue kv = cell == null ? null :
+                    new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
+                            cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
+                            cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
+                            cell.getTimestamp(), KeyValue.Type.codeToType(cell.getType().getCode()),
+                            cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+            return kv;
+        }
+        @Override
+        public byte[] getRowKey() {
+            return put.getRow();
+        }
+
+    }
     /**
      * Updates the EMPTY cell value to VERIFIED for global index table rows.
      */

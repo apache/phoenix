@@ -277,23 +277,6 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
             return scanner.getMvccReadPoint();
         }
 
-
-        private void deleteRowIfAgedEnough(byte[] indexRowKey, long ts,
-                boolean specific) throws IOException {
-            if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold) {
-                Delete del;
-                if (specific) {
-                    del = indexMaintainer.buildRowDeleteMutation(indexRowKey,
-                            IndexMaintainer.DeleteType.SINGLE_VERSION, ts);
-                } else {
-                    del = indexMaintainer.buildRowDeleteMutation(indexRowKey,
-                            IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
-                }
-                Mutation[] mutations = new Mutation[]{del};
-                region.batchMutate(mutations);
-            }
-        }
-
         private PageFilter removePageFilterFromFilterList(FilterList filterList) {
             Iterator<Filter> filterIterator = filterList.getFilters().iterator();
             while (filterIterator.hasNext()) {
@@ -382,7 +365,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
                 // This means there does not exist a data table row for the data row key derived from
                 // this unverified index row. So, no index row has been built
                 // Delete the unverified row from index if it is old enough
-                deleteRowIfAgedEnough(indexRowKey, ts, false);
+                indexMaintainer.deleteRowIfAgedEnough(indexRowKey, ts, ageThreshold, false, region);
                 // Skip this unverified row (i.e., do not return it to the client). Just retuning empty row is
                 // sufficient to do that
                 row.clear();
@@ -404,7 +387,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
                 // This means there exists a data table row for the data row key derived from this unverified index row
                 // but the data table row does not point back to the index row.
                 // Delete the unverified row from index if it is old enough
-                deleteRowIfAgedEnough(indexRowKey, ts, false);
+                indexMaintainer.deleteRowIfAgedEnough(indexRowKey, ts, ageThreshold, false, region);
                 // Open a new scanner starting from the row after the current row
                 indexScan.withStartRow(indexRowKey, false);
                 scanner = ((BaseRegionScanner)delegate).getNewRegionScanner(indexScan);
@@ -455,7 +438,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
             // There could be back to back such events so we need a loop to go through them
             do {
                 // First delete the unverified row from index if it is old enough
-                deleteRowIfAgedEnough(indexRowKey, ts, true);
+                indexMaintainer.deleteRowIfAgedEnough(indexRowKey, ts, ageThreshold, true, region);
                 // Now we will do a single row scan to retrieve the verified index row built from the data table row.
                 // Note we cannot read all versions in one scan as the max number of row versions for an index table
                 // can be 1. In that case, we will get only one (i.e., the most recent) version instead of all versions
@@ -538,6 +521,9 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         }
 
         private boolean verifyRowAndRemoveEmptyColumn(List<Cell> cellList) throws IOException {
+            if (indexMaintainer.isUncovered()) {
+                return true;
+            }
             if (!indexMaintainer.isImmutableRows()) {
                 removeOlderCells(cellList);
             }
