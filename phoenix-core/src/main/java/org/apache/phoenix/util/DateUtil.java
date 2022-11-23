@@ -206,7 +206,7 @@ public class DateUtil {
             String nanosStr = timestampValue.substring(period + 1);
             if (nanosStr.length() > 9)
                 throw new IllegalDataException("nanos > 999999999 or < 0");
-            if (nanosStr.length() > 3 ) {
+            if (nanosStr.length() > 3) {
                 int nanos = Integer.parseInt(nanosStr);
                 for (int i = 0; i < 9 - nanosStr.length(); i++) {
                     nanos *= 10;
