@@ -260,7 +260,7 @@ public class RowTimestampIT extends ParallelStatsDisabledIT {
             // the data in this query.
             PreparedStatement stmt =
                     conn.prepareStatement("SELECT KV1, KV2, PK2 FROM " + tableName
-                            + " WHERE PK1 = ? AND PK2 > ? AND PK2 < ? ");
+                            + " WHERE PK1 = ? AND PK2 >= ? AND PK2 <= ? ");
             stmt.setString(1, "PK1");
             stmt.setDate(2, new Date(startTime));
             stmt.setDate(3, new Date(endTime));
