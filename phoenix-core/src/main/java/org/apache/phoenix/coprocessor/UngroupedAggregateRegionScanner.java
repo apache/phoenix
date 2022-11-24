@@ -315,11 +315,11 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                 }
             }
             if (targetPConn != null) {
-                    try {
-                        targetPConn.close();
-                    } catch (SQLException e) {
-                        LOGGER.error("Closing connection: " + targetPConn + " failed: ", e);
-                    }
+                try {
+                    targetPConn.close();
+                } catch (SQLException e) {
+                    LOGGER.error("Closing connection: " + targetPConn + " failed: ", e);
+                }
             }
         } finally {
             innerScanner.close();
