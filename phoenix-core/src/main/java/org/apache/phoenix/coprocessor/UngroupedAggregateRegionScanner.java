@@ -161,6 +161,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
     private boolean incrScanRefCount = false;
     private byte[] indexMaintainersPtr;
     private boolean useIndexProto;
+    private PhoenixConnection targetPConn = null;
 
     public UngroupedAggregateRegionScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
                                            final RegionScanner innerScanner, final Region region, final Scan scan,
@@ -227,8 +228,13 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         if (upsertSelectTable != null) {
             isUpsert = true;
             projectedTable = deserializeTable(upsertSelectTable);
-            targetHTable = ((PhoenixConnection)QueryUtil.getConnectionOnServer(ungroupedAggregateRegionObserver.getUpsertSelectConfig())).getQueryServices().getTable(
-                    projectedTable.getPhysicalName().getBytes());
+            targetPConn =
+                    ((PhoenixConnection) QueryUtil.getConnectionOnServer(
+                        ungroupedAggregateRegionObserver.getUpsertSelectConfig()));
+            targetHTable =
+                    targetPConn.getQueryServices()
+                            .getTable(projectedTable.getPhysicalName().getBytes());
+            // TODO Can't we just close the PhoenixConnection immediately here ?
             selectExpressions = deserializeExpressions(scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS));
             values = new byte[projectedTable.getPKColumns().size()][];
             isPKChanging = ExpressionUtil.isPkPositionChanging(new TableRef(projectedTable), selectExpressions);
@@ -307,6 +313,13 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                 } catch (IOException e) {
                     LOGGER.error("Closing table: " + targetHTable + " failed: ", e);
                 }
+            }
+            if (targetPConn != null) {
+                    try {
+                        targetPConn.close();
+                    } catch (SQLException e) {
+                        LOGGER.error("Closing connection: " + targetPConn + " failed: ", e);
+                    }
             }
         } finally {
             innerScanner.close();
