@@ -3516,6 +3516,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
                     QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
             metaConnection.createStatement().execute(getSystemSequenceTableDDL(nSequenceSaltBuckets));
+            // When creating the table above, DDL statements are
+            // used. However, the CFD level properties are not set
+            // via DDL commands, hence we are explicitly setting
+            // few properties using the Admin API below.
+            updateSystemSequenceWithCacheOnWriteProps(metaConnection);
         } catch (TableAlreadyExistsException e) {
             nSequenceSaltBuckets = getSaltBuckets(e);
         }
@@ -4100,9 +4105,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return metaConnection;
     }
 
-    private PhoenixConnection upgradeSystemSequence(
+    @VisibleForTesting
+    public PhoenixConnection upgradeSystemSequence(
             PhoenixConnection metaConnection,
-            Map<String, String> systemTableToSnapshotMap) throws SQLException {
+            Map<String, String> systemTableToSnapshotMap) throws SQLException, IOException {
         int nSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
                 QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
                 QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
@@ -4158,8 +4164,36 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } else {
                 nSequenceSaltBuckets = getSaltBuckets(e);
             }
+
+            updateSystemSequenceWithCacheOnWriteProps(metaConnection);
         }
         return metaConnection;
+    }
+
+    private void updateSystemSequenceWithCacheOnWriteProps(PhoenixConnection metaConnection) throws
+        IOException, SQLException {
+
+        try (Admin admin = getAdmin()) {
+            TableDescriptor oldTD = admin.getDescriptor(
+                SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME,
+                    metaConnection.getQueryServices().getProps()));
+            ColumnFamilyDescriptor oldCf = oldTD.getColumnFamily(
+                QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+
+            // If the CacheOnWrite related properties are not set, lets set them.
+            if (!oldCf.isCacheBloomsOnWrite() || !oldCf.isCacheDataOnWrite()
+                || !oldCf.isCacheIndexesOnWrite()) {
+                ColumnFamilyDescriptorBuilder newCFBuilder =
+                    ColumnFamilyDescriptorBuilder.newBuilder(oldCf);
+                newCFBuilder.setCacheBloomsOnWrite(true);
+                newCFBuilder.setCacheDataOnWrite(true);
+                newCFBuilder.setCacheIndexesOnWrite(true);
+
+                TableDescriptorBuilder newTD = TableDescriptorBuilder.newBuilder(oldTD);
+                newTD.modifyColumnFamily(newCFBuilder.build());
+                admin.modifyTable(newTD.build());
+            }
+        }
     }
 
     private void takeSnapshotOfSysTable(
