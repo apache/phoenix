@@ -72,12 +72,15 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
@@ -89,6 +92,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
@@ -454,6 +458,60 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             SchemaUtil.getEmptyColumnFamily(sysStatsTable)).getKeepDeletedCells());
         assertEquals(1, sysStatsDesc.getColumnFamily(
             SchemaUtil.getEmptyColumnFamily(sysStatsTable)).getMaxVersions());
+    }
+
+    @Test
+    public void testCacheOnWritePropsOnSystemSequence() throws Exception {
+        PhoenixConnection conn = getConnection(false, null).
+            unwrap(PhoenixConnection.class);
+        ConnectionQueryServicesImpl cqs = (ConnectionQueryServicesImpl)(conn.getQueryServices());
+
+        TableDescriptor initialTD = utility.getAdmin().getDescriptor(
+            SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME,
+                cqs.getProps()));
+        ColumnFamilyDescriptor initialCFD = initialTD.getColumnFamily(
+            QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+
+        // Confirm that the Cache-On-Write related properties are set
+        // on SYSTEM.SEQUENCE during creation.
+        assertEquals(Boolean.TRUE, initialCFD.isCacheBloomsOnWrite());
+        assertEquals(Boolean.TRUE, initialCFD.isCacheDataOnWrite());
+        assertEquals(Boolean.TRUE, initialCFD.isCacheIndexesOnWrite());
+
+        // Check to see whether the Cache-On-Write related properties are set on
+        // pre-existing tables too via the upgrade path. We do the below to test it :
+        // 1. Explicitly disable the Cache-On-Write related properties on the table.
+        // 2. Call the Upgrade Path on the table.
+        // 3. Verify that the property is set after the upgrades too.
+        ColumnFamilyDescriptorBuilder newCFBuilder =
+            ColumnFamilyDescriptorBuilder.newBuilder(initialCFD);
+        newCFBuilder.setCacheBloomsOnWrite(false);
+        newCFBuilder.setCacheDataOnWrite(false);
+        newCFBuilder.setCacheIndexesOnWrite(false);
+        TableDescriptorBuilder newTD = TableDescriptorBuilder.newBuilder(initialTD);
+        newTD.modifyColumnFamily(newCFBuilder.build());
+        utility.getAdmin().modifyTable(newTD.build());
+
+        // Check that the Cache-On-Write related properties are now disabled.
+        TableDescriptor updatedTD = utility.getAdmin().getDescriptor(
+            SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME,
+                cqs.getProps()));
+        ColumnFamilyDescriptor updatedCFD = updatedTD.getColumnFamily(
+            QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+        assertEquals(Boolean.FALSE, updatedCFD.isCacheBloomsOnWrite());
+        assertEquals(Boolean.FALSE, updatedCFD.isCacheDataOnWrite());
+        assertEquals(Boolean.FALSE, updatedCFD.isCacheIndexesOnWrite());
+
+        // Let's try upgrading the existing table - and see if the property is set on
+        // during upgrades.
+        cqs.upgradeSystemSequence(conn, new HashMap<String, String>());
+
+        updatedTD = utility.getAdmin().getDescriptor(SchemaUtil.getPhysicalTableName(
+            PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME, cqs.getProps()));
+        updatedCFD = updatedTD.getColumnFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+        assertEquals(Boolean.TRUE, updatedCFD.isCacheBloomsOnWrite());
+        assertEquals(Boolean.TRUE, updatedCFD.isCacheDataOnWrite());
+        assertEquals(Boolean.TRUE, updatedCFD.isCacheIndexesOnWrite());
     }
 
     private Set<String> getChildLinks(Connection conn, String tableName) throws SQLException {
