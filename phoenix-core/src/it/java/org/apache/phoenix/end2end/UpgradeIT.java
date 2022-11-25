@@ -457,6 +457,35 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             SchemaUtil.getEmptyColumnFamily(sysStatsTable)).getMaxVersions());
     }
 
+    @Test
+    public void testCacheDataOnWriteSetOnSystemSequence() throws Exception {
+        PhoenixConnection conn = getConnection(false, null).unwrap(PhoenixConnection.class);
+        ConnectionQueryServicesImpl cqs = (ConnectionQueryServicesImpl)(conn.getQueryServices());
+
+        PTable sysSeqTable = PhoenixRuntime.getTable(conn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
+        TableDescriptor sysSeqDesc = utility.getAdmin().getDescriptor(SchemaUtil.getPhysicalTableName(
+        PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME, cqs.getProps()));
+
+        // Confirm that the CACHE_DATA_ON_WRITE is set on SYSTEM.SEQUENCE during creation.
+        assertEquals(Boolean.TRUE, sysSeqDesc.getColumnFamily(
+        SchemaUtil.getEmptyColumnFamily(sysSeqTable)).isCacheDataOnWrite());
+
+        // WIP -- Check the upgrade logic is working.
+        // 1. Alter the table to disable the CACHE_DATA_ON_WRITE on SYSTEM SEQUENCE - TODO
+        // 2. Check the CACHE_DATA_ON_WRITE is disabled - TODO
+        // 3. Upgrade the System Sequence explicitly.
+        // 4. Check that the CACHE_DATA_ON_WRITE is set.
+        cqs.upgradeSystemSequence(conn, new HashMap<String, String>());
+
+        // Check that SYSTEM.SEQUENCE table is fixed
+        // Check that the HBase tables reflect the change
+        sysSeqTable = PhoenixRuntime.getTable(conn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
+        sysSeqDesc = utility.getAdmin().getDescriptor(SchemaUtil.getPhysicalTableName(
+        PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME, cqs.getProps()));
+        assertEquals(Boolean.TRUE, sysSeqDesc.getColumnFamily(
+        SchemaUtil.getEmptyColumnFamily(sysSeqTable)).isCacheDataOnWrite());
+    }
+    
     private Set<String> getChildLinks(Connection conn, String tableName) throws SQLException {
         ResultSet rs =
                 conn.createStatement().executeQuery(String.format(

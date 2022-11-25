@@ -4312,10 +4312,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return metaConnection;
     }
 
-
-    private PhoenixConnection upgradeSystemSequence(
+    @VisibleForTesting
+    public PhoenixConnection upgradeSystemSequence(
             PhoenixConnection metaConnection,
-            Map<String, String> systemTableToSnapshotMap) throws SQLException {
+            Map<String, String> systemTableToSnapshotMap) throws SQLException, IOException {
         int nSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
                 QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
                 QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
@@ -4370,6 +4370,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 nSequenceSaltBuckets = nSaltBuckets;
             } else {
                 nSequenceSaltBuckets = getSaltBuckets(e);
+            }
+
+            if (!UpgradeUtil.tableHasCacheDataOnWrite(
+                metaConnection, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME)) {
+                    try (Statement stmt = metaConnection.createStatement()){
+                        stmt.executeUpdate("ALTER TABLE "
+                                + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " SET "
+                                + ColumnFamilyDescriptorBuilder.CACHE_DATA_ON_WRITE + "=" + Boolean.TRUE);
+                    }
             }
         }
         return metaConnection;
