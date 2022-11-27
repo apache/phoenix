@@ -17,27 +17,27 @@
  */
 package org.apache.phoenix.end2end.index;
 
-import java.util.Map;
+import java.util.Arrays;
+import java.util.Collection;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
+import org.junit.runners.Parameterized.Parameters;
 
-//FIXME shouldn't this be @NeedsOwnMiniClusterTest ?
 @Category(ParallelStatsDisabledTest.class)
-public class GlobalMutableNonTxIndexWithLazyPostBatchWriteIT extends GlobalMutableNonTxIndexIT {
+public class UncoveredGlobalMutableNonTxIndexIT extends BaseIndexIT {
 
-    public GlobalMutableNonTxIndexWithLazyPostBatchWriteIT(boolean columnEncoded) {
-        super(columnEncoded);
+    public UncoveredGlobalMutableNonTxIndexIT(boolean columnEncoded) {
+        super(false, true, true, null, columnEncoded);
     }
 
-    @BeforeClass
-    public static synchronized void doSetup() throws Exception {
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
-        props.put(IndexRegionObserver.INDEX_LAZY_POST_BATCH_WRITE, "true");
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    // name is used by failsafe as file name in reports
+    @Parameters(name="UncoveredGlobalMutableNonTxIndexIT_columnEncoded={0}")
+    public static synchronized Collection<Object[]> data() {
+        return Arrays.asList(new Object[][] {
+                {false},
+                {true}
+           });
     }
 }

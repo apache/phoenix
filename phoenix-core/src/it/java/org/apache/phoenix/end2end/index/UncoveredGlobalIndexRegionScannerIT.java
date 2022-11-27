@@ -108,6 +108,14 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
                 } catch (Exception e) {
                     // Expected
                 }
+                // The LOCAL keyword should not be allowed with UNCOVERED
+                try {
+                    conn.createStatement().execute("CREATE UNCOVERED LOCAL INDEX " + indexTableName
+                            + " on " + dataTableName);
+                    Assert.fail();
+                } catch (Exception e) {
+                    // Expected
+                }
             } else {
                 // The INCLUDE clause should be allowed
                 conn.createStatement().execute("CREATE INDEX " + indexTableName

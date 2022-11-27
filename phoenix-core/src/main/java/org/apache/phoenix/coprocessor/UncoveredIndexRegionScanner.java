@@ -74,7 +74,6 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     protected State state = State.INITIAL;
     protected final byte[][] viewConstants;
     protected final RegionCoprocessorEnvironment env;
-    protected byte[][] regionEndKeys;
     protected final int pageSizeInRows;
     protected final long ageThreshold;
     protected byte[] emptyCF;
@@ -86,7 +85,6 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     protected final IndexMaintainer indexMaintainer;
     protected final TupleProjector tupleProjector;
     protected final ImmutableBytesWritable ptr;
-    protected String exceptionMessage;
     protected List<List<Cell>> indexRows = null;
     protected Map<ImmutableBytesPtr, Result> dataRows = null;
     protected Iterator<List<Cell>> indexRowIterator = null;

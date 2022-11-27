@@ -372,12 +372,16 @@ public class QueryOptimizer {
                 // Checking number of columns handles the wildcard cases correctly, as in that case the index
                 // must contain all columns from the data table to be able to be used.
                 if (indexState == PIndexState.ACTIVE || indexState == PIndexState.PENDING_ACTIVE
-                        || (indexState == PIndexState.PENDING_DISABLE && isUnderPendingDisableThreshold(indexTableRef.getCurrentTime(), indexTable.getIndexDisableTimestamp()))) {
+                        || (indexState == PIndexState.PENDING_DISABLE
+                        && isUnderPendingDisableThreshold(indexTableRef.getCurrentTime(),
+                        indexTable.getIndexDisableTimestamp()))) {
                     if (plan.getProjector().getColumnCount() == nColumns) {
                         return plan;
-                    } else if (IndexUtil.isCoveredGlobalIndex(index)) {
-                        String schemaNameStr = index.getSchemaName()==null?null:index.getSchemaName().getString();
-                        String tableNameStr = index.getTableName()==null?null:index.getTableName().getString();
+                    } else {
+                        String schemaNameStr = index.getSchemaName()==null? null
+                                : index.getSchemaName().getString();
+                        String tableNameStr = index.getTableName()==null? null
+                                :index.getTableName().getString();
                         throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, "*");
                     }
                 }

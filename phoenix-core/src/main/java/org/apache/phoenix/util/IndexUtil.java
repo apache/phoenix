@@ -337,7 +337,7 @@ public class IndexUtil {
 
     public static List<Mutation> generateIndexData(final PTable table, PTable index,
             final MultiRowMutationState multiRowMutationState, List<Mutation> dataMutations, final KeyValueBuilder kvBuilder, PhoenixConnection connection)
-            throws SQLException {
+            throws SQLException, IOException {
         try {
             final ImmutableBytesPtr ptr = new ImmutableBytesPtr();
             IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);

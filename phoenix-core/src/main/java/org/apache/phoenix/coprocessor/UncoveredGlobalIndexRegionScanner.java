@@ -137,7 +137,6 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
                     state = State.SCANNING_DATA_INTERRUPTED;
                     break;
                 }
-                System.out.println(result);
                 dataRows.put(new ImmutableBytesPtr(result.getRow()), result);
                 if ((EnvironmentEdgeManager.currentTimeMillis() - startTime) >= pageSizeMs) {
                     state = State.SCANNING_DATA_INTERRUPTED;

@@ -29,12 +29,12 @@ import org.junit.runners.Parameterized.Parameters;
 @Ignore("No transactionProviders with local index support currently available")
 public class LocalMutableTxIndexIT extends BaseIndexIT {
 
-    public LocalMutableTxIndexIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded) {
-        super(localIndex, mutable, transactionProvider, columnEncoded);
+    public LocalMutableTxIndexIT(String transactionProvider, boolean columnEncoded) {
+        super(true, false, true, transactionProvider, columnEncoded);
     }
 
     // name is used by failsafe as file name in reports
-    @Parameters(name="LocalMutableTxIndexIT_localIndex={0},mutable={1},transactionProvider={2},columnEncoded={3}")
+    @Parameters(name="LocalMutableTxIndexIT_transactionProvider={0},columnEncoded={1}")
     public static synchronized Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
             // OMID does not support local indexes

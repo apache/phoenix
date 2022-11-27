@@ -27,16 +27,16 @@ import org.junit.runners.Parameterized.Parameters;
 @Category(ParallelStatsDisabledTest.class)
 public class GlobalMutableTxIndexIT extends BaseIndexIT {
 
-    public GlobalMutableTxIndexIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded) {
-        super(localIndex, mutable, transactionProvider, columnEncoded);
+    public GlobalMutableTxIndexIT(String transactionProvider, boolean columnEncoded) {
+        super(false, false, true, transactionProvider, columnEncoded);
     }
 
     // name is used by failsafe as file name in reports
-    @Parameters(name="GlobalMutableTxIndexIT_localIndex={0},mutable={1},transactionProvider={2},columnEncoded={3}")
+    @Parameters(name="GlobalMutableTxIndexIT_transactionProvider={0},columnEncoded={1}")
     public static synchronized Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
             // OMID does not support local indexes or column encoding
-            { false, true, "OMID", false },
+            { "OMID", false },
         });
     }
 
