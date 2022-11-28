@@ -34,8 +34,34 @@ public abstract class CompatPhoenixRpcScheduler extends RpcScheduler {
         return this.delegate.getMetaPriorityQueueLength();
     }
 
-    public boolean dispatch(CallRunner task) throws IOException, InterruptedException {
-        return compatDispatch(task);
+    @Override
+    public int getActiveGeneralRpcHandlerCount() {
+        return this.delegate.getActiveGeneralRpcHandlerCount();
+    }
+
+    @Override
+    public int getActivePriorityRpcHandlerCount() {
+        return this.delegate.getActivePriorityRpcHandlerCount();
+    }
+
+    @Override
+    public int getActiveMetaPriorityRpcHandlerCount() {
+        return this.delegate.getActiveMetaPriorityRpcHandlerCount();
+    }
+
+    @Override
+    public int getActiveReplicationRpcHandlerCount() {
+        return this.delegate.getActiveReplicationRpcHandlerCount();
+    }
+
+    @Override
+    public boolean dispatch(CallRunner task) {
+        try {
+            return compatDispatch(task);
+        } catch (Exception e) {
+            //This never happens with Hbase 2.5
+            throw new RuntimeException(e);
+        }
     }
 
     public abstract boolean compatDispatch(CallRunner task)

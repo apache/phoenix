@@ -474,6 +474,26 @@
           </dependency>
         </dependencies>
       </profile>
+      <profile>
+        <id>phoenix-hbase-compat-2.5.0</id>
+        <!-- keep dependency plugin happy -->
+        <activation>
+          <property>
+            <name>hbase.profile</name>
+            <value>2.5</value>
+          </property>
+        </activation>
+        <properties>
+          <hbase.profile>2.5.0</hbase.profile>
+        </properties>
+        <dependencies>
+          <dependency>
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper-jute</artifactId>
+            <scope>provided</scope>
+          </dependency>
+        </dependencies>
+      </profile>
     <profile>
       <id>phoenix-hbase-compat-2.4.1-default</id>
       <!-- keep dependency plugin happy -->

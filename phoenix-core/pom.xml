@@ -72,6 +72,9 @@
                     || ("${hbase.compat.version}".equals("2.4.1")
                       &amp;&amp; hbaseMinor == 4
                       &amp;&amp; hbasePatch &gt;=1)
+                    || ("${hbase.compat.version}".equals("2.5.0")
+                      &amp;&amp; hbaseMinor == 5
+                      &amp;&amp; hbasePatch &gt;=0)
                   )
                 </condition>
               </evaluateBeanshell>
@@ -680,6 +683,36 @@
       <dependency>
         <groupId>org.apache.zookeeper</groupId>
         <artifactId>zookeeper-jute</artifactId>
+      </dependency>
+    </dependencies>
+  </profile>
+  <profile>
+    <id>phoenix-hbase-compat-2.5.0</id>
+    <!-- keep dependency plugin happy -->
+    <activation>
+      <property>
+        <name>hbase.profile</name>
+        <value>2.5</value>
+      </property>
+    </activation>
+    <properties>
+      <hbase.profile>2.5</hbase.profile>
+    </properties>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper-jute</artifactId>
+      </dependency>
+      <!-- log4j2 for Hbase 2.5 minicluster -->
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-api</artifactId>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-core</artifactId>
+        <scope>test</scope>
       </dependency>
     </dependencies>
   </profile>

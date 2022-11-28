@@ -15,29 +15,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.compat.hbase;
+package org.apache.phoenix.compat.hbase.coprocessor;
 
-import java.io.IOException;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.wal.WALKey;
 
-import org.apache.hadoop.hbase.ipc.CallRunner;
-import org.apache.hadoop.hbase.ipc.RpcScheduler;
+import java.util.HashMap;
+import java.util.Map;
 
-/**
- * {@link RpcScheduler} that first checks to see if this is an index or metadata update before
- * passing off the call to the delegate {@link RpcScheduler}.
- */
-public abstract class CompatPhoenixRpcScheduler extends RpcScheduler {
-    protected RpcScheduler delegate;
+public class CompatIndexRegionObserver implements RegionObserver {
 
-    @Override
-    public int getMetaPriorityQueueLength() {
-        return this.delegate.getMetaPriorityQueueLength();
+    public static void appendToWALKey(WALKey key, String attrKey, byte[] attrValue) {
+        key.addExtendedAttribute(attrKey, attrValue);
     }
 
-    public boolean dispatch(CallRunner task) throws IOException, InterruptedException {
-        return compatDispatch(task);
+    public static byte[] getAttributeValueFromWALKey(WALKey key, String attrKey) {
+        return key.getExtendedAttribute(attrKey);
     }
 
-    public abstract boolean compatDispatch(CallRunner task)
-            throws IOException, InterruptedException;
+    public static Map<String, byte[]> getAttributeValuesFromWALKey(WALKey key) {
+        return new HashMap<String, byte[]>(key.getExtendedAttributes());
+    }
+
 }

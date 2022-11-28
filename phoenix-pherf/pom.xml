@@ -290,6 +290,12 @@
             <ignoredUnusedDeclaredDependency>
               org.apache.hbase:hbase-testing-util
             </ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>
+              org.apache.logging.log4j:log4j-api
+            </ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>
+               org.apache.logging.log4j:log4j-core
+            </ignoredUnusedDeclaredDependency>
           </ignoredUnusedDeclaredDependencies>
           <ignoredUsedUndeclaredDependencies>
             <ignoredUsedUndeclaredDependency>
@@ -382,4 +388,32 @@
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+        <id>phoenix-hbase-compat-2.5.0</id>
+        <!-- keep dependency plugin happy -->
+        <activation>
+            <property>
+                <name>hbase.profile</name>
+                <value>2.5</value>
+            </property>
+        </activation>
+        <properties>
+            <hbase.profile>2.5</hbase.profile>
+        </properties>
+        <dependencies>
+            <!-- log4j2 for Hbase 2.5 minicluster -->
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-api</artifactId>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-core</artifactId>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </profile>
+  </profiles>
 </project>
