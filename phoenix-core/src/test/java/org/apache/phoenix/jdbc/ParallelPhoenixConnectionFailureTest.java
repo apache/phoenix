@@ -19,65 +19,37 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
-import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 
-import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 import org.mockito.Mockito;
 import org.mockito.stubbing.Answer;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Test to make sure once an error is encountered on an underlying phoenix connection
  * we don't use that connection during the entire lifecycle of client conenction
  */
-@Category(NeedsOwnMiniClusterTest.class)
 public class ParallelPhoenixConnectionFailureTest extends BaseTest {
 
     private static String url =
-            JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + PhoenixRuntime.CONNECTIONLESS
-                    + JDBC_PROTOCOL_SEPARATOR + HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT
-                    + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;;
-    private static PhoenixTestDriver driver;
-    private static HBaseTestingUtility hbaseTestingUtility;
-
-    @BeforeClass
-    public static void setupBeforeClass() throws Exception {
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        driver = initAndRegisterTestDriver(url, new ReadOnlyProps(props));
-        hbaseTestingUtility = new HBaseTestingUtility();
-    }
-
-    @AfterClass
-    public static void tearDownAfterClass() {
-        destroyDriver(driver);
-    }
+            JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + PhoenixRuntime.CONNECTIONLESS;
 
     @Test
     public void testExecuteQueryChainFailure() throws SQLException {
+        HBaseTestingUtility hbaseTestingUtility = new HBaseTestingUtility();
+
         PhoenixConnection conn1 = (PhoenixConnection) DriverManager.getConnection(url);
         PhoenixConnection conn2 = (PhoenixConnection) DriverManager.getConnection(url);
         PhoenixConnection connSpy1 = Mockito.spy(conn1);
