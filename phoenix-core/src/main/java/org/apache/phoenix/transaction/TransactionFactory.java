@@ -18,6 +18,8 @@
 package org.apache.phoenix.transaction;
 
 import java.io.IOException;
+
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 
 public class TransactionFactory {
@@ -26,10 +28,17 @@ public class TransactionFactory {
 
     static{
         boolean tephraEnabled = true;
-        try {
-            Class.forName("org.apache.tephra.TransactionFailureException");
-        } catch (Throwable e) {
+        //FIXME this may break with vendor version numbers
+        if(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.4") > 0) {
+            //Tephra does not support Hbase 2.5 or later
             tephraEnabled = false;
+        } else {
+            try {
+                //Tephra not linked in
+                Class.forName("org.apache.tephra.TransactionFailureException");
+            } catch (Throwable e) {
+                tephraEnabled = false;
+            }
         }
         if (tephraEnabled) {
             tephraTransactionProvider = TephraTransactionProvider.getInstance();

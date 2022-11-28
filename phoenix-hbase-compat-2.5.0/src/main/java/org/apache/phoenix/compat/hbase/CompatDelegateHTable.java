@@ -15,25 +15,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.compat.hbase;
 
-public class HbaseCompatCapabilities {
+import java.io.IOException;
 
-    public static boolean isMaxLookbackTimeSupported() {
-        return true;
+import org.apache.hadoop.hbase.client.RegionLocator;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.RowMutations;
+import org.apache.hadoop.hbase.client.Table;
+
+public abstract class CompatDelegateHTable implements Table {
+
+    protected final Table delegate;
+
+    public CompatDelegateHTable(Table delegate) {
+        this.delegate = delegate;
     }
 
-    //In HBase 2.1 and 2.2, a lookback query won't return any results if covered by a future delete,
-    //but in 2.3 and later we have the preSoreScannerOpen hook that overrides that behavior
-    public static boolean isLookbackBeyondDeletesSupported() { return true; }
+    @Override
+    public RegionLocator getRegionLocator() throws IOException {
+        return delegate.getRegionLocator();
+    }
 
-    //HBase 2.1 does not have HBASE-22710, which is necessary for raw scan skip scan and
-    // AllVersionsIndexRebuild filters to
-    // show all versions properly. HBase 2.2.5+ and HBase 2.3.0+ have this fix.
-    public static boolean isRawFilterSupported() { return true; }
-
-    //HBase 2.3+ has preWALAppend() on RegionObserver (HBASE-22623)
-    public static boolean hasPreWALAppend() { return true; }
-
+    @Override
+    public Result mutateRow(RowMutations rm) throws IOException {
+        return delegate.mutateRow(rm);
+    }
 }

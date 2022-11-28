@@ -40,6 +40,7 @@
   </organization>
 
   <modules>
+    <module>phoenix-hbase-compat-2.5.0</module>
     <module>phoenix-hbase-compat-2.4.1</module>
     <module>phoenix-hbase-compat-2.4.0</module>
     <module>phoenix-hbase-compat-2.3.0</module>
@@ -82,13 +83,14 @@
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
 
     <!-- This is used by the release script only -->
-    <hbase.profile.list>2.1 2.2 2.3 2.4.0 2.4</hbase.profile.list>
+    <hbase.profile.list>2.1 2.2 2.3 2.4.0 2.4 2.5</hbase.profile.list>
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.1.runtime.version>2.1.10</hbase-2.1.runtime.version>
     <hbase-2.2.runtime.version>2.2.7</hbase-2.2.runtime.version>
     <hbase-2.3.runtime.version>2.3.7</hbase-2.3.runtime.version>
     <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
     <hbase-2.4.runtime.version>2.4.15</hbase-2.4.runtime.version>
+    <hbase-2.5.runtime.version>2.5.0</hbase-2.5.runtime.version>
 
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
@@ -99,7 +101,9 @@
     <!-- Dependency versions -->
     <jackson-bom.version>2.12.6.20220326</jackson-bom.version>
     <antlr.version>3.5.2</antlr.version>
-    <reload4j.version>1.2.22</reload4j.version>
+    <reload4j.version>1.2.24</reload4j.version>
+    <!-- Only for Hbase 2.5 minicluster -->
+    <log4j2.version>2.17.2</log4j2.version>
     <disruptor.version>3.3.6</disruptor.version>
     <slf4j.version>1.7.36</slf4j.version>
     <!-- com.google repo will be used except on Aarch64 platform. -->
@@ -372,6 +376,24 @@
                 </ignoredUnusedDeclaredDependency>
                 <ignoredUnusedDeclaredDependency>
                   org.apache.hbase:hbase-testing-util
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-api
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-core
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-slf4j-impl
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-1.2-api
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-api
+                </ignoredUnusedDeclaredDependency>
+                <ignoredUnusedDeclaredDependency>
+                  org.apache.logging.log4j:log4j-core
                 </ignoredUnusedDeclaredDependency>
               </ignoredUnusedDeclaredDependencies>
               <ignoredUsedUndeclaredDependencies>
@@ -646,6 +668,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-hbase-2.5</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-embedded-hbase-2.1</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -671,6 +698,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-embedded-hbase-2.5</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-server-hbase-2.1</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -692,6 +724,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-server-hbase-2.4</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.5</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -732,6 +769,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-hbase-compat-2.4.1</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.5.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <!-- Intra-project test dependencies -->
@@ -1494,6 +1536,16 @@
         <version>${hamcrest.version}</version>
         <scope>test</scope>
       </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-api</artifactId>
+        <version>${log4j2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-core</artifactId>
+        <version>${log4j2.version}</version>
+      </dependency>
 
        <!-- Runtime dependencies -->
       <dependency>
@@ -1699,6 +1751,25 @@
         <hbase.compat.version>2.4.1</hbase.compat.version>
         <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
         <hbase.thirdparty.version>3.4.1</hbase.thirdparty.version>
+        <zookeeper.version>3.5.7</zookeeper.version>
+        <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
+      </properties>
+    </profile>
+    <profile>
+      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
+      <id>phoenix-hbase-compat-2.5.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.5</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.5</hbase.profile>
+        <hbase.compat.version>2.5.0</hbase.compat.version>
+        <hadoop.version>3.2.3</hadoop.version>
+        <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
+        <hbase.thirdparty.version>4.1.1</hbase.thirdparty.version>
         <zookeeper.version>3.5.7</zookeeper.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
       </properties>
