@@ -34,7 +34,6 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ColumnInfo;
-import org.joda.time.DateTime;
 
 
 public class PhoenixRecordWritable implements DBWritable {
@@ -129,14 +128,11 @@ public class PhoenixRecordWritable implements DBWritable {
                 continue;
             }
 
-            // both Java and Joda dates used to work in 4.2.3, but now they must be java.sql.Date
+            // Java date used to work in 4.2.3, but now they must be java.sql.Date
             // can override any other types here as needed
             final Object finalObj;
             final PDataType<?> finalType;
-            if (v instanceof DateTime) {
-                finalObj = new java.sql.Date(((DateTime) v).getMillis());
-                finalType = PDate.INSTANCE;
-            } else if (v instanceof java.util.Date) {
+            if (v instanceof java.util.Date) {
                 finalObj = new java.sql.Date(((java.util.Date) v).getTime());
                 finalType = PDate.INSTANCE;
             } else {

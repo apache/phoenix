@@ -18,7 +18,10 @@
 package org.apache.phoenix.expression.function;
 
 import java.sql.SQLException;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
+import java.util.TimeZone;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
@@ -28,13 +31,11 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
-import org.joda.time.DateTime;
-import org.joda.time.chrono.GJChronology;
 
 /**
  * 
  * Implementation of the Month() buildin. Input Date/Timestamp/Time.
- * Returns an integer from 1 to 12 representing the month omponent of date
+ * Returns an integer from 1 to 12 representing the month component of date
  * 
  */
 @BuiltInFunction(name=MonthFunction.NAME, 
@@ -59,8 +60,10 @@ public class MonthFunction extends DateScalarFunction {
             return true; //means null
         }
         long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
-        DateTime dt = new DateTime(dateTime, GJChronology.getInstanceUTC());
-        int month = dt.getMonthOfYear();
+        Date dt = new Date(dateTime);
+        Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+        calendar.setTime(dt);
+        int month = calendar.get(Calendar.MONTH) + 1;
         PDataType returnType = getDataType();
         byte[] byteValue = new byte[returnType.getByteSize()];
         returnType.getCodec().encodeInt(month, byteValue, 0);

@@ -188,7 +188,7 @@ public class ResultTest extends ResultBaseTest {
 
         ThreadTime tt = new ThreadTime();
         tt.setThreadName("thread1");
-        Calendar calendar = Calendar.getInstance();
+        Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
         Date startTime1 = calendar.getTime();
         RunTime runtime1 = new RunTime(startTime1, 1000L, new Long(10));
         tt.getRunTimesInMs().add(runtime1);

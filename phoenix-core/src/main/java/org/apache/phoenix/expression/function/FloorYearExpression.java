@@ -17,16 +17,18 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 
+import org.apache.commons.lang3.time.DateUtils;
 import org.apache.phoenix.expression.Expression;
-import org.joda.time.DateTime;
 
 /**
  * 
- * Floor function that rounds up the {@link DateTime} to start of year. 
+ * Floor function that rounds up the {@link Date} to start of year.
  */
-public class FloorYearExpression extends RoundJodaDateExpression {
+public class FloorYearExpression extends RoundJavaDateExpression {
 
     public FloorYearExpression() {
         super();
@@ -37,8 +39,9 @@ public class FloorYearExpression extends RoundJodaDateExpression {
     }
 
     @Override
-    public long roundDateTime(DateTime datetime) {
-        return datetime.year().roundFloorCopy().getMillis();
+    public long roundDateTime(Date dateTime) {
+        return DateUtils.truncate(dateTime, Calendar.YEAR).getTime() +
+                Calendar.getInstance().getTimeZone().getRawOffset();
     }
 
 }

@@ -17,16 +17,19 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
-import org.joda.time.DateTime;
+
+import static java.lang.Math.abs;
 
 /**
  * 
- * Ceil function that rounds up the {@link DateTime} to next week. 
+ * Ceil function that rounds up the {@link Date} to next week.
  */
-public class CeilWeekExpression extends RoundJodaDateExpression {
+public class CeilWeekExpression extends RoundJavaDateExpression {
     
     public CeilWeekExpression() {
         super();
@@ -37,8 +40,7 @@ public class CeilWeekExpression extends RoundJodaDateExpression {
     }
 
     @Override
-    public long roundDateTime(DateTime dateTime) {
-        return dateTime.weekOfWeekyear().roundCeilingCopy().getMillis();
+    public long roundDateTime(Date dateTime) {
+        return dateTime.getTime() - dateTime.getTime() % week + week - correction;
     }
-
 }
