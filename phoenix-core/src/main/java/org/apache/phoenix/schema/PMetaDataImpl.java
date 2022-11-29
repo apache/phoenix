@@ -23,10 +23,13 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.function.Consumer;
 
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -43,32 +46,44 @@ public class PMetaDataImpl implements PMetaData {
     private PMetaDataCache metaData;
     private final TimeKeeper timeKeeper;
     private final PTableRefFactory tableRefFactory;
+    private final long updateCacheFrequency;
     
-    public PMetaDataImpl(int initialCapacity, ReadOnlyProps props) {
-        this(initialCapacity, TimeKeeper.SYSTEM, props);
+    public PMetaDataImpl(int initialCapacity, long updateCacheFrequency, ReadOnlyProps props) {
+        this(initialCapacity, updateCacheFrequency, TimeKeeper.SYSTEM, props);
     }
 
-    public PMetaDataImpl(int initialCapacity, TimeKeeper timeKeeper, ReadOnlyProps props) {
+    public PMetaDataImpl(int initialCapacity, long updateCacheFrequency, TimeKeeper timeKeeper, ReadOnlyProps props) {
+
         this(new PMetaDataCache(initialCapacity, props.getLong(
             QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB,
-            QueryServicesOptions.DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE), timeKeeper,
-                PTableRefFactory.getFactory(props)), timeKeeper, PTableRefFactory.getFactory(props));
+            QueryServicesOptions.DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE), timeKeeper),
+                timeKeeper, PTableRefFactory.getFactory(props),
+                updateCacheFrequency);
     }
 
-    private PMetaDataImpl(PMetaDataCache metaData, TimeKeeper timeKeeper, PTableRefFactory tableRefFactory) {
+    private PMetaDataImpl(PMetaDataCache metaData, TimeKeeper timeKeeper,
+                          PTableRefFactory tableRefFactory, long updateCacheFrequency) {
         this.timeKeeper = timeKeeper;
         this.metaData = metaData;
         this.tableRefFactory = tableRefFactory;
+        this.updateCacheFrequency = updateCacheFrequency;
+    }
+
+    private void updateGlobalMetric(PTableRef pTableRef) {
+            if (pTableRef != null && pTableRef.getTable() != null) {
+                GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER.increment();
+            }
+            else {
+                GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER.increment();
+            }
     }
 
     @Override
-    public PMetaDataImpl clone() {
-        return new PMetaDataImpl(new PMetaDataCache(this.metaData), this.timeKeeper, this.tableRefFactory);
-    }
-    
-    @Override
     public PTableRef getTableRef(PTableKey key) throws TableNotFoundException {
         PTableRef ref = metaData.get(key);
+        if (!key.getName().contains(QueryConstants.SYSTEM_SCHEMA_NAME)) {
+            updateGlobalMetric(ref);
+        }
         if (ref == null) {
             throw new TableNotFoundException(key.getName());
         }
@@ -86,23 +101,26 @@ public class PMetaDataImpl implements PMetaData {
 
     @Override
     public int size() {
-        return metaData.size();
+        return (int) metaData.size();
     }
-
+    // TODO The tables with zero update cache frequency should not be inserted to the cache. However, Phoenix
+    // uses the cache as the temporary memory during all operations currently. When this behavior changes, we can use
+    // useMetaDataCache to determine if a table should be inserted to the cache.
+    private boolean useMetaDataCache(PTable table) {
+        return table.getType() == PTableType.SYSTEM
+                || table.getUpdateCacheFrequency() != 0
+                || updateCacheFrequency != 0;
+    }
     @Override
     public void updateResolvedTimestamp(PTable table, long resolvedTimestamp) throws SQLException {
-    	metaData.put(table.getKey(), tableRefFactory.makePTableRef(table, this.timeKeeper.getCurrentTime(), resolvedTimestamp));
+        metaData.put(table.getKey(), tableRefFactory.makePTableRef(table,
+                this.timeKeeper.getCurrentTime(), resolvedTimestamp));
     }
 
     @Override
     public void addTable(PTable table, long resolvedTime) throws SQLException {
         PTableRef tableRef = tableRefFactory.makePTableRef(table, this.timeKeeper.getCurrentTime(), resolvedTime);
-        int netGain = 0;
         PTableKey key = table.getKey();
-        PTableRef oldTableRef = metaData.get(key);
-        if (oldTableRef != null) {
-            netGain -= oldTableRef.getEstimatedSize();
-        }
         PTable newParentTable = null;
         PTableRef newParentTableRef = null;
         long parentResolvedTimestamp = resolvedTime;
@@ -122,21 +140,14 @@ public class PMetaDataImpl implements PMetaData {
                     }
                 }
                 newIndexes.add(table);
-                netGain -= oldParentRef.getEstimatedSize();
                 newParentTable = PTableImpl.builderWithColumns(oldParentRef.getTable(),
                         getColumnsToClone(oldParentRef.getTable()))
                         .setIndexes(newIndexes)
                         .setTimeStamp(table.getTimeStamp())
                         .build();
                 newParentTableRef = tableRefFactory.makePTableRef(newParentTable, this.timeKeeper.getCurrentTime(), parentResolvedTimestamp);
-                netGain += newParentTableRef.getEstimatedSize();
             }
         }
-        if (newParentTable == null) { // Don't count in gain if we found a parent table, as its accounted for in newParentTable
-            netGain += tableRef.getEstimatedSize();
-        }
-        long overage = metaData.getCurrentSize() + netGain - metaData.getMaxSize();
-        metaData = overage <= 0 ? metaData : metaData.cloneMinusOverage(overage);
         
         if (newParentTable != null) { // Upsert new index table into parent data table list
             metaData.put(newParentTable.getKey(), newParentTableRef);

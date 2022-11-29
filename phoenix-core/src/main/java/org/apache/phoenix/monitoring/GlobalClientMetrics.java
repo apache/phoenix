@@ -44,6 +44,8 @@ import static org.apache.phoenix.monitoring.MetricType.TASK_QUEUE_WAIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.TASK_REJECTED_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.CLIENT_METADATA_CACHE_HIT_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.CLIENT_METADATA_CACHE_MISS_COUNTER;
 
 import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_CALLS;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_REMOTE_RPC_CALLS;
@@ -116,7 +118,10 @@ public enum GlobalClientMetrics {
     GLOBAL_HBASE_COUNT_RPC_RETRIES(COUNT_RPC_RETRIES),
     GLOBAL_HBASE_COUNT_REMOTE_RPC_RETRIES(COUNT_REMOTE_RPC_RETRIES),
     GLOBAL_HBASE_COUNT_ROWS_SCANNED(COUNT_ROWS_SCANNED),
-    GLOBAL_HBASE_COUNT_ROWS_FILTERED(COUNT_ROWS_FILTERED);
+    GLOBAL_HBASE_COUNT_ROWS_FILTERED(COUNT_ROWS_FILTERED),
+    GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER(CLIENT_METADATA_CACHE_MISS_COUNTER),
+    GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER(CLIENT_METADATA_CACHE_HIT_COUNTER);
+
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalClientMetrics.class);
     private static final boolean isGlobalMetricsEnabled = QueryServicesOptions.withDefaults().isGlobalMetricsEnabled();

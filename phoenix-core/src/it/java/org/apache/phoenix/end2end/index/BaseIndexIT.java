@@ -367,6 +367,11 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 assertFalse(rs.next());
             }
         }
+        catch (Exception e) {
+            if (!transactional) {
+                fail("Should not fail for non-transactional tables");
+            }
+        }
     }
 
     @Test
