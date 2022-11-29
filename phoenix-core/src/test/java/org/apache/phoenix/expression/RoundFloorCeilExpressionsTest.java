@@ -1134,7 +1134,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
                 new java.sql.Timestamp(DateUtil.parseDate("2024-02-1 0:0:0").getTime());
         // January is 31 days
         long lowerBoundaryWholeMonthLeap = wholeMonthLeap.getTime() - 31 * HALF_DAY;
-        // February is is 29 days
+        // February is 29 days
         long upperBoundaryWholeMonthLeap = wholeMonthLeap.getTime() + 29 * HALF_DAY;
         assertEquals(lowerBoundaryWholeMonthLeap,
             roundMonthExpression.rangeLower(wholeMonthLeap.getTime()));
@@ -1512,7 +1512,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
         java.sql.Timestamp wholeMonthLeap =
                 new java.sql.Timestamp(DateUtil.parseDate("2024-02-1 0:0:0").getTime());
         long lowerBoundaryWholeMonthLeap = wholeMonthLeap.getTime();
-        // February is is 29 days
+        // February is 29 days
         long upperBoundaryWholeMonthLeap = wholeMonthLeap.getTime() + 29 * DAY - 1;
         assertEquals(lowerBoundaryWholeMonthLeap,
             floorMonthExpression.rangeLower(wholeMonthLeap.getTime()));
@@ -1861,7 +1861,7 @@ public class RoundFloorCeilExpressionsTest extends BaseConnectionlessQueryTest {
 
         java.sql.Timestamp wholeMonthLeap =
                 new java.sql.Timestamp(DateUtil.parseDate("2024-03-1 0:0:0").getTime());
-        // February is is 29 days
+        // February is 29 days
         long lowerBoundaryWholeMonthLeap = wholeMonthLeap.getTime() - 29 * DAY + 1;
         long upperBoundaryWholeMonthLeap = wholeMonthLeap.getTime();
         assertEquals(lowerBoundaryWholeMonthLeap,
