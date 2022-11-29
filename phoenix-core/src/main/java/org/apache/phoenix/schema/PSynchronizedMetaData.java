@@ -61,17 +61,6 @@ public class PSynchronizedMetaData implements PMetaData {
     }
 
     @Override
-    public PMetaData clone() {
-        readWriteLock.readLock().lock();
-        try {
-            return delegate.clone();
-        }
-        finally {
-            readWriteLock.readLock().unlock();
-        }
-    }
-
-    @Override
     public void addTable(PTable table, long resolvedTime) throws SQLException {
         readWriteLock.writeLock().lock();
         try {

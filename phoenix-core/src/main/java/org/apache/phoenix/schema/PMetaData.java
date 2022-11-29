@@ -21,14 +21,13 @@ import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.query.MetaDataMutated;
 
-public interface PMetaData extends MetaDataMutated, Iterable<PTable>, Cloneable {
+public interface PMetaData extends MetaDataMutated, Iterable<PTable> {
 
     public static interface Pruner {
         public boolean prune(PTable table);
         public boolean prune(PFunction function);
     }
     public int size();
-    public PMetaData clone();
     public PTableRef getTableRef(PTableKey key) throws TableNotFoundException;
     public void pruneTables(Pruner pruner);
     public PFunction getFunction(PTableKey key) throws FunctionNotFoundException;
