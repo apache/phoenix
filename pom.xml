@@ -1271,6 +1271,12 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-codahale-metrics</artifactId>
+        <version>${omid.version}</version>
+      </dependency>
+
+      <dependency>
         <groupId>org.apache.curator</groupId>
         <artifactId>curator-framework</artifactId>
         <version>${curator.version}</version>
@@ -1286,7 +1292,6 @@
         <version>${curator.version}</version>
       </dependency>
 
-      <!-- Fix omid dependency scopes -->
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-testing-util</artifactId>
