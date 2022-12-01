@@ -365,16 +365,7 @@
           <configuration>
               <ignoredUnusedDeclaredDependencies>
                 <ignoredUnusedDeclaredDependency>
-                  org.apache.omid:omid-hbase-shims-hbase2.x
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.omid:omid-hbase-common-hbase2.x:jar
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.omid:omid-hbase-commit-table-hbase2.x
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.omid:omid-timestamp-storage-hbase2.x
+                  org.apache.omid:*
                 </ignoredUnusedDeclaredDependency>
                 <ignoredUnusedDeclaredDependency>
                   org.slf4j:slf4j-reload4j
@@ -1306,6 +1297,12 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-codahale-metrics</artifactId>
+        <version>${omid.version}</version>
+      </dependency>
+
+      <dependency>
         <groupId>org.apache.curator</groupId>
         <artifactId>curator-framework</artifactId>
         <version>${curator.version}</version>
@@ -1321,7 +1318,6 @@
         <version>${curator.version}</version>
       </dependency>
 
-      <!-- Fix omid dependency scopes -->
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-testing-util</artifactId>
