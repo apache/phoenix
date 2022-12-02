@@ -2377,7 +2377,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         // Verify before TTL expiration
         Properties props = new Properties();
-        long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+        long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() + 1;
         props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
         props.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
@@ -2414,7 +2414,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                         .getTenantId();
 
         // Verify rows exists (not masked) at current time
-        long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+        long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() + 1;
         Properties props = new Properties();
         props.setProperty("CurrentSCN", Long.toString(scnTimestamp ));
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
