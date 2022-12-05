@@ -38,6 +38,11 @@ else
   HBASE_VERSION="$1"
 fi
 
+if [[ "$HBASE_VERSION" == *"-hadoop3" ]]; then
+  echo "Hbase version is already compiled for Hadoop3. Skipping rebuild"
+  exit 0;
+fi
+
 # The name of the Apache Hbase source file
 HBASE_SOURCE_NAME="hbase-$HBASE_VERSION-src.tar.gz"
 # The relative path on the ASF mirrors for the Hbase source file
