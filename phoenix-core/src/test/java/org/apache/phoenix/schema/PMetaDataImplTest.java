@@ -83,7 +83,7 @@ public class PMetaDataImplTest {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB, "10");
         props.put(QueryServices.CLIENT_CACHE_ENCODING, "object");
-        PMetaData metaData = new PMetaDataImpl(5, timeKeeper,  new ReadOnlyProps(props));
+        PMetaData metaData = new PMetaDataImpl(5, Long.MAX_VALUE, timeKeeper,  new ReadOnlyProps(props));
         addToTable(metaData, "a", 5, timeKeeper);
         assertEquals(1, metaData.size());
         addToTable(metaData, "b", 4, timeKeeper);
@@ -98,9 +98,9 @@ public class PMetaDataImplTest {
 
         addToTable(metaData, "d", 11, timeKeeper);
         assertEquals(1, metaData.size());
-        assertNames(metaData, "d");
+        assertNames(metaData, "b");
         
-        removeFromTable(metaData, "d", timeKeeper);
+        removeFromTable(metaData, "b", timeKeeper);
         assertNames(metaData);
         
         addToTable(metaData, "a", 4, timeKeeper);
@@ -115,12 +115,6 @@ public class PMetaDataImplTest {
         addToTable(metaData, "d", 3, timeKeeper);
         assertEquals(3, metaData.size());
         assertNames(metaData, "c", "a","d");
-        
-        // Clone maintains insert order
-        metaData = metaData.clone();
-        addToTable(metaData, "e", 6, timeKeeper);
-        assertEquals(2, metaData.size());
-        assertNames(metaData, "d","e");
     }
 
     @Test
@@ -129,7 +123,7 @@ public class PMetaDataImplTest {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB, "5");
         props.put(QueryServices.CLIENT_CACHE_ENCODING, "object");
-        PMetaData metaData = new PMetaDataImpl(5, timeKeeper,  new ReadOnlyProps(props));
+        PMetaData metaData = new PMetaDataImpl(5, Long.MAX_VALUE, timeKeeper,  new ReadOnlyProps(props));
         addToTable(metaData, "a", 1, timeKeeper);
         assertEquals(1, metaData.size());
         addToTable(metaData, "b", 1, timeKeeper);
@@ -151,7 +145,7 @@ public class PMetaDataImplTest {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB, "5");
         props.put(QueryServices.CLIENT_CACHE_ENCODING, "object");
-        PMetaData metaData = new PMetaDataImpl(5, timeKeeper,  new ReadOnlyProps(props));
+        PMetaData metaData = new PMetaDataImpl(5, Long.MAX_VALUE, timeKeeper,  new ReadOnlyProps(props));
         addToTable(metaData, "a", 1, timeKeeper);
         assertEquals(1, metaData.size());
         addToTable(metaData, "b", 1, timeKeeper);
@@ -160,7 +154,7 @@ public class PMetaDataImplTest {
         assertEquals(1, metaData.size());
         addToTable(metaData, "d", 20, timeKeeper);
         assertEquals(1, metaData.size());
-        assertNames(metaData, "d");
+        assertNames(metaData, "c");
         addToTable(metaData, "e", 1, timeKeeper);
         assertEquals(1, metaData.size());
         addToTable(metaData, "f", 2, timeKeeper);
@@ -169,35 +163,12 @@ public class PMetaDataImplTest {
     }
 
     @Test
-    public void shouldAlwaysKeepOneEntryIfMaxSizeIsZero() throws Exception {
-        TestTimeKeeper timeKeeper = new TestTimeKeeper();
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
-        props.put(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB, "0");
-        props.put(QueryServices.CLIENT_CACHE_ENCODING, "object");
-        PMetaData metaData = new PMetaDataImpl(5, timeKeeper,  new ReadOnlyProps(props));
-        addToTable(metaData, "a", 1, timeKeeper);
-        assertEquals(1, metaData.size());
-        addToTable(metaData, "b", 1, timeKeeper);
-        assertEquals(1, metaData.size());
-        addToTable(metaData, "c", 5, timeKeeper);
-        assertEquals(1, metaData.size());
-        addToTable(metaData, "d", 20, timeKeeper);
-        assertEquals(1, metaData.size());
-        assertNames(metaData, "d");
-        addToTable(metaData, "e", 1, timeKeeper);
-        assertEquals(1, metaData.size());
-        addToTable(metaData, "f", 2, timeKeeper);
-        assertEquals(1, metaData.size());
-        assertNames(metaData, "f");
-    }
-
-    @Test
     public void testAge() throws Exception {
         TestTimeKeeper timeKeeper = new TestTimeKeeper();
         Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB, "10");
         props.put(QueryServices.CLIENT_CACHE_ENCODING, "object");
-        PMetaData metaData = new PMetaDataImpl(5, timeKeeper,  new ReadOnlyProps(props));
+        PMetaData metaData = new PMetaDataImpl(5, Long.MAX_VALUE, timeKeeper,  new ReadOnlyProps(props));
         String tableName = "a";
         addToTable(metaData, tableName, 1, timeKeeper);
         PTableRef aTableRef = metaData.getTableRef(new PTableKey(null,tableName));
@@ -214,7 +185,7 @@ public class PMetaDataImplTest {
     @Test
     public void testSchema() throws Exception {
         TestTimeKeeper timeKeeper = new TestTimeKeeper();
-        PMetaData metaData = new PMetaDataImpl(5, timeKeeper,
+        PMetaData metaData = new PMetaDataImpl(5, Long.MAX_VALUE, timeKeeper,
             new ReadOnlyProps(Collections.EMPTY_MAP));
         PSchema schema = new PSchema("testSchema");
         metaData.addSchema(schema);

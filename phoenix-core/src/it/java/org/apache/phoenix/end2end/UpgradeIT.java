@@ -125,8 +125,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                     return true;
                 }
             };
-            try (PhoenixConnection phxConn = new PhoenixConnection(servicesWithUpgrade, getUrl(), PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES), 
-                    conn.unwrap(PhoenixConnection.class).getMetaDataCache())) {
+            try (PhoenixConnection phxConn = new PhoenixConnection(servicesWithUpgrade, getUrl(), PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES))) {
                 try {
                     phxConn.createStatement().execute(
                             "CREATE TABLE " + generateUniqueName()

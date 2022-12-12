@@ -40,15 +40,14 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.joda.time.DateTime;
+import org.joda.time.DateTimeFieldType;
 import org.joda.time.DateTimeZone;
-import org.joda.time.chrono.ISOChronology;
 import org.joda.time.chrono.GJChronology;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.DateTimeFormatterBuilder;
 import org.joda.time.format.ISODateTimeFormat;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
@@ -155,7 +154,7 @@ public class DateUtil {
         if (pattern == null || pattern.length() == 0) {
             pattern = defaultPattern;
         }
-        if(defaultPattern.equals(pattern)) {
+        if (defaultPattern.equals(pattern)) {
             return JulianDateFormatParserFactory.getParser(timeZone);
         } else {
             return new SimpleDateFormatParser(pattern, timeZone);
@@ -207,7 +206,7 @@ public class DateUtil {
             String nanosStr = timestampValue.substring(period + 1);
             if (nanosStr.length() > 9)
                 throw new IllegalDataException("nanos > 999999999 or < 0");
-            if(nanosStr.length() > 3 ) {
+            if (nanosStr.length() > 3) {
                 int nanos = Integer.parseInt(nanosStr);
                 for (int i = 0; i < 9 - nanosStr.length(); i++) {
                     nanos *= 10;
@@ -345,6 +344,52 @@ public class DateUtil {
         @Override
         public TimeZone getTimeZone() {
             return formatter.getZone().toTimeZone();
+        }
+    }
+
+    public static long rangeJodaHalfEven(DateTime roundedDT, DateTime otherDT,
+            DateTimeFieldType type) {
+        // It's OK if this is slow, as it's only called O(1) times per query
+        //
+        // We need to reverse engineer what roundHalfEvenCopy() does
+        // and return the lower/upper (inclusive) range here
+        // Joda simply works on milliseconds between the floor and ceil values.
+        // We could avoid the period call for units less than a day, but this is not a perf
+        // critical function.
+        long roundedMs = roundedDT.getMillis();
+        long otherMs = otherDT.getMillis();
+        long midMs = (roundedMs + otherMs) / 2;
+        long remainder = (roundedMs + otherMs) % 2;
+        if (remainder == 0) {
+            int roundedUnits = roundedDT.get(type);
+            if (otherMs > roundedMs) {
+                // Upper range, other is bigger.
+                if ((roundedUnits & 1) == 0) {
+                    // This unit is even, the next second is odd, so we get the mid point
+                    return midMs;
+                } else {
+                    // This unit is odd, the next second is even and takes the midpoint.
+                    return midMs - 1;
+                }
+            } else {
+                // Lower range, other is smaller.
+                if ((roundedUnits & 1) == 0) {
+                    // This unit is even, the next second is odd, so we get the mid point
+                    return midMs;
+                } else {
+                    // This unit is odd, the next second is even and takes the midpoint.
+                    return midMs + 1;
+                }
+            }
+        } else {
+            // probably never happens
+            if (otherMs > roundedMs) {
+                // Upper range, return the rounded down value
+                return midMs;
+            } else {
+                // Lower range, the mid value belongs to the previous unit.
+                return midMs + 1;
+            }
         }
     }
 }

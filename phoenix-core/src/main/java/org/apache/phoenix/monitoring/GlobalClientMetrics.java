@@ -59,6 +59,8 @@ import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_TASK_TIMEOUT_
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_CONNECTION_FALLBACK_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_CONNECTION_CREATED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_CONNECTION_ERROR_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.CLIENT_METADATA_CACHE_HIT_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.CLIENT_METADATA_CACHE_MISS_COUNTER;
 
 import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_CALLS;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_REMOTE_RPC_CALLS;
@@ -151,7 +153,10 @@ public enum GlobalClientMetrics {
     GLOBAL_HA_PARALLEL_TASK_TIMEOUT_COUNTER(HA_PARALLEL_TASK_TIMEOUT_COUNTER),
     GLOBAL_HA_PARALLEL_CONNECTION_FALLBACK_COUNTER(HA_PARALLEL_CONNECTION_FALLBACK_COUNTER),
     GLOBAL_HA_PARALLEL_CONNECTION_ERROR_COUNTER( HA_PARALLEL_CONNECTION_ERROR_COUNTER),
-    GLOBAL_HA_PARALLEL_CONNECTION_CREATED_COUNTER(HA_PARALLEL_CONNECTION_CREATED_COUNTER);
+    GLOBAL_HA_PARALLEL_CONNECTION_CREATED_COUNTER(HA_PARALLEL_CONNECTION_CREATED_COUNTER),
+
+    GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER(CLIENT_METADATA_CACHE_MISS_COUNTER),
+    GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER(CLIENT_METADATA_CACHE_HIT_COUNTER);
 
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalClientMetrics.class);
