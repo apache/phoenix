@@ -2837,19 +2837,4 @@ public class UpgradeUtil {
             SchemaUtil.getEmptyColumnFamily(table)).getMaxVersions() > 1;
     }
 
-    /**
-     * Checks whether the given table has ColumnFamilyDescriptorBuilder.CACHE_DATA_ON_WRITE set to true or not.
-     *
-     * @return true if the flag is set, false otherwise.
-     */
-    public static boolean tableHasCacheDataOnWrite(PhoenixConnection conn, String pTableName)
-            throws SQLException, org.apache.hadoop.hbase.TableNotFoundException, IOException {
-        ConnectionQueryServices cqs = conn.getQueryServices();
-        Admin admin = cqs.getAdmin();
-        PTable pTable = PhoenixRuntime.getTable(conn, pTableName);
-        TableName tableName = SchemaUtil.getPhysicalTableName(pTableName, cqs.getProps());
-        TableDescriptor tableDesc = admin.getDescriptor(tableName);
-        return tableDesc.getColumnFamily(
-            SchemaUtil.getEmptyColumnFamily(pTable)).isCacheDataOnWrite();
-    }
 }

@@ -434,7 +434,6 @@ public interface QueryConstants {
             TENANT_ID + "," + SEQUENCE_SCHEMA + "," + SEQUENCE_NAME + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n"+
-            ColumnFamilyDescriptorBuilder.CACHE_DATA_ON_WRITE + "=" + Boolean.TRUE + ",\n" +
             TRANSACTIONAL + "=" + Boolean.FALSE;
 
     String UPGRADE_TABLE_SNAPSHOT_PREFIX = "_UPGRADING_TABLE_";
