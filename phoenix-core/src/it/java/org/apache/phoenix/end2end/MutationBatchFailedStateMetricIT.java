@@ -10,6 +10,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.monitoring.MetricType.DELETE_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
@@ -79,6 +80,12 @@ public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
         return Arrays.asList(new Object[][] { { "OMID" }, { null } });
     }
 
+    /**
+     * We will have 5 rows in table and we will try deleting 4 out of 5 rows
+     * In this test intention is to fail the delete and see how metric value isupdated when that happens
+     * for transactional table and non transactional table
+     * @throws SQLException
+     */
     @Test
     public void testFailedDelete() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -92,10 +99,11 @@ public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
             boolean autoCommit = conn.getAutoCommit();
             System.out.println("Auto commit : " + autoCommit);
             Statement stmt = conn.createStatement();
-
+            // adding coprocessor which basically overrides prebatchmutate whiich is called for all the mutations
+            // it is called before applying mutation to region
             TestUtil.addCoprocessor(conn, deleteTableName,
                 ImmutableIndexIT.DeleteFailingRegionObserver.class);
-
+            // trying to delete 4 rows with this single delete statement
             String dml = String.format("DELETE FROM %s where val1 >  1", deleteTableName);
             boolean execute = stmt.execute(dml);
             conn.commit();
@@ -108,9 +116,17 @@ public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
         } catch (SQLException e) {
             Map<String, Map<MetricType, Long>> mutationMetrics =
                     conn.unwrap(PhoenixConnection.class).getMutationMetrics();
-            int i = mutationMetrics.get(deleteTableName).get(MUTATION_BATCH_FAILED_SIZE).intValue();
-            System.out.println("mfs = " + i);
-            Assert.assertEquals(4, i);
+            int mfs = mutationMetrics.get(deleteTableName).get(MUTATION_BATCH_FAILED_SIZE).intValue();
+            int dbfs = mutationMetrics.get(deleteTableName).get(DELETE_BATCH_FAILED_SIZE).intValue();
+            System.out.println("mfs = " + mfs);
+            System.out.println("dbfs = " + dbfs);
+            if (transactional) {
+                Assert.assertEquals(4, dbfs);
+                Assert.assertEquals(1, mfs);
+            } else {
+                Assert.assertEquals(4, dbfs);
+                Assert.assertEquals(4, mfs);
+            }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
