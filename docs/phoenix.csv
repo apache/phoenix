@@ -372,7 +372,7 @@ DROP SCHEMA my_schema
 "
 
 "Commands","GRANT","
-GRANT {permissionString} [ON [SCHEMA schemaName] tableName] TO [GROUP] userString
+GRANT {permissionString} [ON [SCHEMA schemaName | [tableRef | tableName] ] ] TO [GROUP] userString
 ","
 Grant permissions at table, schema or user level. Permissions are managed by HBase in hbase:acl table, hence access controls need to be enabled. This feature will be available from Phoenix 4.14 version onwards.
 
