@@ -461,15 +461,19 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCacheOnWritePropsOnSystemSequence() throws Exception {
-        PhoenixConnection conn = getConnection(false, null).unwrap(PhoenixConnection.class);
+        PhoenixConnection conn = getConnection(false, null).
+            unwrap(PhoenixConnection.class);
         ConnectionQueryServicesImpl cqs = (ConnectionQueryServicesImpl)(conn.getQueryServices());
 
         PTable pTable = PhoenixRuntime.getTable(conn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
-        TableDescriptor initialTD = utility.getAdmin().getDescriptor(SchemaUtil.getPhysicalTableName(
-            PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME, cqs.getProps()));
-        ColumnFamilyDescriptor initialCFD = initialTD.getColumnFamily(SchemaUtil.getEmptyColumnFamily(pTable));
+        TableDescriptor initialTD = utility.getAdmin().getDescriptor(
+            SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME,
+                cqs.getProps()));
+        ColumnFamilyDescriptor initialCFD = initialTD.getColumnFamily(
+            SchemaUtil.getEmptyColumnFamily(pTable));
 
-        // Confirm that the Cache-On-Write related properties are set on SYSTEM.SEQUENCE during creation.
+        // Confirm that the Cache-On-Write related properties are set
+        // on SYSTEM.SEQUENCE during creation.
         assertEquals(Boolean.TRUE, initialCFD.isCacheBloomsOnWrite());
         assertEquals(Boolean.TRUE, initialCFD.isCacheDataOnWrite());
         assertEquals(Boolean.TRUE, initialCFD.isCacheIndexesOnWrite());
@@ -479,24 +483,28 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         // 1. Explicitly disable the Cache-On-Write related properties on the table.
         // 2. Call the Upgrade Path on the table.
         // 3. Verify that the property is set after the upgrades too.
-        ColumnFamilyDescriptorBuilder newCFBuilder = ColumnFamilyDescriptorBuilder.newBuilder(initialCFD);
+        ColumnFamilyDescriptorBuilder newCFBuilder =
+            ColumnFamilyDescriptorBuilder.newBuilder(initialCFD);
         newCFBuilder.setCacheBloomsOnWrite(false);
         newCFBuilder.setCacheDataOnWrite(false);
         newCFBuilder.setCacheIndexesOnWrite(false);
         TableDescriptorBuilder newTD = TableDescriptorBuilder.newBuilder(initialTD);
-            newTD.modifyColumnFamily(newCFBuilder.build());
+        newTD.modifyColumnFamily(newCFBuilder.build());
         utility.getAdmin().modifyTable(newTD.build());
 
         // Check that the Cache-On-Write related properties are now disabled.
         pTable = PhoenixRuntime.getTable(conn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
-        TableDescriptor updatedTD = utility.getAdmin().getDescriptor(SchemaUtil.getPhysicalTableName(
-            PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME, cqs.getProps()));
-        ColumnFamilyDescriptor updatedCFD  = updatedTD.getColumnFamily(SchemaUtil.getEmptyColumnFamily(pTable));
+        TableDescriptor updatedTD = utility.getAdmin().getDescriptor(
+            SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME,
+                cqs.getProps()));
+        ColumnFamilyDescriptor updatedCFD  = updatedTD.getColumnFamily(
+            SchemaUtil.getEmptyColumnFamily(pTable));
         assertEquals(Boolean.FALSE, updatedCFD.isCacheBloomsOnWrite());
         assertEquals(Boolean.FALSE, updatedCFD.isCacheDataOnWrite());
         assertEquals(Boolean.FALSE, updatedCFD.isCacheIndexesOnWrite());
 
-        // Let's try upgrading the existing table - and see if the property is set on during upgrades.
+        // Let's try upgrading the existing table - and see if the property is set on
+        // during upgrades.
         cqs.upgradeSystemSequence(conn, new HashMap<String, String>());
 
         pTable = PhoenixRuntime.getTable(conn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);

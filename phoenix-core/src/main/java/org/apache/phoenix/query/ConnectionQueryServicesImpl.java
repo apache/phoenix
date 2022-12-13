@@ -3541,15 +3541,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     if (!isDoNotUpgradePropSet) {
                                         createOtherSystemTables(metaConnection);
 
-                                        // When creating the tables above, DDL statements are used. However,
-                                        // the CFD level properties are not set via DDL commands, hence we
-                                        // are explicitly setting few properties using the Admin API below.
+                                        // When creating the tables above, DDL statements are
+                                        // used. However, the CFD level properties are not set
+                                        // via DDL commands, hence we are explicitly setting
+                                        // few properties using the Admin API below.
                                         updateSystemSequenceWithCacheOnWriteProps(metaConnection);
                                         // In case namespace mapping is enabled and system table to
                                         // system namespace mapping is also enabled, create an entry
                                         // for the SYSTEM namespace in the SYSCAT table, so that
                                         // GRANT/REVOKE commands can work with SYSTEM Namespace
                                         createSchemaIfNotExistsSystemNSMappingEnabled(metaConnection);
+
                                     }
                                 } else if (isAutoUpgradeEnabled && !isDoNotUpgradePropSet) {
                                     // Upgrade is required and we are allowed to automatically upgrade
@@ -4380,33 +4382,33 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
 
             updateSystemSequenceWithCacheOnWriteProps(metaConnection);
-
         }
         return metaConnection;
     }
 
-    private void updateSystemSequenceWithCacheOnWriteProps(PhoenixConnection metaConnection) throws IOException, SQLException {
+    private void updateSystemSequenceWithCacheOnWriteProps(PhoenixConnection metaConnection) throws
+        IOException, SQLException {
 
         try (Admin admin = getAdmin()) {
-            try (Table table = connection.getTable(
-                    TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME))) {
+            PTable pTable = PhoenixRuntime.getTable(metaConnection,
+                PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
+            TableDescriptor oldTD = admin.getDescriptor(
+                SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME,
+                    metaConnection.getQueryServices().getProps()));
+            ColumnFamilyDescriptor oldCf = oldTD.getColumnFamily(
+                SchemaUtil.getEmptyColumnFamily(pTable));
 
-                TableDescriptor oldTD = table.getDescriptor();
-                PTable pTable = PhoenixRuntime.getTable(metaConnection, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
+            // If the CacheOnWrite related properties are not set, lets set them.
+            if (!oldCf.isCacheDataOnWrite()) {
+                ColumnFamilyDescriptorBuilder newCFBuilder =
+                    ColumnFamilyDescriptorBuilder.newBuilder(oldCf);
+                newCFBuilder.setCacheBloomsOnWrite(true);
+                newCFBuilder.setCacheDataOnWrite(true);
+                newCFBuilder.setCacheIndexesOnWrite(true);
 
-                ColumnFamilyDescriptor oldCf = oldTD.getColumnFamily(SchemaUtil.getEmptyColumnFamily(pTable));
-
-                // If the CacheOnWrite related properties are not set, lets set them.
-                if (!oldCf.isCacheDataOnWrite()) {
-                    ColumnFamilyDescriptorBuilder newCFBuilder = ColumnFamilyDescriptorBuilder.newBuilder(oldCf);
-                    newCFBuilder.setCacheBloomsOnWrite(true);
-                    newCFBuilder.setCacheDataOnWrite(true);
-                    newCFBuilder.setCacheIndexesOnWrite(true);
-
-                    TableDescriptorBuilder newTD = TableDescriptorBuilder.newBuilder(oldTD);
-                    newTD.modifyColumnFamily(newCFBuilder.build());
-                    admin.modifyTable(newTD.build());
-                }
+                TableDescriptorBuilder newTD = TableDescriptorBuilder.newBuilder(oldTD);
+                newTD.modifyColumnFamily(newCFBuilder.build());
+                admin.modifyTable(newTD.build());
             }
         }
     }
