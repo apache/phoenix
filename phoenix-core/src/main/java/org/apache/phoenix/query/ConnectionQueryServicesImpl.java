@@ -4390,16 +4390,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         IOException, SQLException {
 
         try (Admin admin = getAdmin()) {
-            PTable pTable = PhoenixRuntime.getTable(metaConnection,
-                PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
             TableDescriptor oldTD = admin.getDescriptor(
                 SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME,
                     metaConnection.getQueryServices().getProps()));
             ColumnFamilyDescriptor oldCf = oldTD.getColumnFamily(
-                SchemaUtil.getEmptyColumnFamily(pTable));
+                QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
 
             // If the CacheOnWrite related properties are not set, lets set them.
-            if (!oldCf.isCacheDataOnWrite()) {
+            if (!oldCf.isCacheBloomsOnWrite() || !oldCf.isCacheDataOnWrite() ||
+                !oldCf.isCacheIndexesOnWrite())
+            {
                 ColumnFamilyDescriptorBuilder newCFBuilder =
                     ColumnFamilyDescriptorBuilder.newBuilder(oldCf);
                 newCFBuilder.setCacheBloomsOnWrite(true);

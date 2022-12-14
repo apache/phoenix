@@ -92,6 +92,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
@@ -465,12 +466,11 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             unwrap(PhoenixConnection.class);
         ConnectionQueryServicesImpl cqs = (ConnectionQueryServicesImpl)(conn.getQueryServices());
 
-        PTable pTable = PhoenixRuntime.getTable(conn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
         TableDescriptor initialTD = utility.getAdmin().getDescriptor(
             SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME,
                 cqs.getProps()));
         ColumnFamilyDescriptor initialCFD = initialTD.getColumnFamily(
-            SchemaUtil.getEmptyColumnFamily(pTable));
+            QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
 
         // Confirm that the Cache-On-Write related properties are set
         // on SYSTEM.SEQUENCE during creation.
@@ -493,12 +493,11 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         utility.getAdmin().modifyTable(newTD.build());
 
         // Check that the Cache-On-Write related properties are now disabled.
-        pTable = PhoenixRuntime.getTable(conn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
         TableDescriptor updatedTD = utility.getAdmin().getDescriptor(
             SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME,
                 cqs.getProps()));
-        ColumnFamilyDescriptor updatedCFD  = updatedTD.getColumnFamily(
-            SchemaUtil.getEmptyColumnFamily(pTable));
+        ColumnFamilyDescriptor updatedCFD = updatedTD.getColumnFamily(
+            QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
         assertEquals(Boolean.FALSE, updatedCFD.isCacheBloomsOnWrite());
         assertEquals(Boolean.FALSE, updatedCFD.isCacheDataOnWrite());
         assertEquals(Boolean.FALSE, updatedCFD.isCacheIndexesOnWrite());
@@ -507,10 +506,9 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         // during upgrades.
         cqs.upgradeSystemSequence(conn, new HashMap<String, String>());
 
-        pTable = PhoenixRuntime.getTable(conn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
         updatedTD = utility.getAdmin().getDescriptor(SchemaUtil.getPhysicalTableName(
             PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME, cqs.getProps()));
-        updatedCFD  = updatedTD.getColumnFamily(SchemaUtil.getEmptyColumnFamily(pTable));
+        updatedCFD = updatedTD.getColumnFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
         assertEquals(Boolean.TRUE, updatedCFD.isCacheBloomsOnWrite());
         assertEquals(Boolean.TRUE, updatedCFD.isCacheDataOnWrite());
         assertEquals(Boolean.TRUE, updatedCFD.isCacheIndexesOnWrite());
