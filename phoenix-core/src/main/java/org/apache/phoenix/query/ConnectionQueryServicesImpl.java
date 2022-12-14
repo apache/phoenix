@@ -3540,18 +3540,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 if (!ConnectionQueryServicesImpl.this.upgradeRequired.get()) {
                                     if (!isDoNotUpgradePropSet) {
                                         createOtherSystemTables(metaConnection);
-
-                                        // When creating the tables above, DDL statements are
-                                        // used. However, the CFD level properties are not set
-                                        // via DDL commands, hence we are explicitly setting
-                                        // few properties using the Admin API below.
-                                        updateSystemSequenceWithCacheOnWriteProps(metaConnection);
                                         // In case namespace mapping is enabled and system table to
                                         // system namespace mapping is also enabled, create an entry
                                         // for the SYSTEM namespace in the SYSCAT table, so that
                                         // GRANT/REVOKE commands can work with SYSTEM Namespace
                                         createSchemaIfNotExistsSystemNSMappingEnabled(metaConnection);
-
                                     }
                                 } else if (isAutoUpgradeEnabled && !isDoNotUpgradePropSet) {
                                     // Upgrade is required and we are allowed to automatically upgrade
@@ -3709,6 +3702,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
                     QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
             metaConnection.createStatement().execute(getSystemSequenceTableDDL(nSequenceSaltBuckets));
+            // When creating the table above, DDL statements are
+            // used. However, the CFD level properties are not set
+            // via DDL commands, hence we are explicitly setting
+            // few properties using the Admin API below.
+            updateSystemSequenceWithCacheOnWriteProps(metaConnection);
         } catch (TableAlreadyExistsException e) {
             nSequenceSaltBuckets = getSaltBuckets(e);
         }
