@@ -680,7 +680,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     && table.getViewType() != ViewType.MAPPED) {
                 try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                     PTable pTable = PhoenixRuntime.getTableNoCache(connection, table.getParentName().getString());
-                    table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table, pTable);
+                    table = ViewUtil.addDerivedColumnsFromParent(connection, table, pTable);
                 }
             }
             builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
