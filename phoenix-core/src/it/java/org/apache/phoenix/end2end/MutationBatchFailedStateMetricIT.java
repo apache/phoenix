@@ -14,7 +14,11 @@ import static org.apache.phoenix.monitoring.MetricType.DELETE_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
@@ -36,7 +40,7 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
 
@@ -56,7 +60,6 @@ public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
                             ? (" TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + transactionProvider
                                     + "'")
                             : "");
-            System.out.println(create_table);
         }
         createTables();
         populateTables();
@@ -82,24 +85,20 @@ public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
 
     /**
      * We will have 5 rows in table and we will try deleting 4 out of 5 rows
-     * In this test intention is to fail the delete and see how metric value isupdated when that happens
+     * In this test intention is to fail the delete and see how metric value is updated when that happens
      * for transactional table and non transactional table
      * @throws SQLException
      */
     @Test
-    public void testFailedDelete() throws SQLException {
+    public void testFailedDelete() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;
         try {
             conn = DriverManager.getConnection(getUrl(), props);
-            long rowCount = TestUtil.getRowCount(conn, deleteTableName);
-            System.out.println("Row Count:" + rowCount);
 
-            Connection finalConn = conn;
-            boolean autoCommit = conn.getAutoCommit();
-            System.out.println("Auto commit : " + autoCommit);
             Statement stmt = conn.createStatement();
-            // adding coprocessor which basically overrides prebatchmutate whiich is called for all the mutations
+            // adding coprocessor which basically overrides prebatchmutate whiich is called for all
+            // the mutations
             // it is called before applying mutation to region
             TestUtil.addCoprocessor(conn, deleteTableName,
                 ImmutableIndexIT.DeleteFailingRegionObserver.class);
@@ -111,15 +110,14 @@ public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
             TestUtil.removeCoprocessor(conn, deleteTableName,
                 ImmutableIndexIT.DeleteFailingRegionObserver.class);
 
-            rowCount = TestUtil.getRowCount(conn, deleteTableName);
-            System.out.println("Row Count:" + rowCount);
+            throw new AssertionError("Commit should not have succeeded");
         } catch (SQLException e) {
             Map<String, Map<MetricType, Long>> mutationMetrics =
                     conn.unwrap(PhoenixConnection.class).getMutationMetrics();
-            int mfs = mutationMetrics.get(deleteTableName).get(MUTATION_BATCH_FAILED_SIZE).intValue();
-            int dbfs = mutationMetrics.get(deleteTableName).get(DELETE_BATCH_FAILED_SIZE).intValue();
-            System.out.println("mfs = " + mfs);
-            System.out.println("dbfs = " + dbfs);
+            int mfs =
+                    mutationMetrics.get(deleteTableName).get(MUTATION_BATCH_FAILED_SIZE).intValue();
+            int dbfs =
+                    mutationMetrics.get(deleteTableName).get(DELETE_BATCH_FAILED_SIZE).intValue();
             if (transactional) {
                 Assert.assertEquals(4, dbfs);
                 Assert.assertEquals(1, mfs);
@@ -127,8 +125,6 @@ public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
                 Assert.assertEquals(4, dbfs);
                 Assert.assertEquals(4, mfs);
             }
-        } catch (Exception e) {
-            throw new RuntimeException(e);
         }
     }
 
