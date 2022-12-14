@@ -578,14 +578,16 @@ public class ViewUtil {
         boolean hasIndexId = table.getViewIndexId() != null;
         // For views :
         if (!hasIndexId) {
-            // 1. need to resolve the views's own indexes so that any columns added by ancestors are included
+            // 1. need to resolve the views's own indexes
+            // so that any columns added by ancestors are included
             List<PTable> allIndexes = Lists.newArrayList();
             if (!pTable.getIndexes().isEmpty()) {
                 for (PTable viewIndex : pTable.getIndexes()) {
-                    PTable resolvedViewIndex =
-                            ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, viewIndex, pTable);
-                    if (resolvedViewIndex!=null)
+                    PTable resolvedViewIndex = ViewUtil.addDerivedColumnsAndIndexesFromParent(
+                            connection, viewIndex, pTable);
+                    if (resolvedViewIndex != null) {
                         allIndexes.add(resolvedViewIndex);
+                    }
                 }
             }
 
@@ -602,12 +604,13 @@ public class ViewUtil {
     }
 
     /**
-     * Inherit all columns from the parent unless its an excluded column if the same columns is present in the parent
-     * and child (for table metadata created before PHOENIX-3534) we chose the child column over the parent column
+     * Inherit all columns from the parent unless its an excluded column if the same columns
+     * is present in the parent and child (for table metadata created before PHOENIX-3534)
+     * we chose the child column over the parent column
      * @return table with inherited columns
      */
     public static PTable addDerivedColumnsFromParent(PhoenixConnection connection,
-                                                               PTable view, PTable parentTable) throws SQLException {
+            PTable view, PTable parentTable) throws SQLException {
         // combine columns for view and view indexes
         boolean hasIndexId = view.getViewIndexId() != null;
         boolean isSalted = view.getBucketNum() != null;
