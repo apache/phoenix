@@ -244,7 +244,7 @@ public class ProjectionCompiler {
             }
             String colName = tableColumn.getName().getString();
             String tableAlias = tableRef.getTableAlias();
-            if (resolveColumn) {
+            if (resolveColumn && !(ref instanceof IndexDataColumnRef)) {
                 try {
                     if (tableAlias != null) {
                         ref = resolver.resolveColumn(null, tableAlias, indexColName);
