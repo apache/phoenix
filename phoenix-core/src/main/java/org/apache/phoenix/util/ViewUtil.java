@@ -15,10 +15,30 @@
  */
 package org.apache.phoenix.util;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYSTEM_CATALOG;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
+import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
+import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.apache.phoenix.util.SchemaUtil.getVarChars;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ExtendedCellBuilder;
 import org.apache.hadoop.hbase.HConstants;
@@ -60,32 +80,12 @@ import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYSTEM_CATALOG;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
-import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
-import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
-import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
-import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 public class ViewUtil {
 
@@ -569,12 +569,47 @@ public class ViewUtil {
     }
 
     /**
-     * Inherit all columns from the parent unless it's an excluded column.
-     * If the same column is present in the parent and child (for table metadata created before
-     * PHOENIX-3534) we choose the child column over the parent column
-     * @return table with inherited columns
+     * Inherit all indexes and columns from the parent
+     * @return table with inherited columns and indexes
      */
     public static PTable addDerivedColumnsAndIndexesFromParent(PhoenixConnection connection,
+            PTable table, PTable parentTable) throws SQLException {
+        PTable pTable = addDerivedColumnsFromParent(connection, table, parentTable);
+        boolean hasIndexId = table.getViewIndexId() != null;
+        // For views :
+        if (!hasIndexId) {
+            // 1. need to resolve the views's own indexes
+            // so that any columns added by ancestors are included
+            List<PTable> allIndexes = Lists.newArrayList();
+            if (!pTable.getIndexes().isEmpty()) {
+                for (PTable viewIndex : pTable.getIndexes()) {
+                    PTable resolvedViewIndex = ViewUtil.addDerivedColumnsAndIndexesFromParent(
+                            connection, viewIndex, pTable);
+                    if (resolvedViewIndex != null) {
+                        allIndexes.add(resolvedViewIndex);
+                    }
+                }
+            }
+
+            // 2. include any indexes from ancestors that can be used by this view
+            List<PTable> inheritedIndexes = Lists.newArrayList();
+            addIndexesFromParent(connection, pTable, parentTable, inheritedIndexes);
+            allIndexes.addAll(inheritedIndexes);
+            if (!allIndexes.isEmpty()) {
+                pTable = PTableImpl.builderWithColumns(pTable, getColumnsToClone(pTable))
+                        .setIndexes(allIndexes).build();
+            }
+        }
+        return pTable;
+    }
+
+    /**
+     * Inherit all columns from the parent unless its an excluded column if the same columns
+     * is present in the parent and child (for table metadata created before PHOENIX-3534)
+     * we chose the child column over the parent column
+     * @return table with inherited columns
+     */
+    public static PTable addDerivedColumnsFromParent(PhoenixConnection connection,
             PTable view, PTable parentTable) throws SQLException {
         // combine columns for view and view indexes
         boolean hasIndexId = view.getViewIndexId() != null;
@@ -733,28 +768,6 @@ public class ViewUtil {
                 .setLastDDLTimestamp(maxDDLTimestamp)
                 .build();
         pTable = WhereConstantParser.addViewInfoToPColumnsIfNeeded(pTable);
-
-        // For views :
-        if (!hasIndexId) {
-            // 1. need to resolve the views's own indexes so that any columns added by ancestors are included
-            List<PTable> allIndexes = Lists.newArrayList();
-            if (pTable !=null && pTable.getIndexes() !=null && !pTable.getIndexes().isEmpty()) {
-                for (PTable viewIndex : pTable.getIndexes()) {
-                    PTable resolvedViewIndex =
-                            ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, viewIndex, pTable);
-                    if (resolvedViewIndex!=null)
-                        allIndexes.add(resolvedViewIndex);
-                }
-            }
-            // 2. include any indexes from ancestors that can be used by this view
-            List<PTable> inheritedIndexes = Lists.newArrayList();
-            addIndexesFromParent(connection, pTable, parentTable, inheritedIndexes);
-            allIndexes.addAll(inheritedIndexes);
-            if (!allIndexes.isEmpty()) {
-                pTable = PTableImpl.builderWithColumns(pTable, getColumnsToClone(pTable))
-                        .setIndexes(allIndexes).build();
-            }
-        }
         return pTable;
     }
 
