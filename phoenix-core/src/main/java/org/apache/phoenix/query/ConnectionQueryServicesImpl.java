@@ -4395,9 +4395,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
 
             // If the CacheOnWrite related properties are not set, lets set them.
-            if (!oldCf.isCacheBloomsOnWrite() || !oldCf.isCacheDataOnWrite() ||
-                !oldCf.isCacheIndexesOnWrite())
-            {
+            if (!oldCf.isCacheBloomsOnWrite() || !oldCf.isCacheDataOnWrite()
+                || !oldCf.isCacheIndexesOnWrite()) {
                 ColumnFamilyDescriptorBuilder newCFBuilder =
                     ColumnFamilyDescriptorBuilder.newBuilder(oldCf);
                 newCFBuilder.setCacheBloomsOnWrite(true);
