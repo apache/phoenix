@@ -372,7 +372,7 @@ DROP SCHEMA my_schema
 "
 
 "Commands","GRANT","
-GRANT {permissionString} [ON [[SCHEMA schemaName] | tableRef] ] TO [GROUP] userString
+GRANT {permissionString} [ON { {SCHEMA schemaName} | tableRef}] TO [GROUP] userString
 ","
 Grant permissions at table, schema or user level. Permissions are managed by HBase in hbase:acl table, hence access controls need to be enabled. This feature will be available from Phoenix 4.14 version onwards.
 
@@ -398,7 +398,7 @@ GRANT 'A' ON SCHEMA my_schema TO 'User3'
 "
 
 "Commands","REVOKE","
-REVOKE [ON [[SCHEMA schemaName] | tableRef] ] FROM [GROUP] userString
+REVOKE [ON { {SCHEMA schemaName} | tableRef}] FROM [GROUP] userString
 ","
 Revoke permissions at table, schema or user level. Permissions are managed by HBase in hbase:acl table, hence access controls need to be enabled. This feature will be available from Phoenix 4.14 version onwards.
 
