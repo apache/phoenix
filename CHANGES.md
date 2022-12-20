@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 5.1.3 - Unreleased (as of 2022-11-12)
+## Release 5.1.3 - Unreleased (as of 2022-12-20)
 
 
 
@@ -26,6 +26,7 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-6692](https://issues.apache.org/jira/browse/PHOENIX-6692) | Add HBase 2.5 support |  Major | core |
 | [PHOENIX-6413](https://issues.apache.org/jira/browse/PHOENIX-6413) | Having cannot resolve alias |  Major | . |
 | [PHOENIX-6405](https://issues.apache.org/jira/browse/PHOENIX-6405) | Disallow bulk loading into non-empty tables with global secondary indexes |  Major | core |
 
@@ -34,10 +35,15 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-6655](https://issues.apache.org/jira/browse/PHOENIX-6655) | SYSTEM.SEQUENCE should have CACHE\_DATA\_ON\_WRITE set to true |  Major | . |
+| [PHOENIX-6837](https://issues.apache.org/jira/browse/PHOENIX-6837) | Switch to Using the -hadoop3 HBase Artifacts Where Available |  Major | core |
+| [PHOENIX-6761](https://issues.apache.org/jira/browse/PHOENIX-6761) | Phoenix Client Side Metadata Caching Improvement |  Major | . |
+| [PHOENIX-6834](https://issues.apache.org/jira/browse/PHOENIX-6834) | Use Pooled HConnection for Server Side Upsert Select |  Major | core |
+| [PHOENIX-6818](https://issues.apache.org/jira/browse/PHOENIX-6818) | Remove dependency on the i18n-util library |  Major | core |
+| [PHOENIX-6827](https://issues.apache.org/jira/browse/PHOENIX-6827) | Update hbase-version to 2.4.15 in phoenix master branch |  Major | . |
 | [PHOENIX-6826](https://issues.apache.org/jira/browse/PHOENIX-6826) | Don't invalidate meta cache if CQSI#getTableRegionLocation encounters IOException. |  Major | core |
 | [PHOENIX-6561](https://issues.apache.org/jira/browse/PHOENIX-6561) | Allow pherf to intake phoenix Connection properties as argument. |  Minor | . |
 | [PHOENIX-6767](https://issues.apache.org/jira/browse/PHOENIX-6767) | Traversing through all the guideposts to prepare parallel scans is not required for salted tables when the query is point lookup |  Major | . |
-| [PHOENIX-6779](https://issues.apache.org/jira/browse/PHOENIX-6779) | Account for connection attempted & failure metrics in all paths |  Major | . |
 | [PHOENIX-6690](https://issues.apache.org/jira/browse/PHOENIX-6690) | Bump HBase 2.4 version to 2.4.11 |  Major | core |
 | [PHOENIX-6663](https://issues.apache.org/jira/browse/PHOENIX-6663) | Use batching when joining data table rows with uncovered local index rows |  Major | . |
 | [PHOENIX-6501](https://issues.apache.org/jira/browse/PHOENIX-6501) | Use batching when joining data table rows with uncovered global index rows |  Major | . |
@@ -56,6 +62,10 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-6843](https://issues.apache.org/jira/browse/PHOENIX-6843) | Flakey ViewTTLIT |  Major | . |
+| [PHOENIX-6841](https://issues.apache.org/jira/browse/PHOENIX-6841) | Depend on omid-codahale-metrics |  Blocker | core, omid |
+| [PHOENIX-6823](https://issues.apache.org/jira/browse/PHOENIX-6823) | calling Joda-based round() function on temporal PK field causes division by zero error |  Major | core |
+| [PHOENIX-6835](https://issues.apache.org/jira/browse/PHOENIX-6835) | Flakey RowTimestampIT.testAutomaticallySettingRowTimestampWithDate |  Major | . |
 | [PHOENIX-6830](https://issues.apache.org/jira/browse/PHOENIX-6830) | Upgrade reload4j due to XXE vulnerability |  Major | core |
 | [PHOENIX-6784](https://issues.apache.org/jira/browse/PHOENIX-6784) | PhantomJS fails on recent Linux distributions |  Blocker | . |
 | [PHOENIX-6806](https://issues.apache.org/jira/browse/PHOENIX-6806) | Protobufs don't compile on ARM-based Macs (Apple Silicon) |  Major | . |
@@ -147,7 +157,7 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
-| [PHOENIX-6474](https://issues.apache.org/jira/browse/PHOENIX-6474) | Add client and server metrics for atomic upserts |  Major | . |
+| [PHOENIX-6711](https://issues.apache.org/jira/browse/PHOENIX-6711) | Add support of skipping the system tables existence check during connection initialisation |  Major | . |
 
 
 ### OTHER:

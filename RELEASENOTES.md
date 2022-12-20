@@ -23,9 +23,47 @@ These release notes cover new developer and user-facing incompatibilities, impor
 
 ---
 
+* [PHOENIX-6655](https://issues.apache.org/jira/browse/PHOENIX-6655) | *Major* | **SYSTEM.SEQUENCE should have CACHE\_DATA\_ON\_WRITE set to true**
+
+Phoenix now sets the CACHE\_DATA\_ON\_WRITE property on the SYSTEM.SEQUENCE table to improve performance.
+
+
+---
+
+* [PHOENIX-6837](https://issues.apache.org/jira/browse/PHOENIX-6837) | *Major* | **Switch to Using the -hadoop3 HBase Artifacts Where Available**
+
+Phoenix now uses the public Hadoop 3 compatible HBase artifacts where available.
+At the time of writing, public Hadoop 3 compatible artifacts are only available for HBase 2.5.2 and later.
+
+
+---
+
+* [PHOENIX-6823](https://issues.apache.org/jira/browse/PHOENIX-6823) | *Major* | **calling Joda-based round() function on temporal PK field causes division by zero error**
+
+Fixed division by zero errors, and incorrect results when using round(), ceiling(), floor() functions in the where clause on date/time fields that are part of the primary key.
+
+
+---
+
+* [PHOENIX-6834](https://issues.apache.org/jira/browse/PHOENIX-6834) | *Major* | **Use Pooled HConnection for Server Side Upsert Select**
+
+Server Side upsert selects now cache the HBase connection to the target table on the region server.
+
+
+---
+
 * [PHOENIX-6751](https://issues.apache.org/jira/browse/PHOENIX-6751) | *Critical* | **Force using range scan vs skip scan when using the IN operator and large number of RVC elements**
 
 Adds a new config parameter, phoenix.max.inList.skipScan.size, which controls the size of an IN clause before it will be automatically converted from a skip scan to a range scan.
+
+
+---
+
+* [PHOENIX-6692](https://issues.apache.org/jira/browse/PHOENIX-6692) | *Major* | **Add HBase 2.5 support**
+
+Phoenix now supports HBase 2.5.
+In Phoenix 5.1.x, Tephra support is not available with HBase 2.5.
+(In 5.2.x Tephra support is fully removed)
 
 
 ---
