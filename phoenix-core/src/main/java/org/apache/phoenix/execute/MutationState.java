@@ -29,6 +29,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SYSCAT_TIME;
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 
@@ -902,6 +903,7 @@ public class MutationState implements SQLCloseable {
         MetaDataClient client = new MetaDataClient(connection);
         long serverTimeStamp = tableRef.getTimeStamp();
         PTable table = null;
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         try {
             // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
             // so no need to do it again here.
@@ -959,6 +961,9 @@ public class MutationState implements SQLCloseable {
                         NUM_METADATA_LOOKUP_FAILURES, 1);
             }
             throw e;
+        } finally {
+            long endTime = EnvironmentEdgeManager.currentTimeMillis();
+            GLOBAL_MUTATION_SYSCAT_TIME.update(endTime - startTime);
         }
         return serverTimeStamp == QueryConstants.UNSET_TIMESTAMP ? HConstants.LATEST_TIMESTAMP : serverTimeStamp;
     }
@@ -1411,8 +1416,6 @@ public class MutationState implements SQLCloseable {
                     child.stop();
                     child.stop();
                     shouldRetry = false;
-                    mutationCommitTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
-                    GLOBAL_MUTATION_COMMIT_TIME.update(mutationCommitTime);
                     numFailedMutations = 0;
 
                     // Remove batches as we process them

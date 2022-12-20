@@ -32,6 +32,7 @@ public enum MetricType {
     MUTATION_BATCH_SIZE("ms", "Number of mutations in the batch",LogLevel.OFF, PLong.INSTANCE),
     MUTATION_BYTES("mb", "Size of mutations in bytes",LogLevel.OFF, PLong.INSTANCE),
     MUTATION_COMMIT_TIME("mt", "Time it took to commit a batch of mutations",LogLevel.OFF, PLong.INSTANCE),
+    MUTATION_SYSCAT_TIME("msyst", "Time it spent in syscat before mutation", LogLevel.OFF, PLong.INSTANCE),
     MUTATION_BATCH_FAILED_SIZE("mfs", "Number of mutations that failed to be committed",LogLevel.OFF, PLong.INSTANCE),
     MUTATION_SQL_COUNTER("msc", "Counter for number of mutation sql statements",LogLevel.OFF, PLong.INSTANCE),
     UPSERT_SQL_COUNTER("uc", "Counter for number of upsert sql queries", LogLevel.OFF, PLong.INSTANCE),
