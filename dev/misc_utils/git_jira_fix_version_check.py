@@ -92,7 +92,7 @@ print('Jira/Git commit message diff completed: #################################
 print('\nAny resolved Jira with fixVersion ' + fix_version
       + ' but corresponding commit not present')
 
-# maxResults=None results in internal batching within the API 
+# maxResults=None results in internal batching within the API
 # and it returns all the results back
 all_issues_with_fix_version = jira.search_issues(
     'project=' + jira_project_name + ' and status in (Resolved,Closed) and fixVersion='
