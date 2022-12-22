@@ -1,12 +1,19 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
- * agreements. See the NOTICE file distributed with this work for additional information regarding
- * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance with the License. You may obtain a
- * copy of the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
- * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
- * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
- * for the specific language governing permissions and limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package org.apache.phoenix.end2end;
 
@@ -104,7 +111,7 @@ public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
                 ImmutableIndexIT.DeleteFailingRegionObserver.class);
             // trying to delete 4 rows with this single delete statement
             String dml = String.format("DELETE FROM %s where val1 >  1", deleteTableName);
-            boolean execute = stmt.execute(dml);
+            stmt.execute(dml);
             conn.commit();
 
             TestUtil.removeCoprocessor(conn, deleteTableName,
@@ -120,10 +127,57 @@ public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
                     mutationMetrics.get(deleteTableName).get(DELETE_BATCH_FAILED_SIZE).intValue();
             if (transactional) {
                 Assert.assertEquals(4, dbfs);
-                Assert.assertEquals(1, mfs);
+                Assert.assertEquals(4, mfs);
             } else {
                 Assert.assertEquals(4, dbfs);
                 Assert.assertEquals(4, mfs);
+            }
+        }
+    }
+
+    @Test
+    public void testFailedUpsertAndDelete() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+
+            Statement stmt = conn.createStatement();
+            // adding coprocessor which basically overrides prebatchmutate whiich is called for all
+            // the mutations
+            // it is called before applying mutation to region
+            TestUtil.addCoprocessor(conn, deleteTableName,
+                    ImmutableIndexIT.DeleteFailingRegionObserver.class);
+            // trying to delete 4 rows with this single delete statement
+            String dml = String.format("DELETE FROM %s where val1 >  1", deleteTableName);
+            stmt.execute(dml);
+
+            String upsertSQL  = String.format(upsertStatement,deleteTableName);
+            PreparedStatement preparedStatement = conn.prepareStatement(upsertSQL);
+            preparedStatement.setString(1, "ROW_6");
+            preparedStatement.setInt(2, 6);
+            preparedStatement.setInt(3, 12);
+            preparedStatement.execute();
+
+            conn.commit();
+
+            TestUtil.removeCoprocessor(conn, deleteTableName,
+                    ImmutableIndexIT.DeleteFailingRegionObserver.class);
+
+            throw new AssertionError("Commit should not have succeeded");
+        } catch (SQLException e) {
+            Map<String, Map<MetricType, Long>> mutationMetrics =
+                    conn.unwrap(PhoenixConnection.class).getMutationMetrics();
+            int mfs =
+                    mutationMetrics.get(deleteTableName).get(MUTATION_BATCH_FAILED_SIZE).intValue();
+            int dbfs =
+                    mutationMetrics.get(deleteTableName).get(DELETE_BATCH_FAILED_SIZE).intValue();
+            if (transactional) {
+                Assert.assertEquals(4, dbfs);
+                Assert.assertEquals(5, mfs);
+            } else {
+                Assert.assertEquals(4, dbfs);
+                Assert.assertEquals(5, mfs);
             }
         }
     }
