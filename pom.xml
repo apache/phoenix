@@ -171,6 +171,7 @@
     <!-- PHOENIX-6806 - Default protoc architecture to the detected one,
       but allow for profile overrides -->
     <protoc.arch>${os.detected.classifier}</protoc.arch>
+    <spotless.version>2.27.2</spotless.version>
   </properties>
 
   <build>
@@ -224,7 +225,7 @@
             <excludeFilterFile>${top.dir}/src/main/config/spotbugs/spotbugs-exclude.xml</excludeFilterFile>
           </configuration>
         </plugin>
-        <!--This plugin's configuration is used to store Eclipse m2e settings 
+        <!--This plugin's configuration is used to store Eclipse m2e settings
           only. It has no influence on the Maven build itself. -->
         <plugin>
           <groupId>org.eclipse.m2e</groupId>
@@ -623,6 +624,113 @@
             <exclude>dev/work/**</exclude>
             <exclude>dev/artifacts/**</exclude>
           </excludes>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <version>${spotless.version}</version>
+        <configuration>
+          <!-- define a language-specific format -->
+          <java>
+            <excludes>
+              <exclude>**/generated/*</exclude>
+              <exclude>**/package-info.java</exclude>
+            </excludes>
+            <!--
+              e.g., remove the following lines:
+              "* @param paramName"
+              "* @throws ExceptionType"
+              "* @return returnType"'
+              Multiline to allow anchors on newlines
+              See https://errorprone.info/bugpattern/EmptyBlockTag
+            -->
+            <replaceRegex>
+              <name>Remove unhelpful javadoc stubs</name>
+              <searchRegex>(?m)^ *\* *@(?:param|throws|return) *\w* *\n</searchRegex>
+              <replacement/>
+            </replaceRegex>
+            <!--
+              e.g., rewrite
+              /** @return blabla */
+              or
+              /**
+               * @return blabla
+               */
+              to
+              /** Returns blabla */
+              See https://errorprone.info/bugpattern/MissingSummary
+              https://google.github.io/styleguide/javaguide.html#s7.2-summary-fragment
+            -->
+            <replaceRegex>
+              <name>Purge single returns tag multi line</name>
+              <searchRegex>(?m)^ */\*\*\n *\* *@return *(.*) *\n *\*/$</searchRegex>
+              <replacement>/** Returns $1 */</replacement>
+            </replaceRegex>
+            <replaceRegex>
+              <name>Purge single returns tag single line</name>
+              <searchRegex>^ */\*\* *@return *(.*) *\*/$</searchRegex>
+              <replacement>/** Returns $1 */</replacement>
+            </replaceRegex>
+            <!-- apply a specific flavor -->
+            <eclipse>
+              <file>${session.executionRootDirectory}/dev/PhoenixCodeTemplate.xml</file>
+            </eclipse>
+            <importOrder>
+              <file>${session.executionRootDirectory}/dev/phoenix.importorder</file>
+            </importOrder>
+            <trimTrailingWhitespace/>
+            <endWithNewline/>
+            <removeUnusedImports/>
+          </java>
+          <pom>
+            <sortPom>
+              <expandEmptyElements>false</expandEmptyElements>
+            </sortPom>
+          </pom>
+          <formats>
+            <!-- you can define as many formats as you want, each is independent -->
+            <format>
+              <!-- define the files to apply to -->
+              <includes>
+                <include>**/*.xml</include>
+                <include>**/*.sh</include>
+                <include>**/*.py</include>
+                <include>**/Jenkinsfile*</include>
+                <include>**/*.md</include>
+                <include>*.md</include>
+                <include>**/*.txt</include>
+                <include>*.txt</include>
+              </includes>
+              <excludes>
+                <exclude>**/target/**</exclude>
+                <exclude>**/dependency-reduced-pom.xml</exclude>
+              </excludes>
+              <!-- define the steps to apply to those files -->
+              <trimTrailingWhitespace/>
+              <endWithNewline/>
+            </format>
+            <format>
+              <!--
+                We have some files which have special license header which must be kept, so
+                here we add a special format section to apply license header, and leave the
+                java section above only used for formatting code style
+              -->
+              <includes>
+                <include>src/main/java/**/*.java</include>
+                <include>src/test/java/**/*.java</include>
+              </includes>
+              <excludes>
+                <exclude>**/generated/*</exclude>
+                <exclude>**/package-info.java</exclude>
+                <!-- ByteRange, from Google protobuf -->
+              </excludes>
+              <licenseHeader>
+                <file>${session.executionRootDirectory}/dev/license-header</file>
+                <delimiter>package</delimiter>
+              </licenseHeader>
+            </format>
+          </formats>
         </configuration>
       </plugin>
       <plugin>
