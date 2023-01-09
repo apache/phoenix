@@ -812,18 +812,39 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             miniBatchOp.addOperationsFromCP(0, localUpdates.toArray(new Mutation[localUpdates.size()]));
         }
     }
+
+    private boolean isPartialUncoveredIndexUpdate(PhoenixIndexMetaData indexMetaData,
+            MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+        int indexedColumnCount = 0;
+        for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
+            indexedColumnCount += indexMaintainer.getIndexedColumns().size();
+        }
+        Set<ColumnReference> indexedColumns = new HashSet<ColumnReference>(indexedColumnCount);
+        for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
+            indexedColumns.addAll(indexMaintainer.getIndexedColumns());
+        }
+        for (int i = 0; i < miniBatchOp.size(); i++) {
+            if (miniBatchOp.getOperationStatus(i) == IGNORE) {
+                continue;
+            }
+            Mutation m = miniBatchOp.getOperation(i);
+            if (!this.builder.isEnabled(m)) {
+                continue;
+            }
+            for (ColumnReference indexedColumn : indexedColumns) {
+                if (m.get(indexedColumn.getFamily(), indexedColumn.getQualifier()).isEmpty()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
     /**
-     * Retrieve the the last committed data row state. This method is called only for regular data mutations since for
-     * rebuild (i.e., index replay) mutations include all row versions.
+     * Retrieve the last committed data row state.
      */
     private void getCurrentRowStates(ObserverContext<RegionCoprocessorEnvironment> c,
                                      BatchMutateContext context) throws IOException {
         Set<KeyRange> keys = new HashSet<KeyRange>(context.rowsToLock.size());
-        context.dataRowStates = new HashMap<ImmutableBytesPtr, Pair<Put, Put>>(context.rowsToLock.size());
-        if (context.hasUncoveredIndex && !context.hasGlobalIndex && !context.hasTransform
-                && !context.hasAtomic && !context.hasDelete) {
-            return;
-        }
         for (ImmutableBytesPtr rowKeyPtr : context.rowsToLock) {
             PendingRow pendingRow = pendingRows.get(rowKeyPtr);
             if (pendingRow != null && pendingRow.getLastContext().getCurrentPhase() == BatchMutatePhase.PRE) {
@@ -1137,7 +1158,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             // Retrieve the current row states from the data table while holding the lock.
             // This is needed for both atomic mutations and global indexes
             long start = EnvironmentEdgeManager.currentTimeMillis();
-            getCurrentRowStates(c, context);
+            context.dataRowStates = new HashMap<ImmutableBytesPtr, Pair<Put, Put>>(context.rowsToLock.size());
+            if (context.hasGlobalIndex || context.hasTransform || context.hasAtomic ||
+                    context.hasDelete ||  (context.hasUncoveredIndex &&
+                    isPartialUncoveredIndexUpdate(indexMetaData, miniBatchOp))) {
+                getCurrentRowStates(c, context);
+            }
             onDupCheckTime += (EnvironmentEdgeManager.currentTimeMillis() - start);
         }
 

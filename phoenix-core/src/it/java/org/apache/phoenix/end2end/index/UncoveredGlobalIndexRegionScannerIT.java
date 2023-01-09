@@ -316,14 +316,15 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             if (!uncovered) {
                 // Verify that without an index hint, a covered index table is not selected
                 assertIndexTableNotSelected(conn, dataTableName, indexTableName,
-                        "SELECT val3 from " + dataTableName + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')");
-                //Verify that with index hint, we will read from the index table even though val3 is not included by the index table
+                        "SELECT val3 from " + dataTableName +
+                                " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')");
+                // Verify that with index hint, we will read from the index table
+                // even though val3 is not included by the index table
                 selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ val3 from "
                         + dataTableName + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')";
                 assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
             } else {
-                //Verify that an index hint is not necessary for an uncovered index
-                //Verify that with index hint, we will read from the index table even though val3 is not included by the index table
+                // Verify that an index hint is not necessary for an uncovered index
                 selectSql = "SELECT  val3 from " + dataTableName
                         + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')";
                 assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
@@ -350,7 +351,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             } else {
                 selectSql = "SELECT id from " + dataTableName + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')";
             }
-            //Verify that we will read from the index table
+            // Verify that we will read from the index table
             assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
             rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
@@ -369,7 +370,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             } else {
                 selectSql = "SELECT count(val3) from " + dataTableName + " where val1 > '0' GROUP BY val1";
             }
-            //Verify that we will read from the index table
+            // Verify that we will read from the index table
             assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
             rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
@@ -383,7 +384,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             } else {
                 selectSql = "SELECT count(val3) from " + dataTableName + " where val1 > '0'";
             }
-            //Verify that we will read from the index table
+            // Verify that we will read from the index table
             assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
             rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
@@ -398,7 +399,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             } else {
                 selectSql = "SELECT val3 from " + dataTableName + " where val1 > '0' ORDER BY val1";
             }
-            //Verify that we will read from the index table
+            // Verify that we will read from the index table
             assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
             rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
@@ -407,6 +408,46 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             assertEquals("cdef", rs.getString(1));
             assertTrue(rs.next());
             assertEquals("bcde", rs.getString(1));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testPartialIndexUpdate() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            conn.createStatement().execute("create table " + dataTableName +
+                    " (id varchar not null primary key, " +
+                    "val1 varchar, val2 varchar, val3 varchar, val4 varchar)");
+            conn.createStatement().execute("upsert into " + dataTableName + " values ('b', 'bc', 'bcd', 'bcde', 'bcdef')");
+            conn.commit();
+            String indexTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + "INDEX "
+                    + indexTableName + " on " + dataTableName + " (val1, val2) " +
+                    (uncovered ? "" : "INCLUDE (val3)"));
+            conn.createStatement().execute("upsert into " + dataTableName + " (id, val2) values ('b', 'bcdd')");
+            conn.commit();
+            String selectSql;
+            if (!uncovered) {
+                // Verify that without an index hint, a covered index table is not selected
+                assertIndexTableNotSelected(conn, dataTableName, indexTableName,
+                        "SELECT val4 from " + dataTableName +
+                                " WHERE val1 = 'bc' AND val2 = 'bcdd'");
+                // Verify that with index hint, we will read from the index table even though val4
+                // is not included by the index table
+                selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ val4 from "
+                        + dataTableName + " WHERE val1 = 'bc' AND val2 = 'bcdd'";
+                assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+            } else {
+                // Verify that an index hint is not necessary for an uncovered index
+                selectSql = "SELECT  val4 from " + dataTableName
+                        + " WHERE val1 = 'bc' AND val2 = 'bcdd'";
+                assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+            }
+
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("bcdef", rs.getString(1));
             assertFalse(rs.next());
         }
     }
