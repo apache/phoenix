@@ -53,6 +53,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
@@ -1308,7 +1309,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
                 "INT INTEGER COLUMN_QUALIFIER_ID 11, INT2 INTEGER COLUMN_QUALIFIER_ID 12, " +
-                "INT3 INTEGER COLUMN_QUALIFIER_ID 14) (COLUMN_QUALIFIER_COUNTER \"0\" 15)";
+                "INT3 INTEGER COLUMN_QUALIFIER_ID 14) (COLUMN_QUALIFIER_COUNTER \"" + QueryConstants.DEFAULT_COLUMN_FAMILY + "\" 15)";
         conn.createStatement().execute(ddl);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         PTable table = pconn.getTable(new PTableKey(null, tableName));
@@ -1317,7 +1318,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertNotEquals(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, encodingScheme);
 
         PTable.EncodedCQCounter cqCounter = table.getEncodedCQCounter();
-        assertEquals(15, cqCounter.values().get("0").intValue());
+        assertEquals(15, cqCounter.values().get(QueryConstants.DEFAULT_COLUMN_FAMILY).intValue());
         assertEquals(11, encodingScheme.decode(table.getColumnForColumnName("INT")
                 .getColumnQualifierBytes()));
         assertEquals(12, encodingScheme.decode(table.getColumnForColumnName("INT2")

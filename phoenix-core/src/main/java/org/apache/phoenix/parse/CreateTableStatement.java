@@ -108,13 +108,6 @@ public class CreateTableStatement extends MutableStatement {
         this.familyCQCounters = familyCounters;
     }
 
-    protected CreateTableStatement(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint,
-            List<ParseNode> splitNodes, PTableType tableType, boolean ifNotExists, 
-            TableName baseTableName, ParseNode whereClause, int bindCount, Boolean immutableRows) {
-        this(tableName, props, columns, pkConstraint, splitNodes, tableType, ifNotExists,
-                baseTableName, whereClause, bindCount, immutableRows, null);
-    }
-
     public ParseNode getWhereClause() {
         return whereClause;
     }
