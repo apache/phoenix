@@ -91,9 +91,9 @@ public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
     }
 
     /**
-     * We will have 5 rows in table and we will try deleting 4 out of 5 rows
-     * In this test intention is to fail the delete and see how metric value is updated when that happens
-     * for transactional table and non transactional table
+     * We will have 5 rows in table and we will try deleting 4 out of 5 rows In this test intention
+     * is to fail the delete and see how metric value is updated when that happens for transactional
+     * table and non transactional table
      * @throws SQLException
      */
     @Test
@@ -114,9 +114,6 @@ public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
             stmt.execute(dml);
             conn.commit();
 
-            TestUtil.removeCoprocessor(conn, deleteTableName,
-                ImmutableIndexIT.DeleteFailingRegionObserver.class);
-
             throw new AssertionError("Commit should not have succeeded");
         } catch (SQLException e) {
             Map<String, Map<MetricType, Long>> mutationMetrics =
@@ -125,13 +122,9 @@ public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
                     mutationMetrics.get(deleteTableName).get(MUTATION_BATCH_FAILED_SIZE).intValue();
             int dbfs =
                     mutationMetrics.get(deleteTableName).get(DELETE_BATCH_FAILED_SIZE).intValue();
-            if (transactional) {
-                Assert.assertEquals(4, dbfs);
-                Assert.assertEquals(4, mfs);
-            } else {
-                Assert.assertEquals(4, dbfs);
-                Assert.assertEquals(4, mfs);
-            }
+
+            Assert.assertEquals(4, dbfs);
+            Assert.assertEquals(4, mfs);
         }
     }
 
@@ -147,12 +140,12 @@ public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
             // the mutations
             // it is called before applying mutation to region
             TestUtil.addCoprocessor(conn, deleteTableName,
-                    ImmutableIndexIT.DeleteFailingRegionObserver.class);
+                ImmutableIndexIT.DeleteFailingRegionObserver.class);
             // trying to delete 4 rows with this single delete statement
             String dml = String.format("DELETE FROM %s where val1 >  1", deleteTableName);
             stmt.execute(dml);
 
-            String upsertSQL  = String.format(upsertStatement,deleteTableName);
+            String upsertSQL = String.format(upsertStatement, deleteTableName);
             PreparedStatement preparedStatement = conn.prepareStatement(upsertSQL);
             preparedStatement.setString(1, "ROW_6");
             preparedStatement.setInt(2, 6);
@@ -160,9 +153,6 @@ public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
             preparedStatement.execute();
 
             conn.commit();
-
-            TestUtil.removeCoprocessor(conn, deleteTableName,
-                    ImmutableIndexIT.DeleteFailingRegionObserver.class);
 
             throw new AssertionError("Commit should not have succeeded");
         } catch (SQLException e) {
@@ -172,13 +162,8 @@ public class MutationBatchFailedStateMetricIT extends ParallelStatsDisabledIT {
                     mutationMetrics.get(deleteTableName).get(MUTATION_BATCH_FAILED_SIZE).intValue();
             int dbfs =
                     mutationMetrics.get(deleteTableName).get(DELETE_BATCH_FAILED_SIZE).intValue();
-            if (transactional) {
-                Assert.assertEquals(4, dbfs);
-                Assert.assertEquals(5, mfs);
-            } else {
-                Assert.assertEquals(4, dbfs);
-                Assert.assertEquals(5, mfs);
-            }
+            Assert.assertEquals(4, dbfs);
+            Assert.assertEquals(5, mfs);
         }
     }
 
