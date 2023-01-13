@@ -68,10 +68,14 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         assertFalse("refCount leaked", refCountLeaked);
     }
 
-    private void populateTable(String tableName) throws Exception {
+    private void populateTable(String tableName, boolean salted) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("create table " + tableName +
-                " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), val3 varchar(10))");
+        String ddl = "create table " + tableName +
+                " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), val3 varchar(10))";
+        if (salted) {
+            ddl += " SALT_BUCKETS=4";
+        }
+        conn.createStatement().execute(ddl);
         conn.createStatement().execute("upsert into " + tableName + " values ('a', 'ab', 'abc', 'abcd')");
         conn.commit();
         conn.createStatement().execute("upsert into " + tableName + " values ('b', 'bc', 'bcd', 'bcde')");
@@ -223,9 +227,18 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
     }
 
     @Test
-    public void testUncoveredGlobalIndex() throws Exception {
+    public void testUncoveredGlobalIndexNoSalt() throws Exception {
+        testUncoveredGlobalIndex(false);
+    }
+
+    @Test
+    public void testUncoveredGlobalIndexWithSalt() throws Exception {
+        testUncoveredGlobalIndex(true);
+    }
+
+    private void testUncoveredGlobalIndex(boolean salted) throws Exception {
         String dataTableName = generateUniqueName();
-        populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+        populateTable(dataTableName, salted); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
@@ -233,16 +246,17 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             int limit = 10;
             // Verify that without hint, the index table is not selected
             assertIndexTableNotSelected(conn, dataTableName, indexTableName,
-                    "SELECT val3 from " + dataTableName + " WHERE val1 = 'bc' AND " +
+                    "SELECT val3, val2 from " + dataTableName + " WHERE val1 = 'bc' AND " +
                             "(val2 = 'bcd' OR val3 ='bcde') LIMIT " + limit);
 
             //Verify that with index hint, we will read from the index table even though val3 is not included by the index table
-            String selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ val3 from "
+            String selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ val3,val2 from "
                     + dataTableName + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde') LIMIT " + limit;
             assertExplainPlanWithLimit(conn, selectSql, dataTableName, indexTableName, limit);
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
             assertEquals("bcde", rs.getString(1));
+            assertEquals("bcd", rs.getString(2));
             assertFalse(rs.next());
             conn.createStatement().execute("DROP INDEX " + indexTableName + " on " + dataTableName);
             // Create an index does not include any columns
