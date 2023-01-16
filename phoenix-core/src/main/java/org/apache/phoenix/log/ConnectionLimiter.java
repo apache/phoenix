@@ -31,7 +31,7 @@ public interface ConnectionLimiter {
 
     void returnConnection(PhoenixConnection connection);
 
-    void onLimit() ;
+    int onSweep(boolean internal) ;
 
     boolean isLastConnection();
 

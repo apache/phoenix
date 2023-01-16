@@ -26,16 +26,22 @@ import java.sql.SQLException;
  */
 public class DefaultConnectionLimiter extends BaseConnectionLimiter {
     private DefaultConnectionLimiter(Builder builder) {
-        super(builder.shouldThrottleNumConnections, builder.maxConnectionsAllowed, builder.maxInternalConnectionsAllowed);
+        super(builder.profileName, builder.shouldThrottleNumConnections, builder.maxConnectionsAllowed, builder.maxInternalConnectionsAllowed);
     }
 
     public static class Builder {
+        protected String profileName;
         protected int maxConnectionsAllowed;
         protected int maxInternalConnectionsAllowed;
         protected boolean shouldThrottleNumConnections;
 
         public Builder(boolean shouldThrottleNumConnections) {
             this.shouldThrottleNumConnections = shouldThrottleNumConnections;
+        }
+
+        public DefaultConnectionLimiter.Builder withConnectionProfile(String profileName) {
+            this.profileName = profileName;
+            return this;
         }
 
         public DefaultConnectionLimiter.Builder withMaxAllowed(int maxAllowed) {
@@ -52,6 +58,7 @@ public class DefaultConnectionLimiter extends BaseConnectionLimiter {
         public ConnectionLimiter build() {
             return new DefaultConnectionLimiter(this);
         }
+
     }
 
 }

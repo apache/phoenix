@@ -22,7 +22,9 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 
+import java.lang.ref.WeakReference;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -34,10 +36,17 @@ import java.util.stream.Stream;
  */
 public class ConnectionActivityLogger {
     private LogLevel logLevel;
+    private boolean isInternalConnection;
+    private UUID connectionID;
+    private WeakReference<PhoenixConnection> connectionReference;
     List<String> activityList = Stream.of(ActivityLogInfo.values()).map(f -> "").collect(Collectors.toList());
 
     public ConnectionActivityLogger(PhoenixConnection connection, LogLevel level) {
         logLevel = level;
+        this.isInternalConnection = connection.isInternalConnection();
+        this.connectionID = connection.getUniqueID();
+        this.connectionReference = new WeakReference<PhoenixConnection>(connection);
+        connection.setActivityLogger(this);
         log(ActivityLogInfo.START_TIME, String.valueOf(EnvironmentEdgeManager.currentTimeMillis()));
         PName tenantName = connection.getTenantId();
         if (tenantName != null) {
@@ -72,9 +81,32 @@ public class ConnectionActivityLogger {
         }
 
         @Override
+        public boolean isInternalConnection() {
+            return false;
+        }
+
+        @Override
+        public PhoenixConnection getConnection() { return null; }
+
+        @Override
         public String getActivityLog() {return "";}
 
+        @Override
+        public String getConnectionID() {return "";}
+
     };
+
+    public String getConnectionID() {
+        return connectionID.toString();
+    }
+
+    public boolean isInternalConnection() {
+        return isInternalConnection;
+    }
+
+    public PhoenixConnection getConnection() {
+        return connectionReference.get();
+    }
 
     /**
      * Set logging info for a given activity

@@ -37,14 +37,15 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_C
  * 3. If connection throttling is enabled checks and calls onLimit if the threshold is breached.
  */
 public abstract class BaseConnectionLimiter implements ConnectionLimiter {
-    private int connectionCount = 0;
-    private int internalConnectionCount = 0;
+    protected int connectionCount = 0;
+    protected int internalConnectionCount = 0;
+    protected String profileName;
     protected int maxConnectionsAllowed;
-
     protected int maxInternalConnectionsAllowed;
     protected boolean shouldThrottleNumConnections;
 
-    protected BaseConnectionLimiter(boolean shouldThrottleNumConnections, int maxConnectionsAllowed, int maxInternalConnectionsAllowed) {
+    protected BaseConnectionLimiter(String profileName, boolean shouldThrottleNumConnections, int maxConnectionsAllowed, int maxInternalConnectionsAllowed) {
+        this.profileName = profileName;
         this.shouldThrottleNumConnections = shouldThrottleNumConnections;
         this.maxConnectionsAllowed = maxConnectionsAllowed;
         this.maxInternalConnectionsAllowed = maxInternalConnectionsAllowed;
@@ -61,7 +62,8 @@ public abstract class BaseConnectionLimiter implements ConnectionLimiter {
         if (shouldThrottleNumConnections) {
             int futureConnections = 1 + ( connection.isInternalConnection() ? internalConnectionCount : connectionCount);
             int allowedConnections = connection.isInternalConnection() ? maxInternalConnectionsAllowed : maxConnectionsAllowed;
-            if (allowedConnections != 0 && futureConnections > allowedConnections) {
+            // if throttling threshold is reached, try reclaiming garbage collected phoenix connections.
+            if ((allowedConnections != 0) && (futureConnections > allowedConnections) && (onSweep(connection.isInternalConnection()) == 0)) {
                 GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.increment();
 
                 //TODO:- After PHOENIX-7038 per profile Phoenix Throttled Counter should be updated here.
@@ -73,7 +75,6 @@ public abstract class BaseConnectionLimiter implements ConnectionLimiter {
                                 build().buildException() :
                         new SQLExceptionInfo.Builder(SQLExceptionCode.NEW_CONNECTION_THROTTLED).
                                 build().buildException();
-                onLimit();
                 throw connectionThrottledException;
             }
         }
@@ -91,7 +92,7 @@ public abstract class BaseConnectionLimiter implements ConnectionLimiter {
     public void returnConnection(PhoenixConnection connection) {
         if (connection.isInternalConnection() && internalConnectionCount > 0) {
             --internalConnectionCount;
-        } else if (connectionCount > 0) {
+        } else if (!connection.isInternalConnection() && connectionCount > 0) {
             --connectionCount;
         }
     }
@@ -113,8 +114,8 @@ public abstract class BaseConnectionLimiter implements ConnectionLimiter {
     }
 
     @Override
-    public void onLimit() {
-        // Default implementation - Do Nothing
+    public int onSweep(boolean internal) {
+        return 0;
     }
 
     @VisibleForTesting
