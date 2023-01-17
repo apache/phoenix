@@ -374,6 +374,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final int maxInternalConnectionsAllowed;
     private final boolean shouldThrottleNumConnections;
     public static final byte[] MUTEX_LOCKED = "MUTEX_LOCKED".getBytes(StandardCharsets.UTF_8);
+    private boolean localIndexUpgradeRequired;
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
@@ -3746,7 +3747,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             metaConnection = UpgradeUtil.disableViewIndexes(metaConnection);
             if (getProps().getBoolean(QueryServices.LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB,
               QueryServicesOptions.DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE)) {
-                metaConnection = UpgradeUtil.upgradeLocalIndexes(metaConnection);
+                localIndexUpgradeRequired = true;
             }
             ConnectionQueryServicesImpl.this.removeTable(null,
               PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
@@ -4004,6 +4005,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // snapshot entries
             metaConnection = upgradeOtherSystemTablesIfRequired(metaConnection,
                 moveChildLinks, systemTableToSnapshotMap);
+
+            // Once the system tables are upgraded the local index upgrade can be done
+            if (localIndexUpgradeRequired) {
+                LOGGER.info("Upgrading local indexes");
+                metaConnection = UpgradeUtil.upgradeLocalIndexes(metaConnection);
+            }
+
             // Synchronize necessary properties amongst all column families of a base table
             // and its indexes. See PHOENIX-3955
             if (syncAllTableAndIndexProps) {
