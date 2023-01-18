@@ -2494,11 +2494,11 @@ public class MetaDataClient {
                         encodingScheme = parent.getEncodingScheme();
                     }
 
-                    ImmutableStorageScheme immutableStorageSchemeProp = (ImmutableStorageScheme) TableProperty.IMMUTABLE_STORAGE_SCHEME.getValue(tableProps);
-                    if (immutableStorageSchemeProp == null) {
+                    immutableStorageScheme = (ImmutableStorageScheme) TableProperty.IMMUTABLE_STORAGE_SCHEME.getValue(tableProps);
+                    if (immutableStorageScheme == null) {
                         immutableStorageScheme = parent.getImmutableStorageScheme();
                     } else {
-                        immutableStorageScheme = getImmutableStorageSchemeForIndex(immutableStorageSchemeProp, schemaName, tableName, transactionProvider);
+                        checkImmutableStorageSchemeForIndex(immutableStorageScheme, schemaName, tableName, transactionProvider);
                     }
 
                     if (immutableStorageScheme == SINGLE_CELL_ARRAY_WITH_OFFSETS) {
@@ -2526,10 +2526,10 @@ public class MetaDataClient {
                 } else {
                     encodingScheme = getEncodingScheme(tableProps, schemaName, tableName, transactionProvider);
 
-                    ImmutableStorageScheme immutableStorageSchemeProp =
+                    immutableStorageScheme =
                             (ImmutableStorageScheme) TableProperty.IMMUTABLE_STORAGE_SCHEME
                                     .getValue(tableProps);
-                    if (immutableStorageSchemeProp == null) {
+                    if (immutableStorageScheme == null) {
                         // Ignore default if transactional and column encoding is not supported
                         if (transactionProvider == null ||
                                 !transactionProvider.getTransactionProvider().isUnsupported(
@@ -2559,7 +2559,10 @@ public class MetaDataClient {
                             }
                         }
                     } else {
-                        immutableStorageScheme = getImmutableStorageSchemeForIndex(immutableStorageSchemeProp, schemaName, tableName, transactionProvider);
+                        if (!isImmutableRows) {
+                            immutableStorageScheme = ONE_CELL_PER_COLUMN;
+                        }
+                        checkImmutableStorageSchemeForIndex(immutableStorageScheme, schemaName, tableName, transactionProvider);
                     }
                     if (immutableStorageScheme != ONE_CELL_PER_COLUMN
                             && encodingScheme == NON_ENCODED_QUALIFIERS) {
@@ -2575,9 +2578,9 @@ public class MetaDataClient {
                 {
                     for (Map.Entry<String, Integer> cq : statement.getFamilyCQCounters().entrySet()) {
                         if (cq.getValue() < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE)
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_COLUMNS_EXCEEDED)
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_CQ)
                                     .setSchemaName(schemaName)
-                                    .setTableName(tableName).build().buildException(); // TODO
+                                    .setTableName(tableName).build().buildException();
                         cqCounter.setValue(cq.getKey(), cq.getValue());
                         changedCqCounters.put(cq.getKey(), cqCounter.getNextQualifier(cq.getKey()));
                     }
@@ -2589,7 +2592,6 @@ public class MetaDataClient {
             Set<Integer> viewNewColumnPositions =
                     Sets.newHashSetWithExpectedSize(colDefs.size());
             Set<String> pkColumnNames = new HashSet<>();
-
             // Check for duplicate column qualifiers
             Map<String, Set<Integer>> inputCqCounters = new HashMap<>();
             for (PColumn pColumn : pkColumns) {
@@ -2632,13 +2634,17 @@ public class MetaDataClient {
                 if (!isPkColumn) {
                     if (colDef.getColumnQualifier() != null) {
                         encodedCQ = colDef.getColumnQualifier();
+                        if (encodedCQ < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE)
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_CQ)
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException();
+
                         inputCqCounters.putIfAbsent(cqCounterFamily, new HashSet<Integer>());
                         Set<Integer> familyCounters = inputCqCounters.get(cqCounterFamily);
-                        if (!familyCounters.add(encodedCQ)
-                            || encodedCQ < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE)
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_COLUMNS_EXCEEDED)
-                                    .setSchemaName(schemaName)
-                                    .setTableName(tableName).build().buildException(); // TODO
+                        if (!familyCounters.add(encodedCQ))
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.DUPLICATE_CQ)
+                                .setSchemaName(schemaName)
+                                .setTableName(tableName).build().buildException();
                     }
                     else if (isAppendOnlySchema) {
                         encodedCQ = Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position);
@@ -3256,7 +3262,7 @@ public class MetaDataClient {
         return encodingScheme;
     }
 
-    private ImmutableStorageScheme getImmutableStorageSchemeForIndex(ImmutableStorageScheme immutableStorageSchemeProp, String schemaName, String tableName, TransactionFactory.Provider transactionProvider)
+    private void checkImmutableStorageSchemeForIndex(ImmutableStorageScheme immutableStorageSchemeProp, String schemaName, String tableName, TransactionFactory.Provider transactionProvider)
             throws SQLException {
         if (immutableStorageSchemeProp != ONE_CELL_PER_COLUMN && transactionProvider != null && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.COLUMN_ENCODING) ) {
             throw new SQLExceptionInfo.Builder(
@@ -3266,7 +3272,6 @@ public class MetaDataClient {
                     .build()
                     .buildException();
         }
-        return immutableStorageSchemeProp;
     }
 
     /* This method handles mutation codes sent by phoenix server, except for TABLE_NOT_FOUND which

@@ -37,14 +37,18 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
     public void testShowCreateTableBasic() throws Exception {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateUniqueName();
-        String ddl = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, INT INTEGER)";
+        String tableName = generateUniqueName();;
+        String ddl = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, INT INTEGER, INT2 INTEGER)";
         conn.createStatement().execute(ddl);
-
-        ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE " + tableName );
+        ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE \"" + tableName + "\"");
         assertTrue(rs.next());
-        assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
-                rs.getString(1).contains(ddl));
+
+        String expected = "CREATE TABLE " + tableName + "[(]K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
+                ", INT2 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
+                "[)].*[(]COLUMN_QUALIFIER_COUNTER \"" + DEFAULT_COLUMN_FAMILY +"\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 2) + "[)]";
+        assertTrue("Matches: :" + expected + "\nResult: " + rs.getString(1),
+                rs.getString(1).matches(expected));
     }
 
     @Test
@@ -57,8 +61,12 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
 
         ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE \"" + tableName + "\"");
         assertTrue(rs.next());
-        assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
-                rs.getString(1).contains(ddl));
+
+        String expected = "CREATE TABLE \"" + tableName + "\"[(]K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
+                "[)].*[(]COLUMN_QUALIFIER_COUNTER \"" + DEFAULT_COLUMN_FAMILY +"\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) + "[)]";
+        assertTrue("Matches: :" + expected + "\nResult: " + rs.getString(1),
+                rs.getString(1).matches(expected));
     }
 
     @Test
@@ -73,25 +81,11 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
 
         ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE " + tableFullName);
         assertTrue(rs.next());
-        assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
-                rs.getString(1).contains(ddl));
-    }
 
-    @Test
-    public void testShowCreateTableColumnQualifierBasic() throws Exception {
-        Properties props = new Properties();
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateUniqueName();;
-        String ddl = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, INT INTEGER, INT2 INTEGER)";
-        conn.createStatement().execute(ddl);
-        ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE \"" + tableName + "\"");
-        assertTrue(rs.next());
-
-        String expected = "CREATE TABLE " + tableName + "[(]K VARCHAR NOT NULL PRIMARY KEY, " +
+        String expected = "CREATE TABLE " + tableFullName + "[(]K VARCHAR NOT NULL PRIMARY KEY, " +
                 "INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                ", INT2 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
-                "[)].*[(]COLUMN_QUALIFIER_COUNTER \"" + DEFAULT_COLUMN_FAMILY +"\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 2) + "[)]";
-        assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
+                "[)].*[(]COLUMN_QUALIFIER_COUNTER \"" + DEFAULT_COLUMN_FAMILY +"\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) + "[)]";
+        assertTrue("Matches: :" + expected + "\nResult: " + rs.getString(1),
                 rs.getString(1).matches(expected));
     }
 
@@ -114,7 +108,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
                 "INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
                 ", INT3 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 2) +
                 "[)].*[(]COLUMN_QUALIFIER_COUNTER \"" + DEFAULT_COLUMN_FAMILY +"\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 3) + "[)]";
-        assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
+        assertTrue("Matches: :" + expected + "\nResult: " + rs.getString(1),
                 rs.getString(1).matches(expected));
     }
 
@@ -141,7 +135,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
                 ", INT2 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
                 ", INT4 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 3) +
                 "[)].*[(]COLUMN_QUALIFIER_COUNTER \"" + DEFAULT_COLUMN_FAMILY +"\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 4) + "[)]";
-        assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
+        assertTrue("Matches: :" + expected + "\nResult: " + rs.getString(1),
                 rs.getString(1).matches(expected));
     }
 
@@ -150,18 +144,20 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();;
-        String ddl = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, a.INT INTEGER, b.INT2 INTEGER) IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS";
+        String ddl = "CREATE IMMUTABLE TABLE " + tableName +
+                "(K VARCHAR NOT NULL PRIMARY KEY, A.INT INTEGER, B.INT2 INTEGER) " +
+                "IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS";
         conn.createStatement().execute(ddl);
         ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE \"" + tableName + "\"");
         assertTrue(rs.next());
 
-//        String expected = "CREATE TABLE " + tableName + "[(]K VARCHAR NOT NULL PRIMARY KEY, " +
-//                "a.INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-//                ", b.INT2 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-//                "[)].*[(]COLUMN_QUALIFIER_COUNTER \"a\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
-//                " \"b\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) + "[)]";
-//        assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
-//                rs.getString(1).matches(expected));
+        String expected = "CREATE TABLE " + tableName + "[(]K VARCHAR NOT NULL PRIMARY KEY, " +
+                "A.INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
+                ", B.INT2 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
+                "[)].*[(]COLUMN_QUALIFIER_COUNTER \"A\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
+                ", \"B\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) + "[)]";
+        assertTrue("Matches: :" + expected + "\nResult: " + rs.getString(1),
+                rs.getString(1).matches(expected));
     }
 
     @Test
