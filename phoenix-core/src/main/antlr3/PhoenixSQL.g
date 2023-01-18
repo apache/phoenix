@@ -530,8 +530,9 @@ create_index_node returns [CreateIndexStatement ret]
                 throw new RuntimeException("UNCOVERED indexes cannot have the INCLUDE clause");
             }
             ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, v, p, ex!=null,
-                    l==null ? (u==null ? IndexType.getDefault() : IndexType.UNCOVERED) : IndexType.LOCAL,
-                    async != null, getBindCount(), new HashMap<String, UDFParseNode>(udfParseNodes));
+                    l==null ? (u==null ? IndexType.getDefault() : IndexType.UNCOVERED_GLOBAL) :
+                    IndexType.LOCAL, async != null, getBindCount(), new HashMap<String,
+                    UDFParseNode>(udfParseNodes));
         }
     ;
 

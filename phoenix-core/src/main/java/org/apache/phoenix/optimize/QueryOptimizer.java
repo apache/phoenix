@@ -19,7 +19,6 @@
 package org.apache.phoenix.optimize;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -345,7 +344,7 @@ public class QueryOptimizer {
                 QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans);
 
                 QueryPlan plan = compiler.compile();
-                if (indexTable.getIndexType() == IndexType.UNCOVERED) {
+                if (indexTable.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
                     // Indexed columns should also be added to the data columns to join for uncovered global indexes.
                     // This is required to verify index rows against data table rows
                     plan.getContext().setUncoveredIndex(true);

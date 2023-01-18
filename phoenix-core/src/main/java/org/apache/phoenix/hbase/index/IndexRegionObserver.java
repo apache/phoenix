@@ -833,6 +833,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             }
             for (ColumnReference indexedColumn : indexedColumns) {
                 if (m.get(indexedColumn.getFamily(), indexedColumn.getQualifier()).isEmpty()) {
+                    // The returned list is empty, which means the indexed column is not
+                    // included. This mutation would result in partial index update (and thus
+                    // index column values should be retrieved from the existing data table row)
                     return true;
                 }
             }

@@ -106,7 +106,7 @@ public interface PTable extends PMetaDataEntity {
     public enum IndexType {
         GLOBAL((byte)1), // Covered Global
         LOCAL((byte)2), // Covered Local
-        UNCOVERED((byte)3); // Uncovered Global
+        UNCOVERED_GLOBAL((byte)3); // Uncovered Global
 
         private final byte[] byteValue;
         private final byte serializedValue;

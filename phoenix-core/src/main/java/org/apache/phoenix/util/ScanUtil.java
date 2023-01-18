@@ -1145,7 +1145,20 @@ public class ScanUtil {
         }
     }
 
-    public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table, PhoenixConnection phoenixConnection) throws SQLException {
+    public static PTable getDataTable(PTable index, PhoenixConnection conn) throws SQLException {
+        String schemaName = index.getParentSchemaName().getString();
+        String tableName = index.getParentTableName().getString();
+        PTable dataTable;
+        try {
+            dataTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(schemaName, tableName));
+            return dataTable;
+        } catch (TableNotFoundException e) {
+            // This index table must be being deleted
+            return null;
+        }
+    }
+    public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table,
+            PhoenixConnection phoenixConnection) throws SQLException {
         boolean isTransforming = (table.getTransformingNewTable() != null);
         PTable indexTable = table;
         // Transforming index table can be repaired in regular path via globalindexchecker coproc on it.
@@ -1192,13 +1205,8 @@ public class ScanUtil {
             if (!IndexUtil.isGlobalIndex(indexTable)) {
                 return;
             }
-
-            String schemaName = indexTable.getParentSchemaName().getString();
-            String tableName = indexTable.getParentTableName().getString();
-            PTable dataTable;
-            try {
-                dataTable = PhoenixRuntime.getTable(phoenixConnection, SchemaUtil.getTableName(schemaName, tableName));
-            } catch (TableNotFoundException e) {
+            PTable dataTable = ScanUtil.getDataTable(indexTable, phoenixConnection);
+            if (dataTable == null) {
                 // This index table must be being deleted. No need to set the scan attributes
                 return;
             }

@@ -49,10 +49,8 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.util.*;
 
 import java.sql.ResultSet;
 import java.util.ArrayList;
@@ -62,6 +60,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.logging.Logger;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

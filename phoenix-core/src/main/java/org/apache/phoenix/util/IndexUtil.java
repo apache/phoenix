@@ -868,14 +868,14 @@ public class IndexUtil {
         return table.getIndexType() == PTable.IndexType.GLOBAL;
     }
     public static boolean isGlobalIndex(final PTable table) {
-        return table.getIndexType() == PTable.IndexType.GLOBAL || table.getIndexType() == PTable.IndexType.UNCOVERED;
+        return table.getIndexType() == PTable.IndexType.GLOBAL || table.getIndexType() == PTable.IndexType.UNCOVERED_GLOBAL;
     }
 
     public static boolean shouldIndexBeUsedForUncoveredQuery(final TableRef tableRef) {
         PTable table = tableRef.getTable();
         return table.getType() == PTableType.INDEX
                 && (table.getIndexType() == PTable.IndexType.LOCAL
-                || table.getIndexType() == PTable.IndexType.UNCOVERED
+                || table.getIndexType() == PTable.IndexType.UNCOVERED_GLOBAL
                 || tableRef.isHinted());
     }
 

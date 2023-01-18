@@ -43,8 +43,6 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -60,7 +58,6 @@ import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexExpressionCompiler;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo;
 import org.apache.phoenix.expression.CoerceExpression;
@@ -107,7 +104,6 @@ import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.schema.tuple.ValueGetterTuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
-import org.apache.phoenix.util.*;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.base.Predicate;
@@ -115,6 +111,17 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+import org.apache.phoenix.util.BitSet;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ExpressionUtil;
+import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TransactionUtil;
+import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 /**
  * 
@@ -436,7 +443,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.viewIndexId = index.getViewIndexId() == null ? null : index.getviewIndexIdType().toBytes(index.getViewIndexId());
         this.viewIndexIdType = index.getviewIndexIdType();
         this.isLocalIndex = index.getIndexType() == IndexType.LOCAL;
-        this.isUncovered = index.getIndexType() == IndexType.UNCOVERED;
+        this.isUncovered = index.getIndexType() == IndexType.UNCOVERED_GLOBAL;
         this.encodingScheme = index.getEncodingScheme();
       
         // null check for b/w compatibility

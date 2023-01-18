@@ -126,7 +126,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         // The index scrutiny run will trigger index repair on all unverified rows, and they will be repaired or
         // deleted (since the age threshold is set to zero ms for these tests
         PTable pIndexTable = PhoenixRuntime.getTable(conn, indexName);
-        if (pIndexTable.getIndexType() != PTable.IndexType.UNCOVERED) {
+        if (pIndexTable.getIndexType() != PTable.IndexType.UNCOVERED_GLOBAL) {
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
         }
         assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());

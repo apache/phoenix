@@ -54,6 +54,7 @@ import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -159,7 +160,9 @@ public class TupleProjectionCompiler {
             }
         }
         // add IndexDataColumnRef
-        position = projectedColumns.size();
+        if (table.getType() == PTableType.INDEX && table.getIndexType() == PTable.IndexType.LOCAL) {
+            position = projectedColumns.size();
+        }
         for (IndexDataColumnRef sourceColumnRef : visitor.indexColumnRefSet) {
             PColumn column = new ProjectedColumn(sourceColumnRef.getColumn().getName(), 
                     sourceColumnRef.getColumn().getFamilyName(), position++, 

@@ -23,7 +23,7 @@ import static org.junit.Assert.*;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
-
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -33,7 +33,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -61,8 +60,11 @@ import org.junit.runners.Parameterized;
 @RunWith(Parameterized.class)
 public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
     private final boolean uncovered;
-    public UncoveredGlobalIndexRegionScannerIT (boolean uncovered) {
+    private final boolean salted;
+
+    public UncoveredGlobalIndexRegionScannerIT (boolean uncovered, boolean salted) {
         this.uncovered = uncovered;
+        this.salted = salted;
     }
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -77,14 +79,17 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         assertFalse("refCount leaked", refCountLeaked);
     }
     @Parameterized.Parameters(
-            name = "uncovered={0}")
-    public static synchronized Collection<Boolean> data() {
-        return Arrays.asList(true, false);
+            name = "uncovered={0},salted={1}")
+    public static synchronized Collection<Boolean[]> data() {
+        return Arrays.asList(new Boolean[][] {
+                { false, false }, { false, true }, { true, false }, { true, true }
+        });
     }
     private void populateTable(String tableName) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("create table " + tableName +
-                " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), val3 varchar(10)) COLUMN_ENCODED_BYTES=0");
+                " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10)," +
+                " val3 varchar(10))" + (salted ? " SALT_BUCKETS=4" : ""));
         conn.createStatement().execute("upsert into " + tableName + " values ('a', 'ab', 'abc', 'abcd')");
         conn.commit();
         conn.createStatement().execute("upsert into " + tableName + " values ('b', 'bc', 'bcd', 'bcde')");
@@ -98,14 +103,15 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             String dataTableName = generateUniqueName();
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("create table " + dataTableName +
-                    " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), val3 varchar(10))");
+                    " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10)," +
+                    " val3 varchar(10))" + (salted ? " SALT_BUCKETS=4" : ""));
             if (uncovered) {
                 // The INCLUDE clause should not be allowed
                 try {
                     conn.createStatement().execute("CREATE UNCOVERED INDEX " + indexTableName
                             + " on " + dataTableName + " (val1) INCLUDE (val2)");
                     Assert.fail();
-                } catch (Exception e) {
+                } catch (SQLException e) {
                     // Expected
                 }
                 // The LOCAL keyword should not be allowed with UNCOVERED
@@ -113,7 +119,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
                     conn.createStatement().execute("CREATE UNCOVERED LOCAL INDEX " + indexTableName
                             + " on " + dataTableName);
                     Assert.fail();
-                } catch (Exception e) {
+                } catch (SQLException e) {
                     // Expected
                 }
             } else {
@@ -131,7 +137,8 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             String indexTableName = generateUniqueName();
             Timestamp initial = new Timestamp(EnvironmentEdgeManager.currentTimeMillis() - 1);
             conn.createStatement().execute("create table " + dataTableName +
-                    " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), val3 varchar(10))");
+                    " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10), " +
+                    " val3 varchar(10))" + (salted ? " SALT_BUCKETS=4" : ""));
             conn.createStatement().execute("upsert into " + dataTableName + " values ('a', 'ab', 'abc', 'abcd')");
             conn.commit();
             Timestamp before = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
@@ -418,7 +425,8 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             String dataTableName = generateUniqueName();
             conn.createStatement().execute("create table " + dataTableName +
                     " (id varchar not null primary key, " +
-                    "val1 varchar, val2 varchar, val3 varchar, val4 varchar)");
+                    "val1 varchar, val2 varchar, val3 varchar, val4 varchar)" +
+                    (salted ? " SALT_BUCKETS=4" : ""));
             conn.createStatement().execute("upsert into " + dataTableName + " values ('b', 'bc', 'bcd', 'bcde', 'bcdef')");
             conn.commit();
             String indexTableName = generateUniqueName();
@@ -460,7 +468,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
                     + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, "
                     + "v2 INTEGER, v3 INTEGER "
                     + "CONSTRAINT pk PRIMARY KEY (k1,k2)) "
-                    + " COLUMN_ENCODED_BYTES = 0, VERSIONS=1");
+                    + " COLUMN_ENCODED_BYTES = 0, VERSIONS=1" + (salted ? ", SALT_BUCKETS=4" : ""));
             TestUtil.addCoprocessor(conn, dataTableName, ScanFilterRegionObserver.class);
             ScanFilterRegionObserver.resetCount();
             String indexTableName = generateUniqueName();
@@ -502,7 +510,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
                     + "(k1 BIGINT NOT NULL, k2 BIGINT NOT NULL, v1 INTEGER, "
                     + "v2 INTEGER, v3 BIGINT "
                     + "CONSTRAINT pk PRIMARY KEY (k1,k2)) "
-                    + " VERSIONS=1, IMMUTABLE_ROWS=TRUE");
+                    + " VERSIONS=1, IMMUTABLE_ROWS=TRUE" + (salted ? ", SALT_BUCKETS=4" : ""));
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + "INDEX " + indexTableName + " ON "
                     + dataTableName + "(v1)");
@@ -583,14 +591,12 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
             assertFalse(rs.next());
-            TestUtil.dumpTable(conn, TableName.valueOf(indexTableName));
             // Configure IndexRegionObserver to fail the last write phase (i.e., the post index update phase) where
             // index rows are deleted and check that this does not impact the correctness
             IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
             String dml = "DELETE from " + dataTableName + " WHERE id  = 'a'";
             assertEquals(1, conn.createStatement().executeUpdate(dml));
             conn.commit();
-            TestUtil.dumpTable(conn, TableName.valueOf(indexTableName));
             // The index rows are actually not deleted yet because IndexRegionObserver failed delete operation.
             dml = "DELETE from " + dataTableName + " WHERE val1  = 'ab'";
             // This DML will scan the Index table and detect invalid index rows. This will trigger read repair which
@@ -598,11 +604,9 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             // the number of rows to be deleted by the "DELETE" DML will be zero since the rows deleted by read repair
             // will not be visible to the DML
             assertEquals(0, conn.createStatement().executeUpdate(dml));
-            TestUtil.dumpTable(conn, TableName.valueOf(indexTableName));
             rs = conn.createStatement().executeQuery(selectSql);
             assertFalse(rs.next());
 
-            TestUtil.dumpTable(conn, TableName.valueOf(indexTableName));
             rs = conn.createStatement().executeQuery("SELECT count(*) from " + indexTableName);
             assertTrue(rs.next());
             assertEquals(1, rs.getLong(1));
