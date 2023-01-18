@@ -24,7 +24,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -180,7 +182,7 @@ public class RoundDecimalExpression extends ScalarFunction {
     @Override
     public KeyPart newKeyPart(final KeyPart childPart) {
         return new KeyPart() {
-            private final List<Expression> extractNodes = Collections.<Expression>singletonList(RoundDecimalExpression.this);
+            private final Set<Expression> extractNodes = new LinkedHashSet<>(Collections.<Expression>singleton(RoundDecimalExpression.this));
 
             @Override
             public PColumn getColumn() {
@@ -188,7 +190,7 @@ public class RoundDecimalExpression extends ScalarFunction {
             }
 
             @Override
-            public List<Expression> getExtractNodes() {
+            public Set<Expression> getExtractNodes() {
                 return extractNodes;
             }
 

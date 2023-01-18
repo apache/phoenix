@@ -46,13 +46,11 @@ execute() {
     THREADS=1
   fi
 
-  mvn clean install -B -e -f "${MAIN_POM}" -Pcodecoverage -DskipShade -DskipTests -fn -T "$THREADS"
-  mvn test -B -e -f "${MAIN_POM}" -Pcodecoverage -DskipShade -Dparallel-tests -fn -T "$THREADS"
-  mvn verify -B -e -f "${MAIN_POM}" -Pcodecoverage -DskipTests -fn -T "$THREADS"
+  mvn -B -e -f "${MAIN_POM}" clean verify -Pcoverage -Dskip.code-coverage -fn -T "$THREADS"
 
   # If the required parameters are given, the code coverage results are uploaded to the SonarQube Server
   if [ -n "$SONAR_LOGIN" ] && [ -n "$SONAR_PROJECT_KEY" ] && [ -n "$SONAR_URL" ]; then
-    mvn -B -e -f "${MAIN_POM}" -T "$THREADS" -Psonar sonar:sonar -Dsonar.host.url="$SONAR_URL" \
+    mvn -B -e -f "${MAIN_POM}" -T "$THREADS" -Pcoverage sonar:sonar -Dsonar.host.url="$SONAR_URL" \
       -Dsonar.login="$SONAR_LOGIN" -Dsonar.projectKey="$SONAR_PROJECT_KEY" -Dsonar.projectName="$SONAR_PROJECT_NAME"
   fi
 }

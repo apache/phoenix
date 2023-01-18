@@ -42,6 +42,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
@@ -219,4 +220,5 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
         throw new UnsupportedOperationException();
     }
 
+    PMetaData getMetaDataCache();
 }

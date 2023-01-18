@@ -22,13 +22,11 @@ public abstract class PTableRef {
     protected final int estSize;
     protected final long createTime;
     protected final long resolvedTimeStamp;
-    protected volatile long lastAccessTime;
     
-    public PTableRef(long lastAccessTime, long resolvedTime, int estimatedSize) {
-        this.lastAccessTime = lastAccessTime;
+    public PTableRef(long createTime, long resolvedTime, int estimatedSize) {
         this.estSize = estimatedSize;
         this.resolvedTimeStamp = resolvedTime;
-        this.createTime = lastAccessTime;
+        this.createTime = createTime;
     }
     
     /**
@@ -48,13 +46,4 @@ public abstract class PTableRef {
     public int getEstimatedSize() {
         return estSize;
     }
-
-    public long getLastAccessTime() {
-        return lastAccessTime;
-    }
-
-    public void setLastAccessTime(long lastAccessTime) {
-        this.lastAccessTime = lastAccessTime;
-    }
-	
 }

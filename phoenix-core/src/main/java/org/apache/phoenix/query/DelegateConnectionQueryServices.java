@@ -42,6 +42,7 @@ import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
@@ -404,5 +405,10 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     public void deleteMutexCell(String tenantId, String schemaName, String tableName,
             String columnName, String familyName) throws SQLException {
         getDelegate().deleteMutexCell(tenantId, schemaName, tableName, columnName, familyName);
+    }
+
+    @Override
+    public PMetaData getMetaDataCache() {
+        return getDelegate().getMetaDataCache();
     }
 }

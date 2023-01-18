@@ -87,7 +87,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
             String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + tableName;
             Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'");
-            helpTestUpdateCache(fullTableName, new int[] {1, 1}, false);
+            helpTestUpdateCache(fullTableName, new int[] {1, 3}, false);
         }
     }
 

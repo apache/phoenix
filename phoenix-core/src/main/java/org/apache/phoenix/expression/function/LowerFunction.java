@@ -30,8 +30,7 @@ import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
-
-import com.force.i18n.LocaleUtils;
+import org.apache.phoenix.util.i18n.LocaleUtils;
 
 @FunctionParseNode.BuiltInFunction(name=LowerFunction.NAME,  args={
         @FunctionParseNode.Argument(allowedTypes={PVarchar.class}),

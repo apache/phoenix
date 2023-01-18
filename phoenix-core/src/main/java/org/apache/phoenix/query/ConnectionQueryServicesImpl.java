@@ -255,7 +255,6 @@ import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PMetaDataImpl;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PSynchronizedMetaData;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
@@ -416,7 +415,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private QueryLoggerDisruptor queryDisruptor;
 
     private PMetaData newEmptyMetaData() {
-        return new PSynchronizedMetaData(new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, getProps()));
+        return new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY,
+                (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
+                getProps().get(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB)),
+                        getProps());
     }
 
     /**
@@ -715,7 +717,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
          * all region locations from the HTable doesn't.
          */
         int retryCount = 0, maxRetryCount = 1;
-        boolean reload =false;
+        TableName table = TableName.valueOf(tableName);
         while (true) {
             try {
                 // We could surface the package projected HConnectionImplementation.getNumberOfCachedRegionLocations
@@ -725,23 +727,27 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 byte[] currentKey = HConstants.EMPTY_START_ROW;
                 do {
                     HRegionLocation regionLocation = ((ClusterConnection)connection).getRegionLocation(
-                            TableName.valueOf(tableName), currentKey, reload);
+                            table, currentKey, false);
                     currentKey = getNextRegionStartKey(regionLocation, currentKey);
                     locations.add(regionLocation);
                 } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW));
                 return locations;
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-                String fullName = Bytes.toString(tableName);
-                throw new TableNotFoundException(fullName);
+                throw new TableNotFoundException(table.getNameAsString());
             } catch (IOException e) {
+                LOGGER.error("Exception encountered in getAllTableRegions for "
+                        + "table: {}, retryCount: {}", table.getNameAsString(), retryCount, e);
                 if (retryCount++ < maxRetryCount) { // One retry, in case split occurs while navigating
-                    reload = true;
                     continue;
                 }
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.GET_TABLE_REGIONS_FAIL)
                 .setRootCause(e).build().buildException();
             }
         }
+    }
+
+    public PMetaData getMetaDataCache() {
+        return latestMetaData;
     }
 
     @Override
@@ -755,7 +761,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         table.getTenantId(), table.getName().getString()));
                 PTable existingTable = existingTableRef.getTable();
                 if (existingTable.getTimeStamp() > table.getTimeStamp()) {
-                    existingTableRef.setLastAccessTime(TimeKeeper.SYSTEM.getCurrentTime());
                     return;
                 }
             } catch (TableNotFoundException e) {}
@@ -875,12 +880,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public PhoenixConnection connect(String url, Properties info) throws SQLException {
         checkClosed();
-        PMetaData metadata = latestMetaData;
         throwConnectionClosedIfNullMetaData();
         validateConnectionProperties(info);
-        metadata = metadata.clone();
 
-        return new PhoenixConnection(this, url, info, metadata);
+        return new PhoenixConnection(this, url, info);
     }
 
     private ColumnFamilyDescriptor generateColumnFamilyDescriptor(Pair<byte[],Map<String,Object>> family, PTableType tableType) throws SQLException {
@@ -3488,7 +3491,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
                             String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
                             try (PhoenixConnection metaConnection = new PhoenixConnection(ConnectionQueryServicesImpl.this, globalUrl,
-                                         scnProps, newEmptyMetaData())) {
+                                         scnProps)) {
                                 try (Statement statement =
                                         metaConnection.createStatement()) {
                                     metaConnection.setRunningUpgrade(true);
@@ -3699,6 +3702,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
                     QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
             metaConnection.createStatement().execute(getSystemSequenceTableDDL(nSequenceSaltBuckets));
+            // When creating the table above, DDL statements are
+            // used. However, the CFD level properties are not set
+            // via DDL commands, hence we are explicitly setting
+            // few properties using the Admin API below.
+            updateSystemSequenceWithCacheOnWriteProps(metaConnection);
         } catch (TableAlreadyExistsException e) {
             nSequenceSaltBuckets = getSaltBuckets(e);
         }
@@ -3838,8 +3846,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             p.remove(PhoenixRuntime.CURRENT_SCN_ATTRIB);
             p.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
             PhoenixConnection conn = new PhoenixConnection(
-              ConnectionQueryServicesImpl.this, metaConnection.getURL(), p,
-              metaConnection.getMetaDataCache());
+              ConnectionQueryServicesImpl.this, metaConnection.getURL(), p);
             try {
                 List<String> tablesNeedingUpgrade = UpgradeUtil
                   .getPhysicalTablesWithDescRowKey(conn);
@@ -4121,7 +4128,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
             String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
             metaConnection = new PhoenixConnection(ConnectionQueryServicesImpl.this, globalUrl,
-                    scnProps, latestMetaData);
+                    scnProps);
             metaConnection.setRunningUpgrade(true);
             // Always try to create SYSTEM.MUTEX table first since we need it to acquire the
             // upgrade mutex. Upgrade or migration is not possible without the upgrade mutex
@@ -4186,7 +4193,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     //to avoid collisions. See PHOENIX-5132 and PHOENIX-5138
                     try (PhoenixConnection conn = new PhoenixConnection(
                             ConnectionQueryServicesImpl.this, globalUrl,
-                            props, newEmptyMetaData())) {
+                            props)) {
                         UpgradeUtil.mergeViewIndexIdSequences(metaConnection);
                     } catch (Exception mergeViewIndeIdException) {
                         LOGGER.warn("Merge view index id sequence failed! If possible, " +
@@ -4312,10 +4319,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return metaConnection;
     }
 
-
-    private PhoenixConnection upgradeSystemSequence(
+    @VisibleForTesting
+    public PhoenixConnection upgradeSystemSequence(
             PhoenixConnection metaConnection,
-            Map<String, String> systemTableToSnapshotMap) throws SQLException {
+            Map<String, String> systemTableToSnapshotMap) throws SQLException, IOException {
         int nSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
                 QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
                 QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
@@ -4371,8 +4378,36 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } else {
                 nSequenceSaltBuckets = getSaltBuckets(e);
             }
+
+            updateSystemSequenceWithCacheOnWriteProps(metaConnection);
         }
         return metaConnection;
+    }
+
+    private void updateSystemSequenceWithCacheOnWriteProps(PhoenixConnection metaConnection) throws
+        IOException, SQLException {
+
+        try (Admin admin = getAdmin()) {
+            TableDescriptor oldTD = admin.getDescriptor(
+                SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME,
+                    metaConnection.getQueryServices().getProps()));
+            ColumnFamilyDescriptor oldCf = oldTD.getColumnFamily(
+                QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+
+            // If the CacheOnWrite related properties are not set, lets set them.
+            if (!oldCf.isCacheBloomsOnWrite() || !oldCf.isCacheDataOnWrite()
+                || !oldCf.isCacheIndexesOnWrite()) {
+                ColumnFamilyDescriptorBuilder newCFBuilder =
+                    ColumnFamilyDescriptorBuilder.newBuilder(oldCf);
+                newCFBuilder.setCacheBloomsOnWrite(true);
+                newCFBuilder.setCacheDataOnWrite(true);
+                newCFBuilder.setCacheIndexesOnWrite(true);
+
+                TableDescriptorBuilder newTD = TableDescriptorBuilder.newBuilder(oldTD);
+                newTD.modifyColumnFamily(newCFBuilder.build());
+                admin.modifyTable(newTD.build());
+            }
+        }
     }
 
     private void takeSnapshotOfSysTable(
@@ -4604,7 +4639,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // Cannot go through DriverManager or you end up in an infinite loop because it'll call init again
         PhoenixConnection metaConnection = new PhoenixConnection(oldMetaConnection, this, props);
         metaConnection.setAutoCommit(false);
-        PTable sysCatalogPTable = metaConnection.getTable(new PTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
+        PTable sysCatalogPTable = PhoenixRuntime.getTable(metaConnection, SYSTEM_CATALOG_NAME);
         int numColumns = sysCatalogPTable.getColumns().size();
         try (PreparedStatement mutateTable = metaConnection.prepareStatement(MetaDataClient.MUTATE_TABLE)) {
             mutateTable.setString(1, null);
@@ -5966,16 +6001,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
          * to which specified row belongs to.
          */
         int retryCount = 0, maxRetryCount = 1;
-        boolean reload =false;
         while (true) {
+            TableName table = TableName.valueOf(tableName);
             try {
-                return connection.getRegionLocator(TableName.valueOf(tableName)).getRegionLocation(row, reload);
+                return connection.getRegionLocator(table).getRegionLocation(row, false);
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 String fullName = Bytes.toString(tableName);
                 throw new TableNotFoundException(SchemaUtil.getSchemaNameFromFullName(fullName), SchemaUtil.getTableNameFromFullName(fullName));
             } catch (IOException e) {
+                LOGGER.error("Exception encountered in getTableRegionLocation for "
+                        + "table: {}, retryCount: {}", table.getNameAsString(), retryCount, e);
                 if (retryCount++ < maxRetryCount) { // One retry, in case split occurs while navigating
-                    reload = true;
                     continue;
                 }
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.GET_TABLE_REGIONS_FAIL)

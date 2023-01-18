@@ -62,6 +62,7 @@ import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
+import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
@@ -74,7 +75,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
@@ -159,7 +159,14 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     private PMetaData newEmptyMetaData() {
-        return new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, getProps());
+        long updateCacheFrequency = (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
+                getProps().get(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB));
+        // We cannot have zero update cache frequency for connectionless query services as we need to keep the
+        // metadata in the cache (i.e., in memory)
+        if (updateCacheFrequency == 0) {
+            updateCacheFrequency = Long.MAX_VALUE;
+        }
+        return new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, updateCacheFrequency, getProps());
     }
 
     protected String getSystemCatalogTableDDL() {
@@ -259,7 +266,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     
     @Override
     public PhoenixConnection connect(String url, Properties info) throws SQLException {
-        return new PhoenixConnection(this, url, info, metaData.clone());
+        return new PhoenixConnection(this, url, info);
     }
 
     @Override
@@ -377,7 +384,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
                 scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
                 String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
-                metaConnection = new PhoenixConnection(this, globalUrl, scnProps, newEmptyMetaData());
+                metaConnection = new PhoenixConnection(this, globalUrl, scnProps);
                 metaConnection.setRunningUpgrade(true);
                 try {
                     metaConnection.createStatement().executeUpdate(getSystemCatalogTableDDL());
@@ -797,5 +804,9 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public void deleteMutexCell(String tenantId, String schemaName, String tableName,
             String columnName, String familyName) throws SQLException {
+    }
+    @Override
+    public PMetaData getMetaDataCache() {
+        return metaData;
     }
 }

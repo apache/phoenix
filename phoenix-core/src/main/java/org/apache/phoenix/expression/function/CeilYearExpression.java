@@ -21,6 +21,7 @@ import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
 import org.joda.time.DateTime;
+import org.joda.time.chrono.GJChronology;
 
 /**
  * 
@@ -41,4 +42,16 @@ public class CeilYearExpression extends RoundJodaDateExpression {
        return dateTime.year().roundCeilingCopy().getMillis();
     }
 
+    @Override
+    public long rangeLower(long time) {
+        // floor(time - 1) + 1
+        return (new DateTime(time - 1, GJChronology.getInstanceUTC())).year().roundFloorCopy()
+                .getMillis() + 1;
+    }
+
+    @Override
+    public long rangeUpper(long time) {
+        // ceil
+        return roundDateTime(new DateTime(time, GJChronology.getInstanceUTC()));
+    }
 }

@@ -17,6 +17,7 @@
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <!-- trigger end2end tests-->
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.phoenix</groupId>
@@ -236,7 +237,7 @@
               <goal>compile</goal>
             </goals>
             <configuration>
-              <protocArtifact>${protobuf.group}:protoc:${protoc.version}:exe:${os.detected.classifier}</protocArtifact>
+              <protocArtifact>${protobuf.group}:protoc:${protoc.version}:exe:${protoc.arch}</protocArtifact>
               <protoSourceRoot>${basedir}/src/main/protobuf/</protoSourceRoot>
               <clearOutputDirectory>false</clearOutputDirectory>
               <checkStaleness>true</checkStaleness>
@@ -413,27 +414,23 @@
     <!-- Omid dependencies -->
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-client-hbase2.x</artifactId>
+      <artifactId>omid-hbase-client</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-coprocessor-hbase2.x</artifactId>
+      <artifactId>omid-hbase-coprocessor</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-shims-hbase2.x</artifactId>
+      <artifactId>omid-hbase-common</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-common-hbase2.x</artifactId>
+      <artifactId>omid-timestamp-storage</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-timestamp-storage-hbase2.x</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-commit-table-hbase2.x</artifactId>
+      <artifactId>omid-hbase-commit-table</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
@@ -447,16 +444,20 @@
       <groupId>org.apache.omid</groupId>
       <artifactId>omid-common</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-codahale-metrics</artifactId>
+    </dependency>
 
     <!-- Omid test dependencies -->
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-tso-server-hbase2.x</artifactId>
+      <artifactId>omid-tso-server</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
-      <artifactId>omid-tso-server-hbase2.x</artifactId>
+      <artifactId>omid-tso-server</artifactId>
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
@@ -552,8 +553,12 @@
       <artifactId>stream</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.salesforce.i18n</groupId>
-      <artifactId>i18n-util</artifactId>
+      <groupId>com.ibm.icu</groupId>
+      <artifactId>icu4j</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.ibm.icu</groupId>
+      <artifactId>icu4j-localespi</artifactId>
     </dependency>
     <dependency>
       <groupId>com.lmax</groupId>

@@ -85,8 +85,8 @@
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.3.runtime.version>2.3.7</hbase-2.3.runtime.version>
     <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
-    <hbase-2.4.runtime.version>2.4.13</hbase-2.4.runtime.version>
-    <hbase-2.5.runtime.version>2.5.0</hbase-2.5.runtime.version>
+    <hbase-2.4.runtime.version>2.4.15</hbase-2.4.runtime.version>
+    <hbase-2.5.runtime.version>2.5.2-hadoop3</hbase-2.5.runtime.version>
 
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
@@ -121,9 +121,9 @@
     <collections.version>3.2.2</collections.version>
     <jodatime.version>2.10.5</jodatime.version>
     <joni.version>2.1.31</joni.version>
-    <omid.version>1.0.2</omid.version>
+    <omid.version>1.1.0</omid.version>
     <stream.version>2.9.5</stream.version>
-    <i18n-util.version>1.0.4</i18n-util.version>
+    <icu4j.version>72.1</icu4j.version>
     <guice.version>4.0</guice.version>
     <zookeeper.version>3.5.7</zookeeper.version>
     <curator.version>4.2.0</curator.version>
@@ -168,6 +168,9 @@
     <maven-owasp-plugin.version>6.5.3</maven-owasp-plugin.version>
     <protobuf.plugin.version>0.6.1</protobuf.plugin.version>
     <os.maven.version>1.5.0.Final</os.maven.version>
+    <!-- PHOENIX-6806 - Default protoc architecture to the detected one,
+      but allow for profile overrides -->
+    <protoc.arch>${os.detected.classifier}</protoc.arch>
   </properties>
 
   <build>
@@ -363,16 +366,7 @@
           <configuration>
               <ignoredUnusedDeclaredDependencies>
                 <ignoredUnusedDeclaredDependency>
-                  org.apache.omid:omid-hbase-shims-hbase2.x
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.omid:omid-hbase-common-hbase2.x:jar
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.omid:omid-hbase-commit-table-hbase2.x
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.omid:omid-timestamp-storage-hbase2.x
+                  org.apache.omid:*
                 </ignoredUnusedDeclaredDependency>
                 <ignoredUnusedDeclaredDependency>
                   org.apache.hbase:hbase-testing-util
@@ -416,9 +410,6 @@
               <configuration>
                 <outputFile>${project.build.directory}/classes/mrapp-generated-classpath
                 </outputFile>
-                <ignoredUnusedDeclaredDependencies>
-                    org.apache.omid:*hbase2.x
-                </ignoredUnusedDeclaredDependencies>
               </configuration>
             </execution>
             <execution>
@@ -1090,17 +1081,9 @@
       <!-- Omid -->
       <dependency>
         <groupId>org.apache.omid</groupId>
-        <artifactId>omid-hbase-common-hbase2.x</artifactId>
+        <artifactId>omid-hbase-common</artifactId>
         <version>${omid.version}</version>
         <exclusions>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-shims-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-common-hbase1.x</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>com.google.inject</groupId>
             <artifactId>guice</artifactId>
@@ -1113,25 +1096,9 @@
       </dependency>
       <dependency>
         <groupId>org.apache.omid</groupId>
-        <artifactId>omid-hbase-client-hbase2.x</artifactId>
+        <artifactId>omid-hbase-client</artifactId>
         <version>${omid.version}</version>
         <exclusions>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-commit-table-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-common-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-client-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-shims-hbase1.x</artifactId>
-         </exclusion>
          <exclusion>
            <groupId>org.testng</groupId>
            <artifactId>testng</artifactId>
@@ -1140,21 +1107,9 @@
       </dependency>
       <dependency>
         <groupId>org.apache.omid</groupId>
-        <artifactId>omid-hbase-coprocessor-hbase2.x</artifactId>
+        <artifactId>omid-hbase-coprocessor</artifactId>
         <version>${omid.version}</version>
         <exclusions>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-commit-table-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-          <artifactId>omid-hbase-client-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-shims-hbase1.x</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
@@ -1171,21 +1126,9 @@
       </dependency>
       <dependency>
         <groupId>org.apache.omid</groupId>
-        <artifactId>omid-tso-server-hbase2.x</artifactId>
+        <artifactId>omid-tso-server</artifactId>
         <version>${omid.version}</version>
         <exclusions>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-common-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-commit-table-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-timestamp-storage-hbase1.x</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
@@ -1214,34 +1157,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.omid</groupId>
-        <artifactId>omid-hbase-shims-hbase2.x</artifactId>
-        <version>${omid.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.testng</groupId>
-            <artifactId>testng</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.omid</groupId>
-        <artifactId>omid-tso-server-hbase2.x</artifactId>
+        <artifactId>omid-tso-server</artifactId>
         <version>${omid.version}</version>
         <type>test-jar</type>
         <exclusions>
           <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-common-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-commit-table-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-timestamp-storage-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
           </exclusion>
@@ -1269,20 +1189,12 @@
       </dependency>
       <dependency>
         <groupId>org.apache.omid</groupId>
-        <artifactId>omid-timestamp-storage-hbase2.x</artifactId>
+        <artifactId>omid-timestamp-storage</artifactId>
         <version>${omid.version}</version>
         <exclusions>
           <exclusion>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-shims-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-common-hbase1.x</artifactId>
           </exclusion>
           <exclusion>
             <groupId>com.google.inject</groupId>
@@ -1300,17 +1212,9 @@
       </dependency>
       <dependency>
         <groupId>org.apache.omid</groupId>
-        <artifactId>omid-hbase-commit-table-hbase2.x</artifactId>
+        <artifactId>omid-hbase-commit-table</artifactId>
         <version>${omid.version}</version>
         <exclusions>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-common-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.omid</groupId>
-            <artifactId>omid-hbase-shims-hbase1.x</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>com.google.inject</groupId>
             <artifactId>guice</artifactId>
@@ -1367,6 +1271,12 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>org.apache.omid</groupId>
+        <artifactId>omid-codahale-metrics</artifactId>
+        <version>${omid.version}</version>
+      </dependency>
+
+      <dependency>
         <groupId>org.apache.curator</groupId>
         <artifactId>curator-framework</artifactId>
         <version>${curator.version}</version>
@@ -1382,7 +1292,6 @@
         <version>${curator.version}</version>
       </dependency>
 
-      <!-- Fix omid dependency scopes -->
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-testing-util</artifactId>
@@ -1524,9 +1433,14 @@
         <version>${stream.version}</version>
       </dependency>
       <dependency>
-        <groupId>com.salesforce.i18n</groupId>
-        <artifactId>i18n-util</artifactId>
-        <version>${i18n-util.version}</version>
+        <groupId>com.ibm.icu</groupId>
+        <artifactId>icu4j</artifactId>
+        <version>${icu4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.ibm.icu</groupId>
+        <artifactId>icu4j-localespi</artifactId>
+        <version>${icu4j.version}</version>
       </dependency>
       <dependency>
         <groupId>com.lmax</groupId>
@@ -1815,19 +1729,52 @@
         </plugins>
       </build>
     </profile>
+
+    <!-- this profile runs the Jacoco code coverage analysis -->
     <profile>
-      <id>sonar</id>
+      <id>coverage</id>
       <activation>
         <activeByDefault>false</activeByDefault>
       </activation>
       <properties>
+        <!-- SONAR properties -->
+        <sonar.projectBaseDir>.</sonar.projectBaseDir>
         <sonar.surefire.reportsPath>${project.build.directory}/surefire-reports</sonar.surefire.reportsPath>
         <sonar.coverage.jacoco.xmlReportPaths>
-          ${project.build.directory}/site/jacoco/jacoco.xml
+          ${sonar.projectBaseDir}/phoenix-assembly/target/code-coverage/jacoco-reports/jacoco.xml
         </sonar.coverage.jacoco.xmlReportPaths>
+        <!-- JACOCO properties -->
+        <main.basedir>${project.basedir}</main.basedir>
+        <codeCoverageReportRootDir>${main.basedir}/phoenix-assembly/target/code-coverage</codeCoverageReportRootDir>
+        <jacocoDestFile>${codeCoverageReportRootDir}/jacoco.exec</jacocoDestFile>
+        <jacocoReportDir>${codeCoverageReportRootDir}/jacoco-reports</jacocoReportDir>
       </properties>
       <build>
         <plugins>
+          <plugin>
+            <groupId>org.jacoco</groupId>
+            <artifactId>jacoco-maven-plugin</artifactId>
+            <version>${jacoco-maven-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>prepare-agent</id>
+                <phase>initialize</phase>
+                <goals>
+                  <goal>prepare-agent</goal>
+                </goals>
+                <configuration>
+                  <propertyName>jacocoArgLine</propertyName>
+                </configuration>
+              </execution>
+              <execution>
+                <id>report</id>
+                <phase>post-integration-test</phase>
+                <goals>
+                  <goal>report</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
           <plugin>
             <groupId>org.sonarsource.scanner.maven</groupId>
             <artifactId>sonar-maven-plugin</artifactId>
@@ -1868,6 +1815,19 @@
         <!-- PHOENIX-6475 Use custom protoc for Linux ARM64 -->
         <protobuf.group>org.openlabtesting.protobuf</protobuf.group>
         <protoc.version>2.5.0.2</protoc.version>
+      </properties>
+    </profile>
+    <profile>
+      <!-- PHOENIX-6806 Use Mac x64 version of protoc for Apple Silicon (aarch64) Macs -->
+      <id>osx-aarch64</id>
+      <activation>
+        <os>
+          <family>mac</family>
+          <arch>aarch64</arch>
+        </os>
+      </activation>
+      <properties>
+        <protoc.arch>osx-x86_64</protoc.arch>
       </properties>
     </profile>
   </profiles>
