@@ -17,40 +17,20 @@
  */
 package org.apache.phoenix.trace.util;
 
-import static org.apache.phoenix.util.StringUtil.toBytes;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Properties;
 import java.util.concurrent.Callable;
 
-import javax.annotation.Nullable;
-
-import org.apache.hadoop.conf.Configuration;
-import org.apache.htrace.HTraceConfiguration;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.call.CallWrapper;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.parse.TraceStatement;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.trace.TraceSpanReceiver;
-import org.apache.htrace.Sampler;
-import org.apache.htrace.Span;
-import org.apache.htrace.Trace;
-import org.apache.htrace.TraceScope;
-import org.apache.htrace.Tracer;
-import org.apache.htrace.impl.ProbabilitySampler;
-import org.apache.htrace.wrappers.TraceCallable;
-import org.apache.htrace.wrappers.TraceRunnable;
+import org.apache.phoenix.trace.TraceUtil;
 import org.apache.phoenix.trace.TraceWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-
-import edu.umd.cs.findbugs.annotations.NonNull;
 
 /**
  * Helper class to manage using the {@link Tracer} within Phoenix
@@ -67,124 +47,7 @@ public class Tracing {
     // Constants for passing into the metrics system
     private static final String TRACE_METRIC_PREFIX = "phoenix.trace.instance";
 
-    /**
-     * Manage the types of frequencies that we support. By default, we never turn on tracing.
-     */
-    public static enum Frequency {
-        NEVER("never", CREATE_NEVER), // default
-        ALWAYS("always", CREATE_ALWAYS), PROBABILITY("probability", CREATE_PROBABILITY);
 
-        String key;
-        Function<ConfigurationAdapter, Sampler<?>> builder;
-
-        private Frequency(String key, Function<ConfigurationAdapter, Sampler<?>> builder) {
-            this.key = key;
-            this.builder = builder;
-        }
-
-        public String getKey() {
-            return key;
-        }
-
-        static Frequency getSampler(String key) {
-            for (Frequency type : Frequency.values()) {
-                if (type.key.equals(key)) {
-                    return type;
-                }
-            }
-            return NEVER;
-        }
-    }
-
-    private static Function<ConfigurationAdapter, Sampler<?>> CREATE_ALWAYS =
-            new Function<ConfigurationAdapter, Sampler<?>>() {
-                @Override
-                public Sampler<?> apply(ConfigurationAdapter arg0) {
-                    return Sampler.ALWAYS;
-                }
-            };
-
-    private static Function<ConfigurationAdapter, Sampler<?>> CREATE_NEVER =
-            new Function<ConfigurationAdapter, Sampler<?>>() {
-                @Override
-                public Sampler<?> apply(ConfigurationAdapter arg0) {
-                    return Sampler.NEVER;
-                }
-            };
-
-    private static Function<ConfigurationAdapter, Sampler<?>> CREATE_PROBABILITY =
-            new Function<ConfigurationAdapter, Sampler<?>>() {
-                @Override
-                public Sampler<?> apply(ConfigurationAdapter conf) {
-                    // get the connection properties for the probability information
-                    Map<String, String> items = new HashMap<String, String>();
-                    items.put(ProbabilitySampler.SAMPLER_FRACTION_CONF_KEY,
-                            conf.get(QueryServices.TRACING_PROBABILITY_THRESHOLD_ATTRIB, Double.toString(QueryServicesOptions.DEFAULT_TRACING_PROBABILITY_THRESHOLD)));
-                    return new ProbabilitySampler(HTraceConfiguration.fromMap(items));
-                }
-            };
-
-    public static Sampler<?> getConfiguredSampler(PhoenixConnection connection) {
-        String tracelevel = connection.getQueryServices().getProps().get(QueryServices.TRACING_FREQ_ATTRIB, QueryServicesOptions.DEFAULT_TRACING_FREQ);
-        return getSampler(tracelevel, new ConfigurationAdapter.ConnectionConfigurationAdapter(
-                connection));
-    }
-
-    public static Sampler<?> getConfiguredSampler(Configuration conf) {
-        String tracelevel = conf.get(QueryServices.TRACING_FREQ_ATTRIB, QueryServicesOptions.DEFAULT_TRACING_FREQ);
-        return getSampler(tracelevel, new ConfigurationAdapter.HadoopConfigConfigurationAdapter(
-                conf));
-    }
-
-    public static Sampler<?> getConfiguredSampler(TraceStatement traceStatement) {
-      double samplingRate = traceStatement.getSamplingRate();
-      if (samplingRate >= 1.0) {
-          return Sampler.ALWAYS;
-      } else if (samplingRate < 1.0 && samplingRate > 0.0) {
-          Map<String, String> items = new HashMap<String, String>();
-          items.put(ProbabilitySampler.SAMPLER_FRACTION_CONF_KEY, Double.toString(samplingRate));
-          return new ProbabilitySampler(HTraceConfiguration.fromMap(items));
-      } else {
-          return Sampler.NEVER;
-      }
-    }
-
-    private static Sampler<?> getSampler(String traceLevel, ConfigurationAdapter conf) {
-        return Frequency.getSampler(traceLevel).builder.apply(conf);
-    }
-
-    public static void setSampling(Properties props, Frequency freq) {
-        props.setProperty(QueryServices.TRACING_FREQ_ATTRIB, freq.key);
-    }
-
-    /**
-     * Start a span with the currently configured sampling frequency. Creates a new 'current' span
-     * on this thread - the previous 'current' span will be replaced with this newly created span.
-     * <p>
-     * Hands back the direct span as you shouldn't be detaching the span - use {@link TraceRunnable}
-     * instead to detach a span from this operation.
-     * @param connection from which to read parameters
-     * @param string description of the span to start
-     * @return the underlying span.
-     */
-    public static TraceScope startNewSpan(PhoenixConnection connection, String string) {
-        Sampler<?> sampler = connection.getSampler();
-        TraceScope scope = Trace.startSpan(string, sampler);
-        addCustomAnnotationsToSpan(scope.getSpan(), connection);
-        return scope;
-    }
-
-    public static String getSpanName(Span span) {
-        return Tracing.TRACE_METRIC_PREFIX + span.getTraceId() + SEPARATOR + span.getParentId()
-                + SEPARATOR + span.getSpanId();
-    }
-
-    public static Span child(Span s, String d) {
-        if (s == null) {
-            return NullSpan.INSTANCE;
-        }
-        return s.child(d);
-    }
 
     /**
      * Wrap the callable in a TraceCallable, if tracing.
@@ -193,28 +56,24 @@ public class Tracing {
      *            thread name
      * @return The callable provided, wrapped if tracing, 'callable' if not.
      */
-    public static <V> Callable<V> wrap(Callable<V> callable, String description) {
-        if (Trace.isTracing()) {
-            return new TraceCallable<V>(Trace.currentSpan(), callable, description);
+    public static <V> Callable<V> wrap(Callable<V> callable, String description, Span parentSpan) {
+        if(parentSpan.getSpanContext().isValid()){
+            return new TraceUtil.TraceCallable<V>(callable, description, parentSpan);
         }
         return callable;
     }
+
 
     /**
      * Helper to automatically start and complete tracing on the given method, used in conjuction
      * with {@link CallRunner#run}.
      * <p>
-     * This will always attempt start a new span (which will always start, unless the
-     * {@link Sampler} says it shouldn't be traced). If you are just looking for flexible tracing
-     * that only turns on if the current thread/query is already tracing, use
-     * {@link #wrap(Callable, String)} or {@link Trace#wrap(Callable)}.
-     * <p>
+     *
      * Ensures that the trace is closed, even if there is an exception from the
      * {@link org.apache.phoenix.call.CallRunner.CallableThrowable}.
      * <p>
      * Generally, this should wrap a long-running operation.
-     * @param conn connection from which to determine if we are tracing, ala
-     *            {@link #startNewSpan(PhoenixConnection, String)}
+     * @param conn connection
      * @param desc description of the operation being run
      * @return the value returned from the call
      */
@@ -222,21 +81,9 @@ public class Tracing {
         return new TracingWrapper(conn, desc);
     }
 
-    private static void addCustomAnnotationsToSpan(@Nullable Span span, @NonNull PhoenixConnection conn) {
-        Preconditions.checkNotNull(conn);
-
-        if (span == null) {
-        	return;
-        }
-		Map<String, String> annotations = conn.getCustomTracingAnnotations();
-		// copy over the annotations as bytes
-		for (Map.Entry<String, String> annotation : annotations.entrySet()) {
-			span.addKVAnnotation(toBytes(annotation.getKey()), toBytes(annotation.getValue()));
-        }
-    }
 
     private static class TracingWrapper implements CallWrapper {
-        private TraceScope scope;
+        private Span span;
         private final PhoenixConnection conn;
         private final String desc;
 
@@ -247,12 +94,14 @@ public class Tracing {
 
         @Override
         public void before() {
-            scope = Tracing.startNewSpan(conn, "Executing " + desc);
+            span = TraceUtil.getGlobalTracer().spanBuilder("Executing " + desc).startSpan();
         }
 
         @Override
         public void after() {
-            scope.close();
+            if (span != null) {
+                span.end();
+            }
         }
     }
 
@@ -260,7 +109,6 @@ public class Tracing {
      * Track if the tracing system has been initialized for phoenix
      */
     private static boolean initialized = false;
-    private static TraceSpanReceiver traceSpanReceiver = null;
 
     /**
      * Add the phoenix span receiver so we can log the traces. We have a single trace source for the
@@ -270,8 +118,6 @@ public class Tracing {
         try {
             QueryServicesOptions options = QueryServicesOptions.withDefaults();
             if (!initialized && options.isTracingEnabled()) {
-                traceSpanReceiver = new TraceSpanReceiver();
-                Trace.addReceiver(traceSpanReceiver);
                 TraceWriter traceWriter = new TraceWriter(options.getTableName(), options.getTracingThreadPoolSize(), options.getTracingBatchSize());
                 traceWriter.start();
             }
@@ -288,10 +134,6 @@ public class Tracing {
         initialized = true;
     }
 
-    public static TraceSpanReceiver getTraceSpanReceiver() {
-        return traceSpanReceiver;
-    }
-
     public static boolean isTraceOn(String traceOption) {
         Preconditions.checkArgument(traceOption != null);
         if(traceOption.equalsIgnoreCase("ON")) return true;
@@ -306,6 +148,7 @@ public class Tracing {
      * @return true If tracing is enabled, false otherwise
      */
     public static boolean isTracing() {
-        return Trace.isTracing();
+        //TODO: Currently setting it to false will investigate
+        return false;
     }
 }

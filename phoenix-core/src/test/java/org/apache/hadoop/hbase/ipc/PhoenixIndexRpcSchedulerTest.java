@@ -159,7 +159,7 @@ public class PhoenixIndexRpcSchedulerTest {
         RequestHeader header = RequestHeader.newBuilder().setPriority(priority).build();
         RpcServer server = RpcServerFactory.createRpcServer(null, "test-rpcserver", Lists.newArrayList(new BlockingServiceAndInterface(
                 SERVICE, null)), isa, conf, scheduler);
-        ServerCall call = Mockito.mock(ServerCall.class);
+        RpcCall call = Mockito.mock(ServerCall.class);
         when(call.getHeader()).thenReturn(header);
         when(call.getRequestUser()).thenReturn(Optional.empty());
         Mockito.when(task.getRpcCall()).thenReturn(call);

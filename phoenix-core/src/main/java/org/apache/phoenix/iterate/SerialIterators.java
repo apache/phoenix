@@ -97,7 +97,8 @@ public class SerialIterators extends BaseResultIterators {
                 flattenedScans = Lists.reverse(flattenedScans);
             }
             final List<Scan> finalScans = flattenedScans;
-            Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
+            //TODO: Parent Scan Description "Serial scanner for table: " + tableRef.getTable().getPhysicalName().getString()
+            Future<PeekingResultIterator> future = executor.submit(new JobCallable<PeekingResultIterator>() {
                 @Override
                 public PeekingResultIterator call() throws Exception {
                     PeekingResultIterator itr = new SerialIterator(finalScans, tableName, renewLeaseThreshold, offset, caches);
@@ -118,7 +119,7 @@ public class SerialIterators extends BaseResultIterators {
                 public TaskExecutionMetricsHolder getTaskExecutionMetric() {
                     return taskMetrics;
                 }
-            }, "Serial scanner for table: " + tableRef.getTable().getPhysicalName().getString()));
+            });
             // Add our singleton Future which will execute serially
             nestedFutures.add(Collections.singletonList(new Pair<Scan, Future<PeekingResultIterator>>(flattenedScans.get(0), future)));
         }

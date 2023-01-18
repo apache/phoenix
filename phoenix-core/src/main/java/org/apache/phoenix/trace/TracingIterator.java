@@ -19,38 +19,40 @@ package org.apache.phoenix.trace;
 
 import java.sql.SQLException;
 
+import io.opentelemetry.api.trace.Span;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.htrace.TraceScope;
 
 /**
  * A simple iterator that closes the trace scope when the iterator is closed.
  */
 public class TracingIterator extends DelegateResultIterator {
 
-    private TraceScope scope;
+    private Span parentSpan;
     private boolean started;
 
     /**
-     * @param scope a scope with a non-null span
+     * @param parentSpan a span with a non-null span
      * @param iterator delegate
      */
-    public TracingIterator(TraceScope scope, ResultIterator iterator) {
+    public TracingIterator(Span parentSpan, ResultIterator iterator) {
         super(iterator);
-        this.scope = scope;
+        this.parentSpan = parentSpan;
     }
 
     @Override
     public void close() throws SQLException {
-        scope.close();
+        if(parentSpan != null){
+            parentSpan.end();
+        }
         super.close();
     }
 
     @Override
     public Tuple next() throws SQLException {
         if (!started) {
-            scope.getSpan().addTimelineAnnotation("First request completed");
+            parentSpan.addEvent("First request completed");
             started = true;
         }
         return super.next();
@@ -58,6 +60,6 @@ public class TracingIterator extends DelegateResultIterator {
 
 	@Override
 	public String toString() {
-		return "TracingIterator [scope=" + scope + ", started=" + started + "]";
+		return "TracingIterator [parentSpan=" + parentSpan + ", started=" + started + "]";
 	}
 }

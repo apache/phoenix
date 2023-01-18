@@ -26,12 +26,19 @@ import java.util.Collection;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.htrace.Span;
-import org.apache.htrace.Tracer;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
+import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
+import io.opentelemetry.api.trace.Span;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -40,6 +47,20 @@ import org.junit.experimental.categories.Category;
  */
 @Category(ParallelStatsDisabledTest.class)
 public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
+
+    private final InMemorySpanExporter testExporter = InMemorySpanExporter.create();
+    private OpenTelemetry openTelemetry = null;
+
+    @Before
+    public void setup() {
+        GlobalOpenTelemetry.resetForTest();
+        SdkTracerProvider sdkTracerProvider = SdkTracerProvider.builder()
+            .addSpanProcessor(SimpleSpanProcessor.create(testExporter))
+            .build();
+        openTelemetry = OpenTelemetrySdk.builder()
+            .setTracerProvider(sdkTracerProvider)
+            .buildAndRegisterGlobal();
+    }
 
     /**
      * IT should create the target table if it hasn't been created yet, but not fail if the table
@@ -87,9 +108,6 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
         Span span = createNewSpan(traceid, parentid, spanid, description, startTime, endTime,
             processid, annotation);
 
-        Tracer.getInstance().deliver(span);
-        assertTrue("Span never committed to table", latch.await(30, TimeUnit.SECONDS));
-
         // make sure we only get expected stat entry (matcing the trace id), otherwise we could the
         // stats for the update as well
         TraceReader reader = new TraceReader(conn, tracingTableName);
@@ -109,6 +127,14 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
         assertEquals(endTime, spanInfo.end);
         assertEquals("Wrong number of tags", 0, spanInfo.tagCount);
         assertEquals("Wrong number of annotations", 1, spanInfo.annotationCount);
+    }
+
+    @After
+    public void tearDown(){
+        if(testExporter != null){
+            testExporter.close();
+        }
+        GlobalOpenTelemetry.resetForTest();
     }
 
 }

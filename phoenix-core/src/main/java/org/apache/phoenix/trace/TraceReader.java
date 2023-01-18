@@ -28,8 +28,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
-import org.apache.htrace.Span;
-import org.apache.htrace.Trace;
+import io.opentelemetry.api.trace.Span;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.query.QueryServices;
@@ -47,6 +46,7 @@ import org.apache.phoenix.thirdparty.com.google.common.primitives.Longs;
 public class TraceReader {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TraceReader.class);
+    public static final long ROOT_SPAN_ID = 0x74ace;
     private final Joiner comma = Joiner.on(',');
     private String knownColumns;
     {
@@ -124,7 +124,7 @@ public class TraceReader {
 
             // search the spans to determine the if we have a known parent
             SpanInfo parentSpan = null;
-            if (parent != Span.ROOT_SPAN_ID) {
+            if (parent != ROOT_SPAN_ID) {
                 // find the parent
                 for (SpanInfo p : trace.spans) {
                     if (p.id == parent) {
@@ -154,10 +154,10 @@ public class TraceReader {
             if (parentSpan != null) {
                 // add this as a child to the parent span
                 parentSpan.children.add(spanInfo);
-            } else if (parent != Span.ROOT_SPAN_ID) {
+            } else if (parent != ROOT_SPAN_ID) {
                 // add the span to the orphan pile to check for the remaining spans we see
                 LOGGER.info(addCustomAnnotations("No parent span found for span: " + span + " (root span id: "
-                        + Span.ROOT_SPAN_ID + ")"));
+                        + ROOT_SPAN_ID + ")"));
                 orphans.add(spanInfo);
             }
 
@@ -332,9 +332,9 @@ public class TraceReader {
         @Override
         public int compareTo(SpanInfo o) {
             // root span always comes first
-            if (this.parentId == Span.ROOT_SPAN_ID) {
+            if (this.parentId == ROOT_SPAN_ID) {
                 return -1;
-            } else if (o.parentId == Span.ROOT_SPAN_ID) {
+            } else if (o.parentId == ROOT_SPAN_ID) {
                 return 1;
             }
 
@@ -354,7 +354,7 @@ public class TraceReader {
             sb.append("\tdescription=" + description);
             sb.append("\n");
             sb.append("\tparent="
-                    + (parent == null ? (parentId == Span.ROOT_SPAN_ID ? "ROOT" : "[orphan - id: "
+                    + (parent == null ? (parentId == ROOT_SPAN_ID ? "ROOT" : "[orphan - id: "
                             + parentId + "]") : parent.id));
             sb.append("\n");
             sb.append("\tstart,end=" + start + "," + end);

@@ -17,11 +17,10 @@
  */
 package org.apache.phoenix.trace;
 
+import io.opentelemetry.api.trace.Span;
 import java.nio.charset.StandardCharsets;
-
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.htrace.Span;
 
 /**
  * Utilities for tracing
@@ -36,8 +35,7 @@ public class TracingUtils {
     public static final String METRICS_MARKER_CONTEXT = "marker";
 
     public static void addAnnotation(Span span, String message, int value) {
-        span.addKVAnnotation(message.getBytes(StandardCharsets.UTF_8),
-            Bytes.toBytes(Integer.toString(value)));
+        span.setAttribute(message, value);
     }
 
     public static Pair<String, String> readAnnotation(byte[] key, byte[] value) {

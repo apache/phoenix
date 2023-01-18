@@ -31,6 +31,16 @@
   <includeBaseDirectory>true</includeBaseDirectory>
 
   <!-- Components that we don't want in jars that are used with other libraries, but we want for a standalone client -->
+  <dependencySets>
+  <dependencySet>
+    <unpack>false</unpack>
+    <outputDirectory>/trace</outputDirectory>
+    <includes>
+      <include>io.opentelemetry.javaagent:opentelemetry-javaagent</include>
+    </includes>
+  </dependencySet>
+  </dependencySets>
+  
   <componentDescriptors>
     <componentDescriptor>src/build/components/all-common-jars.xml</componentDescriptor>
     <componentDescriptor>src/build/components/all-common-files.xml</componentDescriptor>

@@ -123,8 +123,6 @@ public class PhoenixMetricsSink implements MetricsSink {
             try {
                 // create the phoenix connection
                 Properties props = new Properties();
-                props.setProperty(QueryServices.TRACING_FREQ_ATTRIB,
-                        Tracing.Frequency.NEVER.getKey());
                 org.apache.hadoop.conf.Configuration conf = HBaseConfiguration.create();
                 Connection conn = QueryUtil.getConnectionOnServer(props, conf);
                 // enable bulk loading when we have enough data

@@ -38,11 +38,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import io.opentelemetry.api.trace.Span;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.htrace.Span;
-import org.apache.htrace.TimelineAnnotation;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -51,7 +50,6 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
@@ -62,7 +60,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
- * Sink for the trace spans pushed into the queue by {@link TraceSpanReceiver}. The class
+ * Sink for the trace spans pushed into the queue by . The class
  * instantiates a thread pool of configurable size, which will pull the data from queue and write to
  * the Phoenix Trace Table in batches. Various configuration options include thread pool size and
  * batch commit size.
@@ -90,7 +88,6 @@ public class TraceWriter {
     private String tableName;
     private int batchSize;
     private int numThreads;
-    private TraceSpanReceiver traceSpanReceiver;
 
     protected ScheduledExecutorService executor;
 
@@ -103,14 +100,6 @@ public class TraceWriter {
 
     public void start() {
 
-        traceSpanReceiver = getTraceSpanReceiver();
-        if (traceSpanReceiver == null) {
-            LOGGER.warn(
-                "No receiver has been initialized for TraceWriter. Traces will not be written.");
-            LOGGER.warn("Restart Phoenix to try again.");
-            return;
-        }
-
         ThreadFactoryBuilder builder = new ThreadFactoryBuilder();
         builder.setDaemon(true).setNameFormat("PHOENIX-METRICS-WRITER");
         executor = Executors.newScheduledThreadPool(this.numThreads, builder.build());
@@ -122,10 +111,6 @@ public class TraceWriter {
         LOGGER.info("Writing tracing metrics to phoenix table");
     }
 
-    @VisibleForTesting
-    protected TraceSpanReceiver getTraceSpanReceiver() {
-        return Tracing.getTraceSpanReceiver();
-    }
 
     public class FlushMetrics implements Runnable {
 
@@ -139,6 +124,7 @@ public class TraceWriter {
         @Override
         public void run() {
             if (conn == null) return;
+            /* TODO: Understand what we are trying to do here
             while (!traceSpanReceiver.isSpanAvailable()) {
                 Span span = traceSpanReceiver.getSpan();
                 if (null == span) break;
@@ -152,6 +138,8 @@ public class TraceWriter {
                     counter = 0;
                 }
             }
+
+             */
         }
 
         private void addToBatch(Span span) {
@@ -165,20 +153,21 @@ public class TraceWriter {
             // prepared
             List<String> variableValues = new ArrayList<String>();
             keys.add(TRACE.columnName);
-            values.add(span.getTraceId());
+            values.add(span.getSpanContext().getTraceId());
 
             keys.add(DESCRIPTION.columnName);
             values.add(VARIABLE_VALUE);
-            variableValues.add(span.getDescription());
+            variableValues.add(span.toString());
 
             keys.add(SPAN.traceName);
-            values.add(span.getSpanId());
+            values.add(span.getSpanContext().getSpanId());
 
             keys.add(PARENT.traceName);
-            values.add(span.getParentId());
+            //TODO: Check if there is a way to get parent id
+            values.add(span.getSpanContext().getSpanId());
 
-            keys.add(START.traceName);
-            values.add(span.getStartTimeMillis());
+            /*keys.add(START.traceName);
+            values.add(span.getSpanContext()getStartTimeMillis());
 
             keys.add(END.traceName);
             values.add(span.getStopTimeMillis());
@@ -239,8 +228,11 @@ public class TraceWriter {
             } catch (SQLException e) {
                 LOGGER.error("Could not write metric: \n" + span + " to prepared statement:\n" + stmt,
                     e);
-            }
+            }*
+
+             */
         }
+
     }
 
     public static String getDynamicColumnName(String family, String column, int count) {
@@ -264,7 +256,7 @@ public class TraceWriter {
         try {
             // create the phoenix connection
             Properties props = new Properties();
-            props.setProperty(QueryServices.TRACING_FREQ_ATTRIB, Tracing.Frequency.NEVER.getKey());
+            //props.setProperty(QueryServices.TRACING_FREQ_ATTRIB, Tracing.Frequency.NEVER.getKey());
             Configuration conf = HBaseConfiguration.create();
             Connection conn = QueryUtil.getConnectionOnServer(props, conf);
 

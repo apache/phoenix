@@ -29,6 +29,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -55,9 +57,6 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.wal.WALEdit;
-import org.apache.htrace.Span;
-import org.apache.htrace.Trace;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.LockManager.RowLock;
@@ -77,8 +76,7 @@ import org.apache.phoenix.hbase.index.write.RecoveryIndexWriter;
 import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.trace.TracingUtils;
-import org.apache.phoenix.trace.util.NullSpan;
+import org.apache.phoenix.trace.TraceUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
@@ -489,11 +487,8 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
       }
 
       // get the current span, or just use a null-span to avoid a bunch of if statements
-      try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
-          Span current = scope.getSpan();
-          if (current == null) {
-              current = NullSpan.INSTANCE;
-          }
+      Span span = TraceUtil.getGlobalTracer().spanBuilder("Starting to build index updates").startSpan();
+      try (Scope scope = span.makeCurrent()) {
           long start = EnvironmentEdgeManager.currentTimeMillis();
 
           // get the index updates for all elements in this batch
@@ -510,8 +505,8 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
               metricSource.incrementNumSlowIndexPrepareCalls(dataTableName);
           }
           metricSource.updateIndexPrepareTime(dataTableName, duration);
-          current.addTimelineAnnotation("Built index updates, doing preStep");
-          TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
+          span.addEvent("Built index updates, doing preStep");
+          span.addEvent("index update count :" + Bytes.toBytes(indexUpdates.size()));
           byte[] tableName = c.getEnvironment().getRegion().getTableDescriptor().getTableName().getName();
           Iterator<Pair<Mutation, byte[]>> indexUpdatesItr = indexUpdates.iterator();
           List<Mutation> localUpdates = new ArrayList<Mutation>(indexUpdates.size());
@@ -605,15 +600,10 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
           return;
       }
 
-      // get the current span, or just use a null-span to avoid a bunch of if statements
-      try (TraceScope scope = Trace.startSpan("Completing index writes")) {
-          Span current = scope.getSpan();
-          if (current == null) {
-              current = NullSpan.INSTANCE;
-          }
+      Span span = TraceUtil.getGlobalTracer().spanBuilder("Completing index writes").startSpan();
+      try (Scope scope = span.makeCurrent()) {
           long start = EnvironmentEdgeManager.currentTimeMillis();
-          
-          current.addTimelineAnnotation("Actually doing index update for first time");
+          span.addEvent("Actually doing index update for first time");
           writer.writeAndHandleFailure(context.indexUpdates, false, context.clientVersion);
 
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
@@ -625,6 +615,8 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
               metricSource.incrementNumSlowIndexWriteCalls(dataTableName);
           }
           metricSource.updateIndexWriteTime(dataTableName, duration);
+      } finally {
+        span.end();
       }
   }
 

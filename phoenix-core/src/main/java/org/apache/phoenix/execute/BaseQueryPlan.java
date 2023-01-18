@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.opentelemetry.api.trace.Span;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
@@ -34,7 +35,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
@@ -76,11 +76,11 @@ import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.trace.TraceUtil;
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.trace.TracingIterator;
-import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
@@ -381,11 +381,11 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
 
         // wrap the iterator so we start/end tracing as we expect
-        if (Tracing.isTracing()) {
-            TraceScope scope = Tracing.startNewSpan(context.getConnection(),
-                    "Creating basic query for " + getPlanSteps(iterator));
-            if (scope.getSpan() != null) return new TracingIterator(scope, iterator);
-        }
+
+        Span span = TraceUtil.getGlobalTracer().spanBuilder("Creating basic query for " + getPlanSteps(iterator)).startSpan();
+
+        if (span.isRecording()) return new TracingIterator(span, iterator);
+
         return iterator;
     }
 
