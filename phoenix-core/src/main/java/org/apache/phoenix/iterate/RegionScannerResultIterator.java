@@ -58,7 +58,11 @@ public class RegionScannerResultIterator extends BaseResultIterator {
         synchronized (scanner) {
             try {
                 // TODO: size
-                List<Cell> results = useQualifierAsIndex ? new EncodedColumnQualiferCellsList(minMaxQualifiers.getFirst(), minMaxQualifiers.getSecond(), encodingScheme) :  new ArrayList<Cell>();
+                List<Cell> results =
+                        useQualifierAsIndex
+                                ? new EncodedColumnQualiferCellsList(minMaxQualifiers.getFirst(),
+                                        minMaxQualifiers.getSecond(), encodingScheme)
+                                : new ArrayList<>();
                 // Results are potentially returned even when the return value of s.next is false
                 // since this is an indication of whether or not there are more values after the
                 // ones returned
@@ -72,7 +76,9 @@ public class RegionScannerResultIterator extends BaseResultIterator {
                 }
                 // We instantiate a new tuple because in all cases currently we hang on to it
                 // (i.e. to compute and hold onto the TopN).
-                Tuple tuple = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
+                Tuple tuple =
+                        useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple()
+                                : new MultiKeyValueTuple();
                 tuple.setKeyValues(results);
                 return tuple;
             } catch (IOException e) {

@@ -24,29 +24,28 @@ import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.schema.tuple.Tuple;
 
-
 /**
  * Result scanner that sorts aggregated rows by columns specified in the ORDER BY clause.
  * <p>
- * Note that currently the sort is entirely done in memory. 
- *  
+ * Note that currently the sort is entirely done in memory.
  * 
  * @since 0.1
  */
 public class OrderedAggregatingResultIterator extends OrderedResultIterator implements AggregatingResultIterator {
 
     public OrderedAggregatingResultIterator(AggregatingResultIterator delegate,
-            List<OrderByExpression> orderByExpressions, boolean spoolingEnabled, long thresholdBytes,
-            Integer limit, Integer offset)
-                    throws SQLException {
-        super(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, limit, offset);
+            List<OrderByExpression> orderByExpressions, boolean spoolingEnabled,
+            long thresholdBytes, Integer limit, Integer offset) throws SQLException {
+        super(delegate, orderByExpressions, spoolingEnabled, thresholdBytes);
+        this.setLimit(limit);
+        this.setOffset(offset);
     }
 
     @Override
     protected AggregatingResultIterator getDelegate() {
         return (AggregatingResultIterator)super.getDelegate();
     }
-    
+
     @Override
     public Tuple next() throws SQLException {
         Tuple tuple = super.next();
@@ -55,7 +54,7 @@ public class OrderedAggregatingResultIterator extends OrderedResultIterator impl
         }
         return tuple;
     }
-    
+
     @Override
     public Aggregator[] aggregate(Tuple result) {
         return getDelegate().aggregate(result);

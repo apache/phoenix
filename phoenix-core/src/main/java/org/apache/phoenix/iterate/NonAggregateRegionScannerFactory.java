@@ -91,30 +91,34 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         int offset = 0;
         if (ScanUtil.isLocalIndex(scan)) {
             /*
-             * For local indexes, we need to set an offset on row key expressions to skip
-             * the region start key.
+             * For local indexes, we need to set an offset on row key expressions to skip the region
+             * start key.
              */
             Region region = getRegion();
-            offset = region.getRegionInfo().getStartKey().length != 0 ?
-                    region.getRegionInfo().getStartKey().length :
-                    region.getRegionInfo().getEndKey().length;
+            offset =
+                    region.getRegionInfo().getStartKey().length != 0
+                            ? region.getRegionInfo().getStartKey().length
+                            : region.getRegionInfo().getEndKey().length;
             ScanUtil.setRowKeyOffset(scan, offset);
         }
         byte[] scanOffsetBytes = scan.getAttribute(BaseScannerRegionObserver.SCAN_OFFSET);
         Integer scanOffset = null;
         if (scanOffsetBytes != null) {
-            scanOffset = (Integer)PInteger.INSTANCE.toObject(scanOffsetBytes);
+            scanOffset = (Integer) PInteger.INSTANCE.toObject(scanOffsetBytes);
         }
         RegionScanner innerScanner = s;
-        PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
+        PTable.QualifierEncodingScheme encodingScheme =
+                EncodedColumnsUtil.getQualifierEncodingScheme(scan);
         boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
 
         Set<KeyValueColumnExpression> arrayKVRefs = Sets.newHashSet();
         KeyValueSchema kvSchema = null;
         ValueBitSet kvSchemaBitSet = null;
-        Expression[] arrayFuncRefs = deserializeArrayPositionalExpressionInfoFromScan(scan, innerScanner, arrayKVRefs);
+        Expression[] arrayFuncRefs =
+                deserializeArrayPositionalExpressionInfoFromScan(scan, innerScanner, arrayKVRefs);
         if (arrayFuncRefs != null) {
-            KeyValueSchema.KeyValueSchemaBuilder builder = new KeyValueSchema.KeyValueSchemaBuilder(0);
+            KeyValueSchema.KeyValueSchemaBuilder builder =
+                    new KeyValueSchema.KeyValueSchemaBuilder(0);
             for (Expression expression : arrayFuncRefs) {
                 builder.addField(expression);
             }
@@ -141,39 +145,38 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
 
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
-        boolean useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(getMinMaxQualifiersFromScan(scan))
-                && scan.getAttribute(BaseScannerRegionObserver.TOPN) != null;
+        boolean useQualifierAsIndex =
+                EncodedColumnsUtil.useQualifierAsIndex(getMinMaxQualifiersFromScan(scan))
+                        && scan.getAttribute(BaseScannerRegionObserver.TOPN) != null;
         // setting dataRegion in case of a non-coprocessor environment
-        if (dataRegion == null &&
-                env.getConfiguration().get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY) != null) {
+        if (dataRegion == null
+                && env.getConfiguration().get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY) != null) {
             dataRegion = env.getRegion();
         }
-        innerScanner = getWrappedScanner(env, innerScanner, arrayKVRefs, arrayFuncRefs, offset, scan, dataColumns,
-                tupleProjector, dataRegion, indexMaintainer, tx, viewConstants, kvSchema, kvSchemaBitSet, j == null ? p : null,
-                ptr, useQualifierAsIndex);
+        innerScanner =
+                getWrappedScanner(env, innerScanner, arrayKVRefs, arrayFuncRefs, offset, scan,
+                    dataColumns, tupleProjector, dataRegion, indexMaintainer, tx, viewConstants,
+                    kvSchema, kvSchemaBitSet, j == null ? p : null, ptr, useQualifierAsIndex);
 
         final ImmutableBytesPtr tenantId = ScanUtil.getTenantId(scan);
         if (j != null) {
-            innerScanner = new HashJoinRegionScanner(env, innerScanner, scan, arrayKVRefs, arrayFuncRefs,
-                    p, j, tenantId, useQualifierAsIndex,
-                    useNewValueColumnQualifier);
+            innerScanner =
+                    new HashJoinRegionScanner(env, innerScanner, scan, arrayKVRefs, arrayFuncRefs,
+                            p, j, tenantId, useQualifierAsIndex, useNewValueColumnQualifier);
         }
         if (scanOffset != null) {
-            innerScanner = getOffsetScanner(innerScanner, new OffsetResultIterator(
-                            new RegionScannerResultIterator(innerScanner, getMinMaxQualifiersFromScan(scan), encodingScheme),
-                            scanOffset, getPageSizeMsForRegionScanner(scan)),
-                    scan.getAttribute(QueryConstants.LAST_SCAN) != null);
+            RegionScannerResultIterator delegate =
+                    new RegionScannerResultIterator(innerScanner, getMinMaxQualifiersFromScan(scan),
+                            encodingScheme);
+            OffsetResultIterator iterator =
+                    new OffsetResultIterator(delegate, scanOffset,
+                            getPageSizeMsForRegionScanner(scan));
+            boolean isLastScan = scan.getAttribute(QueryConstants.LAST_SCAN) != null;
+            innerScanner = getOffsetScanner(innerScanner, iterator, isLastScan);
         }
-        boolean spoolingEnabled =
-                env.getConfiguration().getBoolean(
-                        QueryServices.SERVER_ORDERBY_SPOOLING_ENABLED_ATTRIB,
-                        QueryServicesOptions.DEFAULT_SERVER_ORDERBY_SPOOLING_ENABLED);
-        long thresholdBytes =
-                env.getConfiguration()
-                        .getLongBytes(QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB,
-                        QueryServicesOptions.DEFAULT_SERVER_SPOOL_THRESHOLD_BYTES);
         final OrderedResultIterator iterator =
-                deserializeFromScan(scan, innerScanner, spoolingEnabled, thresholdBytes);
+                deserializeFromScan(scan, innerScanner, isSpoolingEnabled(),
+                    getSpoolThresholdBytes());
         if (iterator == null) {
             return innerScanner;
         }
@@ -181,9 +184,21 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         return getTopNScanner(env, innerScanner, iterator, tenantId);
     }
 
+    private boolean isSpoolingEnabled() {
+        return env.getConfiguration().getBoolean(
+            QueryServices.SERVER_ORDERBY_SPOOLING_ENABLED_ATTRIB,
+            QueryServicesOptions.DEFAULT_SERVER_ORDERBY_SPOOLING_ENABLED);
+    }
+
+    private long getSpoolThresholdBytes() {
+        return env.getConfiguration().getLongBytes(
+            QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB,
+            QueryServicesOptions.DEFAULT_SERVER_SPOOL_THRESHOLD_BYTES);
+    }
+
     @VisibleForTesting
     static OrderedResultIterator deserializeFromScan(Scan scan, RegionScanner s,
-                                                     boolean spoolingEnabled, long thresholdBytes) {
+            boolean spoolingEnabled, long thresholdBytes) {
         byte[] topN = scan.getAttribute(BaseScannerRegionObserver.TOPN);
         if (topN == null) {
             return null;
@@ -195,9 +210,9 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                 (scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION) == null)
                         || (VersionUtil.decodeMajorVersion(clientVersion) > 5)
                         || (VersionUtil.decodeMajorVersion(clientVersion) == 5
-                        && clientVersion < MetaDataProtocol.MIN_5_x_DISABLE_SERVER_SPOOL_THRESHOLD)
+                                && clientVersion < MetaDataProtocol.MIN_5_x_DISABLE_SERVER_SPOOL_THRESHOLD)
                         || (VersionUtil.decodeMajorVersion(clientVersion) == 4
-                        && clientVersion < MetaDataProtocol.MIN_4_x_DISABLE_SERVER_SPOOL_THRESHOLD);
+                                && clientVersion < MetaDataProtocol.MIN_4_x_DISABLE_SERVER_SPOOL_THRESHOLD);
         ByteArrayInputStream stream = new ByteArrayInputStream(topN); // TODO: size?
         try {
             DataInputStream input = new DataInputStream(stream);
@@ -215,10 +230,15 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                 orderByExpression.readFields(input);
                 orderByExpressions.add(orderByExpression);
             }
-            PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
-            ResultIterator inner = new RegionScannerResultIterator(s, EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan), encodingScheme);
+            PTable.QualifierEncodingScheme encodingScheme =
+                    EncodedColumnsUtil.getQualifierEncodingScheme(scan);
+            ResultIterator inner =
+                    new RegionScannerResultIterator(s,
+                            EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan), encodingScheme);
+            Integer limitToSet = limit >= 0 ? limit : null;
             return new OrderedResultIterator(inner, orderByExpressions, spoolingEnabled,
-                    thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize, getPageSizeMsForRegionScanner(scan));
+                    thresholdBytes).setLimit(limitToSet).setEstimatedRowSize(estimatedRowSize)
+                            .setPageSizeMs(getPageSizeMsForRegionScanner(scan));
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -230,8 +250,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         }
     }
 
-    private Expression[] deserializeArrayPositionalExpressionInfoFromScan(Scan scan, RegionScanner s,
-                                                                          Set<KeyValueColumnExpression> arrayKVRefs) {
+    private Expression[] deserializeArrayPositionalExpressionInfoFromScan(Scan scan,
+            RegionScanner s, Set<KeyValueColumnExpression> arrayKVRefs) {
         byte[] specificArrayIdx = scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX);
         if (specificArrayIdx == null) {
             return null;
@@ -241,9 +261,12 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             DataInputStream input = new DataInputStream(stream);
             int arrayKVRefSize = WritableUtils.readVInt(input);
             for (int i = 0; i < arrayKVRefSize; i++) {
-                PTable.ImmutableStorageScheme scheme = EncodedColumnsUtil.getImmutableStorageScheme(scan);
-                KeyValueColumnExpression kvExp = scheme != PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN ? new SingleCellColumnExpression(scheme)
-                        : new KeyValueColumnExpression();
+                PTable.ImmutableStorageScheme scheme =
+                        EncodedColumnsUtil.getImmutableStorageScheme(scan);
+                KeyValueColumnExpression kvExp =
+                        scheme != PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN
+                                ? new SingleCellColumnExpression(scheme)
+                                : new KeyValueColumnExpression();
                 kvExp.readFields(input);
                 arrayKVRefs.add(kvExp);
             }
@@ -266,18 +289,19 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         }
     }
 
-
     private RegionScanner getOffsetScanner(final RegionScanner s,
-                                           final OffsetResultIterator iterator, final boolean isLastScan) throws IOException {
+            final OffsetResultIterator iterator, final boolean isLastScan) throws IOException {
         final Tuple firstTuple;
         final Region region = getRegion();
         region.startRegionOperation();
         try {
             Tuple tuple = iterator.next();
             if (tuple == null && !isLastScan) {
-                List<Cell> kvList = new ArrayList<Cell>(1);
-                KeyValue kv = new KeyValue(QueryConstants.OFFSET_ROW_KEY_BYTES, QueryConstants.OFFSET_FAMILY,
-                        QueryConstants.OFFSET_COLUMN, PInteger.INSTANCE.toBytes(iterator.getRemainingOffset()));
+                List<Cell> kvList = new ArrayList<>(1);
+                KeyValue kv =
+                        new KeyValue(QueryConstants.OFFSET_ROW_KEY_BYTES,
+                                QueryConstants.OFFSET_FAMILY, QueryConstants.OFFSET_COLUMN,
+                                PInteger.INSTANCE.toBytes(iterator.getRemainingOffset()));
                 kvList.add(kv);
                 Result r = Result.create(kvList);
                 firstTuple = new ResultTuple(r);
@@ -301,14 +325,17 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             @Override
             public boolean next(List<Cell> results) throws IOException {
                 try {
-                    if (isFilterDone()) { return false; }
+                    if (isFilterDone()) {
+                        return false;
+                    }
                     for (int i = 0; i < tuple.size(); i++) {
                         results.add(tuple.getValue(i));
                     }
                     tuple = iterator.next();
                     return !isFilterDone();
                 } catch (Throwable t) {
-                    ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
+                    ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(),
+                        t);
                     return false;
                 }
             }
@@ -323,7 +350,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                             iterator.close();
                         }
                     } catch (SQLException e) {
-                        ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), e);
+                        ServerUtil.throwIOException(
+                            getRegion().getRegionInfo().getRegionNameAsString(), e);
                     }
                 }
             }
@@ -331,17 +359,16 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     }
 
     /**
-     *  Return region scanner that does TopN.
-     *  We only need to call startRegionOperation and closeRegionOperation when
-     *  getting the first Tuple (which forces running through the entire region)
-     *  since after this everything is held in memory
+     * Return region scanner that does TopN. We only need to call startRegionOperation and
+     * closeRegionOperation when getting the first Tuple (which forces running through the entire
+     * region) since after this everything is held in memory
      */
     private RegionScanner getTopNScanner(RegionCoprocessorEnvironment env, final RegionScanner s,
-                                         final OrderedResultIterator iterator, ImmutableBytesPtr tenantId) throws Throwable {
+            final OrderedResultIterator iterator, ImmutableBytesPtr tenantId) throws Throwable {
 
         final Tuple firstTuple;
         TenantCache tenantCache = GlobalCache.getTenantCache(env, tenantId);
-        long estSize = iterator.getEstimatedByteSize();
+        long estSize = iterator.getEstimatedRowSize();
         final MemoryManager.MemoryChunk chunk = tenantCache.getMemoryManager().allocate(estSize);
         final Region region = getRegion();
         region.startRegionOperation();
@@ -393,11 +420,12 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                     s.close();
                 } finally {
                     try {
-                        if(iterator != null) {
+                        if (iterator != null) {
                             iterator.close();
                         }
                     } catch (SQLException e) {
-                        ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), e);
+                        ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(),
+                            e);
                     } finally {
                         chunk.close();
                     }
