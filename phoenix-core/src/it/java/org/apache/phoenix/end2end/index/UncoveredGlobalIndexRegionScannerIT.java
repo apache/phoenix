@@ -327,19 +327,20 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
                                 " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')");
                 // Verify that with index hint, we will read from the index table
                 // even though val3 is not included by the index table
-                selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ val3 from "
+                selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ val2, val3 from "
                         + dataTableName + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')";
                 assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
             } else {
                 // Verify that an index hint is not necessary for an uncovered index
-                selectSql = "SELECT  val3 from " + dataTableName
+                selectSql = "SELECT  val2, val3 from " + dataTableName
                         + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')";
                 assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
             }
 
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
-            assertEquals("bcde", rs.getString(1));
+            assertEquals("bcd", rs.getString(1));
+            assertEquals("bcde", rs.getString(2));
             assertFalse(rs.next());
             conn.createStatement().execute("DROP INDEX " + indexTableName + " on " + dataTableName);
             conn.commit();
