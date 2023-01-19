@@ -138,7 +138,7 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
                 if (snapshotName != null) {
                   // result iterator to read snapshots
                   final TableSnapshotResultIterator tableSnapshotResultIterator = new TableSnapshotResultIterator(configuration, scan,
-                      scanMetricsHolder, queryPlan.getContext());
+                      scanMetricsHolder, queryPlan.getContext(), false);
                     peekingResultIterator = LookAheadResultIterator.wrap(tableSnapshotResultIterator);
                     LOGGER.info("Adding TableSnapshotResultIterator for scan: " + scan);
                 } else {
@@ -146,7 +146,7 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
                       new TableResultIterator(
                           queryPlan.getContext().getConnection().getMutationState(), scan,
                           scanMetricsHolder, renewScannerLeaseThreshold, queryPlan,
-                          this.scanGrouper);
+                          this.scanGrouper, false);
                   peekingResultIterator = LookAheadResultIterator.wrap(tableResultIterator);
                   LOGGER.info("Adding TableResultIterator for scan: " + scan);
                 }

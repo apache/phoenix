@@ -77,7 +77,9 @@ public class TableSnapshotResultIterator implements ResultIterator {
   private boolean closed = false;
   private StatementContext context;
 
-  public TableSnapshotResultIterator(Configuration configuration, Scan scan, ScanMetricsHolder scanMetricsHolder, StatementContext context)
+  private final boolean isConnInContext;
+
+  public TableSnapshotResultIterator(Configuration configuration, Scan scan, ScanMetricsHolder scanMetricsHolder, StatementContext context, boolean isConnInContext)
       throws IOException {
     this.configuration = configuration;
     this.currentRegion = -1;
@@ -95,6 +97,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
         PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
     this.rootDir = CommonFSUtils.getRootDir(configuration);
     this.fs = rootDir.getFileSystem(configuration);
+    this.isConnInContext = isConnInContext;
     init();
   }
 
@@ -156,7 +159,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
         RegionInfo hri = regions.get(this.currentRegion);
         this.scanIterator =
             new ScanningResultIterator(new SnapshotScanner(configuration, fs, restoreDir, htd, hri, scan),
-                scan, scanMetricsHolder, context);
+                scan, scanMetricsHolder, context, isConnInContext);
       } catch (Throwable e) {
         throw ServerUtil.parseServerException(e);
       }

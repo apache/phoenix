@@ -105,6 +105,8 @@ public class TableResultIterator implements ResultIterator {
     private Map<ImmutableBytesPtr,ServerCache> caches;
     private HashCacheClient hashCacheClient;
 
+    private final boolean isConnInContext;
+
     @VisibleForTesting // Exposed for testing. DON'T USE ANYWHERE ELSE!
     TableResultIterator() {
         this.scanMetricsHolder = null;
@@ -115,6 +117,7 @@ public class TableResultIterator implements ResultIterator {
         this.scanGrouper = null;
         this.caches = null;
         this.retry = 0;
+        this.isConnInContext = true;
     }
 
     public static enum RenewLeaseStatus {
@@ -123,11 +126,22 @@ public class TableResultIterator implements ResultIterator {
 
     public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
             long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper) throws SQLException {
-        this(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, null);
+        this(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, null, true);
     }
 
     public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
             long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper,Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
+        this(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, caches, true);
+    }
+
+    public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
+            long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper, boolean isConnInContext) throws SQLException {
+        this(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, null, isConnInContext);
+    }
+
+    public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
+            long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper,Map<ImmutableBytesPtr,ServerCache> caches,
+            boolean isConnInContext) throws SQLException {
         this.scan = scan;
         this.scanMetricsHolder = scanMetricsHolder;
         this.plan = plan;
@@ -140,6 +154,7 @@ public class TableResultIterator implements ResultIterator {
         this.caches = caches;
         this.retry=plan.getContext().getConnection().getQueryServices().getProps()
                 .getInt(QueryConstants.HASH_JOIN_CACHE_RETRIES, QueryConstants.DEFAULT_HASH_JOIN_CACHE_RETRIES);
+        this.isConnInContext = isConnInContext;
         ScanUtil.setScanAttributesForClient(scan, table, plan.getContext().getConnection());
     }
 
@@ -237,7 +252,7 @@ public class TableResultIterator implements ResultIterator {
             if (delegate == UNINITIALIZED_SCANNER) {
                 try {
                     this.scanIterator =
-                            new ScanningResultIterator(htable.getScanner(scan), scan, scanMetricsHolder, plan.getContext());
+                            new ScanningResultIterator(htable.getScanner(scan), scan, scanMetricsHolder, plan.getContext(), isConnInContext);
                 } catch (IOException e) {
                     Closeables.closeQuietly(htable);
                     throw ServerUtil.parseServerException(e);
