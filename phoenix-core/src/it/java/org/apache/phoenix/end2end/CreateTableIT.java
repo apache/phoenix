@@ -1328,6 +1328,33 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testCreateTableWithColumnQualifiersMultipleFamilies() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "A.INT INTEGER COLUMN_QUALIFIER_ID 11, A.INT2 INTEGER COLUMN_QUALIFIER_ID 13, " +
+                "B.INT3 INTEGER COLUMN_QUALIFIER_ID 12) " +
+                "(COLUMN_QUALIFIER_COUNTER \"A\" 14, \"B\" 13)";
+        conn.createStatement().execute(ddl);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable table = pconn.getTable(new PTableKey(null, tableName));
+
+        QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
+        assertNotEquals(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, encodingScheme);
+
+        PTable.EncodedCQCounter cqCounter = table.getEncodedCQCounter();
+        assertEquals(14, cqCounter.values().get("A").intValue());
+        assertEquals(13, cqCounter.values().get("B").intValue());
+        assertEquals(11, encodingScheme.decode(table.getColumnForColumnName("INT")
+                .getColumnQualifierBytes()));
+        assertEquals(13, encodingScheme.decode(table.getColumnForColumnName("INT2")
+                .getColumnQualifierBytes()));
+        assertEquals(12, encodingScheme.decode(table.getColumnForColumnName("INT3")
+                .getColumnQualifierBytes()));
+    }
+
+    @Test
     public void testCreateTableWithColumnQualifiersDuplicateCQ() throws Exception {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1339,23 +1366,50 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             fail("Duplicate Column Qualifiers");}
         catch (SQLException e) {
-            // expected
+            // expected DUPLICATE_CQ
+            if (e.getErrorCode() != SQLExceptionCode.DUPLICATE_CQ.getErrorCode())
+            {
+                fail("Duplicate Column Qualifiers");
+            }
         }
     }
 
     @Test
-    public void testCreateTableWithColumnQualifiersInvalid() throws Exception {
+    public void testCreateTableInvalidColumnQualifier() throws Exception {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
-                "INT INTEGER COLUMN_QUALIFIER_ID 9, INT2 INTEGER COLUMN_QUALIFIER_ID 11, " +
+                "INT INTEGER COLUMN_QUALIFIER_ID 11, INT2 INTEGER COLUMN_QUALIFIER_ID 9, " +
                 "INT3 INTEGER COLUMN_QUALIFIER_ID 14) (COLUMN_QUALIFIER_COUNTER \"0\" 15)";
         try {
             conn.createStatement().execute(ddl);
             fail("Invalid Column Qualifier");}
         catch (SQLException e) {
-            // expected
+            // expected INVALID_CQ
+            if (e.getErrorCode() != SQLExceptionCode.INVALID_CQ.getErrorCode())
+            {
+                fail("Invalid Column Qualifier");
+            }
+        }
+    }
+
+    @Test
+    public void testCreateTableInvalidColumnQualifierCounter() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER COLUMN_QUALIFIER_ID 11) (COLUMN_QUALIFIER_COUNTER \"0\" 8)";
+        try {
+            conn.createStatement().execute(ddl);
+            fail("Invalid Column Qualifier");}
+        catch (SQLException e) {
+            // expected INVALID_CQ
+            if (e.getErrorCode() != SQLExceptionCode.INVALID_CQ.getErrorCode())
+            {
+                fail("Invalid Column Qualifier");
+            }
         }
     }
 

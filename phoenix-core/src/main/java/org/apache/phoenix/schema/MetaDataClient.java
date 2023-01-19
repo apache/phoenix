@@ -2566,7 +2566,6 @@ public class MetaDataClient {
                     }
                     if (immutableStorageScheme != ONE_CELL_PER_COLUMN
                             && encodingScheme == NON_ENCODED_QUALIFIERS) {
-                        getEncodingScheme(tableProps, schemaName, tableName, transactionProvider);
                         throw new SQLExceptionInfo.Builder(
                                 SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES)
                                 .setSchemaName(schemaName).setTableName(tableName).build()
