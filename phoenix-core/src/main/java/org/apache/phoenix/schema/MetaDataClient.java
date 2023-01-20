@@ -2494,11 +2494,12 @@ public class MetaDataClient {
                         encodingScheme = parent.getEncodingScheme();
                     }
 
-                    immutableStorageScheme = (ImmutableStorageScheme) TableProperty.IMMUTABLE_STORAGE_SCHEME.getValue(tableProps);
-                    if (immutableStorageScheme == null) {
+                    ImmutableStorageScheme immutableStorageSchemeProp = (ImmutableStorageScheme) TableProperty.IMMUTABLE_STORAGE_SCHEME.getValue(tableProps);
+                    if (immutableStorageSchemeProp == null) {
                         immutableStorageScheme = parent.getImmutableStorageScheme();
                     } else {
-                        checkImmutableStorageSchemeForIndex(immutableStorageScheme, schemaName, tableName, transactionProvider);
+                        checkImmutableStorageSchemeForIndex(immutableStorageSchemeProp, schemaName, tableName, transactionProvider);
+                        immutableStorageScheme = immutableStorageSchemeProp;
                     }
 
                     if (immutableStorageScheme == SINGLE_CELL_ARRAY_WITH_OFFSETS) {
@@ -2526,10 +2527,10 @@ public class MetaDataClient {
                 } else {
                     encodingScheme = getEncodingScheme(tableProps, schemaName, tableName, transactionProvider);
 
-                    immutableStorageScheme =
+                    ImmutableStorageScheme immutableStorageSchemeProp =
                             (ImmutableStorageScheme) TableProperty.IMMUTABLE_STORAGE_SCHEME
                                     .getValue(tableProps);
-                    if (immutableStorageScheme == null) {
+                    if (immutableStorageSchemeProp == null) {
                         // Ignore default if transactional and column encoding is not supported
                         if (transactionProvider == null ||
                                 !transactionProvider.getTransactionProvider().isUnsupported(
@@ -2559,9 +2560,7 @@ public class MetaDataClient {
                             }
                         }
                     } else {
-                        if (!isImmutableRows) {
-                            immutableStorageScheme = ONE_CELL_PER_COLUMN;
-                        }
+                        immutableStorageScheme = isImmutableRows ? immutableStorageSchemeProp : ONE_CELL_PER_COLUMN;
                         checkImmutableStorageSchemeForIndex(immutableStorageScheme, schemaName, tableName, transactionProvider);
                     }
                     if (immutableStorageScheme != ONE_CELL_PER_COLUMN
@@ -2632,6 +2631,20 @@ public class MetaDataClient {
                 Integer encodedCQ = null;
                 if (!isPkColumn) {
                     if (colDef.getColumnQualifier() != null) {
+                        if (cqCounter.getNextQualifier(cqCounterFamily) > ENCODED_CQ_COUNTER_INITIAL_VALUE &&
+                                !inputCqCounters.containsKey(cqCounterFamily)) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_CQ)
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException();
+                        }
+
+                        if (statement.getFamilyCQCounters() == null ||
+                                statement.getFamilyCQCounters().get(cqCounterFamily) == null) {
+                            cqCounter.setValue(cqCounterFamily, colDef.getColumnQualifier());
+                            cqCounter.increment(cqCounterFamily);
+                            changedCqCounters.put(cqCounterFamily, cqCounter.getNextQualifier(cqCounterFamily));
+                        }
+
                         encodedCQ = colDef.getColumnQualifier();
                         if (encodedCQ < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE)
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_CQ)
@@ -2645,11 +2658,16 @@ public class MetaDataClient {
                                 .setSchemaName(schemaName)
                                 .setTableName(tableName).build().buildException();
                     }
-                    else if (isAppendOnlySchema) {
-                        encodedCQ = Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position);
-                    }
                     else {
-                        encodedCQ = cqCounter.getNextQualifier(cqCounterFamily);
+                        if (inputCqCounters.containsKey(cqCounterFamily))
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_CQ)
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException();
+
+                        if (isAppendOnlySchema)
+                            encodedCQ = Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position);
+                        else
+                            encodedCQ = cqCounter.getNextQualifier(cqCounterFamily);
                     }
                 }
                 byte[] columnQualifierBytes = null;

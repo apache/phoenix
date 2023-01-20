@@ -404,8 +404,16 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         Map<String, Integer> cqCounterValues = table.getEncodedCQCounter().values();
         ArrayList<String> cqCounters = new ArrayList<>(cqCounterValues.size());
         for(Map.Entry<String, Integer> entry : cqCounterValues.entrySet()) {
-            String def = "\"" + entry.getKey() + "\" " + entry.getValue().toString();
-            cqCounters.add(def);
+            Boolean include = table.getColumns().stream()
+                    .filter(c -> !table.getPKColumns().contains(c))
+                    .filter(pColumn -> pColumn.getFamilyName().getString().equalsIgnoreCase(entry.getKey()))
+                    .map(o -> table.getEncodingScheme().decode(o.getColumnQualifierBytes()))
+                    .max(Integer::compare).map(maxCounter -> maxCounter != entry.getValue() - 1)
+                    .orElse(false);
+            if (include) {
+                String def = "\"" + entry.getKey() + "\" " + entry.getValue().toString();
+                cqCounters.add(def);
+            }
         }
         if (cqCounters.size() > 0) {
             cqBuilder.append(" (");

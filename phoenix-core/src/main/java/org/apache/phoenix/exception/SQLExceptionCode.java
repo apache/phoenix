@@ -449,9 +449,12 @@ public enum SQLExceptionCode {
     UNABLE_TO_UPSERT_TASK(1146, "XCL46",
         "Error upserting records in SYSTEM.TASK table"),
     INVALID_CQ(1148, "XCL48",
-            "Error COLUMN_QUALIFIER is less than INITIAL_VALUE."),
+            "COLUMN_QUALIFIER is less than INITIAL_VALUE."),
     DUPLICATE_CQ(1149, "XCL49",
-            "Error duplicate COLUMN QUALIFIER."),
+            "Duplicate COLUMN_QUALIFIER."),
+    MISSING_CQ(1150, "XCL49",
+            "Missing COLUMN_QUALIFIER."),
+
 
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
