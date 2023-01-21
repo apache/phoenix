@@ -52,6 +52,7 @@ import java.util.Arrays;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
+import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.util.MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES;
 
 public class SchemaExtractionProcessor implements SchemaProcessor {
@@ -403,21 +404,23 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         StringBuilder cqBuilder = new StringBuilder();
         Map<String, Integer> cqCounterValues = table.getEncodedCQCounter().values();
         ArrayList<String> cqCounters = new ArrayList<>(cqCounterValues.size());
+
         for(Map.Entry<String, Integer> entry : cqCounterValues.entrySet()) {
             Boolean include = table.getColumns().stream()
                     .filter(c -> !table.getPKColumns().contains(c))
-                    .filter(pColumn -> pColumn.getFamilyName().getString().equalsIgnoreCase(entry.getKey()))
+                    .filter(pColumn -> table.getImmutableStorageScheme() == SINGLE_CELL_ARRAY_WITH_OFFSETS ?
+                            pColumn.getFamilyName().getString().equalsIgnoreCase(entry.getKey()) : true)
                     .map(o -> table.getEncodingScheme().decode(o.getColumnQualifierBytes()))
                     .max(Integer::compare).map(maxCounter -> maxCounter != entry.getValue() - 1)
                     .orElse(false);
             if (include) {
-                String def = "\"" + entry.getKey() + "\" " + entry.getValue().toString();
+                String def = "\"" + entry.getKey() + "\"=" + entry.getValue().toString();
                 cqCounters.add(def);
             }
         }
         if (cqCounters.size() > 0) {
+            cqBuilder.append(" COLUMN_QUALIFIER_COUNTER");
             cqBuilder.append(" (");
-            cqBuilder.append("COLUMN_QUALIFIER_COUNTER ");
             cqBuilder.append(StringUtils.join( ", ", cqCounters));
             cqBuilder.append(')');
         }
@@ -500,7 +503,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
     {
         if (columns.size() == 0) return false;
 
-        return table.getEncodingScheme() != PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+        return table.getType() == PTableType.TABLE && table.getEncodingScheme() != PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
     }
 
     private String getColumnInfoString(PTable table, StringBuilder colInfo, List<PColumn> columns,

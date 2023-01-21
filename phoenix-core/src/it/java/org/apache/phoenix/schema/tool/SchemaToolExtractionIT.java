@@ -66,7 +66,8 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
         String schemaName = generateUniqueName();
         String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
         String createTableStmt = "CREATE TABLE "+ pTableFullName + "(K VARCHAR NOT NULL PRIMARY KEY, "
-                + "V1 VARCHAR, V2 VARCHAR) TTL=2592000, IMMUTABLE_ROWS=TRUE, DISABLE_WAL=TRUE";
+                + "V1 VARCHAR COLUMN_QUALIFIER_ID 11, V2 VARCHAR COLUMN_QUALIFIER_ID 12) " +
+                "TTL=2592000, IMMUTABLE_ROWS=TRUE, DISABLE_WAL=TRUE";
         List<String> queries = new ArrayList<String>(){};
         queries.add(createTableStmt);
         String result = runSchemaExtractionTool(schemaName, tableName, null, queries);
@@ -79,7 +80,8 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
         String schemaName = "lowecaseschemaname1";
         String pTableFullName = SchemaUtil.getEscapedTableName(schemaName, tableName);
         String createTableStmt = "CREATE TABLE "+ pTableFullName + "(\"smallK\" VARCHAR NOT NULL PRIMARY KEY, "
-                + "\"asd\".V1 VARCHAR, \"foo\".\"bar\" VARCHAR) TTL=2592000, IMMUTABLE_ROWS=true, DISABLE_WAL=true";
+                + "\"asd\".V1 VARCHAR COLUMN_QUALIFIER_ID 11, \"foo\".\"bar\" VARCHAR COLUMN_QUALIFIER_ID 11) " +
+                "TTL=2592000, IMMUTABLE_ROWS=true, DISABLE_WAL=true";
         List<String> queries = new ArrayList<String>(){};
         queries.add(createTableStmt);
         String result = runSchemaExtractionTool("\"" + schemaName + "\"", "\"" + tableName + "\"", null, queries);

@@ -460,7 +460,7 @@ create_table_node returns [CreateTableStatement ret]
         (LPAREN c=column_defs (pk=pk_constraint)? RPAREN)
         (p=fam_properties)?
         (SPLIT ON s=value_expression_list)?
-        (LPAREN COLUMN_QUALIFIER_COUNTER cqc=column_qualifier_counters RPAREN)?
+        (COLUMN_QUALIFIER_COUNTER LPAREN cqc=column_qualifier_counters RPAREN)?
         {ret = factory.createTable(t, p, c, pk, s, PTableType.TABLE, ex!=null, null, null, getBindCount(), im!=null ? true : null,  cqc); }
     ;
    
@@ -709,8 +709,8 @@ column_defs returns [List<ColumnDef> ret]
 
 column_qualifier_counters returns [Map<String, Integer> ret]
 @init{ret = new HashMap<String,Integer>(); }
-    :   k=prop_name v=NUMBER {$ret.put(k, Integer.parseInt( v.getText() ));}
-        (COMMA k=prop_name v=NUMBER {$ret.put(k, Integer.parseInt( v.getText() ));} )*
+    :   k=identifier EQ v=NUMBER {$ret.put(k, Integer.parseInt( v.getText() ));}
+        (COMMA k=identifier EQ v=NUMBER {$ret.put(k, Integer.parseInt( v.getText() ));} )*
     ;
 
 indexes returns [List<NamedNode> ret]

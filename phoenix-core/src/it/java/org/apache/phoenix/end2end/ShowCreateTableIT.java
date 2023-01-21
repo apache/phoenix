@@ -44,12 +44,12 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE " + tableName );
         assertTrue(rs.next());
 
-        String expected = "CREATE TABLE " + tableName + "[(]K VARCHAR NOT NULL PRIMARY KEY, " +
+        String expected = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
                 "INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
                 ", INT2 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
-                "[)].*";
-        assertTrue("Matches: :" + expected + "\nResult: " + rs.getString(1),
-                rs.getString(1).matches(expected));
+                ") IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN'";
+        assertTrue("Expected: :" + expected + "\nResult: " + rs.getString(1),
+                rs.getString(1).equals(expected));
     }
 
     @Test
@@ -63,11 +63,11 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE \"" + tableName + "\"");
         assertTrue(rs.next());
 
-        String expected = "CREATE TABLE \"" + tableName + "\"[(]K VARCHAR NOT NULL PRIMARY KEY, " +
+        String expected = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
                 "INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                "[)].*";
-        assertTrue("Matches: :" + expected + "\nResult: " + rs.getString(1),
-                rs.getString(1).matches(expected));
+                ") IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN'";
+        assertTrue("Expected: :" + expected + "\nResult: " + rs.getString(1),
+                rs.getString(1).equals(expected));
     }
 
     @Test
@@ -83,11 +83,11 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE " + tableFullName);
         assertTrue(rs.next());
 
-        String expected = "CREATE TABLE " + tableFullName + "[(]K VARCHAR NOT NULL PRIMARY KEY, " +
+        String expected = "CREATE TABLE " + tableFullName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
                 "INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                "[)].*";
-        assertTrue("Matches: :" + expected + "\nResult: " + rs.getString(1),
-                rs.getString(1).matches(expected));
+                ") IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN'";
+        assertTrue("Expected: :" + expected + "\nResult: " + rs.getString(1),
+                rs.getString(1).equals(expected));
     }
 
     @Test
@@ -105,12 +105,13 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE \"" + tableName + "\"");
         assertTrue(rs.next());
 
-        String expected = "CREATE TABLE " + tableName + "[(]K VARCHAR NOT NULL PRIMARY KEY, " +
+        String expected = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
                 "INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
                 ", INT2 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
-                "[)].*[(]COLUMN_QUALIFIER_COUNTER \"" + DEFAULT_COLUMN_FAMILY +"\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 3) + "[)]";
-        assertTrue("Matches: :" + expected + "\nResult: " + rs.getString(1),
-                rs.getString(1).matches(expected));
+                ") IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN' COLUMN_QUALIFIER_COUNTER " +
+                "(\"" + DEFAULT_COLUMN_FAMILY +"\"=" + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 3) + ")";
+        assertTrue("Expected: :" + expected + "\nResult: " + rs.getString(1),
+                rs.getString(1).equals(expected));
     }
 
     @Test
@@ -152,12 +153,12 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE \"" + tableName + "\"");
         assertTrue(rs.next());
 
-        String expected = "CREATE TABLE " + tableName + "[(]K VARCHAR NOT NULL PRIMARY KEY, " +
+        String expected = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
                 "A.INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
                 ", B.INT2 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                "[)] IMMUTABLE_ROWS=true";
-        assertTrue("Matches: :" + expected + "\nResult: " + rs.getString(1),
-                rs.getString(1).matches(expected));
+                ") IMMUTABLE_ROWS=true";
+        assertTrue("Expected: :" + expected + "\nResult: " + rs.getString(1),
+                rs.getString(1).equals(expected));
     }
 
     @Test
@@ -177,14 +178,14 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE \"" + tableName + "\"");
         assertTrue(rs.next());
 
-        String expected = "CREATE TABLE " + tableName + "[(]K VARCHAR NOT NULL PRIMARY KEY, " +
+        String expected = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
                 "A.INT INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
                 ", A.INT2 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
                 ", B.INT3 INTEGER COLUMN_QUALIFIER_ID " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                "[)].*[(]COLUMN_QUALIFIER_COUNTER \"B\" " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 2)
-                + "[)]";
-        assertTrue("Matches: :" + expected + "\nResult: " + rs.getString(1),
-                rs.getString(1).matches(expected));
+                ") IMMUTABLE_ROWS=true COLUMN_QUALIFIER_COUNTER (\"B\"=" + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 2)
+                + ")";
+        assertTrue("Expected: :" + expected + "\nResult: " + rs.getString(1),
+                rs.getString(1).equals(expected));
     }
 
     @Test
