@@ -2630,7 +2630,7 @@ public class MetaDataClient {
                 // the column encoding (PHOENIX-4737).
                 Integer encodedCQ = null;
                 if (!isPkColumn) {
-                    if (colDef.getColumnQualifier() != null) {
+                    if (colDef.getColumnQualifier() != null && encodingScheme != NON_ENCODED_QUALIFIERS) {
                         if (cqCounter.getNextQualifier(cqCounterFamily) > ENCODED_CQ_COUNTER_INITIAL_VALUE &&
                                 !inputCqCounters.containsKey(cqCounterFamily)) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_CQ)
@@ -2657,8 +2657,7 @@ public class MetaDataClient {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.DUPLICATE_CQ)
                                 .setSchemaName(schemaName)
                                 .setTableName(tableName).build().buildException();
-                    }
-                    else {
+                    } else {
                         if (inputCqCounters.containsKey(cqCounterFamily))
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_CQ)
                                     .setSchemaName(schemaName)
