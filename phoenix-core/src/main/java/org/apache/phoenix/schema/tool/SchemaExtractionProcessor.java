@@ -402,6 +402,8 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
 
     private String convertColumnQualifiersToString(PTable table) {
         StringBuilder cqBuilder = new StringBuilder();
+        if (shouldGenerateWithDefaults)
+            return cqBuilder.toString();
         Map<String, Integer> cqCounterValues = table.getEncodedCQCounter().values();
         ArrayList<String> cqCounters = new ArrayList<>(cqCounterValues.size());
 
@@ -501,7 +503,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
 
     private boolean shouldContainQualifier(PTable table, List<PColumn> columns)
     {
-        if (columns.size() == 0) return false;
+        if (columns.size() == 0 || shouldGenerateWithDefaults) return false;
 
         return table.getType() == PTableType.TABLE && table.getEncodingScheme() != PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
     }
