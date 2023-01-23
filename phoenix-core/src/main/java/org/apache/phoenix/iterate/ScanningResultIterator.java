@@ -76,15 +76,15 @@ public class ScanningResultIterator implements ResultIterator {
     private StatementContext context;
     private static boolean throwExceptionIfScannerClosedForceFully = false;
 
-    private final boolean isConnInContext;
+    private final boolean isMapReduceContext;
 
-    public ScanningResultIterator(ResultScanner scanner, Scan scan, ScanMetricsHolder scanMetricsHolder, StatementContext context, boolean isConnInContext) {
+    public ScanningResultIterator(ResultScanner scanner, Scan scan, ScanMetricsHolder scanMetricsHolder, StatementContext context, boolean isMapReduceContext) {
         this.scanner = scanner;
         this.scanMetricsHolder = scanMetricsHolder;
         this.context = context;
         scanMetricsUpdated = false;
         scanMetricsEnabled = scan.isScanMetricsEnabled();
-        this.isConnInContext = isConnInContext;
+        this.isMapReduceContext = isMapReduceContext;
     }
 
     @Override
@@ -173,7 +173,7 @@ public class ScanningResultIterator implements ResultIterator {
         try {
             Result result = scanner.next();
             while (result != null && (result.isEmpty() || isDummy(result))) {
-                if (isConnInContext && (context.getConnection().isClosing() || context.getConnection().isClosed())) {
+                if (!isMapReduceContext && (context.getConnection().isClosing() || context.getConnection().isClosed())) {
                     LOG.warn("Closing ResultScanner as Connection is already closed or in middle of closing");
                     if (throwExceptionIfScannerClosedForceFully) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.FAILED_KNOWINGLY_FOR_TEST).build().buildException();
