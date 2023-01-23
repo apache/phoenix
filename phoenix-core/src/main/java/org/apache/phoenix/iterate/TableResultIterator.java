@@ -111,7 +111,7 @@ public class TableResultIterator implements ResultIterator {
         this.scanGrouper = null;
         this.caches = null;
         this.retry = 0;
-        this.isMapReduceContext = true;
+        this.isMapReduceContext = false;
     }
 
     public static enum RenewLeaseStatus {
