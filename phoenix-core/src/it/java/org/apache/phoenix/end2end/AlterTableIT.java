@@ -1818,8 +1818,8 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
-                "INT INTEGER COLUMN_QUALIFIER_ID 11, INT2 INTEGER COLUMN_QUALIFIER_ID 12, " +
-                "INT3 INTEGER COLUMN_QUALIFIER_ID 14) " +
+                "INT INTEGER ENCODED_QUALIFIER 11, INT2 INTEGER ENCODED_QUALIFIER 12, " +
+                "INT3 INTEGER ENCODED_QUALIFIER 14) " +
                 generateDDLOptions("IMMUTABLE_ROWS = true"
                         + (!columnEncoded ? ",IMMUTABLE_STORAGE_SCHEME=" + PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN : "")) +
                 " COLUMN_QUALIFIER_COUNTER (\"" + QueryConstants.DEFAULT_COLUMN_FAMILY + "\"=15)";
@@ -1832,10 +1832,11 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         PTable table = pconn.getTable(new PTableKey(null, tableName));
 
         QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
-        if (columnEncoded)
+        if (columnEncoded) {
             assertNotEquals(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, encodingScheme);
-        else
+        } else {
             assertEquals(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, encodingScheme);
+        }
 
         PTable.EncodedCQCounter cqCounter = table.getEncodedCQCounter();
         assertEquals(columnEncoded ? 16 : null, cqCounter.getNextQualifier(QueryConstants.DEFAULT_COLUMN_FAMILY));

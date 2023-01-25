@@ -130,7 +130,7 @@ tokens
     LIST = 'list';
     JARS='jars';
     ROW_TIMESTAMP='row_timestamp';
-    COLUMN_QUALIFIER_ID = 'column_qualifier_id';
+    ENCODED_QUALIFIER = 'encoded_qualifier';
     COLUMN_QUALIFIER_COUNTER = 'column_qualifier_counter';
     USE='use';
     OFFSET ='offset';
@@ -460,7 +460,7 @@ create_table_node returns [CreateTableStatement ret]
         (LPAREN c=column_defs (pk=pk_constraint)? RPAREN)
         (p=fam_properties)?
         (SPLIT ON s=value_expression_list)?
-        (COLUMN_QUALIFIER_COUNTER LPAREN cqc=column_qualifier_counters RPAREN)?
+        (COLUMN_QUALIFIER_COUNTER LPAREN cqc=initializiation_list RPAREN)?
         {ret = factory.createTable(t, p, c, pk, s, PTableType.TABLE, ex!=null, null, null, getBindCount(), im!=null ? true : null,  cqc); }
     ;
    
@@ -707,10 +707,10 @@ column_defs returns [List<ColumnDef> ret]
     :  v = column_def {$ret.add(v);}  (COMMA v = column_def {$ret.add(v);} )*
 ;
 
-column_qualifier_counters returns [Map<String, Integer> ret]
-@init{ret = new HashMap<String,Integer>(); }
-    :   k=identifier EQ v=NUMBER {$ret.put(k, Integer.parseInt( v.getText() ));}
-        (COMMA k=identifier EQ v=NUMBER {$ret.put(k, Integer.parseInt( v.getText() ));} )*
+initializiation_list returns [Map<NamedNode, Integer> ret]
+@init{ret = new HashMap<NamedNode,Integer>(); }
+    :   k=index_name EQ v=NUMBER {$ret.put(k, Integer.parseInt( v.getText() ));}
+        (COMMA k=index_name EQ v=NUMBER {$ret.put(k, Integer.parseInt( v.getText() ));} )*
     ;
 
 indexes returns [List<NamedNode> ret]
@@ -719,7 +719,7 @@ indexes returns [List<NamedNode> ret]
 ;
 
 column_def returns [ColumnDef ret]
-    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? ((pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)|(COLUMN_QUALIFIER_ID cq=NUMBER))?
+    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? ((pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)|(ENCODED_QUALIFIER eq=NUMBER))?
         { $ret = factory.columnDef(
             c,
             dt,
@@ -731,7 +731,7 @@ column_def returns [ColumnDef ret]
             pk != null, 
             order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()),
             df == null ? null : df.toString(),
-            cq == null ? null : Integer.parseInt( cq.getText() ),
+            eq == null ? null : Integer.parseInt( eq.getText() ),
             rr != null); }
     ;
 

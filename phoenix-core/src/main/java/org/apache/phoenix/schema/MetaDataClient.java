@@ -2453,6 +2453,8 @@ public class MetaDataClient {
             int position = positionOffset;
             EncodedCQCounter cqCounter = NULL_COUNTER;
             Map<String, Integer> changedCqCounters = new HashMap<>(colDefs.size());
+            // Check for duplicate column qualifiers
+            Map<String, Set<Integer>> inputCqCounters = new HashMap<>();
             PTable viewPhysicalTable = null;
             if (tableType == PTableType.VIEW) {
                 /*
@@ -2574,13 +2576,15 @@ public class MetaDataClient {
                 cqCounter = encodingScheme != NON_ENCODED_QUALIFIERS ? new EncodedCQCounter() : NULL_COUNTER;
                 if (encodingScheme != NON_ENCODED_QUALIFIERS && statement.getFamilyCQCounters() != null)
                 {
-                    for (Map.Entry<String, Integer> cq : statement.getFamilyCQCounters().entrySet()) {
-                        if (cq.getValue() < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE)
+                    for (Map.Entry<NamedNode, Integer> cq : statement.getFamilyCQCounters().entrySet()) {
+                        if (cq.getValue() < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_CQ)
                                     .setSchemaName(schemaName)
                                     .setTableName(tableName).build().buildException();
-                        cqCounter.setValue(cq.getKey(), cq.getValue());
-                        changedCqCounters.put(cq.getKey(), cqCounter.getNextQualifier(cq.getKey()));
+                        }
+                        cqCounter.setValue(cq.getKey().getName(), cq.getValue());
+                        changedCqCounters.put(cq.getKey().getName(), cqCounter.getNextQualifier(cq.getKey().getName()));
+                        inputCqCounters.putIfAbsent(cq.getKey().getName(), new HashSet<Integer>());
                     }
                 }
             }
@@ -2590,8 +2594,6 @@ public class MetaDataClient {
             Set<Integer> viewNewColumnPositions =
                     Sets.newHashSetWithExpectedSize(colDefs.size());
             Set<String> pkColumnNames = new HashSet<>();
-            // Check for duplicate column qualifiers
-            Map<String, Set<Integer>> inputCqCounters = new HashMap<>();
             for (PColumn pColumn : pkColumns) {
                 pkColumnNames.add(pColumn.getName().toString());
             }
@@ -2639,34 +2641,41 @@ public class MetaDataClient {
                         }
 
                         if (statement.getFamilyCQCounters() == null ||
-                                statement.getFamilyCQCounters().get(cqCounterFamily) == null) {
-                            cqCounter.setValue(cqCounterFamily, colDef.getColumnQualifier());
-                            cqCounter.increment(cqCounterFamily);
+                                statement.getFamilyCQCounters().get(NamedNode.caseSensitiveNamedNode(cqCounterFamily)) == null) {
+                            if (colDef.getColumnQualifier() >= cqCounter.getNextQualifier(cqCounterFamily)) {
+                                cqCounter.setValue(cqCounterFamily, colDef.getColumnQualifier());
+                                cqCounter.increment(cqCounterFamily);
+                            }
                             changedCqCounters.put(cqCounterFamily, cqCounter.getNextQualifier(cqCounterFamily));
                         }
 
                         encodedCQ = colDef.getColumnQualifier();
-                        if (encodedCQ < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE)
+                        if (encodedCQ < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE ||
+                                encodedCQ >= cqCounter.getNextQualifier(cqCounterFamily)) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_CQ)
                                     .setSchemaName(schemaName)
                                     .setTableName(tableName).build().buildException();
+                        }
 
                         inputCqCounters.putIfAbsent(cqCounterFamily, new HashSet<Integer>());
                         Set<Integer> familyCounters = inputCqCounters.get(cqCounterFamily);
-                        if (!familyCounters.add(encodedCQ))
+                        if (!familyCounters.add(encodedCQ)) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.DUPLICATE_CQ)
-                                .setSchemaName(schemaName)
-                                .setTableName(tableName).build().buildException();
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException();
+                        }
                     } else {
-                        if (inputCqCounters.containsKey(cqCounterFamily))
+                        if (inputCqCounters.containsKey(cqCounterFamily)) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_CQ)
                                     .setSchemaName(schemaName)
                                     .setTableName(tableName).build().buildException();
+                        }
 
-                        if (isAppendOnlySchema)
+                        if (isAppendOnlySchema) {
                             encodedCQ = Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position);
-                        else
+                        } else {
                             encodedCQ = cqCounter.getNextQualifier(cqCounterFamily);
+                        }
                     }
                 }
                 byte[] columnQualifierBytes = null;
@@ -2679,10 +2688,9 @@ public class MetaDataClient {
                     .setTableName(tableName).build().buildException();
                 }
                 PColumn column = newColumn(position++, colDef, pkConstraint, defaultFamilyName, false, columnQualifierBytes, isImmutableRows);
-                if (!isAppendOnlySchema && colDef.getColumnQualifier() == null) {
-                    if (cqCounter.increment(cqCounterFamily)) {
-                        changedCqCounters.put(cqCounterFamily, cqCounter.getNextQualifier(cqCounterFamily));
-                    }
+                if (!isAppendOnlySchema && colDef.getColumnQualifier() == null
+                        && cqCounter.increment(cqCounterFamily)) {
+                    changedCqCounters.put(cqCounterFamily, cqCounter.getNextQualifier(cqCounterFamily));
                 }
                 if (SchemaUtil.isPKColumn(column)) {
                     // TODO: remove this constraint?

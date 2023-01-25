@@ -449,11 +449,11 @@ public enum SQLExceptionCode {
     UNABLE_TO_UPSERT_TASK(1146, "XCL46",
         "Error upserting records in SYSTEM.TASK table"),
     INVALID_CQ(1148, "XCL48",
-            "COLUMN_QUALIFIER is less than INITIAL_VALUE."),
+            "ENCODED_QUALIFIER is less than INITIAL_VALUE."),
     DUPLICATE_CQ(1149, "XCL49",
-            "Duplicate COLUMN_QUALIFIER."),
+            "Duplicate ENCODED_QUALIFIER."),
     MISSING_CQ(1150, "XCL49",
-            "Missing COLUMN_QUALIFIER."),
+            "Missing ENCODED_QUALIFIER."),
 
 
     /**

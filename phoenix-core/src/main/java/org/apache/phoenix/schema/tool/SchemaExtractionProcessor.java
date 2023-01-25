@@ -304,7 +304,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
 
         String columnInfoString = getColumnInfoStringForTable(table);
         String propertiesString = convertPropertiesToString(false);
-        String columnQualifierString = convertColumnQualifiersToString(table);
+        String columnQualifierString = convertColumnQualifierCountersToString(table);
 
         return generateTableDDLString(columnInfoString, propertiesString, columnQualifierString,
                 pSchemaName, pTableName);
@@ -400,14 +400,15 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         }
     }
 
-    private String convertColumnQualifiersToString(PTable table) {
+    private String convertColumnQualifierCountersToString(PTable table) {
         StringBuilder cqBuilder = new StringBuilder();
-        if (shouldGenerateWithDefaults)
+        if (shouldGenerateWithDefaults) {
             return cqBuilder.toString();
+        }
         Map<String, Integer> cqCounterValues = table.getEncodedCQCounter().values();
         ArrayList<String> cqCounters = new ArrayList<>(cqCounterValues.size());
 
-        for(Map.Entry<String, Integer> entry : cqCounterValues.entrySet()) {
+        for (Map.Entry<String, Integer> entry : cqCounterValues.entrySet()) {
             Boolean include = table.getColumns().stream()
                     .filter(c -> !table.getPKColumns().contains(c))
                     .filter(pColumn -> table.getImmutableStorageScheme() == SINGLE_CELL_ARRAY_WITH_OFFSETS ?
@@ -503,7 +504,9 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
 
     private boolean shouldContainQualifier(PTable table, List<PColumn> columns)
     {
-        if (columns.size() == 0 || shouldGenerateWithDefaults) return false;
+        if (columns.size() == 0 || shouldGenerateWithDefaults) {
+            return false;
+        }
 
         return table.getType() == PTableType.TABLE && table.getEncodingScheme() != PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
     }
@@ -518,7 +521,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
                 def += " PRIMARY KEY" + extractPKColumnAttributes(col);
             }
             if (appendQualifier && !pkColumns.contains(col)) {
-                def += " COLUMN_QUALIFIER_ID " +
+                def += " ENCODED_QUALIFIER " +
                         table.getEncodingScheme().decode(col.getColumnQualifierBytes());
             }
             colDefs.add(def);
