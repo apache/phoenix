@@ -244,7 +244,7 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
             // last possible moment. You need to swap the start/stop and make the
             // start exclusive and the stop inclusive.
             ScanUtil.setupReverseScan(scan);
-            if (scan.getFilter() != null && !(scan.getFilter() instanceof PagedFilter)) {
+            if (!(scan.getFilter() instanceof PagedFilter)) {
                 byte[] pageSizeMsBytes = scan.getAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS);
                 if (pageSizeMsBytes != null) {
                     scan.setFilter(new PagedFilter(scan.getFilter(), getPageSizeMsForFilter(scan)));
