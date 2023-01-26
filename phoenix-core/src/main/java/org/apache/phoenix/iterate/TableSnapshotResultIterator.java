@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.snapshot.SnapshotDescriptionUtils;
 import org.apache.hadoop.hbase.snapshot.SnapshotManifest;
 import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -73,12 +74,16 @@ public class TableSnapshotResultIterator implements ResultIterator {
   private FileSystem fs;
   private int currentRegion;
   private boolean closed = false;
+  private StatementContext context;
 
-  public TableSnapshotResultIterator(Configuration configuration, Scan scan, ScanMetricsHolder scanMetricsHolder)
+  private final boolean isMapReduceContext;
+
+  public TableSnapshotResultIterator(Configuration configuration, Scan scan, ScanMetricsHolder scanMetricsHolder, StatementContext context, boolean isMapReduceContext)
       throws IOException {
     this.configuration = configuration;
     this.currentRegion = -1;
     this.scan = scan;
+    this.context = context;
     this.scanMetricsHolder = scanMetricsHolder;
     this.scanIterator = UNINITIALIZED_SCANNER;
     if (PhoenixConfigurationUtil.isMRSnapshotManagedExternally(configuration)) {
@@ -91,6 +96,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
         PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
     this.rootDir = CommonFSUtils.getRootDir(configuration);
     this.fs = rootDir.getFileSystem(configuration);
+    this.isMapReduceContext = isMapReduceContext;
     init();
   }
 
@@ -152,7 +158,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
         RegionInfo hri = regions.get(this.currentRegion);
         this.scanIterator =
             new ScanningResultIterator(new SnapshotScanner(configuration, fs, restoreDir, htd, hri, scan),
-                scan, scanMetricsHolder);
+                scan, scanMetricsHolder, context, isMapReduceContext);
       } catch (Throwable e) {
         throw ServerUtil.parseServerException(e);
       }
