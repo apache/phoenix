@@ -1572,21 +1572,12 @@ public class MutationState implements SQLCloseable {
                 numDeleteMutationsInBatch++;
             }
         }
-
-        long totalfailedMutation = numUpsertMutationsInBatch + numDeleteMutationsInBatch;
-        //TODO this case is something that should not happen
-        // but still if connditioon makes sese if this ever happens
-        if (totalfailedMutation < numFailedMutations) {
-            LOGGER.warn(
-                "total failed mutation less than num of failed mutation.  This is not expected.");
-            totalfailedMutation = numFailedMutations;
-        }
         // Update the MUTATION_BATCH_FAILED_SIZE counter with the number of failed delete mutations
         // in case we are dealing with all deletes for a non-transactional table, since there is a
         // bug in sendMutations where we don't get the correct value for numFailedMutations when
         // we don't use transactions
         return new MutationMetricQueue.MutationMetric(0, 0, 0, 0, 0, 0,
-                allDeletesMutations && !isTransactional ? numDeleteMutationsInBatch : totalfailedMutation,
+                allDeletesMutations && !isTransactional ? numDeleteMutationsInBatch : numFailedMutations,
                 0, 0, 0, 0,
                 numUpsertMutationsInBatch,
                 allUpsertsMutations ? 1 : 0,
