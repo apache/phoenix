@@ -1309,8 +1309,8 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
                 "INT INTEGER ENCODED_QUALIFIER 11, INT2 INTEGER ENCODED_QUALIFIER 12, " +
-                "INT3 INTEGER ENCODED_QUALIFIER 14) COLUMN_QUALIFIER_COUNTER (\""
-                + QueryConstants.DEFAULT_COLUMN_FAMILY + "\"=15)";
+                "INT3 INTEGER ENCODED_QUALIFIER 14) COLUMN_QUALIFIER_COUNTER ('"
+                + QueryConstants.DEFAULT_COLUMN_FAMILY + "'=15)";
         conn.createStatement().execute(ddl);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         PTable table = pconn.getTable(new PTableKey(null, tableName));
@@ -1335,8 +1335,8 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
                 "INT3 INTEGER ENCODED_QUALIFIER 14, INT INTEGER ENCODED_QUALIFIER 11, " +
-                "INT2 INTEGER ENCODED_QUALIFIER 12) COLUMN_QUALIFIER_COUNTER (\""
-                + QueryConstants.DEFAULT_COLUMN_FAMILY + "\"=15)";
+                "INT2 INTEGER ENCODED_QUALIFIER 12) COLUMN_QUALIFIER_COUNTER ('"
+                + QueryConstants.DEFAULT_COLUMN_FAMILY + "'=15)";
         conn.createStatement().execute(ddl);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         PTable table = pconn.getTable(new PTableKey(null, tableName));
@@ -1387,7 +1387,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String ddl = "CREATE IMMUTABLE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
                 "A.INT INTEGER ENCODED_QUALIFIER 11, A.INT2 INTEGER ENCODED_QUALIFIER 13, " +
                 "B.INT3 INTEGER ENCODED_QUALIFIER 12) " +
-                "COLUMN_QUALIFIER_COUNTER (\"A\"=14, \"B\"=13)";
+                "COLUMN_QUALIFIER_COUNTER ('A'=14, 'B'=13)";
         conn.createStatement().execute(ddl);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         PTable table = pconn.getTable(new PTableKey(null, tableName));
@@ -1439,7 +1439,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
                 "INT INTEGER ENCODED_QUALIFIER 11, INT2 INTEGER ENCODED_QUALIFIER 11, " +
-                "INT3 INTEGER ENCODED_QUALIFIER 14) COLUMN_QUALIFIER_COUNTER (\"0\"=15)";
+                "INT3 INTEGER ENCODED_QUALIFIER 14) COLUMN_QUALIFIER_COUNTER ('0'=15)";
         try {
             conn.createStatement().execute(ddl);
             fail("Duplicate Column Qualifiers");
@@ -1458,7 +1458,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
                 "INT INTEGER ENCODED_QUALIFIER 11, INT2 INTEGER ENCODED_QUALIFIER 9, " +
-                "INT3 INTEGER ENCODED_QUALIFIER 14) COLUMN_QUALIFIER_COUNTER (\"0\"=15)";
+                "INT3 INTEGER ENCODED_QUALIFIER 14) COLUMN_QUALIFIER_COUNTER ('0'=15)";
         try {
             conn.createStatement().execute(ddl);
             fail("Invalid Column Qualifier");
@@ -1470,7 +1470,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
 
         ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
-                "INT INTEGER ENCODED_QUALIFIER 11) COLUMN_QUALIFIER_COUNTER (\"0\"=8)";
+                "INT INTEGER ENCODED_QUALIFIER 11) COLUMN_QUALIFIER_COUNTER ('0'=8)";
         try {
             conn.createStatement().execute(ddl);
             fail("Invalid Column Qualifier");
@@ -1482,7 +1482,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
 
         ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
-                "INT INTEGER ENCODED_QUALIFIER 15) COLUMN_QUALIFIER_COUNTER (\"0\"=13)";
+                "INT INTEGER ENCODED_QUALIFIER 15) COLUMN_QUALIFIER_COUNTER ('0'=13)";
         try {
             conn.createStatement().execute(ddl);
             fail("Invalid Column Qualifier");
@@ -1491,6 +1491,17 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             if (e.getErrorCode() != SQLExceptionCode.INVALID_CQ.getErrorCode()) {
                 fail("Invalid Column Qualifier");
             }
+        }
+
+        ddl = "CREATE IMMUTABLE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT1 INTEGER, " +
+                "INT2 INTEGER " +
+                "DEFAULT_COLUMN_FAMILY=dF" +
+                "COLUMN_QUALIFIER_COUNTER (\"0\"=13)";
+        try {
+            conn.createStatement().execute(ddl);
+        } catch (SQLException e) {
+            //expected
         }
     }
 
@@ -1512,7 +1523,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
 
         ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
-                "INT INTEGER ENCODED_QUALIFIER 11, INT2 INTEGER) COLUMN_QUALIFIER_COUNTER (\"0\"=13)";
+                "INT INTEGER ENCODED_QUALIFIER 11, INT2 INTEGER) COLUMN_QUALIFIER_COUNTER ('0'=13)";
         try {
             conn.createStatement().execute(ddl);
             fail("Invalid Column Qualifier");
@@ -1525,7 +1536,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testCreateTableCaseSensitiveColumnQualifier() throws Exception {
+    public void testCreateTableDefaultColumnQualifier() throws Exception {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();

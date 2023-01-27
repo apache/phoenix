@@ -42,7 +42,7 @@ public class CreateTableStatement extends MutableStatement {
     private final ParseNode whereClause;
     // TODO change this to boolean at the next major release and remove TableProperty.IMMUTABLE_ROWS and QueryServiceOptions.IMMUTABLE_ROWS_ATTRIB
     private final Boolean immutableRows;
-    private final Map<NamedNode, Integer> familyCQCounters;
+    private final Map<String, Integer> familyCQCounters;
     
     public CreateTableStatement(CreateTableStatement createTable, List<ColumnDef> columns) {
         this.tableName = createTable.tableName;
@@ -93,7 +93,7 @@ public class CreateTableStatement extends MutableStatement {
     protected CreateTableStatement(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint,
                                    List<ParseNode> splitNodes, PTableType tableType, boolean ifNotExists,
                                    TableName baseTableName, ParseNode whereClause, int bindCount, Boolean immutableRows,
-                                   Map<NamedNode, Integer> familyCounters) {
+                                   Map<String, Integer> familyCounters) {
         this.tableName = tableName;
         this.props = props == null ? ImmutableListMultimap.<String,Pair<String,Object>>of() : props;
         this.tableType = PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(tableName.getSchemaName()) ? PTableType.SYSTEM : tableType;
@@ -153,7 +153,7 @@ public class CreateTableStatement extends MutableStatement {
         return immutableRows;
     }
 
-    public Map<NamedNode, Integer> getFamilyCQCounters() {
+    public Map<String, Integer> getFamilyCQCounters() {
         return familyCQCounters;
     }
 }

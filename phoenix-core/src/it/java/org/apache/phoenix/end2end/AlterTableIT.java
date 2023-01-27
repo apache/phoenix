@@ -1822,7 +1822,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
                 "INT3 INTEGER ENCODED_QUALIFIER 14) " +
                 generateDDLOptions("IMMUTABLE_ROWS = true"
                         + (!columnEncoded ? ",IMMUTABLE_STORAGE_SCHEME=" + PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN : "")) +
-                " COLUMN_QUALIFIER_COUNTER (\"" + QueryConstants.DEFAULT_COLUMN_FAMILY + "\"=15)";
+                " COLUMN_QUALIFIER_COUNTER ('" + QueryConstants.DEFAULT_COLUMN_FAMILY + "'=15)";
         conn.createStatement().execute(ddl);
 
         String addDdl = "ALTER TABLE \"" + tableName + "\" ADD CHAR1 char(10)";

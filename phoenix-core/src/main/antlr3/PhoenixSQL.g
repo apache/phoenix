@@ -707,10 +707,10 @@ column_defs returns [List<ColumnDef> ret]
     :  v = column_def {$ret.add(v);}  (COMMA v = column_def {$ret.add(v);} )*
 ;
 
-initializiation_list returns [Map<NamedNode, Integer> ret]
-@init{ret = new HashMap<NamedNode,Integer>(); }
-    :   k=index_name EQ v=NUMBER {$ret.put(k, Integer.parseInt( v.getText() ));}
-        (COMMA k=index_name EQ v=NUMBER {$ret.put(k, Integer.parseInt( v.getText() ));} )*
+initializiation_list returns [Map<String, Integer> ret]
+@init{ret = new HashMap<String,Integer>(); }
+    :   k=STRING_LITERAL EQ v=NUMBER {$ret.put(k.getText(), Integer.parseInt( v.getText() ));}
+        (COMMA k=STRING_LITERAL EQ v=NUMBER {$ret.put(k.getText(), Integer.parseInt( v.getText() ));} )*
     ;
 
 indexes returns [List<NamedNode> ret]

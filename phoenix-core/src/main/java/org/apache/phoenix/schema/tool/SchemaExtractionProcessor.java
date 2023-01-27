@@ -417,7 +417,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
                     .max(Integer::compare).map(maxCounter -> maxCounter != entry.getValue() - 1)
                     .orElse(false);
             if (include) {
-                String def = "\"" + entry.getKey() + "\"=" + entry.getValue().toString();
+                String def = "'" + entry.getKey() + "'=" + entry.getValue().toString();
                 cqCounters.add(def);
             }
         }

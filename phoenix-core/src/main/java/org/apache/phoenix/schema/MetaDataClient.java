@@ -2576,15 +2576,15 @@ public class MetaDataClient {
                 cqCounter = encodingScheme != NON_ENCODED_QUALIFIERS ? new EncodedCQCounter() : NULL_COUNTER;
                 if (encodingScheme != NON_ENCODED_QUALIFIERS && statement.getFamilyCQCounters() != null)
                 {
-                    for (Map.Entry<NamedNode, Integer> cq : statement.getFamilyCQCounters().entrySet()) {
+                    for (Map.Entry<String, Integer> cq : statement.getFamilyCQCounters().entrySet()) {
                         if (cq.getValue() < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_CQ)
                                     .setSchemaName(schemaName)
                                     .setTableName(tableName).build().buildException();
                         }
-                        cqCounter.setValue(cq.getKey().getName(), cq.getValue());
-                        changedCqCounters.put(cq.getKey().getName(), cqCounter.getNextQualifier(cq.getKey().getName()));
-                        inputCqCounters.putIfAbsent(cq.getKey().getName(), new HashSet<Integer>());
+                        cqCounter.setValue(cq.getKey(), cq.getValue());
+                        changedCqCounters.put(cq.getKey(), cqCounter.getNextQualifier(cq.getKey()));
+                        inputCqCounters.putIfAbsent(cq.getKey(), new HashSet<Integer>());
                     }
                 }
             }
@@ -2641,7 +2641,7 @@ public class MetaDataClient {
                         }
 
                         if (statement.getFamilyCQCounters() == null ||
-                                statement.getFamilyCQCounters().get(NamedNode.caseSensitiveNamedNode(cqCounterFamily)) == null) {
+                                statement.getFamilyCQCounters().get(cqCounterFamily) == null) {
                             if (colDef.getColumnQualifier() >= cqCounter.getNextQualifier(cqCounterFamily)) {
                                 cqCounter.setValue(cqCounterFamily, colDef.getColumnQualifier());
                                 cqCounter.increment(cqCounterFamily);

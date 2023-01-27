@@ -91,7 +91,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testShowCreateDefaultFamily() throws Exception {
+    public void testShowCreateTableDefaultFamily() throws Exception {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
@@ -102,7 +102,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
                 "\"A\".INT4 INTEGER, " +
                 "\"b\".INT5 INTEGER, " +
                 "\"B\".INT6 INTEGER) " +
-                "DEFAULT_COLUMN_FAMILY=dF";
+                "DEFAULT_COLUMN_FAMILY='dF'";
         conn.createStatement().execute(ddl);
 
         ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE " + tableName );
@@ -120,6 +120,23 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
                 rs.getString(1).equals(expected));
     }
 
+    @Test
+    public void testShowCreateTableCounter() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
+                ", INT2 INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
+                ") IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN' COLUMN_QUALIFIER_COUNTER " +
+                "('" + DEFAULT_COLUMN_FAMILY +"'=" + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 3) + ")";
+        conn.createStatement().execute(ddl);
+
+        ResultSet rs = conn.createStatement().executeQuery("SHOW CREATE TABLE " + tableName );
+        assertTrue(rs.next());
+        assertTrue("Expected: :" + ddl + "\nResult: " + rs.getString(1),
+                rs.getString(1).equals(ddl));
+    }
 
     @Test
     public void testShowCreateTableColumnQualifierDrop() throws Exception {
@@ -140,7 +157,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
                 "INT INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
                 ", INT2 INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
                 ") IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN' COLUMN_QUALIFIER_COUNTER " +
-                "(\"" + DEFAULT_COLUMN_FAMILY +"\"=" + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 3) + ")";
+                "('" + DEFAULT_COLUMN_FAMILY +"'=" + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 3) + ")";
         assertTrue("Expected: :" + expected + "\nResult: " + rs.getString(1),
                 rs.getString(1).equals(expected));
     }
@@ -213,7 +230,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
                 "A.INT INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
                 ", A.INT2 INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
                 ", B.INT3 INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                ") IMMUTABLE_ROWS=true COLUMN_QUALIFIER_COUNTER (\"B\"=" + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 2)
+                ") IMMUTABLE_ROWS=true COLUMN_QUALIFIER_COUNTER ('B'=" + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 2)
                 + ")";
         assertTrue("Expected: :" + expected + "\nResult: " + rs.getString(1),
                 rs.getString(1).equals(expected));
