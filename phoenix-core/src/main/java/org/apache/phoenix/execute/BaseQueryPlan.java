@@ -349,22 +349,16 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 String parentSchemaName = parentTable.getParentSchemaName().getString();
                 String parentTableName = parentTable.getParentTableName().getString();
                 final ParseNodeFactory FACTORY = new ParseNodeFactory();
-                // TODO: is it necessary to re-resolve the table?
-                TableRef dataTableRef =
-                        FromCompiler.getResolver(
-                            FACTORY.namedTable(null, TableName.create(parentSchemaName, parentTableName)),
-                            context.getConnection()).resolveTable(parentSchemaName, parentTableName);
-                PTable dataTable = dataTableRef.getTable();
                 // Set data columns to be join back from data table.
-                serializeDataTableColumnsToJoin(scan, dataColumns, dataTable);
+                serializeDataTableColumnsToJoin(scan, dataColumns, table);
                 KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);
                 // Set key value schema of the data columns.
                 serializeSchemaIntoScan(scan, schema);
                 if (table.getIndexType() == IndexType.LOCAL) {
                     // Set index maintainer of the local index.
-                    serializeIndexMaintainerIntoScan(scan, dataTable);
+                    serializeIndexMaintainerIntoScan(scan, table);
                     // Set view constants if exists.
-                    serializeViewConstantsIntoScan(scan, dataTable);
+                    serializeViewConstantsIntoScan(scan, table);
                 }
             }
         }
