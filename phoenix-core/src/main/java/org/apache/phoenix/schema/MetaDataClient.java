@@ -2632,7 +2632,7 @@ public class MetaDataClient {
                 // the column encoding (PHOENIX-4737).
                 Integer encodedCQ = null;
                 if (!isPkColumn) {
-                    if (colDef.getColumnQualifier() != null && encodingScheme != NON_ENCODED_QUALIFIERS) {
+                    if (colDef.getEncodedQualifier() != null && encodingScheme != NON_ENCODED_QUALIFIERS) {
                         if (cqCounter.getNextQualifier(cqCounterFamily) > ENCODED_CQ_COUNTER_INITIAL_VALUE &&
                                 !inputCqCounters.containsKey(cqCounterFamily)) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_CQ)
@@ -2642,14 +2642,14 @@ public class MetaDataClient {
 
                         if (statement.getFamilyCQCounters() == null ||
                                 statement.getFamilyCQCounters().get(cqCounterFamily) == null) {
-                            if (colDef.getColumnQualifier() >= cqCounter.getNextQualifier(cqCounterFamily)) {
-                                cqCounter.setValue(cqCounterFamily, colDef.getColumnQualifier());
+                            if (colDef.getEncodedQualifier() >= cqCounter.getNextQualifier(cqCounterFamily)) {
+                                cqCounter.setValue(cqCounterFamily, colDef.getEncodedQualifier());
                                 cqCounter.increment(cqCounterFamily);
                             }
                             changedCqCounters.put(cqCounterFamily, cqCounter.getNextQualifier(cqCounterFamily));
                         }
 
-                        encodedCQ = colDef.getColumnQualifier();
+                        encodedCQ = colDef.getEncodedQualifier();
                         if (encodedCQ < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE ||
                                 encodedCQ >= cqCounter.getNextQualifier(cqCounterFamily)) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_CQ)
@@ -2688,7 +2688,7 @@ public class MetaDataClient {
                     .setTableName(tableName).build().buildException();
                 }
                 PColumn column = newColumn(position++, colDef, pkConstraint, defaultFamilyName, false, columnQualifierBytes, isImmutableRows);
-                if (!isAppendOnlySchema && colDef.getColumnQualifier() == null
+                if (!isAppendOnlySchema && colDef.getEncodedQualifier() == null
                         && cqCounter.increment(cqCounterFamily)) {
                     changedCqCounters.put(cqCounterFamily, cqCounter.getNextQualifier(cqCounterFamily));
                 }

@@ -295,11 +295,12 @@ public class ParseNodeFactory {
     public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName,
                                boolean isArray, Integer arrSize, Boolean isNull,
                                Integer maxLength, Integer scale, boolean isPK,
-                               SortOrder sortOrder, String expressionStr, Integer cq, boolean isRowTimestamp) {
+                               SortOrder sortOrder, String expressionStr, Integer encodedQualifier,
+                               boolean isRowTimestamp) {
         return new ColumnDef(columnDefName, sqlTypeName,
                 isArray, arrSize, isNull,
                 maxLength, scale, isPK,
-                sortOrder, expressionStr, cq, isRowTimestamp);
+                sortOrder, expressionStr, encodedQualifier, isRowTimestamp);
     }
 
 
