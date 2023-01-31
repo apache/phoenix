@@ -19,6 +19,7 @@ package org.apache.phoenix.parse;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -41,6 +42,7 @@ public class CreateTableStatement extends MutableStatement {
     private final ParseNode whereClause;
     // TODO change this to boolean at the next major release and remove TableProperty.IMMUTABLE_ROWS and QueryServiceOptions.IMMUTABLE_ROWS_ATTRIB
     private final Boolean immutableRows;
+    private final Map<String, Integer> familyCQCounters;
     
     public CreateTableStatement(CreateTableStatement createTable, List<ColumnDef> columns) {
         this.tableName = createTable.tableName;
@@ -54,6 +56,7 @@ public class CreateTableStatement extends MutableStatement {
         this.baseTableName = createTable.baseTableName;
         this.whereClause = createTable.whereClause;
         this.immutableRows = createTable.immutableRows;
+        this.familyCQCounters = createTable.familyCQCounters;
     }
 
     public CreateTableStatement(CreateTableStatement createTable, PrimaryKeyConstraint pkConstraint,
@@ -69,6 +72,7 @@ public class CreateTableStatement extends MutableStatement {
         this.baseTableName = createTable.baseTableName;
         this.whereClause = createTable.whereClause;
         this.immutableRows = createTable.immutableRows;
+        this.familyCQCounters = createTable.familyCQCounters;
     }
 
     public CreateTableStatement(CreateTableStatement createTable, ListMultimap<String,Pair<String,Object>>  props, List<ColumnDef> columns) {
@@ -83,11 +87,13 @@ public class CreateTableStatement extends MutableStatement {
         this.baseTableName = createTable.baseTableName;
         this.whereClause = createTable.whereClause;
         this.immutableRows = createTable.immutableRows;
+        this.familyCQCounters = createTable.familyCQCounters;
     }
 
     protected CreateTableStatement(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint,
-            List<ParseNode> splitNodes, PTableType tableType, boolean ifNotExists, 
-            TableName baseTableName, ParseNode whereClause, int bindCount, Boolean immutableRows) {
+                                   List<ParseNode> splitNodes, PTableType tableType, boolean ifNotExists,
+                                   TableName baseTableName, ParseNode whereClause, int bindCount, Boolean immutableRows,
+                                   Map<String, Integer> familyCounters) {
         this.tableName = tableName;
         this.props = props == null ? ImmutableListMultimap.<String,Pair<String,Object>>of() : props;
         this.tableType = PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(tableName.getSchemaName()) ? PTableType.SYSTEM : tableType;
@@ -99,6 +105,7 @@ public class CreateTableStatement extends MutableStatement {
         this.baseTableName = baseTableName;
         this.whereClause = whereClause;
         this.immutableRows = immutableRows;
+        this.familyCQCounters = familyCounters;
     }
 
     public ParseNode getWhereClause() {
@@ -144,5 +151,9 @@ public class CreateTableStatement extends MutableStatement {
 
     public Boolean immutableRows() {
         return immutableRows;
+    }
+
+    public Map<String, Integer> getFamilyCQCounters() {
+        return familyCQCounters;
     }
 }

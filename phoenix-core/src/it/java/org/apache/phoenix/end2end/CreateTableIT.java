@@ -52,6 +52,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
@@ -1243,6 +1244,278 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         } catch (Exception e) {
             assertTrue(e instanceof SQLException);
         }
+    }
+
+    @Test
+    public void testCreateTableWithColumnQualifiers() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER ENCODED_QUALIFIER 11, INT2 INTEGER ENCODED_QUALIFIER 12, " +
+                "INT3 INTEGER ENCODED_QUALIFIER 14) COLUMN_QUALIFIER_COUNTER ('"
+                + QueryConstants.DEFAULT_COLUMN_FAMILY + "'=15)";
+        conn.createStatement().execute(ddl);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable table = pconn.getTable(new PTableKey(null, tableName));
+
+        QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
+        assertNotEquals(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, encodingScheme);
+
+        PTable.EncodedCQCounter cqCounter = table.getEncodedCQCounter();
+        assertEquals(15, cqCounter.values().get(QueryConstants.DEFAULT_COLUMN_FAMILY).intValue());
+        assertEquals(11, encodingScheme.decode(table.getColumnForColumnName("INT")
+                .getColumnQualifierBytes()));
+        assertEquals(12, encodingScheme.decode(table.getColumnForColumnName("INT2")
+                .getColumnQualifierBytes()));
+        assertEquals(14, encodingScheme.decode(table.getColumnForColumnName("INT3")
+                .getColumnQualifierBytes()));
+    }
+
+    @Test
+    public void testCreateTableWithNotOrderedColumnQualifiers() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT3 INTEGER ENCODED_QUALIFIER 14, INT INTEGER ENCODED_QUALIFIER 11, " +
+                "INT2 INTEGER ENCODED_QUALIFIER 12) COLUMN_QUALIFIER_COUNTER ('"
+                + QueryConstants.DEFAULT_COLUMN_FAMILY + "'=15)";
+        conn.createStatement().execute(ddl);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable table = pconn.getTable(new PTableKey(null, tableName));
+
+        QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
+        assertNotEquals(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, encodingScheme);
+
+        PTable.EncodedCQCounter cqCounter = table.getEncodedCQCounter();
+        assertEquals(15, cqCounter.values().get(QueryConstants.DEFAULT_COLUMN_FAMILY).intValue());
+        assertEquals(11, encodingScheme.decode(table.getColumnForColumnName("INT")
+                .getColumnQualifierBytes()));
+        assertEquals(12, encodingScheme.decode(table.getColumnForColumnName("INT2")
+                .getColumnQualifierBytes()));
+        assertEquals(14, encodingScheme.decode(table.getColumnForColumnName("INT3")
+                .getColumnQualifierBytes()));
+    }
+
+    @Test
+    public void testCreateTableWithColumnQualifiersWithoutCounter() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER ENCODED_QUALIFIER 11, INT2 INTEGER ENCODED_QUALIFIER 12, " +
+                "INT3 INTEGER ENCODED_QUALIFIER 14)";
+        conn.createStatement().execute(ddl);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable table = pconn.getTable(new PTableKey(null, tableName));
+
+        QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
+        assertNotEquals(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, encodingScheme);
+
+        PTable.EncodedCQCounter cqCounter = table.getEncodedCQCounter();
+        assertEquals(15, cqCounter.values().get(QueryConstants.DEFAULT_COLUMN_FAMILY).intValue());
+        assertEquals(11, encodingScheme.decode(table.getColumnForColumnName("INT")
+                .getColumnQualifierBytes()));
+        assertEquals(12, encodingScheme.decode(table.getColumnForColumnName("INT2")
+                .getColumnQualifierBytes()));
+        assertEquals(14, encodingScheme.decode(table.getColumnForColumnName("INT3")
+                .getColumnQualifierBytes()));
+    }
+
+    @Test
+    public void testCreateTableWithColumnQualifiersMultipleFamilies() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE IMMUTABLE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "A.INT INTEGER ENCODED_QUALIFIER 11, A.INT2 INTEGER ENCODED_QUALIFIER 13, " +
+                "B.INT3 INTEGER ENCODED_QUALIFIER 12) " +
+                "COLUMN_QUALIFIER_COUNTER ('A'=14, 'B'=13)";
+        conn.createStatement().execute(ddl);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable table = pconn.getTable(new PTableKey(null, tableName));
+
+        QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
+        assertNotEquals(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, encodingScheme);
+
+        PTable.EncodedCQCounter cqCounter = table.getEncodedCQCounter();
+        assertEquals(14, cqCounter.values().get("A").intValue());
+        assertEquals(13, cqCounter.values().get("B").intValue());
+        assertEquals(11, encodingScheme.decode(table.getColumnForColumnName("INT")
+                .getColumnQualifierBytes()));
+        assertEquals(13, encodingScheme.decode(table.getColumnForColumnName("INT2")
+                .getColumnQualifierBytes()));
+        assertEquals(12, encodingScheme.decode(table.getColumnForColumnName("INT3")
+                .getColumnQualifierBytes()));
+    }
+
+    @Test
+    public void testCreateTableWithColumnQualifiersMultipleFamiliesWithoutCounter() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE IMMUTABLE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "A.INT INTEGER ENCODED_QUALIFIER 11, A.INT2 INTEGER ENCODED_QUALIFIER 13, " +
+                "B.INT3 INTEGER ENCODED_QUALIFIER 12)";
+        conn.createStatement().execute(ddl);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable table = pconn.getTable(new PTableKey(null, tableName));
+
+        QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
+        assertNotEquals(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, encodingScheme);
+
+        PTable.EncodedCQCounter cqCounter = table.getEncodedCQCounter();
+        assertEquals(14, cqCounter.values().get("A").intValue());
+        assertEquals(13, cqCounter.values().get("B").intValue());
+        assertEquals(11, encodingScheme.decode(table.getColumnForColumnName("INT")
+                .getColumnQualifierBytes()));
+        assertEquals(13, encodingScheme.decode(table.getColumnForColumnName("INT2")
+                .getColumnQualifierBytes()));
+        assertEquals(12, encodingScheme.decode(table.getColumnForColumnName("INT3")
+                .getColumnQualifierBytes()));
+    }
+
+    @Test
+    public void testCreateTableWithColumnQualifiersDuplicateCQ() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER ENCODED_QUALIFIER 11, INT2 INTEGER ENCODED_QUALIFIER 11, " +
+                "INT3 INTEGER ENCODED_QUALIFIER 14) COLUMN_QUALIFIER_COUNTER ('0'=15)";
+        try {
+            conn.createStatement().execute(ddl);
+            fail("Duplicate Column Qualifiers");
+        } catch (SQLException e) {
+            // expected DUPLICATE_CQ
+            if (e.getErrorCode() != SQLExceptionCode.DUPLICATE_CQ.getErrorCode()) {
+                fail("Duplicate Column Qualifiers");
+            }
+        }
+    }
+
+    @Test
+    public void testCreateTableInvalidColumnQualifier() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER ENCODED_QUALIFIER 11, INT2 INTEGER ENCODED_QUALIFIER 9, " +
+                "INT3 INTEGER ENCODED_QUALIFIER 14) COLUMN_QUALIFIER_COUNTER ('0'=15)";
+        try {
+            conn.createStatement().execute(ddl);
+            fail("Invalid Column Qualifier");
+        } catch (SQLException e) {
+            // expected INVALID_CQ
+            if (e.getErrorCode() != SQLExceptionCode.INVALID_CQ.getErrorCode()) {
+                fail("Invalid Column Qualifier");
+            }
+        }
+
+        ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER ENCODED_QUALIFIER 11) COLUMN_QUALIFIER_COUNTER ('0'=8)";
+        try {
+            conn.createStatement().execute(ddl);
+            fail("Invalid Column Qualifier");
+        } catch (SQLException e) {
+            // expected INVALID_CQ
+            if (e.getErrorCode() != SQLExceptionCode.INVALID_CQ.getErrorCode()) {
+                fail("Invalid Column Qualifier");
+            }
+        }
+
+        ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER ENCODED_QUALIFIER 15) COLUMN_QUALIFIER_COUNTER ('0'=13)";
+        try {
+            conn.createStatement().execute(ddl);
+            fail("Invalid Column Qualifier");
+        } catch (SQLException e) {
+            // expected INVALID_CQ
+            if (e.getErrorCode() != SQLExceptionCode.INVALID_CQ.getErrorCode()) {
+                fail("Invalid Column Qualifier");
+            }
+        }
+
+        ddl = "CREATE IMMUTABLE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT1 INTEGER, " +
+                "INT2 INTEGER " +
+                "DEFAULT_COLUMN_FAMILY=dF" +
+                "COLUMN_QUALIFIER_COUNTER (\"0\"=13)";
+        try {
+            conn.createStatement().execute(ddl);
+        } catch (SQLException e) {
+            //expected
+        }
+    }
+
+    @Test
+    public void testCreateTableMissingColumnQualifier() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER, INT2 INTEGER ENCODED_QUALIFIER 12)";
+        try {
+            conn.createStatement().execute(ddl);
+            fail("Invalid Column Qualifier");
+        } catch (SQLException e) {
+            // expected MISSING_CQ
+            if (e.getErrorCode() != SQLExceptionCode.MISSING_CQ.getErrorCode()) {
+                fail("Missing Column Qualifier");
+            }
+        }
+
+        ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER ENCODED_QUALIFIER 11, INT2 INTEGER) COLUMN_QUALIFIER_COUNTER ('0'=13)";
+        try {
+            conn.createStatement().execute(ddl);
+            fail("Invalid Column Qualifier");
+        } catch (SQLException e) {
+            // expected MISSING_CQ
+            if (e.getErrorCode() != SQLExceptionCode.MISSING_CQ.getErrorCode()) {
+                fail("Missing Column Qualifier");
+            }
+        }
+    }
+
+    @Test
+    public void testCreateTableDefaultColumnQualifier() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE IMMUTABLE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT1 INTEGER, " +
+                "INT2 INTEGER, " +
+                "a.INT3 INTEGER, " +
+                "\"A\".INT4 INTEGER, " +
+                "\"b\".INT5 INTEGER, " +
+                "\"B\".INT6 INTEGER) " +
+                "DEFAULT_COLUMN_FAMILY=dF";
+        conn.createStatement().execute(ddl);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable table = pconn.getTable(new PTableKey(null, tableName));
+
+        QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
+        assertNotEquals(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, encodingScheme);
+
+        PTable.EncodedCQCounter cqCounter = table.getEncodedCQCounter();
+        assertEquals(13, cqCounter.values().get("dF").intValue());
+        assertEquals(13, cqCounter.values().get("A").intValue());
+        assertEquals(12, cqCounter.values().get("b").intValue());
+        assertEquals(12, cqCounter.values().get("B").intValue());
+        assertEquals(11, encodingScheme.decode(table.getColumnForColumnName("INT1")
+                .getColumnQualifierBytes()));
+        assertEquals(12, encodingScheme.decode(table.getColumnForColumnName("INT2")
+                .getColumnQualifierBytes()));
+        assertEquals(11, encodingScheme.decode(table.getColumnForColumnName("INT3")
+                .getColumnQualifierBytes()));
+        assertEquals(12, encodingScheme.decode(table.getColumnForColumnName("INT4")
+                .getColumnQualifierBytes()));
+        assertEquals(11, encodingScheme.decode(table.getColumnForColumnName("INT5")
+                .getColumnQualifierBytes()));
+        assertEquals(11, encodingScheme.decode(table.getColumnForColumnName("INT6")
+                .getColumnQualifierBytes()));
     }
 
     public static long verifyLastDDLTimestamp(String dataTableFullName, long startTS, Connection conn) throws SQLException {

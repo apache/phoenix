@@ -66,7 +66,8 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
         String schemaName = generateUniqueName();
         String pTableFullName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
         String createTableStmt = "CREATE TABLE "+ pTableFullName + "(K VARCHAR NOT NULL PRIMARY KEY, "
-                + "V1 VARCHAR, V2 VARCHAR) TTL=2592000, IMMUTABLE_ROWS=TRUE, DISABLE_WAL=TRUE";
+                + "V1 VARCHAR ENCODED_QUALIFIER 11, V2 VARCHAR ENCODED_QUALIFIER 12) " +
+                "TTL=2592000, IMMUTABLE_ROWS=TRUE, DISABLE_WAL=TRUE";
         List<String> queries = new ArrayList<String>(){};
         queries.add(createTableStmt);
         String result = runSchemaExtractionTool(schemaName, tableName, null, queries);
@@ -79,7 +80,8 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
         String schemaName = "lowecaseschemaname1";
         String pTableFullName = SchemaUtil.getEscapedTableName(schemaName, tableName);
         String createTableStmt = "CREATE TABLE "+ pTableFullName + "(\"smallK\" VARCHAR NOT NULL PRIMARY KEY, "
-                + "\"asd\".V1 VARCHAR, \"foo\".\"bar\" VARCHAR) TTL=2592000, IMMUTABLE_ROWS=true, DISABLE_WAL=true";
+                + "\"asd\".V1 VARCHAR ENCODED_QUALIFIER 11, \"foo\".\"bar\" VARCHAR ENCODED_QUALIFIER 11) " +
+                "TTL=2592000, IMMUTABLE_ROWS=true, DISABLE_WAL=true";
         List<String> queries = new ArrayList<String>(){};
         queries.add(createTableStmt);
         String result = runSchemaExtractionTool("\"" + schemaName + "\"", "\"" + tableName + "\"", null, queries);
@@ -416,8 +418,9 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
         String query = "create table " + pTableFullName +
                 "(a_char CHAR(15) NOT NULL, " +
                 "b_char CHAR(10) NOT NULL, " +
-                "c_var_array VARCHAR ARRAY, " +
-                "d_char_array CHAR(15) ARRAY[3] CONSTRAINT PK PRIMARY KEY (a_char, b_char)) " +
+                "c_var_array VARCHAR ARRAY ENCODED_QUALIFIER 11, " +
+                "d_char_array CHAR(15) ARRAY[3] ENCODED_QUALIFIER 12 " +
+                "CONSTRAINT PK PRIMARY KEY (a_char, b_char)) " +
                 "TTL=2592000, IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN', REPLICATION_SCOPE=1";
         List<String> queries = new ArrayList<String>(){};
         queries.add(query);
@@ -458,7 +461,8 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
                 "b_char CHAR(10) NOT NULL, " +
                 "\"av\".\"_\" CHAR(1), " +
                 "\"bv\".\"_\" CHAR(1), " +
-                "\"cv\".\"_\" CHAR(1) CONSTRAINT PK PRIMARY KEY (a_char, b_char)) " + properties;
+                "\"cv\".\"_\" CHAR(1) " +
+                "CONSTRAINT PK PRIMARY KEY (a_char, b_char)) " + properties;
         List<String> queries = new ArrayList<String>(){};
         queries.add(query);
         String result = runSchemaExtractionTool(schemaName, tableName, null, queries);
