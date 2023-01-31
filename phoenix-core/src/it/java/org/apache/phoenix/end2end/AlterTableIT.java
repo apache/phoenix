@@ -32,6 +32,7 @@ import static org.apache.phoenix.util.TestUtil.closeConnection;
 import static org.apache.phoenix.util.TestUtil.closeStatement;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -1693,6 +1694,46 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             }
 
             stmt.execute(okDdl);
+        }
+    }
+
+    @Test
+    public void testAlterTableWithColumnQualifiers() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER ENCODED_QUALIFIER 11, INT2 INTEGER ENCODED_QUALIFIER 12, " +
+                "INT3 INTEGER ENCODED_QUALIFIER 14) " +
+                generateDDLOptions("IMMUTABLE_ROWS = true"
+                        + (!columnEncoded ? ",IMMUTABLE_STORAGE_SCHEME=" + PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN : "")) +
+                " COLUMN_QUALIFIER_COUNTER ('" + QueryConstants.DEFAULT_COLUMN_FAMILY + "'=15)";
+        conn.createStatement().execute(ddl);
+
+        String addDdl = "ALTER TABLE \"" + tableName + "\" ADD CHAR1 char(10)";
+        conn.createStatement().execute(addDdl);
+
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable table = pconn.getTable(new PTableKey(null, tableName));
+
+        QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
+        if (columnEncoded) {
+            assertNotEquals(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, encodingScheme);
+        } else {
+            assertEquals(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, encodingScheme);
+        }
+
+        PTable.EncodedCQCounter cqCounter = table.getEncodedCQCounter();
+        assertEquals(columnEncoded ? 16 : null, cqCounter.getNextQualifier(QueryConstants.DEFAULT_COLUMN_FAMILY));
+        if (columnEncoded) {
+            assertEquals(11, encodingScheme.decode(table.getColumnForColumnName("INT")
+                    .getColumnQualifierBytes()));
+            assertEquals(12, encodingScheme.decode(table.getColumnForColumnName("INT2")
+                    .getColumnQualifierBytes()));
+            assertEquals(14, encodingScheme.decode(table.getColumnForColumnName("INT3")
+                    .getColumnQualifierBytes()));
+            assertEquals(15, encodingScheme.decode(table.getColumnForColumnName("CHAR1")
+                    .getColumnQualifierBytes()));
         }
     }
 

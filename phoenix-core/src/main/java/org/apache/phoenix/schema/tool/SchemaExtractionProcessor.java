@@ -48,6 +48,9 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
+import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.util.MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES;
 
 public class SchemaExtractionProcessor implements SchemaProcessor {
@@ -298,16 +301,19 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
 
         String columnInfoString = getColumnInfoStringForTable(table);
         String propertiesString = convertPropertiesToString();
+        String columnQualifierString = convertColumnQualifierCountersToString(table);
 
-        return generateTableDDLString(columnInfoString, propertiesString, pSchemaName, pTableName);
+        return generateTableDDLString(columnInfoString, propertiesString, columnQualifierString,
+                pSchemaName, pTableName);
     }
 
     private String generateTableDDLString(String columnInfoString, String propertiesString,
-            String pSchemaName, String pTableName) {
+                  String columnQualifierString, String pSchemaName, String pTableName) {
         String quotedTableFullName = SchemaUtil.getFullTableNameWithQuotes(pSchemaName, pTableName);
         StringBuilder outputBuilder = new StringBuilder(String.format(CREATE_TABLE,
                 quotedTableFullName));
-        outputBuilder.append(columnInfoString).append(" ").append(propertiesString);
+        outputBuilder.append(columnInfoString).append(" ").append(propertiesString)
+                .append(columnQualifierString);
         return outputBuilder.toString();
     }
 
@@ -391,6 +397,36 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         }
     }
 
+    private String convertColumnQualifierCountersToString(PTable table) {
+        StringBuilder cqBuilder = new StringBuilder();
+        if (shouldGenerateWithDefaults) {
+            return cqBuilder.toString();
+        }
+        Map<String, Integer> cqCounterValues = table.getEncodedCQCounter().values();
+        ArrayList<String> cqCounters = new ArrayList<>(cqCounterValues.size());
+
+        for (Map.Entry<String, Integer> entry : cqCounterValues.entrySet()) {
+            Boolean include = table.getColumns().stream()
+                    .filter(c -> !table.getPKColumns().contains(c))
+                    .filter(pColumn -> table.getImmutableStorageScheme() == SINGLE_CELL_ARRAY_WITH_OFFSETS ?
+                            pColumn.getFamilyName().getString().equalsIgnoreCase(entry.getKey()) : true)
+                    .map(o -> table.getEncodingScheme().decode(o.getColumnQualifierBytes()))
+                    .max(Integer::compare).map(maxCounter -> maxCounter != entry.getValue() - 1)
+                    .orElse(false);
+            if (include) {
+                String def = "'" + entry.getKey() + "'=" + entry.getValue().toString();
+                cqCounters.add(def);
+            }
+        }
+        if (cqCounters.size() > 0) {
+            cqBuilder.append(" COLUMN_QUALIFIER_COUNTER");
+            cqBuilder.append(" (");
+            cqBuilder.append(StringUtils.join( ", ", cqCounters));
+            cqBuilder.append(')');
+        }
+        return cqBuilder.toString();
+    }
+
     private String convertPropertiesToString() {
         StringBuilder optionBuilder = new StringBuilder();
         for(Map.Entry<String, String> entry : definedProps.entrySet()) {
@@ -450,13 +486,27 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         return getColumnInfoString(table, colInfo, columns, pkColumns);
     }
 
+    private boolean shouldContainQualifier(PTable table, List<PColumn> columns)
+    {
+        if (columns.size() == 0 || shouldGenerateWithDefaults) {
+            return false;
+        }
+
+        return table.getType() == PTableType.TABLE && table.getEncodingScheme() != PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+    }
+
     private String getColumnInfoString(PTable table, StringBuilder colInfo, List<PColumn> columns,
             List<PColumn> pkColumns) {
+        boolean appendQualifier = shouldContainQualifier(table, columns);
         ArrayList<String> colDefs = new ArrayList<>(columns.size());
         for (PColumn col : columns) {
             String def = extractColumn(col);
             if (pkColumns.size() == 1 && pkColumns.contains(col)) {
                 def += " PRIMARY KEY" + extractPKColumnAttributes(col);
+            }
+            if (appendQualifier && !pkColumns.contains(col)) {
+                def += " ENCODED_QUALIFIER " +
+                        table.getEncodingScheme().decode(col.getColumnQualifierBytes());
             }
             colDefs.add(def);
         }
