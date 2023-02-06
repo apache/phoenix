@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.execute;
 
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SYSCAT_TIME;
 import static org.apache.phoenix.query.QueryServices.SOURCE_OPERATION_ATTRIB;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_FAILED_COUNT;
@@ -887,52 +888,62 @@ public class MutationState implements SQLCloseable {
         // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
         // so no need to do it again here.
         PTable table = tableRef.getTable();
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
+        try {
 
-        // We generally don't re-resolve SYSTEM tables, but if it relies on ROW_TIMESTAMP, we must
-        // get the latest timestamp in order to upsert data with the correct server-side timestamp
-        // in case the ROW_TIMESTAMP is not provided in the UPSERT statement.
-        boolean hitServerForLatestTimestamp =
-                table.getRowTimestampColPos() != -1 && table.getType() == PTableType.SYSTEM;
-        MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(),
-                table.getTableName().getString(), hitServerForLatestTimestamp);
-        PTable resolvedTable = result.getTable();
-        if (resolvedTable == null) { throw new TableNotFoundException(table.getSchemaName().getString(), table
-                .getTableName().getString()); }
-        // Always update tableRef table as the one we've cached may be out of date since when we executed
-        // the UPSERT VALUES call and updated in the cache before this.
-        tableRef.setTable(resolvedTable);
-        List<PTable> indexes = resolvedTable.getIndexes();
-        for (PTable idxTtable : indexes) {
-            // If index is still active, but has a non zero INDEX_DISABLE_TIMESTAMP value, then infer that
-            // our failure mode is block writes on index failure.
-            if ((idxTtable.getIndexState() == PIndexState.ACTIVE || idxTtable.getIndexState() == PIndexState.PENDING_ACTIVE)
-                    && idxTtable.getIndexDisableTimestamp() > 0) { throw new SQLExceptionInfo.Builder(
-                    SQLExceptionCode.INDEX_FAILURE_BLOCK_WRITE).setSchemaName(table.getSchemaName().getString())
-                    .setTableName(table.getTableName().getString()).build().buildException(); }
-        }
-        long timestamp = result.getMutationTime();
-        if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
-            serverTimeStamp = timestamp;
-            if (result.wasUpdated()) {
-                List<PColumn> columns = Lists.newArrayListWithExpectedSize(table.getColumns().size());
-                for (Map.Entry<ImmutableBytesPtr, RowMutationState> rowEntry : rowKeyToColumnMap.entrySet()) {
-                    RowMutationState valueEntry = rowEntry.getValue();
-                    if (valueEntry != null) {
-                        Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
-                        if (colValues != PRow.DELETE_MARKER) {
-                            for (PColumn column : colValues.keySet()) {
-                                if (!column.isDynamic()) columns.add(column);
+            // We generally don't re-resolve SYSTEM tables, but if it relies on ROW_TIMESTAMP, we must
+            // get the latest timestamp in order to upsert data with the correct server-side timestamp
+            // in case the ROW_TIMESTAMP is not provided in the UPSERT statement.
+            boolean hitServerForLatestTimestamp =
+                    table.getRowTimestampColPos() != -1 && table.getType() == PTableType.SYSTEM;
+            MetaDataMutationResult result = client.updateCache(table.getSchemaName().getString(),
+                    table.getTableName().getString(), hitServerForLatestTimestamp);
+            PTable resolvedTable = result.getTable();
+            if (resolvedTable == null) {
+                throw new TableNotFoundException(table.getSchemaName().getString(), table
+                        .getTableName().getString());
+            }
+            // Always update tableRef table as the one we've cached may be out of date since when we executed
+            // the UPSERT VALUES call and updated in the cache before this.
+            tableRef.setTable(resolvedTable);
+            List<PTable> indexes = resolvedTable.getIndexes();
+            for (PTable idxTtable : indexes) {
+                // If index is still active, but has a non zero INDEX_DISABLE_TIMESTAMP value, then infer that
+                // our failure mode is block writes on index failure.
+                if ((idxTtable.getIndexState() == PIndexState.ACTIVE || idxTtable.getIndexState() == PIndexState.PENDING_ACTIVE)
+                        && idxTtable.getIndexDisableTimestamp() > 0) {
+                    throw new SQLExceptionInfo.Builder(
+                            SQLExceptionCode.INDEX_FAILURE_BLOCK_WRITE).setSchemaName(table.getSchemaName().getString())
+                            .setTableName(table.getTableName().getString()).build().buildException();
+                }
+            }
+            long timestamp = result.getMutationTime();
+            if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
+                serverTimeStamp = timestamp;
+                if (result.wasUpdated()) {
+                    List<PColumn> columns = Lists.newArrayListWithExpectedSize(table.getColumns().size());
+                    for (Map.Entry<ImmutableBytesPtr, RowMutationState> rowEntry : rowKeyToColumnMap.entrySet()) {
+                        RowMutationState valueEntry = rowEntry.getValue();
+                        if (valueEntry != null) {
+                            Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
+                            if (colValues != PRow.DELETE_MARKER) {
+                                for (PColumn column : colValues.keySet()) {
+                                    if (!column.isDynamic()) columns.add(column);
+                                }
                             }
                         }
                     }
-                }
-                for (PColumn column : columns) {
-                    if (column != null) {
-                        resolvedTable.getColumnFamily(column.getFamilyName().getString()).getPColumnForColumnName(
-                                column.getName().getString());
+                    for (PColumn column : columns) {
+                        if (column != null) {
+                            resolvedTable.getColumnFamily(column.getFamilyName().getString()).getPColumnForColumnName(
+                                    column.getName().getString());
+                        }
                     }
                 }
             }
+        } finally {
+            long endTime = EnvironmentEdgeManager.currentTimeMillis();
+            GLOBAL_MUTATION_SYSCAT_TIME.update(endTime - startTime); 
         }
         return serverTimeStamp == QueryConstants.UNSET_TIMESTAMP ? HConstants.LATEST_TIMESTAMP : serverTimeStamp;
     }
