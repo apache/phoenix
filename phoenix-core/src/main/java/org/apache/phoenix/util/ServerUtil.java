@@ -47,6 +47,7 @@ import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControlle
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Region.RowLock;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -311,7 +312,7 @@ public class ServerUtil {
                 @Override
                     public Connection apply(ConnectionType t) {
                     try {
-                        return env.createConnection(getTypeSpecificConfiguration(connectionType, env.getConfiguration()));
+                        return CompatUtil.createShortCircuitConnection(getTypeSpecificConfiguration(connectionType, env.getConfiguration()), env);
                     } catch (IOException e) {
                        throw new RuntimeException(e);
                     }
