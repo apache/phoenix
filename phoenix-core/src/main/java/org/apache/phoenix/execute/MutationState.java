@@ -786,6 +786,7 @@ public class MutationState implements SQLCloseable {
         //downstream consumers don't need to have the Phoenix codecs.
         byte[] lastDDLTimestamp =
             table.getLastDDLTimestamp() != null ? Bytes.toBytes(table.getLastDDLTimestamp()) : null;
+        WALAnnotationUtil.annotateMutation(mutation, tenantId, schemaName, tableName, tableType, lastDDLTimestamp);
         WALAnnotationUtil.annotateMutation(mutation, externalSchemaRegistryId);
     }
 
@@ -1054,15 +1055,10 @@ public class MutationState implements SQLCloseable {
     }
 
     public enum MutationMetadataType {
-        @Deprecated
         TENANT_ID,
-        @Deprecated
         SCHEMA_NAME,
-        @Deprecated
         LOGICAL_TABLE_NAME,
-        @Deprecated
         TIMESTAMP,
-        @Deprecated
         TABLE_TYPE,
         EXTERNAL_SCHEMA_ID
     }
