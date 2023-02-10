@@ -34,7 +34,6 @@ import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.RegionInfoUtil;
 import org.apache.hadoop.hbase.client.Result;
@@ -90,26 +89,35 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
         RegionInfo childRegion = region.getRegionInfo();
         byte[] splitKey = null;
         if (reader == null && r != null) {
-            if(!p.toString().contains(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+            if (!p.toString().contains(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
                 return reader;
             }
-            PhoenixConnection conn = null;
             Table metaTable = null;
             byte[] regionStartKeyInHFile = null;
-            try (Connection hbaseConn =
-                    ConnectionFactory.createConnection(ctx.getEnvironment().getConfiguration())) {
+
+            try (PhoenixConnection conn =
+                    QueryUtil.getConnectionOnServer(ctx.getEnvironment().getConfiguration())
+                            .unwrap(PhoenixConnection.class)) {
+                // This is the CQSI shared Connection. MUST NOT be closed.
+                Connection hbaseConn = conn.getQueryServices().getAdmin().getConnection();
                 Scan scan = CompatUtil.getScanForTableName(hbaseConn, tableName);
                 SingleColumnValueFilter scvf = null;
                 if (Reference.isTopFileRegion(r.getFileRegion())) {
-                    scvf = new SingleColumnValueFilter(HConstants.CATALOG_FAMILY,
-                        HConstants.SPLITB_QUALIFIER, CompareOperator.EQUAL, RegionInfoUtil.toByteArray(region.getRegionInfo()));
+                    scvf =
+                            new SingleColumnValueFilter(HConstants.CATALOG_FAMILY,
+                                    HConstants.SPLITB_QUALIFIER, CompareOperator.EQUAL,
+                                    RegionInfoUtil.toByteArray(region.getRegionInfo()));
                     scvf.setFilterIfMissing(true);
                 } else {
-                    scvf = new SingleColumnValueFilter(HConstants.CATALOG_FAMILY,
-                        HConstants.SPLITA_QUALIFIER, CompareOperator.EQUAL, RegionInfoUtil.toByteArray(region.getRegionInfo()));
+                    scvf =
+                            new SingleColumnValueFilter(HConstants.CATALOG_FAMILY,
+                                    HConstants.SPLITA_QUALIFIER, CompareOperator.EQUAL,
+                                    RegionInfoUtil.toByteArray(region.getRegionInfo()));
                     scvf.setFilterIfMissing(true);
                 }
-                if(scvf != null) scan.setFilter(scvf);
+                if (scvf != null) {
+                    scan.setFilter(scvf);
+                }
                 metaTable = hbaseConn.getTable(TableName.META_TABLE_NAME);
                 Result result = null;
                 try (ResultScanner scanner = metaTable.getScanner(scan)) {
@@ -119,17 +127,17 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                     List<RegionInfo> mergeRegions =
                             MetaTableAccessor.getMergeRegions(ctx.getEnvironment().getConnection(),
                                 region.getRegionInfo().getRegionName());
-                    if (mergeRegions == null || mergeRegions.isEmpty()){
+                    if (mergeRegions == null || mergeRegions.isEmpty()) {
                         return reader;
                     }
                     byte[] splitRow =
                             CellUtil.cloneRow(KeyValueUtil.createKeyValueFromKey(r.getSplitKey()));
-                    // We need not change any thing in first region data because first region start key
+                    // We need not change any thing in first region data because first region start
+                    // key
                     // is equal to merged region start key. So returning same reader.
                     if (Bytes.compareTo(mergeRegions.get(0).getStartKey(), splitRow) == 0) {
-                        if (mergeRegions.get(0).getStartKey().length == 0
-                                 && region.getRegionInfo().getEndKey().length
-                                         != mergeRegions.get(0).getEndKey().length) {
+                        if (mergeRegions.get(0).getStartKey().length == 0 && region.getRegionInfo()
+                                .getEndKey().length != mergeRegions.get(0).getEndKey().length) {
                             childRegion = mergeRegions.get(0);
                             regionStartKeyInHFile =
                                     mergeRegions.get(0).getStartKey().length == 0
@@ -139,8 +147,8 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                             return reader;
                         }
                     } else {
-                        for (RegionInfo mergeRegion :
-                                mergeRegions.subList(1, mergeRegions.size())) {
+                        for (RegionInfo mergeRegion : mergeRegions.subList(1,
+                            mergeRegions.size())) {
                             if (Bytes.compareTo(mergeRegion.getStartKey(), splitRow) == 0) {
                                 childRegion = mergeRegion;
                                 regionStartKeyInHFile = mergeRegion.getStartKey();
@@ -148,51 +156,48 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                             }
                         }
                     }
-                    splitKey = KeyValueUtil.createFirstOnRow(region.getRegionInfo().getStartKey().length == 0 ?
-                        new byte[region.getRegionInfo().getEndKey().length] :
-                            region.getRegionInfo().getStartKey()).getKey();
+                    splitKey =
+                            KeyValueUtil.createFirstOnRow(
+                                region.getRegionInfo().getStartKey().length == 0
+                                        ? new byte[region.getRegionInfo().getEndKey().length]
+                                        : region.getRegionInfo().getStartKey())
+                                    .getKey();
                 } else {
                     RegionInfo parentRegion = MetaTableAccessor.getRegionInfo(result);
                     regionStartKeyInHFile =
-                            parentRegion.getStartKey().length == 0 ? new byte[parentRegion
-                                    .getEndKey().length] : parentRegion.getStartKey();
+                            parentRegion.getStartKey().length == 0
+                                    ? new byte[parentRegion.getEndKey().length]
+                                    : parentRegion.getStartKey();
                 }
-            } finally {
-                if (metaTable != null) metaTable.close();
-            }
-            try {
-                conn = QueryUtil.getConnectionOnServer(ctx.getEnvironment().getConfiguration()).unwrap(
-                            PhoenixConnection.class);
+
                 PTable dataTable =
-                        IndexUtil.getPDataTable(conn, ctx.getEnvironment().getRegion()
-                                .getTableDescriptor());
+                        IndexUtil.getPDataTable(conn,
+                            ctx.getEnvironment().getRegion().getTableDescriptor());
                 List<PTable> indexes = dataTable.getIndexes();
                 Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers =
                         new HashMap<ImmutableBytesWritable, IndexMaintainer>();
                 for (PTable index : indexes) {
                     if (index.getIndexType() == IndexType.LOCAL) {
                         IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable, conn);
-                        indexMaintainers.put(new ImmutableBytesWritable(index.getviewIndexIdType().toBytes(index.getViewIndexId())),
+                        indexMaintainers.put(
+                            new ImmutableBytesWritable(
+                                    index.getviewIndexIdType().toBytes(index.getViewIndexId())),
                             indexMaintainer);
                     }
                 }
-                if(indexMaintainers.isEmpty()) return reader;
+                if (indexMaintainers.isEmpty()) {
+                    return reader;
+                }
                 byte[][] viewConstants = getViewConstants(dataTable);
-                return new IndexHalfStoreFileReader(fs, p, cacheConf, in, size, r, ctx
-                        .getEnvironment().getConfiguration(), indexMaintainers, viewConstants,
+                return new IndexHalfStoreFileReader(fs, p, cacheConf, in, size, r,
+                        ctx.getEnvironment().getConfiguration(), indexMaintainers, viewConstants,
                         childRegion, regionStartKeyInHFile, splitKey,
                         childRegion.getReplicaId() == RegionInfo.DEFAULT_REPLICA_ID,
                         new AtomicInteger(0), region.getRegionInfo());
             } catch (SQLException e) {
                 throw new IOException(e);
             } finally {
-                if (conn != null) {
-                    try {
-                        conn.close();
-                    } catch (SQLException e) {
-                        throw new IOException(e);
-                    }
-                }
+                if (metaTable != null) metaTable.close();
             }
         }
         return reader;
