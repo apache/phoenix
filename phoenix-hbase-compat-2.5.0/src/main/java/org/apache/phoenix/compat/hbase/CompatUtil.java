@@ -17,12 +17,15 @@
  */
 package org.apache.phoenix.compat.hbase;
 
+import java.io.IOException;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.io.hfile.HFileContext;
@@ -66,4 +69,8 @@ public class CompatUtil {
         return StoreUtils.getBytesPerChecksum(conf);
     }
 
+    public static Connection createShortCircuitConnection(final Configuration configuration,
+            final RegionCoprocessorEnvironment env) throws IOException {
+        return env.createConnection(configuration);
+    }
 }
