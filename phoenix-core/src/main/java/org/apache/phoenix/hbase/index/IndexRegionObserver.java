@@ -34,7 +34,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
@@ -228,7 +227,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // The collection of candidate index mutations that will be applied after the data table mutations
       private ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates;
       private List<RowLock> rowLocks = Lists.newArrayListWithExpectedSize(QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-      private Set<ImmutableBytesPtr> rowsToLock = new TreeSet<>();
+      private HashSet<ImmutableBytesPtr> rowsToLock = new HashSet<>();
       // The current and next states of the data rows corresponding to the pending mutations
       private HashMap<ImmutableBytesPtr, Pair<Put, Put>> dataRowStates;
       // The previous concurrent batch contexts

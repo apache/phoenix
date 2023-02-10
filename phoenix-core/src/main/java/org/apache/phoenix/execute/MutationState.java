@@ -801,7 +801,6 @@ public class MutationState implements SQLCloseable {
         byte[] lastDDLTimestamp =
                 table.getLastDDLTimestamp() != null ? Bytes.toBytes(table.getLastDDLTimestamp()) : null;
         WALAnnotationUtil.annotateMutation(mutation, tenantId, schemaName, tableName, tableType, lastDDLTimestamp);
-        WALAnnotationUtil.annotateMutation(mutation, externalSchemaRegistryId);
     }
 
     /**
