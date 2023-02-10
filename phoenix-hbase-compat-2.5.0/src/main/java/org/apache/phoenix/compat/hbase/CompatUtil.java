@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
@@ -146,4 +147,8 @@ public class CompatUtil {
         return StoreUtils.getBytesPerChecksum(conf);
     }
 
+    public static Connection createShortCircuitConnection(final Configuration configuration,
+            final RegionCoprocessorEnvironment env) throws IOException {
+        return env.createConnection(configuration);
+    }
 }

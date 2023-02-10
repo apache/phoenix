@@ -28,6 +28,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
@@ -146,4 +147,9 @@ public class CompatUtil {
         return HStore.getBytesPerChecksum(conf);
     }
 
+    public static Connection createShortCircuitConnection(final Configuration configuration,
+            final RegionCoprocessorEnvironment env) throws IOException {
+        //Short Circuit connections are broken before 2.4.12
+        return org.apache.hadoop.hbase.client.ConnectionFactory.createConnection(configuration);
+    }
 }
