@@ -165,9 +165,6 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
     @Override
     public void stop(CoprocessorEnvironment env) throws IOException {
         super.stop(env);
-        if (this.accessCheckEnabled) {
-            serverConnection.close();
-        }
     }
 
     @Override
