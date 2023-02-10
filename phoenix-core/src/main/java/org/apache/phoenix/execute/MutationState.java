@@ -762,17 +762,33 @@ public class MutationState implements SQLCloseable {
     }
 
     private void annotateMutationsWithMetadata(PTable table, List<Mutation> rowMutations) {
-        //only annotate if the change detection flag is on the table.
-        if (table == null || !table.isChangeDetectionEnabled()) {
+        if (table == null) {
             return;
         }
-        //annotate each mutation with enough metadata so that anyone interested can
+        // Annotate each mutation with enough phoenix metadata so that anyone interested can
         // deterministically figure out exactly what Phoenix schema object created the mutation
         // Server-side we can annotate the HBase WAL with these.
         for (Mutation mutation : rowMutations) {
             annotateMutationWithMetadata(table, mutation);
         }
 
+        //only annotate external schema id if the change detection flag is on the table.
+        if (!table.isChangeDetectionEnabled()) {
+            return;
+        }
+        //annotate each mutation with enough metadata so that anyone interested can
+        // deterministically figure out exactly what Phoenix schema object created the mutation
+        // Server-side we can annotate the HBase WAL with these.
+        for (Mutation mutation : rowMutations) {
+            annotateMutationWithMetadataWithExternalSchemaId(table, mutation);
+        }
+
+    }
+
+    private void annotateMutationWithMetadataWithExternalSchemaId(PTable table, Mutation mutation) {
+        byte[] externalSchemaRegistryId = table.getExternalSchemaId() != null ?
+                Bytes.toBytes(table.getExternalSchemaId()) : null;
+        WALAnnotationUtil.annotateMutation(mutation, externalSchemaRegistryId);
     }
 
     private void annotateMutationWithMetadata(PTable table, Mutation mutation) {
@@ -781,11 +797,9 @@ public class MutationState implements SQLCloseable {
         byte[] tableName = table.getTableName() != null ? table.getTableName().getBytes() : null;
         byte[] tableType = table.getType().getValue().getBytes();
         byte[] externalSchemaRegistryId = table.getExternalSchemaId() != null ?
-            Bytes.toBytes(table.getExternalSchemaId()) : null;
-        //Note that we use the _HBase_ byte encoding for a Long, not the Phoenix one, so that
-        //downstream consumers don't need to have the Phoenix codecs.
+                Bytes.toBytes(table.getExternalSchemaId()) : null;
         byte[] lastDDLTimestamp =
-            table.getLastDDLTimestamp() != null ? Bytes.toBytes(table.getLastDDLTimestamp()) : null;
+                table.getLastDDLTimestamp() != null ? Bytes.toBytes(table.getLastDDLTimestamp()) : null;
         WALAnnotationUtil.annotateMutation(mutation, tenantId, schemaName, tableName, tableType, lastDDLTimestamp);
         WALAnnotationUtil.annotateMutation(mutation, externalSchemaRegistryId);
     }

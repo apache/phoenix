@@ -78,7 +78,6 @@ import static org.junit.Assert.fail;
  * table type etc over to the Sink cluster. For this, we need to set two important attributes:
  * 1. hbase.coprocessor.regionserver.classes
  * 2. phoenix.append.metadata.to.wal
- * In addition to the above configs, we also need CHANGE_DETECTION_ENABLED table descriptor attribute.
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class ReplicationWithWALAnnotationIT extends BaseTest {
@@ -181,7 +180,7 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
         //create the primary and index tables
         primaryConnection.createStatement().execute(
                 String.format("CREATE TABLE %s (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) "
-                        + "CHANGE_DETECTION_ENABLED = true, REPLICATION_SCOPE = 1", DATA_TABLE_FULL_NAME));
+                        + "REPLICATION_SCOPE = 1", DATA_TABLE_FULL_NAME));
         primaryConnection.createStatement()
                 .execute(String.format("CREATE INDEX %s ON %s (v1)", INDEX_TABLE_NAME, DATA_TABLE_FULL_NAME));
 
@@ -206,7 +205,7 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
         //create the primary and index tables
         secondaryConnection.createStatement().execute(
                 String.format("CREATE TABLE %s (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) "
-                        + "CHANGE_DETECTION_ENABLED = true, REPLICATION_SCOPE = 1", DATA_TABLE_FULL_NAME));
+                        + "REPLICATION_SCOPE = 1", DATA_TABLE_FULL_NAME));
         secondaryConnection.createStatement()
                 .execute(String.format("CREATE INDEX %s ON %s (v1)", INDEX_TABLE_NAME, DATA_TABLE_FULL_NAME));
 
@@ -291,15 +290,15 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
         //create the primary and index tables
         primaryConnection.createStatement().execute(
                 String.format("CREATE TABLE %s (TENANT_ID VARCHAR(15) NOT NULL, k VARCHAR NOT NULL, v1 "
-                        + "VARCHAR, v2 VARCHAR CONSTRAINT pk PRIMARY KEY (TENANT_ID, k)) CHANGE_DETECTION_ENABLED = "
-                        + "true, REPLICATION_SCOPE = 1, MULTI_TENANT = true", DATA_TABLE_FULL_NAME));
+                        + "VARCHAR, v2 VARCHAR CONSTRAINT pk PRIMARY KEY (TENANT_ID, k)) "
+                        + "REPLICATION_SCOPE = 1, MULTI_TENANT = true", DATA_TABLE_FULL_NAME));
         primaryConnection.createStatement()
                 .execute(String.format("CREATE INDEX %s ON %s (v1)", INDEX_TABLE_NAME, DATA_TABLE_FULL_NAME));
 
         Connection primaryTenantConnection = getTenantConnection(url1, "tenant01");
 
-        primaryTenantConnection.createStatement().execute(String.format("CREATE VIEW %s AS SELECT * FROM %s "
-                + "CHANGE_DETECTION_ENABLED = true", TENANT_VIEW_NAME, DATA_TABLE_FULL_NAME));
+        primaryTenantConnection.createStatement().execute(String.format("CREATE VIEW %s AS SELECT * FROM %s ",
+                TENANT_VIEW_NAME, DATA_TABLE_FULL_NAME));
         primaryTenantConnection.createStatement()
                 .execute(String.format("CREATE INDEX %s ON %s (v1)", TENANT_VIEW_INDEX_NAME, TENANT_VIEW_NAME));
 
@@ -332,15 +331,15 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
         //create the primary and index tables
         secondaryConnection.createStatement().execute(
                 String.format("CREATE TABLE %s (TENANT_ID VARCHAR(15) NOT NULL, k VARCHAR NOT NULL, v1 "
-                        + "VARCHAR, v2 VARCHAR CONSTRAINT pk PRIMARY KEY (TENANT_ID, k)) CHANGE_DETECTION_ENABLED = "
-                        + "true, REPLICATION_SCOPE = 1, MULTI_TENANT = true", DATA_TABLE_FULL_NAME));
+                        + "VARCHAR, v2 VARCHAR CONSTRAINT pk PRIMARY KEY (TENANT_ID, k)) "
+                        + "REPLICATION_SCOPE = 1, MULTI_TENANT = true", DATA_TABLE_FULL_NAME));
         secondaryConnection.createStatement()
                 .execute(String.format("CREATE INDEX %s ON %s (v1)", INDEX_TABLE_NAME, DATA_TABLE_FULL_NAME));
 
         Connection secondaryTenantConnection = getTenantConnection(url2, "tenant01");
 
-        secondaryTenantConnection.createStatement().execute(String.format("CREATE VIEW %s AS SELECT * FROM %s "
-                + "CHANGE_DETECTION_ENABLED = true", TENANT_VIEW_NAME, DATA_TABLE_FULL_NAME));
+        secondaryTenantConnection.createStatement().execute(String.format("CREATE VIEW %s AS SELECT * FROM %s ",
+                TENANT_VIEW_NAME, DATA_TABLE_FULL_NAME));
         secondaryTenantConnection.createStatement()
                 .execute(String.format("CREATE INDEX %s ON %s (v1)", TENANT_VIEW_INDEX_NAME, TENANT_VIEW_NAME));
 
