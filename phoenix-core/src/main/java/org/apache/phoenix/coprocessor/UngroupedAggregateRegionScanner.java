@@ -51,6 +51,7 @@ import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -78,7 +79,6 @@ import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.memory.InsufficientMemoryException;
 import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.query.QueryConstants;
@@ -112,7 +112,6 @@ import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -161,7 +160,6 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
     private boolean incrScanRefCount = false;
     private byte[] indexMaintainersPtr;
     private boolean useIndexProto;
-    private PhoenixConnection targetPConn = null;
 
     public UngroupedAggregateRegionScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
                                            final RegionScanner innerScanner, final Region region, final Scan scan,
@@ -228,13 +226,10 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         if (upsertSelectTable != null) {
             isUpsert = true;
             projectedTable = deserializeTable(upsertSelectTable);
-            targetPConn =
-                    ((PhoenixConnection) QueryUtil.getConnectionOnServer(
-                        ungroupedAggregateRegionObserver.getUpsertSelectConfig()));
-            targetHTable =
-                    targetPConn.getQueryServices()
-                            .getTable(projectedTable.getPhysicalName().getBytes());
-            // TODO Can't we just close the PhoenixConnection immediately here ?
+            //The Connection is cached in the coprocessor environment, it MUST NOT be closed.
+            targetHTable = ServerUtil.ConnectionFactory.getConnection(
+                ServerUtil.ConnectionType.DEFAULT_SERVER_CONNECTION,
+                env).getTable(TableName.valueOf(projectedTable.getPhysicalName().getBytes()));
             selectExpressions = deserializeExpressions(scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS));
             values = new byte[projectedTable.getPKColumns().size()][];
             isPKChanging = ExpressionUtil.isPkPositionChanging(new TableRef(projectedTable), selectExpressions);
@@ -312,13 +307,6 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                     targetHTable.close();
                 } catch (IOException e) {
                     LOGGER.error("Closing table: " + targetHTable + " failed: ", e);
-                }
-            }
-            if (targetPConn != null) {
-                try {
-                    targetPConn.close();
-                } catch (SQLException e) {
-                    LOGGER.error("Closing connection: " + targetPConn + " failed: ", e);
                 }
             }
         } finally {
