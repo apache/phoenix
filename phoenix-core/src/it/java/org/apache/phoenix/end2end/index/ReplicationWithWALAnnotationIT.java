@@ -37,6 +37,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.hbase.zookeeper.ZKWatcher;
 import org.apache.phoenix.coprocessor.ReplicationSinkEndpoint;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -52,6 +53,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.AfterClass;
+import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -168,8 +170,35 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
                 ReplicationPeerConfig.newBuilder().setClusterKey(utility2.getClusterKey()).build());
     }
 
+    private boolean isReplicationSinkEndpointEnabled() {
+        // true for 2.4.16+ or 2.5.3+ versions, false otherwise
+        String hbaseVersion = VersionInfo.getVersion();
+        String[] versionArr = hbaseVersion.split("\\.");
+        int majorVersion = Integer.parseInt(versionArr[0]);
+        int minorVersion = Integer.parseInt(versionArr[1]);
+        int patchVersion = Integer.parseInt(versionArr[2].split("-hadoop")[0]);
+        if (majorVersion > 2) {
+            return true;
+        }
+        if (majorVersion < 2) {
+            return false;
+        }
+        if (minorVersion > 5) {
+            return true;
+        }
+        if (minorVersion < 4) {
+            return false;
+        }
+        if (minorVersion == 4) {
+            return patchVersion >= 16;
+        }
+        return patchVersion >= 3;
+    }
+
     @Test
     public void testReplicationWithWALExtendedAttributes() throws Exception {
+        Assume.assumeTrue("Replication sink endpoint on hbase versions 2.4.16+ or 2.5.3+",
+                isReplicationSinkEndpointEnabled());
         // register driver for url1
         driver = initAndRegisterTestDriver(url1, new ReadOnlyProps(props.entrySet().iterator()));
         Connection primaryConnection = getConnection(url1);
@@ -280,6 +309,8 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
 
     @Test
     public void testReplicationWithWALExtendedAttributesWithTenants() throws Exception {
+        Assume.assumeTrue("Replication sink endpoint on hbase versions 2.4.16+ or 2.5.3+",
+                isReplicationSinkEndpointEnabled());
         // register driver for url1
         driver = initAndRegisterTestDriver(url1, new ReadOnlyProps(props.entrySet().iterator()));
         Connection primaryConnection = getConnection(url1);
