@@ -228,6 +228,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // The collection of candidate index mutations that will be applied after the data table mutations
       private ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates;
       private List<RowLock> rowLocks = Lists.newArrayListWithExpectedSize(QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
+      //  TreeSet to improve locking efficiency and avoid deadlock (PHOENIX-6871 and HBASE-17924) 
       private Set<ImmutableBytesPtr> rowsToLock = new TreeSet<>();
       // The current and next states of the data rows corresponding to the pending mutations
       private HashMap<ImmutableBytesPtr, Pair<Put, Put>> dataRowStates;
