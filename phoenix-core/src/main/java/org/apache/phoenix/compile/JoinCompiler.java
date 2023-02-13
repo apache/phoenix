@@ -20,7 +20,6 @@ package org.apache.phoenix.compile;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
-import static org.apache.phoenix.util.IndexUtil.isHintedGlobalIndex;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -76,7 +75,7 @@ import org.apache.phoenix.parse.TableNodeVisitor;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.IndexDataColumnRef;
+import org.apache.phoenix.schema.LocalIndexDataColumnRef;
 import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PNameFactory;
@@ -158,37 +157,43 @@ public class JoinCompiler {
     public static JoinTable compile(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver) throws SQLException {
         JoinCompiler compiler = new JoinCompiler(statement, select, resolver);
         JoinTableConstructor constructor = compiler.new JoinTableConstructor();
-        Pair<Table, List<JoinSpec>> res = select.getFrom().accept(constructor);
-        JoinTable joinTable = res.getSecond() == null ? compiler.new JoinTable(res.getFirst()) : compiler.new JoinTable(res.getFirst(), res.getSecond());
-        if (select.getWhere() != null) {
-            joinTable.pushDownFilter(select.getWhere());
+        Pair<Table, List<JoinSpec>> res = (select.getFrom()!=null) ? select.getFrom().accept(constructor) : null;
+        JoinTable joinTable = res!=null?res.getSecond() == null ? compiler.new JoinTable(res.getFirst()) : compiler.new JoinTable(res.getFirst(), res.getSecond()) : null ;
+        if(joinTable!=null)
+        {
+            if (select.getWhere() != null) {
+                joinTable.pushDownFilter(select.getWhere());
+            }
+
+            ColumnRefParseNodeVisitor generalRefVisitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
+            ColumnRefParseNodeVisitor joinLocalRefVisitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
+
+            joinTable.pushDownColumnRefVisitors(generalRefVisitor, joinLocalRefVisitor);
+
+            ParseNodeUtil.applyParseNodeVisitor(select, generalRefVisitor, false);
+
+            compiler.columnNodes.putAll(joinLocalRefVisitor.getColumnRefMap());
+            compiler.columnNodes.putAll(generalRefVisitor.getColumnRefMap());
+
+            for (ColumnRef ref : generalRefVisitor.getColumnRefMap().keySet()) {
+                compiler.columnRefs.put(ref, ColumnRefType.GENERAL);
+            }
+            for (ColumnRef ref : joinLocalRefVisitor.getColumnRefMap().keySet()) {
+                if (!compiler.columnRefs.containsKey(ref))
+                    compiler.columnRefs.put(ref, ColumnRefType.JOINLOCAL);
+            }
+
+            /**
+             * After {@link ColumnRefParseNodeVisitor} is pushed down,
+             * pruning columns for each {@link JoinCompiler.Table} if
+             * {@link @link JoinCompiler.Table#isSubselect()}.
+             */
+            joinTable.pruneSubselectAliasedNodes();
+            return joinTable;
         }
-
-        ColumnRefParseNodeVisitor generalRefVisitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
-        ColumnRefParseNodeVisitor joinLocalRefVisitor = new ColumnRefParseNodeVisitor(resolver, statement.getConnection());
-
-        joinTable.pushDownColumnRefVisitors(generalRefVisitor, joinLocalRefVisitor);
-
-        ParseNodeUtil.applyParseNodeVisitor(select, generalRefVisitor, false);
-
-        compiler.columnNodes.putAll(joinLocalRefVisitor.getColumnRefMap());
-        compiler.columnNodes.putAll(generalRefVisitor.getColumnRefMap());
-
-        for (ColumnRef ref : generalRefVisitor.getColumnRefMap().keySet()) {
-            compiler.columnRefs.put(ref, ColumnRefType.GENERAL);
+        else {
+            return null;
         }
-        for (ColumnRef ref : joinLocalRefVisitor.getColumnRefMap().keySet()) {
-            if (!compiler.columnRefs.containsKey(ref))
-                compiler.columnRefs.put(ref, ColumnRefType.JOINLOCAL);
-        }
-
-        /**
-         * After {@link ColumnRefParseNodeVisitor} is pushed down,
-         * pruning columns for each {@link JoinCompiler.Table} if
-         * {@link @link JoinCompiler.Table#isSubselect()}.
-         */
-        joinTable.pruneSubselectAliasedNodes();
-        return joinTable;
     }
 
     private class JoinTableConstructor implements TableNodeVisitor<Pair<Table, List<JoinSpec>>> {
@@ -398,7 +403,7 @@ public class JoinCompiler {
 
         /**
          * Pruning columns for each {@link JoinCompiler.Table} if
-         * {@link JoinCompiler.Table#isSubselect()}.
+         * {@link @link JoinCompiler.Table#isSubselect()}.
          * @throws SQLException
          */
         public void pruneSubselectAliasedNodes() throws SQLException {
@@ -523,7 +528,7 @@ public class JoinCompiler {
                 ParseNode newPostFilterParseNode =
                         postFilterParseNode.accept(pushDownPostFilterNodeVistor);
                 if(newPostFilterParseNode != postFilterParseNode &&
-                   newPostFilterParseNodes == null) {
+                        newPostFilterParseNodes == null) {
                     newPostFilterParseNodes =
                             new ArrayList<ParseNode>(this.postFilters.subList(0, index));
                 }
@@ -556,7 +561,7 @@ public class JoinCompiler {
 
             for (Map.Entry<ColumnRef, ColumnRefType> e : columnRefs.entrySet()) {
                 if (e.getValue() == ColumnRefType.GENERAL &&
-                    allTableRefs.contains(e.getKey().getTableRef())) {
+                        allTableRefs.contains(e.getKey().getTableRef())) {
                     return true;
                 }
             }
@@ -565,18 +570,18 @@ public class JoinCompiler {
         }
 
         public boolean hasFilters() {
-           if (!postFilters.isEmpty())
-               return true;
+            if (!postFilters.isEmpty())
+                return true;
 
-           if (isPrefilterAccepted && leftTable.hasFilters())
-               return true;
+            if (isPrefilterAccepted && leftTable.hasFilters())
+                return true;
 
-           for (JoinSpec joinSpec : prefilterAcceptedTables) {
-               if (joinSpec.getRhsJoinTable().hasFilters())
-                   return true;
-           }
+            for (JoinSpec joinSpec : prefilterAcceptedTables) {
+                if (joinSpec.getRhsJoinTable().hasFilters())
+                    return true;
+            }
 
-           return false;
+            return false;
         }
     }
 
@@ -589,7 +594,7 @@ public class JoinCompiler {
         private OnNodeVisitor onNodeVisitor;
 
         private JoinSpec(JoinType type, ParseNode onNode, JoinTable joinTable,
-                boolean singleValueOnly, ColumnResolver resolver) throws SQLException {
+                         boolean singleValueOnly, ColumnResolver resolver) throws SQLException {
             this.type = type;
             this.onConditions = new ArrayList<EqualParseNode>();
             this.rhsJoinTable = joinTable;
@@ -635,7 +640,7 @@ public class JoinCompiler {
         }
 
         public void pushDownFilterToRhsJoinTable(ParseNode parseNode) throws SQLException {
-             this.rhsJoinTable.pushDownFilter(parseNode);
+            this.rhsJoinTable.pushDownFilter(parseNode);
         }
 
         public void addOnCondition(EqualParseNode equalParseNode) {
@@ -725,48 +730,48 @@ public class JoinCompiler {
 
             if (!lType.isComparableTo(rType))
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH)
-                    .setMessage("On-clause LHS expression and RHS expression must be comparable. LHS type: " + lType + ", RHS type: " + rType)
-                    .build().buildException();
+                        .setMessage("On-clause LHS expression and RHS expression must be comparable. LHS type: " + lType + ", RHS type: " + rType)
+                        .build().buildException();
 
             if (lType.isCoercibleTo(PTinyint.INSTANCE)
-                && (rType == null || rType.isCoercibleTo(PTinyint.INSTANCE))) {
-              return lType; // to preserve UNSIGNED type
+                    && (rType == null || rType.isCoercibleTo(PTinyint.INSTANCE))) {
+                return lType; // to preserve UNSIGNED type
             }
             if (lType.isCoercibleTo(PSmallint.INSTANCE)
-                && (rType == null || rType.isCoercibleTo(PSmallint.INSTANCE))) {
-              return lType; // to preserve UNSIGNED type
+                    && (rType == null || rType.isCoercibleTo(PSmallint.INSTANCE))) {
+                return lType; // to preserve UNSIGNED type
             }
             if (lType.isCoercibleTo(PInteger.INSTANCE)
-                && (rType == null || rType.isCoercibleTo(PInteger.INSTANCE))) {
-              return lType; // to preserve UNSIGNED type
+                    && (rType == null || rType.isCoercibleTo(PInteger.INSTANCE))) {
+                return lType; // to preserve UNSIGNED type
             }
             if (lType.isCoercibleTo(PLong.INSTANCE)
-                && (rType == null || rType.isCoercibleTo(PLong.INSTANCE))) {
-              return lType; // to preserve UNSIGNED type
+                    && (rType == null || rType.isCoercibleTo(PLong.INSTANCE))) {
+                return lType; // to preserve UNSIGNED type
             }
             if (lType.isCoercibleTo(PDouble.INSTANCE)
-                && (rType == null || rType.isCoercibleTo(PDouble.INSTANCE))) {
-              return lType; // to preserve UNSIGNED type
+                    && (rType == null || rType.isCoercibleTo(PDouble.INSTANCE))) {
+                return lType; // to preserve UNSIGNED type
             }
             if (lType.isCoercibleTo(PDecimal.INSTANCE)
-                && (rType == null || rType.isCoercibleTo(PDecimal.INSTANCE))) {
-              return PDecimal.INSTANCE;
+                    && (rType == null || rType.isCoercibleTo(PDecimal.INSTANCE))) {
+                return PDecimal.INSTANCE;
             }
             if (lType.isCoercibleTo(PDate.INSTANCE)
-                && (rType == null || rType.isCoercibleTo(PDate.INSTANCE))) {
-              return lType;
+                    && (rType == null || rType.isCoercibleTo(PDate.INSTANCE))) {
+                return lType;
             }
             if (lType.isCoercibleTo(PTimestamp.INSTANCE)
-                && (rType == null || rType.isCoercibleTo(PTimestamp.INSTANCE))) {
-              return lType;
+                    && (rType == null || rType.isCoercibleTo(PTimestamp.INSTANCE))) {
+                return lType;
             }
             if (lType.isCoercibleTo(PVarchar.INSTANCE)
-                && (rType == null || rType.isCoercibleTo(PVarchar.INSTANCE))) {
-              return PVarchar.INSTANCE;
+                    && (rType == null || rType.isCoercibleTo(PVarchar.INSTANCE))) {
+                return PVarchar.INSTANCE;
             }
             if (lType.isCoercibleTo(PBoolean.INSTANCE)
-                && (rType == null || rType.isCoercibleTo(PBoolean.INSTANCE))) {
-              return PBoolean.INSTANCE;
+                    && (rType == null || rType.isCoercibleTo(PBoolean.INSTANCE))) {
+                return PBoolean.INSTANCE;
             }
             return PVarbinary.INSTANCE;
         }
@@ -832,7 +837,7 @@ public class JoinCompiler {
         public List<ColumnDef> getDynamicColumns() {
             return dynamicColumns;
         }
-        
+
         public Double getTableSamplingRate() {
             return tableSamplingRate;
         }
@@ -1049,7 +1054,7 @@ public class JoinCompiler {
 
         public boolean hasFilters() {
             return isSubselect() ?
-                   (!postFilterParseNodes.isEmpty() || subselectStatement.getWhere() != null || subselectStatement.getHaving() != null) :
+                    (!postFilterParseNodes.isEmpty() || subselectStatement.getWhere() != null || subselectStatement.getHaving() != null) :
                     !preFilterParseNodes.isEmpty();
         }
 
@@ -1102,7 +1107,7 @@ public class JoinCompiler {
                 if (columnRef.getTableRef().equals(tableRef)
                         && !SchemaUtil.isPKColumn(columnRef.getColumn())
                         && !(columnRef instanceof LocalIndexColumnRef)) {
-                	EncodedColumnsUtil.setColumns(columnRef.getColumn(), tableRef.getTable(), scan);
+                    EncodedColumnsUtil.setColumns(columnRef.getColumn(), tableRef.getTable(), scan);
                 }
             }
         }
@@ -1128,8 +1133,7 @@ public class JoinCompiler {
                     if (columnRef.getTableRef().equals(tableRef)
                             && (!retainPKColumns || !SchemaUtil.isPKColumn(columnRef.getColumn()))) {
                         if (columnRef instanceof LocalIndexColumnRef) {
-                            sourceColumns.add(new IndexDataColumnRef(context, tableRef,
-                                    IndexUtil.getIndexColumnName(columnRef.getColumn())));
+                            sourceColumns.add(new LocalIndexDataColumnRef(context, tableRef, IndexUtil.getIndexColumnName(columnRef.getColumn())));
                         } else {
                             sourceColumns.add(columnRef);
                         }
@@ -1181,7 +1185,7 @@ public class JoinCompiler {
                     columnRefParseNodeVisitor.getContentType(
                             this.joinTable.getAllTableRefs());
             if(columnRefType == ColumnRefParseNodeVisitor.ColumnRefType.NONE ||
-               columnRefType == ColumnRefParseNodeVisitor.ColumnRefType.SELF_ONLY){
+                    columnRefType == ColumnRefParseNodeVisitor.ColumnRefType.SELF_ONLY){
                 this.joinTable.postFilters.add(parentParseNode);
                 return null;
             }
@@ -1203,35 +1207,35 @@ public class JoinCompiler {
 
         @Override
         protected Void leaveBooleanNode(ParseNode node,
-                List<Void> l) throws SQLException {
+                                        List<Void> l) throws SQLException {
             columnRefVisitor.reset();
             node.accept(columnRefVisitor);
             ColumnRefParseNodeVisitor.ColumnRefType type =
                     columnRefVisitor.getContentType(this.joinTable.getLeftTableRef());
             switch (type) {
-            case NONE:
-            case SELF_ONLY:
-                this.joinTable.addLeftTableFilter(node);
-                break;
-            case FOREIGN_ONLY:
-                JoinTable matched = null;
-                for (JoinSpec joinSpec : this.joinTable.getPrefilterAcceptedJoinSpecs()) {
-                    if (columnRefVisitor.getContentType(
-                            joinSpec.getRhsJoinTable().getAllTableRefs()) ==
-                        ColumnRefParseNodeVisitor.ColumnRefType.SELF_ONLY) {
-                        matched = joinSpec.getRhsJoinTable();
-                        break;
+                case NONE:
+                case SELF_ONLY:
+                    this.joinTable.addLeftTableFilter(node);
+                    break;
+                case FOREIGN_ONLY:
+                    JoinTable matched = null;
+                    for (JoinSpec joinSpec : this.joinTable.getPrefilterAcceptedJoinSpecs()) {
+                        if (columnRefVisitor.getContentType(
+                                joinSpec.getRhsJoinTable().getAllTableRefs()) ==
+                                ColumnRefParseNodeVisitor.ColumnRefType.SELF_ONLY) {
+                            matched = joinSpec.getRhsJoinTable();
+                            break;
+                        }
                     }
-                }
-                if (matched != null) {
-                    matched.pushDownFilter(node);
-                } else {
+                    if (matched != null) {
+                        matched.pushDownFilter(node);
+                    } else {
+                        this.joinTable.addPostJoinFilter(node);
+                    }
+                    break;
+                default:
                     this.joinTable.addPostJoinFilter(node);
-                }
-                break;
-            default:
-                this.joinTable.addPostJoinFilter(node);
-                break;
+                    break;
             }
             return null;
         }
@@ -1285,7 +1289,7 @@ public class JoinCompiler {
 
         @Override
         protected Void leaveBooleanNode(ParseNode node,
-                List<Void> l) throws SQLException {
+                                        List<Void> l) throws SQLException {
             columnRefVisitor.reset();
             node.accept(columnRefVisitor);
             ColumnRefParseNodeVisitor.ColumnRefType type =
@@ -1357,7 +1361,7 @@ public class JoinCompiler {
         private final TableRef indexTableRef;
 
         public LocalIndexColumnRef(TableRef tableRef, String familyName,
-                String columnName, TableRef indexTableRef) throws MetaDataEntityNotFoundException {
+                                   String columnName, TableRef indexTableRef) throws MetaDataEntityNotFoundException {
             super(tableRef, familyName, columnName);
             this.indexTableRef = indexTableRef;
         }
@@ -1394,11 +1398,10 @@ public class JoinCompiler {
             try {
                 columnRef = resolver.resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
             } catch (ColumnNotFoundException e) {
-                // This could be an IndexDataColumnRef. If so, the table name must have
+                // This could be a LocalIndexDataColumnRef. If so, the table name must have
                 // been appended by the IndexStatementRewriter, and we can convert it into.
                 TableRef tableRef = resolver.resolveTable(node.getSchemaName(), node.getTableName());
-                if (tableRef.getTable().getIndexType() == IndexType.LOCAL
-                        || isHintedGlobalIndex(tableRef)) {
+                if (tableRef.getTable().getIndexType() == IndexType.LOCAL) {
                     TableRef parentTableRef = FromCompiler.getResolver(
                             NODE_FACTORY.namedTable(null, TableName.create(tableRef.getTable()
                                     .getSchemaName().getString(), tableRef.getTable()
@@ -1433,17 +1436,17 @@ public class JoinCompiler {
             for (TableRef tRef : tableRefSet) {
                 boolean isSelf = selfTableRefs.contains(tRef);
                 switch (ret) {
-                case NONE:
-                    ret = isSelf ? ColumnRefType.SELF_ONLY : ColumnRefType.FOREIGN_ONLY;
-                    break;
-                case SELF_ONLY:
-                    ret = isSelf ? ColumnRefType.SELF_ONLY : ColumnRefType.COMPLEX;
-                    break;
-                case FOREIGN_ONLY:
-                    ret = isSelf ? ColumnRefType.COMPLEX : ColumnRefType.FOREIGN_ONLY;
-                    break;
-                default: // COMPLEX do nothing
-                    break;
+                    case NONE:
+                        ret = isSelf ? ColumnRefType.SELF_ONLY : ColumnRefType.FOREIGN_ONLY;
+                        break;
+                    case SELF_ONLY:
+                        ret = isSelf ? ColumnRefType.SELF_ONLY : ColumnRefType.COMPLEX;
+                        break;
+                    case FOREIGN_ONLY:
+                        ret = isSelf ? ColumnRefType.COMPLEX : ColumnRefType.FOREIGN_ONLY;
+                        break;
+                    default: // COMPLEX do nothing
+                        break;
                 }
 
                 if (ret == ColumnRefType.COMPLEX) {
@@ -1527,27 +1530,25 @@ public class JoinCompiler {
         Preconditions.checkArgument(left.getType() == PTableType.PROJECTED);
         Preconditions.checkArgument(right.getType() == PTableType.PROJECTED);
         List<PColumn> merged = Lists.<PColumn> newArrayList();
-        int startingPosition = left.getBucketNum() == null ? 0 : 1;
         if (type == JoinType.Full) {
-            for (int i = startingPosition; i < left.getColumns().size(); i++) {
-                PColumn c  = left.getColumns().get(i);
+            for (PColumn c : left.getColumns()) {
                 merged.add(new ProjectedColumn(c.getName(), c.getFamilyName(),
                         c.getPosition(), true, ((ProjectedColumn) c).getSourceColumnRef(), SchemaUtil.isPKColumn(c) ? null : c.getName().getBytes()));
             }
         } else {
             merged.addAll(left.getColumns());
-            if (left.getBucketNum() != null) {
-                merged.remove(0);
-            }
         }
-        int position = merged.size() + startingPosition;
+        int position = merged.size();
         for (PColumn c : right.getColumns()) {
             if (!SchemaUtil.isPKColumn(c)) {
-                PColumn column = new ProjectedColumn(c.getName(), c.getFamilyName(), 
-                        position++, type == JoinType.Inner ? c.isNullable() : true, 
+                PColumn column = new ProjectedColumn(c.getName(), c.getFamilyName(),
+                        position++, type == JoinType.Inner ? c.isNullable() : true,
                         ((ProjectedColumn) c).getSourceColumnRef(), c.getName().getBytes());
                 merged.add(column);
             }
+        }
+        if (left.getBucketNum() != null) {
+            merged.remove(0);
         }
         return new PTableImpl.Builder()
                 .setType(left.getType())
@@ -1573,7 +1574,7 @@ public class JoinCompiler {
                 .setBaseColumnCount(BASE_TABLE_BASE_COLUMN_COUNT)
                 .setEncodedCQCounter(PTable.EncodedCQCounter.NULL_COUNTER)
                 .setUseStatsForParallelization(left.useStatsForParallelization())
-                .setExcludedColumns(ImmutableList.of())
+                .setExcludedColumns(ImmutableList.<PColumn>of())
                 .setTenantId(left.getTenantId())
                 .setSchemaName(left.getSchemaName())
                 .setTableName(PNameFactory.newName(SchemaUtil.getTableName(left.getName().getString(),
@@ -1581,7 +1582,7 @@ public class JoinCompiler {
                 .setPkName(left.getPKName())
                 .setRowKeyOrderOptimizable(left.rowKeyOrderOptimizable())
                 .setBucketNum(left.getBucketNum())
-                .setIndexes(left.getIndexes() == null ? Collections.emptyList() : left.getIndexes())
+                .setIndexes(left.getIndexes() == null ? Collections.<PTable>emptyList() : left.getIndexes())
                 .setParentSchemaName(left.getParentSchemaName())
                 .setParentTableName(left.getParentTableName())
                 .setPhysicalNames(ImmutableList.<PName>of())
