@@ -349,7 +349,6 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 String parentSchemaName = parentTable.getParentSchemaName().getString();
                 String parentTableName = parentTable.getParentTableName().getString();
                 final ParseNodeFactory FACTORY = new ParseNodeFactory();
-                // TODO: is it necessary to re-resolve the table?
                 TableRef dataTableRef =
                         FromCompiler.getResolver(
                             FACTORY.namedTable(null, TableName.create(parentSchemaName, parentTableName)),
