@@ -399,8 +399,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
         Properties props = new Properties();
         props.setProperty("CurrentSCN", Long.toString(scn));
         try (Connection connWithSCN = DriverManager.getConnection(getUrl(), props)) {
-            String selectSql =  "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName +
-                    ")*/ * from " + dataTableName + " WHERE val1  = 'ab'";
+            String selectSql =  "SELECT * from " + dataTableName + " WHERE val1  = 'ab'";
             // Verify that we will read from the index table
             assertExplainPlan(connWithSCN, selectSql, dataTableName, indexTableName);
             ResultSet rs = connWithSCN.createStatement().executeQuery(selectSql);
