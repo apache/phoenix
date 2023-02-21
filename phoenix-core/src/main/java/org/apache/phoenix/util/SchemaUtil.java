@@ -1224,7 +1224,7 @@ public class SchemaUtil {
 
 	public static boolean hasGlobalIndex(PTable table) {
         for (PTable index : table.getIndexes()) {
-            if (index.getIndexType() == IndexType.GLOBAL) {
+            if (IndexUtil.isGlobalIndex(index)) {
                 return true;
             }
         }

@@ -103,7 +103,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILURES;
-import static org.apache.phoenix.util.IndexUtil.isHintedGlobalIndex;
 
 /**
  * Validates FROM clause and builds a ColumnResolver for resolving column references
@@ -1166,7 +1165,7 @@ public class FromCompiler {
             super(conn, 0, udfParseNodes, null);
             Preconditions.checkArgument(projectedTable.getType() == PTableType.PROJECTED);
             this.isIndex = projectedTable.getIndexType() == IndexType.LOCAL
-                    || projectedTable.getIndexType() == IndexType.GLOBAL;
+                    || IndexUtil.isGlobalIndex(projectedTable);
             this.columnRefMap = new HashMap<ColumnRef, Integer>();
             long ts = Long.MAX_VALUE;
             for (int i = projectedTable.getBucketNum() == null ? 0 : 1; i < projectedTable.getColumns().size(); i++) {
@@ -1207,8 +1206,7 @@ public class FromCompiler {
                 // This could be a ColumnRef for index data column.
                 TableRef tableRef = isIndex ? super.getTables().get(0)
                         : super.resolveTable(schemaName, tableName);
-                if (tableRef.getTable().getIndexType() == IndexType.LOCAL
-                        || isHintedGlobalIndex(tableRef)) {
+                if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(tableRef)) {
                     try {
                         TableRef parentTableRef = super.resolveTable(
                                 tableRef.getTable().getSchemaName().getString(),

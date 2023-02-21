@@ -1019,7 +1019,7 @@ public class IndexTool extends Configured implements Tool {
         boolean autosplit = cmdLine.hasOption(AUTO_SPLIT_INDEX_OPTION.getOpt());
         boolean splitIndex = cmdLine.hasOption(SPLIT_INDEX_OPTION.getOpt());
         boolean isSalted = pIndexTable.getBucketNum() != null; // no need to split salted tables
-        if (!isSalted && IndexType.GLOBAL.equals(indexType) && (autosplit || splitIndex)) {
+        if (!isSalted && (IndexType.GLOBAL.equals(indexType) || IndexType.UNCOVERED_GLOBAL.equals(indexType)) && (autosplit || splitIndex)) {
             String nOpt = cmdLine.getOptionValue(AUTO_SPLIT_INDEX_OPTION.getOpt());
             int autosplitNumRegions = nOpt == null ? DEFAULT_AUTOSPLIT_NUM_REGIONS : Integer.parseInt(nOpt);
             String rateOpt = cmdLine.getOptionValue(SPLIT_INDEX_OPTION.getOpt());

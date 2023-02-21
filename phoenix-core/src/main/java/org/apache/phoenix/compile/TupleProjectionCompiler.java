@@ -18,7 +18,6 @@
 package org.apache.phoenix.compile;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
-import static org.apache.phoenix.util.IndexUtil.isHintedGlobalIndex;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -55,6 +54,7 @@ import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -160,7 +160,7 @@ public class TupleProjectionCompiler {
             }
         }
         // add IndexDataColumnRef
-        position = projectedColumns.size();
+        position = projectedColumns.size() + (hasSaltingColumn ? 1 : 0);
         for (IndexDataColumnRef sourceColumnRef : visitor.indexColumnRefSet) {
             PColumn column = new ProjectedColumn(sourceColumnRef.getColumn().getName(), 
                     sourceColumnRef.getColumn().getFamilyName(), position++, 
@@ -256,8 +256,7 @@ public class TupleProjectionCompiler {
                     nonPkColumnRefSet.add(resolveColumn);
                 }
             } catch (ColumnNotFoundException e) {
-                if (context.getCurrentTable().getTable().getIndexType() == PTable.IndexType.LOCAL
-                        || isHintedGlobalIndex(context.getCurrentTable())) {
+                if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(context.getCurrentTable())) {
                     try {
                         context.setUncoveredIndex(true);
                         indexColumnRefSet.add(new IndexDataColumnRef(context,

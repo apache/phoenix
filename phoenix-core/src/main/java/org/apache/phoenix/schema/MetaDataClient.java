@@ -5012,7 +5012,7 @@ public class MetaDataClient {
                 if (newIndexState == PIndexState.BUILDING && !isAsync) {
                     PTable index = indexRef.getTable();
                     // First delete any existing rows of the index
-                    if (index.getIndexType().equals(IndexType.GLOBAL) && index.getViewIndexId() == null) {
+                    if (IndexUtil.isGlobalIndex(index) && index.getViewIndexId() == null) {
                         //for a global index of a normal base table, it's safe to just truncate and
                         //rebuild. We preserve splits to reduce the amount of splitting we need to do
                         //during rebuild

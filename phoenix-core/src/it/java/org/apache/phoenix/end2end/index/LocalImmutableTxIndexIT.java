@@ -30,7 +30,7 @@ import org.junit.runners.Parameterized.Parameters;
 public class LocalImmutableTxIndexIT extends BaseIndexIT {
 
     public LocalImmutableTxIndexIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded) {
-        super(localIndex, mutable, transactionProvider, columnEncoded);
+        super(localIndex, false, mutable, transactionProvider, columnEncoded);
     }
 
     // name is used by failsafe as file name in reports

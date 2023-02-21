@@ -1145,7 +1145,20 @@ public class ScanUtil {
         }
     }
 
-    public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table, PhoenixConnection phoenixConnection) throws SQLException {
+    public static PTable getDataTable(PTable index, PhoenixConnection conn) throws SQLException {
+        String schemaName = index.getParentSchemaName().getString();
+        String tableName = index.getParentTableName().getString();
+        PTable dataTable;
+        try {
+            dataTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(schemaName, tableName));
+            return dataTable;
+        } catch (TableNotFoundException e) {
+            // This index table must be being deleted
+            return null;
+        }
+    }
+    public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table,
+            PhoenixConnection phoenixConnection) throws SQLException {
         boolean isTransforming = (table.getTransformingNewTable() != null);
         PTable indexTable = table;
         // Transforming index table can be repaired in regular path via globalindexchecker coproc on it.
@@ -1189,16 +1202,11 @@ public class ScanUtil {
             if (table.isTransactional() || table.getType() != PTableType.INDEX) {
                 return;
             }
-            if (indexTable.getIndexType() != PTable.IndexType.GLOBAL) {
+            if (!IndexUtil.isGlobalIndex(indexTable)) {
                 return;
             }
-
-            String schemaName = indexTable.getParentSchemaName().getString();
-            String tableName = indexTable.getParentTableName().getString();
-            PTable dataTable;
-            try {
-                dataTable = PhoenixRuntime.getTable(phoenixConnection, SchemaUtil.getTableName(schemaName, tableName));
-            } catch (TableNotFoundException e) {
+            PTable dataTable = ScanUtil.getDataTable(indexTable, phoenixConnection);
+            if (dataTable == null) {
                 // This index table must be being deleted. No need to set the scan attributes
                 return;
             }
@@ -1218,7 +1226,11 @@ public class ScanUtil {
                 IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(indexTable), phoenixConnection);
                 scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
             }
-            scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
+            if (IndexUtil.isCoveredGlobalIndex(indexTable)) {
+                scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
+            } else {
+                scan.setAttribute(BaseScannerRegionObserver.UNCOVERED_GLOBAL_INDEX, TRUE_BYTES);
+            }
             scan.setAttribute(BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME, dataTable.getPhysicalName().getBytes());
             IndexMaintainer indexMaintainer = indexTable.getIndexMaintainer(dataTable, phoenixConnection);
             byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();

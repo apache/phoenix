@@ -51,6 +51,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.IndexUtil.IndexStatusUpdater;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -250,7 +251,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
             byte[] cfn = Bytes.add(emptyColumnFamily, QueryConstants.NAMESPACE_SEPARATOR_BYTES, emptyKeyValue);
             columnIndexes.put(cfn, new Integer(columnIndex));
             columnIndex++;
-            if (PTable.IndexType.GLOBAL == table.getIndexType()) {
+            if (IndexUtil.isGlobalIndex(table)) {
                 indexStatusUpdaters[index] =
                         new IndexStatusUpdater(emptyColumnFamily, emptyKeyValue);
             }

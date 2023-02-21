@@ -52,6 +52,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -183,7 +184,7 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
                              QueryUtil.getConnectionOnServer(configuration)) {
                     PTable table = PhoenixRuntime.getTable(conn, tableName);
                     if (table.getType() == PTableType.INDEX
-                            && table.getIndexType() == PTable.IndexType.GLOBAL) {
+                            && IndexUtil.isGlobalIndex(table)) {
                         /*
                          * For global indexes, we need to get the parentName first and then
                          * fetch guide post width configured for the parent table.

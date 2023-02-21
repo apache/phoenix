@@ -89,13 +89,15 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
     private static final Random RAND = new Random();
 
     private final boolean localIndex;
+    private final boolean uncovered;
     private final boolean transactional;
     private final TransactionFactory.Provider transactionProvider;
     private final boolean mutable;
     private final String tableDDLOptions;
 
-    protected BaseIndexIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded) {
+    protected BaseIndexIT(boolean localIndex, boolean uncovered, boolean mutable, String transactionProvider, boolean columnEncoded) {
         this.localIndex = localIndex;
+        this.uncovered = uncovered;
         this.mutable = mutable;
         StringBuilder optionBuilder = new StringBuilder();
         if (!columnEncoded) {
@@ -137,9 +139,10 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             Statement stmt = conn.createStatement();
             stmt.execute(ddl);
             BaseTest.populateTestTable(fullTableName);
-            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName
+            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " ON " + fullTableName
                     + " (char_col1 ASC, int_col1 ASC)"
-                    + " INCLUDE (long_col1, long_col2)";
+                    + (uncovered ? "" : " INCLUDE (long_col1, long_col2)");
             stmt.execute(ddl);
 
             String query = "SELECT d.char_col1, int_col1 from " + fullTableName + " as d";
@@ -151,8 +154,11 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 plan.getPlanStepsAsAttributes();
             assertEquals("PARALLEL 1-WAY",
                 explainPlanAttributes.getIteratorTypeAndScanSize());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
-                explainPlanAttributes.getServerWhereFilter());
+            if (!uncovered) {
+                // Optimizer would not select the uncovered index for this query
+                assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                        explainPlanAttributes.getServerWhereFilter());
+            }
 
             if (localIndex) {
                 assertEquals(fullTableName, explainPlanAttributes.getTableName());
@@ -161,7 +167,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                     explainPlanAttributes.getClientSortAlgo());
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
-            } else {
+            } else if (!uncovered) {
                 assertEquals(fullIndexName, explainPlanAttributes.getTableName());
                 assertNull(explainPlanAttributes.getClientSortAlgo());
                 assertEquals("FULL SCAN ",
@@ -210,9 +216,10 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             Statement stmt = conn.createStatement();
             stmt.execute(ddl);
             BaseTest.populateTestTable(fullTableName);
-            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName
+            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " ON " + fullTableName
                         + " (long_pk, varchar_pk)"
-                        + " INCLUDE (long_col1, long_col2)";
+                        + (uncovered ? "" : " INCLUDE (long_col1, long_col2)");
             stmt.execute(ddl);
 
             ResultSet rs;
@@ -329,9 +336,10 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 }
 
                 String indexName = SchemaUtil.getTableNameFromFullName(fullIndexName);
-                ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName
+                ddl = "CREATE " + (localIndex ? "LOCAL" : "") + (uncovered ? "UNCOVERED" : "")
+                        + " INDEX " + indexName + " ON " + fullTableName
                         + " (long_pk, varchar_pk)"
-                        + " INCLUDE (long_col1, long_col2)";
+                        + (uncovered ? "" : " INCLUDE (long_col1, long_col2)");
                 stmt1.execute(ddl);
 
                 /*
@@ -387,9 +395,10 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             Statement stmt = conn.createStatement();
             stmt.execute(ddl);
             BaseTest.populateTestTable(fullTableName);
-            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName
+            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " ON " + fullTableName
                         + " (long_col1, long_col2)"
-                        + " INCLUDE (decimal_col1, decimal_col2)";
+                        + (uncovered ? "" : " INCLUDE (decimal_col1, decimal_col2)");
             stmt.execute(ddl);
         }
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -441,7 +450,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             Statement stmt = conn.createStatement();
             stmt.execute(ddl);
             BaseTest.populateTestTable(fullTableName);
-            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName + " (int_col2)";
+            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " ON " + fullTableName + " (int_col2)";
             stmt.execute(ddl);
             ResultSet rs;
             rs = conn.createStatement().executeQuery("SELECT int_col2, COUNT(*) FROM " + fullTableName + " GROUP BY int_col2");
@@ -462,7 +472,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             Statement stmt = conn.createStatement();
             stmt.execute(ddl);
             BaseTest.populateTestTable(fullTableName);
-            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName + " (int_col2)";
+            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " ON " + fullTableName + " (int_col2)";
             conn.createStatement().execute(ddl);
             ResultSet rs = conn.createStatement().executeQuery("SELECT distinct int_col2 FROM " + fullTableName + " where int_col2 > 0");
             assertTrue(rs.next());
@@ -487,7 +498,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             Statement stmt = conn.createStatement();
             stmt.execute(ddl);
             BaseTest.populateTestTable(fullTableName);
-            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName + " (int_col1)";
+            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " ON " + fullTableName + " (int_col1)";
             stmt.execute(ddl);
             ResultSet rs = conn.createStatement().executeQuery("SELECT int_col1 FROM " + fullTableName + " where int_col1 IN (1, 2, 3, 4)");
             assertTrue(rs.next());
@@ -522,7 +534,9 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
 
             String options = localIndex ? "SALT_BUCKETS=10, MULTI_TENANT=true, IMMUTABLE_ROWS=true, DISABLE_WAL=true" : "";
             conn.createStatement().execute(
-                    "CREATE INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2) " + options);
+                    "CREATE " + (uncovered ? "UNCOVERED" : "") + " INDEX " + indexName
+                            + " ON " + fullTableName + " (v1)"
+                            + (uncovered ? " " : "INCLUDE (v2) ") + options);
             query = "SELECT * FROM " + fullIndexName;
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
@@ -556,10 +570,13 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
 
             TestUtil.createMultiCFTestTable(conn, fullTableName, tableDDLOptions);
             populateMultiCFTestTable(fullTableName, date);
-            String ddl = "CREATE " + (localIndex ? " LOCAL " : "") + " INDEX " + indexName + " ON " + fullTableName + " (date_col)";
+            String ddl = "CREATE " + (localIndex ? " LOCAL " : "")
+                    + (uncovered ? "UNCOVERED" : "") + " INDEX " + indexName
+                    + " ON " + fullTableName + " (date_col)";
             conn.createStatement().execute(ddl);
 
-            String query = "SELECT int_pk from " + fullTableName ;
+            String query = "SELECT" + (uncovered ? " /*+ INDEX(" + fullTableName + " "
+                    + indexName + ")*/ " : " ") + "int_pk from " + fullTableName;
             ExplainPlan plan = conn.prepareStatement(query)
                 .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
                 .getExplainPlan();
@@ -645,9 +662,12 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
 
-            ddl = "CREATE " + (localIndex ? " LOCAL " : "") + " INDEX " + indexName + " ON " + fullTableName + " (v2 DESC) INCLUDE (v1)";
+            ddl = "CREATE " + (localIndex ? " LOCAL " : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " ON " + fullTableName + " (v2 DESC)"
+                    + (uncovered ? "" : "INCLUDE (v1)");
             conn.createStatement().execute(ddl);
-            query = "SELECT * FROM " + fullIndexName;
+            query = "SELECT" + (uncovered ? " /*+ INDEX(" + fullTableName + " "
+                    + indexName + ")*/ * FROM " + fullTableName : " * FROM " + fullIndexName);
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
 
@@ -662,7 +682,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             stmt.execute();
             conn.commit();
 
-            query = "SELECT * FROM " + fullTableName;
+            query = "SELECT" + (uncovered ? " /*+ INDEX(" + fullTableName + " "
+                    + indexName + ")*/" : "") + " * FROM " + fullTableName;
             ExplainPlan plan = conn.prepareStatement(query)
                 .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
                 .getExplainPlan();
@@ -748,7 +769,9 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             query = "SELECT * FROM " + fullTableName;
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
-            ddl = "CREATE " + (localIndex ? " LOCAL " : "") + " INDEX " + indexName + " ON " + fullTableName + " (v2 DESC) INCLUDE (a.v1)";
+            ddl = "CREATE " + (localIndex ? " LOCAL " : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " ON " + fullTableName + " (v2 DESC)"
+                    + (uncovered ? "" : "INCLUDE (a.v1)");
             conn.createStatement().execute(ddl);
             query = "SELECT * FROM " + fullIndexName;
             rs = conn.createStatement().executeQuery(query);
@@ -779,7 +802,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 explainPlanAttributes.getExplainScanType());
             assertEquals(fullTableName, explainPlanAttributes.getTableName());
 
-            query = "SELECT a.* FROM " + fullTableName;
+            query = "SELECT" + (uncovered ? " /*+ INDEX(" + fullTableName + " "
+                    + indexName + ")*/ " : " ") + "a.* FROM " + fullTableName;
             plan = conn.prepareStatement(query)
                 .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
                 .getExplainPlan();
@@ -836,7 +860,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
 
             conn.createStatement().execute(
-                    "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + " (v1, v2)");
+                    "CREATE " + (localIndex ? "LOCAL " : "") + (uncovered ? "UNCOVERED" : "")
+                            + " INDEX " + indexName + " ON " + fullTableName + " (v1, v2)");
             query = "SELECT * FROM " + fullIndexName;
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
@@ -922,7 +947,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
 
             conn.createStatement().execute(
-                    "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + testTable + " (v1, v2)");
+                    "CREATE " + (localIndex ? "LOCAL " : "") + (uncovered ? "UNCOVERED" : "")
+                            + " INDEX " + indexName + " ON " + testTable + " (v1, v2)");
             query = "SELECT * FROM " + fullIndexName;
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
@@ -961,7 +987,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
             
             // make sure the index is working as expected
-            query = "SELECT * FROM " + testTable;
+            query = "SELECT" + (uncovered ? " /*+ INDEX(" + testTable + " "
+                    + indexName + ")*/ " : " ") + "* FROM "+ testTable;
             ExplainPlan plan = conn.prepareStatement(query)
                 .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
                 .getExplainPlan();
@@ -1023,7 +1050,9 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             long ts = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,fullTableName)).getTimeStamp();
             assertFalse(rs.next());
             conn.createStatement().execute(
-                    "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + "(\"v2\") INCLUDE (\"V1\")");
+                    "CREATE " + (localIndex ? "LOCAL " : "") + (uncovered ? "UNCOVERED " : " ")
+                            + "INDEX " + indexName + " ON " + fullTableName + "(\"v2\")"
+                    + (uncovered ? "" : " INCLUDE (\"V1\")"));
             query = "SELECT * FROM "+fullIndexName;
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
@@ -1172,7 +1201,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             ResultSet rs;
             String ddl = "CREATE TABLE " + fullTableName +"  (PK1 CHAR(2) NOT NULL PRIMARY KEY, CF1.COL1 BIGINT) " + tableDDLOptions;
             conn.createStatement().execute(ddl);
-            ddl = "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + "(COL1)";
+            ddl = "CREATE " + (localIndex ? "LOCAL " : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " ON " + fullTableName + "(COL1)";
             conn.createStatement().execute(ddl);
 
             query = "SELECT COUNT(COL1) FROM " + fullTableName +" WHERE COL1 IN (1,25,50,75,100)";
@@ -1207,14 +1237,18 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             TestUtil.createMultiCFTestTable(conn, fullTableName, tableDDLOptions);
             populateMultiCFTestTable(fullTableName, date);
             String ddl = null;
-            ddl = "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + " (decimal_pk) INCLUDE (decimal_col1, decimal_col2)";
+            ddl = "CREATE " + (localIndex ? "LOCAL " : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " ON " + fullTableName + " (decimal_pk)"
+                    + (uncovered ? "" : "INCLUDE (decimal_col1, decimal_col2)");
             conn.createStatement().execute(ddl);
             
             if (transactional && transactionProvider == TransactionFactory.Provider.OMID) {
                 assertShadowCellsExist(conn, fullTableName, fullIndexName);
             }
 
-            query = "SELECT decimal_pk, decimal_col1, decimal_col2 from " + fullTableName ;
+            query = "SELECT" + (uncovered ? " /*+ INDEX(" + fullTableName + " " + indexName
+                    + ")*/ " : " ") + "decimal_pk, decimal_col1, decimal_col2 from "
+                    + fullTableName ;
             ExplainPlan plan = conn.prepareStatement(query)
                 .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
                 .getExplainPlan();
@@ -1320,7 +1354,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 ddl += "(p1 desc, p2))";
             }
             stmt.executeUpdate(ddl);
-            ddl = "CREATE "+ (localIndex ? "LOCAL " : "") + " INDEX " + indexName + " on " + fullTableName + "(a)";
+            ddl = "CREATE "+ (localIndex ? "LOCAL " : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " on " + fullTableName + "(a)";
             stmt.executeUpdate(ddl);
 
             // upsert a single row
@@ -1350,7 +1385,9 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             String tableName =
                     initATableValues(generateUniqueName(), tenantId, getDefaultSplits(tenantId),
                         new Date(System.currentTimeMillis()), null, getUrl(), tableDDLOptions);
-            String ddl = "CREATE "+ (localIndex ? "LOCAL " : "") + " INDEX " + indexName + " on " + tableName + "(A_STRING) INCLUDE (B_STRING)";
+            String ddl = "CREATE "+ (localIndex ? "LOCAL " : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " on " + tableName + "(A_STRING)"
+            + (uncovered ? "" : " INCLUDE (B_STRING)");
             conn.createStatement().executeUpdate(ddl);
             String query = "SELECT ENTITY_ID,A_STRING,B_STRING FROM " + tableName + " WHERE organization_id=? and entity_id=?";
 

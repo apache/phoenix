@@ -19,7 +19,6 @@ package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
-import static org.apache.phoenix.util.IndexUtil.isHintedGlobalIndex;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -208,7 +207,7 @@ public class ProjectionCompiler {
         int tableOffset = dataTable.getBucketNum() == null ? 0 : 1;
         int minTablePKOffset = getMinPKOffset(dataTable, tenantId);
         int minIndexPKOffset = getMinPKOffset(index, tenantId);
-        if (index.getIndexType() != IndexType.LOCAL) {
+        if (!IndexUtil.shouldIndexBeUsedForUncoveredQuery(tableRef)) {
             if (index.getColumns().size()-minIndexPKOffset != dataTable.getColumns().size()-minTablePKOffset) {
                 // We'll end up not using this by the optimizer, so just throw
                 String schemaNameStr = dataTable.getSchemaName()==null?null:dataTable.getSchemaName().getString();
@@ -231,8 +230,7 @@ public class ProjectionCompiler {
                 indexColumn = index.getColumnForColumnName(indexColName);
                 ref = new ColumnRef(tableRef, indexColumn.getPosition());
             } catch (ColumnNotFoundException e) {
-                if (tableRef.getTable().getIndexType() == IndexType.LOCAL
-                        || isHintedGlobalIndex(tableRef)) {
+                if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(tableRef)) {
                     try {
                         context.setUncoveredIndex(true);
                         ref = new IndexDataColumnRef(context, tableRef, indexColName);
@@ -246,7 +244,7 @@ public class ProjectionCompiler {
             }
             String colName = tableColumn.getName().getString();
             String tableAlias = tableRef.getTableAlias();
-            if (resolveColumn) {
+            if (resolveColumn && !(ref instanceof IndexDataColumnRef)) {
                 try {
                     if (tableAlias != null) {
                         ref = resolver.resolveColumn(null, tableAlias, indexColName);
@@ -306,8 +304,7 @@ public class ProjectionCompiler {
                 ref = new ColumnRef(tableRef, indexColumn.getPosition());
                 indexColumnFamily = indexColumn.getFamilyName() == null ? null : indexColumn.getFamilyName().getString();
             } catch (ColumnNotFoundException e) {
-                if (tableRef.getTable().getIndexType() == IndexType.LOCAL
-                        || isHintedGlobalIndex(tableRef)) {
+                if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(tableRef)) {
                     try {
                         context.setUncoveredIndex(true);
                         ref = new IndexDataColumnRef(context, tableRef, indexColName);
@@ -505,7 +502,15 @@ public class ProjectionCompiler {
         } else {
             isProjectEmptyKeyValue = where == null || LiteralExpression.isTrue(where) || where.requiresFinalEvaluation();
             for (byte[] family : projectedFamilies) {
-                projectColumnFamily(table, scan, family);
+                try {
+                    if (table.getColumnFamily(family) != null) {
+                        projectColumnFamily(table, scan, family);
+                    }
+                } catch (ColumnFamilyNotFoundException e) {
+                    if (!IndexUtil.shouldIndexBeUsedForUncoveredQuery(tableRef)) {
+                        throw e;
+                    }
+                }
             }
         }
         

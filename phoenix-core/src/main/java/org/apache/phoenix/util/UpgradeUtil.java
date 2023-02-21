@@ -1492,7 +1492,7 @@ public class UpgradeUtil {
             Map<String, Object> syncedProps, Set<TableDescriptor> tableDescsToSync) throws SQLException {
         for (PTable indexTable: baseTable.getIndexes()) {
             // We already handle local index property synchronization when considering all column families of the base table
-            if (indexTable.getIndexType() == IndexType.GLOBAL) {
+            if (IndexUtil.isGlobalIndex(indexTable)) {
                 addTableDescIfPropsChanged(cqs.getTableDescriptor(indexTable.getPhysicalName().getBytes()),
                         defaultColFam, syncedProps, tableDescsToSync);
             }
