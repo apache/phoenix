@@ -1295,6 +1295,16 @@ public class ScanUtil {
         }
     }
 
+    public static Long getRPCReadTimeout(ReadOnlyProps props) {
+        if (props.get(HConstants.HBASE_RPC_READ_TIMEOUT_KEY) != null) {
+            return props.getLong(HConstants.HBASE_RPC_READ_TIMEOUT_KEY,
+                    HConstants.DEFAULT_HBASE_RPC_TIMEOUT);
+        } else {
+            return props.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY,
+                    HConstants.DEFAULT_HBASE_RPC_TIMEOUT);
+        }
+    }
+
     public static Long getPageSizeInMs(ReadOnlyProps props) {
         if (props.getBoolean(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB,
                 QueryServicesOptions.DEFAULT_PHOENIX_SERVER_PAGING_ENABLED)) {
@@ -1303,13 +1313,7 @@ public class ScanUtil {
                 // Use the half of the HBase RPC read timeout value as the server page size to
                 // make sure that the HBase region server will be able to send a heartbeat
                 // message to the client before the client times out
-                if (props.get(HConstants.HBASE_RPC_READ_TIMEOUT_KEY) != null) {
-                    return props.getLong(HConstants.HBASE_RPC_READ_TIMEOUT_KEY,
-                                            HConstants.DEFAULT_HBASE_RPC_TIMEOUT) / 2;
-                } else {
-                    return props.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY,
-                                            HConstants.DEFAULT_HBASE_RPC_TIMEOUT) / 2;
-                }
+                return getRPCReadTimeout(props) / 2;
             } else {
                 return pageSizeMs;
             }
