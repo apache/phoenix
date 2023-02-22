@@ -627,12 +627,7 @@ public abstract class BaseTest {
         conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
         conf.setInt(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY, 1);
         conf.setInt(GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, 0);
-        // This results in processing one row at a time in each next operation of the aggregate region
-        // scanner, i.e.,  one row pages. In other words, 0ms page allows only one row to be processed
-        // within one page; 0ms page is equivalent to one-row page
-        if (conf.getLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 0) == 0) {
-            conf.setLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 0);
-        }
+        conf.setInt(HConstants.HBASE_RPC_READ_TIMEOUT_KEY, 20); // 20ms
         return conf;
     }
 
