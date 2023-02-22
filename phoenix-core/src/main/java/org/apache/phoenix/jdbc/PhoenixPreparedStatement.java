@@ -29,7 +29,6 @@ import java.sql.Clob;
 import java.sql.Date;
 import java.sql.NClob;
 import java.sql.ParameterMetaData;
-import java.sql.PreparedStatement;
 import java.sql.Ref;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -56,6 +55,7 @@ import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
 
 /**
@@ -363,8 +363,13 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
 
     @Override
     public void setDate(int parameterIndex, Date x) throws SQLException {
-        if (x != null) { // Since Date is mutable, make a copy
-            x = new Date(x.getTime());
+        if (x != null) {
+            if (connection.isCompliantTimezoneHandling()) {
+                x = DateUtil.applyInputDisplacement(x);
+            } else {
+                // Since Date is mutable, make a copy
+                x = new Date(x.getTime());
+            }
         }
         setParameter(parameterIndex, x);
     }
@@ -440,6 +445,19 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
 
     @Override
     public void setObject(int parameterIndex, Object o) throws SQLException {
+        if (o instanceof java.util.Date) {
+            //TODO add java.time when implemented
+            if (connection.isCompliantTimezoneHandling()) {
+                if (o instanceof java.sql.Timestamp) {
+                    o = DateUtil.applyInputDisplacement((java.sql.Timestamp)o);
+                } else if (o instanceof java.sql.Time) {
+                    o = DateUtil.applyInputDisplacement((java.sql.Time)o);
+                } else if (o instanceof java.sql.Date) {
+                    o = DateUtil.applyInputDisplacement((java.sql.Date)o);
+                }
+            }
+            //FIXME if we make a copy in setDate() from temporals, why not here ?
+        }
         setParameter(parameterIndex, o);
     }
 
@@ -485,8 +503,13 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
 
     @Override
     public void setTime(int parameterIndex, Time x) throws SQLException {
-        if (x != null) { // Since Time is mutable, make a copy
-            x = new Time(x.getTime());
+        if (x != null) {
+            if (connection.isCompliantTimezoneHandling()) {
+                x = DateUtil.applyInputDisplacement(x);
+            } else {
+                // Since Date is mutable, make a copy
+                x = new Time(x.getTime());
+            }
         }
         setParameter(parameterIndex, x);
     }
@@ -501,12 +524,17 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
     }
 
     private void setTimestampParameter(int parameterIndex, Timestamp x, Calendar cal) throws SQLException {
-        if (x != null) { // Since Timestamp is mutable, make a copy
-            int nanos = x.getNanos();
-            x = new Timestamp(x.getTime());
-            x.setNanos(nanos);
+        if (x != null) {
+            if (connection.isCompliantTimezoneHandling()) {
+                x = DateUtil.applyInputDisplacement(x);
+            } else {
+                int nanos = x.getNanos();
+                x = new Timestamp(x.getTime());
+                x.setNanos(nanos);
+            }
         }
         // TODO: deal with Calendar
+        // FIXME we don't need the offset correction when calendar is specified
         setParameter(parameterIndex, x);
     }
     

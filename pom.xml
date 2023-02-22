@@ -108,7 +108,7 @@
     <commons-lang.version>3.8</commons-lang.version>
     <commons-csv.version>1.0</commons-csv.version>
     <commons-compress.version>1.21</commons-compress.version>
-    <sqlline.version>1.9.0</sqlline.version>
+    <sqlline.version>1.13.0-SNAPSHOT</sqlline.version>
     <commons-configuration2.version>2.1.1</commons-configuration2.version>
     <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
@@ -325,7 +325,7 @@
               <id>ParallelStatsEnabledTest</id>
               <configuration>
                 <reuseForks>true</reuseForks>
-                <argLine>@{jacocoArgLine} -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
+                <argLine>@{jacocoArgLine} -Duser.timezone="America/Los_Angeles" -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
               </configuration>
               <goals>
@@ -337,7 +337,7 @@
               <id>ParallelStatsDisabledTest</id>
               <configuration>
                 <reuseForks>true</reuseForks>
-                <argLine>@{jacocoArgLine} -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
+                <argLine>@{jacocoArgLine} -Duser.timezone="America/Los_Angeles" -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
               </configuration>
               <goals>
@@ -349,7 +349,7 @@
               <id>NeedTheirOwnClusterTests</id>
               <configuration>
                  <reuseForks>false</reuseForks>
-                 <argLine>@{jacocoArgLine} -enableassertions -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
+                 <argLine>@{jacocoArgLine} -Duser.timezone="America/Los_Angeles" -enableassertions -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
               </configuration>
               <goals>
@@ -570,7 +570,7 @@
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
-          <argLine>@{jacocoArgLine} -enableassertions -Xmx2250m
+          <argLine>@{jacocoArgLine} -enableassertions -Xmx2250m -Duser.timezone="America/Los_Angeles"
             -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
           <shutdown>exit</shutdown>

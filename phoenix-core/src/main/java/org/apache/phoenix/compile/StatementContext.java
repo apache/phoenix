@@ -42,6 +42,9 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PTime;
+import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.NumberUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -59,17 +62,11 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  */
 public class StatementContext {
     private ColumnResolver resolver;
+    private final PhoenixConnection connection;
     private final BindManager binds;
     private final Scan scan;
     private final ExpressionManager expressions;
     private final AggregationManager aggregates;
-    private final String dateFormat;
-    private final Format dateFormatter;
-    private final String timeFormat;
-    private final Format timeFormatter;
-    private final String timestampFormat;
-    private final Format timestampFormatter;
-    private final TimeZone dateFormatTimeZone;
     private final String numberFormat;
     private final ImmutableBytesWritable tempPtr;
     private final PhoenixStatement statement;
@@ -124,17 +121,8 @@ public class StatementContext {
         this.binds = binds;
         this.aggregates = new AggregationManager();
         this.expressions = new ExpressionManager();
-        PhoenixConnection connection = statement.getConnection();
+        this.connection = statement.getConnection();
         ReadOnlyProps props = connection.getQueryServices().getProps();
-        String timeZoneID = props.get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
-                DateUtil.DEFAULT_TIME_ZONE_ID);
-        this.dateFormat = props.get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
-        this.dateFormatter = DateUtil.getDateFormatter(dateFormat, timeZoneID);
-        this.timeFormat = props.get(QueryServices.TIME_FORMAT_ATTRIB, DateUtil.DEFAULT_TIME_FORMAT);
-        this.timeFormatter = DateUtil.getTimeFormatter(timeFormat, timeZoneID);
-        this.timestampFormat = props.get(QueryServices.TIMESTAMP_FORMAT_ATTRIB, DateUtil.DEFAULT_TIMESTAMP_FORMAT);
-        this.timestampFormatter = DateUtil.getTimestampFormatter(timestampFormat, timeZoneID);
-        this.dateFormatTimeZone = DateUtil.getTimeZone(timeZoneID);
         this.numberFormat = props.get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         this.tempPtr = new ImmutableBytesWritable();
         this.currentTable = resolver != null && !resolver.getTables().isEmpty() ? resolver.getTables().get(0) : null;
@@ -176,32 +164,32 @@ public class StatementContext {
         return dataColumns;
     }
 
-    public String getDateFormat() {
-        return dateFormat;
+    public String getDateFormatTimeZoneId() {
+        return connection.getDateFormatTimeZoneId();
     }
-
-    public TimeZone getDateFormatTimeZone() {
-        return dateFormatTimeZone;
+    
+    public String getDateFormat() {
+        return connection.getDatePattern();
     }
 
     public Format getDateFormatter() {
-        return dateFormatter;
+        return connection.getFormatter(PDate.INSTANCE);
     }
 
     public String getTimeFormat() {
-        return timeFormat;
+        return connection.getTimePattern();
     }
 
     public Format getTimeFormatter() {
-        return timeFormatter;
+        return connection.getFormatter(PTime.INSTANCE);
     }
 
     public String getTimestampFormat() {
-        return timestampFormat;
+        return connection.getTimestampPattern();
     }
 
     public Format getTimestampFormatter() {
-        return timestampFormatter;
+        return connection.getFormatter(PTimestamp.INSTANCE);
     }
 
     public String getNumberFormat() {
@@ -255,7 +243,7 @@ public class StatementContext {
     }
 
     public PhoenixConnection getConnection() {
-        return statement.getConnection();
+        return connection;
     }
 
     public PhoenixStatement getStatement() {
@@ -281,10 +269,17 @@ public class StatementContext {
          * purely to bind the current time based on the server time.
          */
         PTable table = this.getCurrentTable().getTable();
-        PhoenixConnection connection = getConnection();
         MetaDataClient client = new MetaDataClient(connection);
         currentTime = client.getCurrentTime(table.getSchemaName().getString(), table.getTableName().getString());
         return currentTime;
+    }
+
+    public long getCurrentTimeWithDisplacement() throws SQLException {
+        if (connection.isCompliantTimezoneHandling()) {
+            return DateUtil.applyInputDisplacement(new java.sql.Date(getCurrentTime())).getTime();
+        } else {
+            return getCurrentTime();
+        }
     }
 
     public SequenceManager getSequenceManager(){

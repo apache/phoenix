@@ -52,7 +52,9 @@ public class CurrentDateFunction extends CurrentDateTimeFunction {
     }
 
     public CurrentDateFunction(List<Expression> children, StatementContext context) throws SQLException {
-        this(context.getCurrentTime());
+        // Note that according to the standard Date is always WITHOUT TIMEZONE, but we don't
+        // implement real dates
+        this(context.getCurrentTimeWithDisplacement());
     }
 
     public CurrentDateFunction(long timeStamp) {

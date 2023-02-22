@@ -91,8 +91,12 @@ import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PTinyint;
+import org.apache.phoenix.schema.types.PUnsignedDate;
+import org.apache.phoenix.schema.types.PUnsignedTime;
+import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -147,6 +151,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
     private final boolean wildcardIncludesDynamicCols;
     private final List<PColumn> staticColumns;
     private final int startPositionForDynamicCols;
+    private final boolean isCompliantTimeZoneHandling;
 
     private RowProjector rowProjectorWithDynamicCols;
     private Tuple currentRow = BEFORE_FIRST;
@@ -181,6 +186,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
             this.staticColumns = null;
             this.startPositionForDynamicCols = 0;
         }
+        this.isCompliantTimeZoneHandling = statement.getConnection().isCompliantTimezoneHandling();
     }
     
     @Override
@@ -353,7 +359,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         PDataType type = colProjector.getExpression().getDataType();
         Object value = colProjector.getValue(currentRow, type, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return false;
         }
         if (type == PBoolean.INSTANCE) {
@@ -443,10 +449,14 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         Date value = (Date)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
             PDate.INSTANCE, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return null;
         }
-        return value;
+        if (isCompliantTimeZoneHandling) {
+            return DateUtil.applyOutputDisplacement(value);
+        } else {
+            return value;
+        }
     }
 
     @Override
@@ -478,7 +488,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         Double value = (Double)getRowProjector().getColumnProjector(columnIndex-1)
                 .getValue(currentRow, PDouble.INSTANCE, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return 0;
         }
         return value;
@@ -505,7 +515,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         Float value = (Float)getRowProjector().getColumnProjector(columnIndex-1)
                 .getValue(currentRow, PFloat.INSTANCE, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return 0;
         }
         return value;
@@ -527,7 +537,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         Integer value = (Integer)getRowProjector().getColumnProjector(columnIndex-1)
                 .getValue(currentRow, PInteger.INSTANCE, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return 0;
         }
         return value;
@@ -544,7 +554,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         Long value = (Long)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
             PLong.INSTANCE, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return 0;
         }
         return value;
@@ -596,6 +606,16 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         ColumnProjector projector = getRowProjector().getColumnProjector(columnIndex-1);
         Object value = projector.getValue(currentRow, projector.getExpression().getDataType(), ptr);
         wasNull = (value == null);
+        if (isCompliantTimeZoneHandling) {
+            PDataType type = projector.getExpression().getDataType();
+            if (type == PDate.INSTANCE || type == PUnsignedDate.INSTANCE) {
+                value = DateUtil.applyOutputDisplacement((java.sql.Date)value);
+            } else if (type == PTime.INSTANCE || type == PUnsignedTime.INSTANCE) {
+                value = DateUtil.applyOutputDisplacement((java.sql.Time)value);
+            } else if (type == PTimestamp.INSTANCE || type == PUnsignedTimestamp.INSTANCE) {
+                value = DateUtil.applyOutputDisplacement((java.sql.Timestamp)value);
+            }
+        }
         return value;
     }
 
@@ -656,7 +676,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         Short value = (Short)getRowProjector().getColumnProjector(columnIndex-1)
                 .getValue(currentRow, PSmallint.INSTANCE, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return 0;
         }
         return value;
@@ -680,7 +700,8 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         ColumnProjector projector = getRowProjector().getColumnProjector(columnIndex-1);
         PDataType type = projector.getExpression().getDataType();
         Object value = projector.getValue(currentRow,type, ptr);
-        if (wasNull = (value == null)) {
+        wasNull = (value == null);
+        if (wasNull) {
             return null;
         }
         // Run Object through formatter to get String.
@@ -701,7 +722,14 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         Time value = (Time)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
             PTime.INSTANCE, ptr);
         wasNull = (value == null);
-        return value;
+        if (wasNull) {
+            return null;
+        }
+        if (isCompliantTimeZoneHandling) {
+            return DateUtil.applyOutputDisplacement(value);
+        } else {
+            return value;
+        }
     }
 
     @Override
@@ -715,7 +743,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         Time value = (Time)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
             PTime.INSTANCE, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return null;
         }
         cal.setTime(value);
@@ -734,7 +762,14 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         Timestamp value = (Timestamp)getRowProjector().getColumnProjector(columnIndex-1)
                 .getValue(currentRow, PTimestamp.INSTANCE, ptr);
         wasNull = (value == null);
-        return value;
+        if (wasNull) {
+            return null;
+        }
+        if (isCompliantTimeZoneHandling) {
+            return DateUtil.applyOutputDisplacement(value);
+        } else {
+            return value;
+        }
     }
 
     @Override
@@ -763,7 +798,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         String value = (String)getRowProjector().getColumnProjector(columnIndex-1)
                 .getValue(currentRow, PVarchar.INSTANCE, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return null;
         }
         try {

@@ -28,6 +28,12 @@ import java.sql.Types;
 import java.text.Format;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.TimeZone;
 
@@ -54,6 +60,7 @@ import edu.umd.cs.findbugs.annotations.NonNull;
 
 @SuppressWarnings({ "serial", "deprecation" })
 public class DateUtil {
+
     public static final String DEFAULT_TIME_ZONE_ID = "GMT";
     public static final String LOCAL_TIME_ZONE_ID = "LOCAL";
     private static final TimeZone DEFAULT_TIME_ZONE = TimeZone.getTimeZone(DEFAULT_TIME_ZONE_ID);
@@ -70,6 +77,9 @@ public class DateUtil {
 
     public static final String DEFAULT_TIMESTAMP_FORMAT = DEFAULT_MS_DATE_FORMAT;
     public static final Format DEFAULT_TIMESTAMP_FORMATTER = DEFAULT_MS_DATE_FORMATTER;
+
+    //Caching for performance. We don't expect the default TZ to changed after startup
+    private static final java.util.TimeZone LOCAL_TIME_ZONE = TimeZone.getDefault();
 
     private static final DateTimeFormatter JULIAN_DATE_TIME_FORMATTER = new DateTimeFormatterBuilder()
         .append(ISODateTimeFormat.dateParser())
@@ -187,18 +197,43 @@ public class DateUtil {
                 : FastDateFormat.getInstance(pattern, getTimeZone(timeZoneID));
     }
 
+    /**
+     * Parses a datetime string in the UTC time zone.
+     * 
+     * @param dateValue datetime string in UTC
+     * @return epoch ms
+     */
     private static long parseDateTime(String dateTimeValue) {
         return JulianDateFormatParser.getInstance().parseDateTime(dateTimeValue);
     }
 
+    
+    /**
+     * Parses a date string in the UTC time zone.
+     * 
+     * @param dateValue date string in UTC
+     * @return epoch ms
+     */
     public static Date parseDate(String dateValue) {
         return new Date(parseDateTime(dateValue));
     }
 
+    /**
+     * Parses a time string in the UTC time zone.
+     * 
+     * @param dateValue time string in UTC
+     * @return epoch ms
+     */
     public static Time parseTime(String timeValue) {
         return new Time(parseDateTime(timeValue));
     }
 
+    /**
+     * Parses the timestsamp string in the UTC time zone.
+     * 
+     * @param timestampValue timestamp string in UTC
+     * @return Timestamp parsed in UTC
+     */
     public static Timestamp parseTimestamp(String timestampValue) {
         Timestamp timestamp = new Timestamp(parseDateTime(timestampValue));
         int period = timestampValue.indexOf('.');
@@ -392,4 +427,87 @@ public class DateUtil {
             }
         }
     }
+
+    // These implementations favor speed over historical correctness, and use
+    // java.util.TimeZone#getOffset(epochms) and inherit its limitations.
+
+    // When we switch to java.time, we might want to revisist this, and add an option for
+    // slower but more correct conversions.
+    // However, any conversion for TZs with DST is best effort anyway.
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the UTC time zone as the Input in the default time zone.
+     * @param input
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Date applyInputDisplacement(java.sql.Date input) {
+        long epoch = input.getTime();
+        return new java.sql.Date(epoch + LOCAL_TIME_ZONE.getOffset(epoch));
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the UTC time zone as the Input in the default time zone.
+     * @param input
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Time applyInputDisplacement(java.sql.Time input) {
+        long epoch = input.getTime();
+        return new java.sql.Time(epoch + LOCAL_TIME_ZONE.getOffset(epoch));
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the UTC time zone as the Input in the default time zone.
+     * @param input
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Timestamp applyInputDisplacement(java.sql.Timestamp input) {
+        long epoch = input.getTime();
+        java.sql.Timestamp ts = new java.sql.Timestamp(epoch + LOCAL_TIME_ZONE.getOffset(epoch));
+        ts.setNanos(input.getNanos());
+        return ts;
+
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the default time zone as the Input in the UTC time zone.
+     * @param input
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Date applyOutputDisplacement(java.sql.Date input) {
+        long epoch = input.getTime();
+        return new java.sql.Date(epoch - getReverseOffset(epoch));
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the default time zone as the Input in the UTC time zone.
+     * @param input
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Time applyOutputDisplacement(java.sql.Time input) {
+        long epoch = input.getTime();
+        return new java.sql.Time(epoch - getReverseOffset(epoch));
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the default time zone as the Input in the UTC time zone.
+     * @param input
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Timestamp applyOutputDisplacement(java.sql.Timestamp input) {
+        long epoch = input.getTime();
+        java.sql.Timestamp ts = new java.sql.Timestamp(epoch - getReverseOffset(epoch));
+        ts.setNanos(input.getNanos());
+        return ts;
+    }
+
+    private static int getReverseOffset(long epoch) {
+        return LOCAL_TIME_ZONE.getOffset(epoch - LOCAL_TIME_ZONE.getRawOffset() - LOCAL_TIME_ZONE.getDSTSavings());
+    }
+
 }
