@@ -397,6 +397,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_MOVE_CHILD_LINKS_DURING_UPGRADE_ENABLED = true;
     public static final int DEFAULT_TIMEOUT_DURING_UPGRADE_MS = 60000 * 30; // 30 mins
     public static final int DEFAULT_SCAN_PAGE_SIZE = 32768;
+    public static final boolean DEFAULT_APPLY_TIME_ZONE_DISPLACMENT = false;
 
     private final Configuration config;
 

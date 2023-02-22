@@ -87,6 +87,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String MAX_MEMORY_PERC_ATTRIB = "phoenix.query.maxGlobalMemoryPercentage";
     public static final String MAX_TENANT_MEMORY_PERC_ATTRIB = "phoenix.query.maxTenantMemoryPercentage";
     public static final String MAX_SERVER_CACHE_SIZE_ATTRIB = "phoenix.query.maxServerCacheBytes";
+    public static final String APPLY_TIME_ZONE_DISPLACMENT_ATTRIB = "phoenix.query.applyTimeZoneDisplacement";
     public static final String DATE_FORMAT_TIMEZONE_ATTRIB = "phoenix.query.dateFormatTimeZone";
     public static final String DATE_FORMAT_ATTRIB = "phoenix.query.dateFormat";
     public static final String TIME_FORMAT_ATTRIB = "phoenix.query.timeFormat";
