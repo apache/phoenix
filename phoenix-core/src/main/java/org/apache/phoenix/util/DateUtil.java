@@ -28,12 +28,6 @@ import java.sql.Types;
 import java.text.Format;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.TimeZone;
 
@@ -199,7 +193,7 @@ public class DateUtil {
 
     /**
      * Parses a datetime string in the UTC time zone.
-     * 
+     *
      * @param dateValue datetime string in UTC
      * @return epoch ms
      */
@@ -210,7 +204,7 @@ public class DateUtil {
     
     /**
      * Parses a date string in the UTC time zone.
-     * 
+     *
      * @param dateValue date string in UTC
      * @return epoch ms
      */
@@ -220,7 +214,7 @@ public class DateUtil {
 
     /**
      * Parses a time string in the UTC time zone.
-     * 
+     *
      * @param dateValue time string in UTC
      * @return epoch ms
      */
@@ -230,7 +224,7 @@ public class DateUtil {
 
     /**
      * Parses the timestsamp string in the UTC time zone.
-     * 
+     *
      * @param timestampValue timestamp string in UTC
      * @return Timestamp parsed in UTC
      */
@@ -428,10 +422,10 @@ public class DateUtil {
         }
     }
 
-    // These implementations favor speed over historical correctness, and use
-    // java.util.TimeZone#getOffset(epochms) and inherit its limitations.
+    // These implementations favour speed over historical correctness, and use
+    // java.util.TimeZone#getOffset(epoch millis) and inherit its limitations.
 
-    // When we switch to java.time, we might want to revisist this, and add an option for
+    // When we switch to java.time, we might want to revisit this, and add an option for
     // slower but more correct conversions.
     // However, any conversion for TZs with DST is best effort anyway.
 
@@ -507,7 +501,8 @@ public class DateUtil {
     }
 
     private static int getReverseOffset(long epoch) {
-        return LOCAL_TIME_ZONE.getOffset(epoch - LOCAL_TIME_ZONE.getRawOffset() - LOCAL_TIME_ZONE.getDSTSavings());
+        return LOCAL_TIME_ZONE.getOffset(
+            epoch - LOCAL_TIME_ZONE.getRawOffset() - LOCAL_TIME_ZONE.getDSTSavings());
     }
 
 }

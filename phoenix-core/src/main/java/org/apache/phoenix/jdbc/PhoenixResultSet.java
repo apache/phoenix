@@ -609,11 +609,11 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         if (isApplyTimeZoneDisplacement) {
             PDataType type = projector.getExpression().getDataType();
             if (type == PDate.INSTANCE || type == PUnsignedDate.INSTANCE) {
-                value = DateUtil.applyOutputDisplacement((java.sql.Date)value);
+                value = DateUtil.applyOutputDisplacement((java.sql.Date) value);
             } else if (type == PTime.INSTANCE || type == PUnsignedTime.INSTANCE) {
-                value = DateUtil.applyOutputDisplacement((java.sql.Time)value);
+                value = DateUtil.applyOutputDisplacement((java.sql.Time) value);
             } else if (type == PTimestamp.INSTANCE || type == PUnsignedTimestamp.INSTANCE) {
-                value = DateUtil.applyOutputDisplacement((java.sql.Timestamp)value);
+                value = DateUtil.applyOutputDisplacement((java.sql.Timestamp) value);
             }
         }
         return value;

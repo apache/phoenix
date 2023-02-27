@@ -449,11 +449,11 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
             //TODO add java.time when implemented
             if (connection.isApplyTimeZoneDisplacement()) {
                 if (o instanceof java.sql.Timestamp) {
-                    o = DateUtil.applyInputDisplacement((java.sql.Timestamp)o);
+                    o = DateUtil.applyInputDisplacement((java.sql.Timestamp) o);
                 } else if (o instanceof java.sql.Time) {
-                    o = DateUtil.applyInputDisplacement((java.sql.Time)o);
+                    o = DateUtil.applyInputDisplacement((java.sql.Time) o);
                 } else if (o instanceof java.sql.Date) {
-                    o = DateUtil.applyInputDisplacement((java.sql.Date)o);
+                    o = DateUtil.applyInputDisplacement((java.sql.Date) o);
                 }
             }
             //FIXME if we make a copy in setDate() from temporals, why not here ?
