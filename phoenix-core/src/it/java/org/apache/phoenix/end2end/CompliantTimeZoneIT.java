@@ -43,7 +43,7 @@ public class CompliantTimeZoneIT extends ParallelStatsEnabledIT {
     public void testCompliantCorrection() throws Exception {
         String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.put(QueryServices.COMPLIANT_TIMEZONE_HANDLING_ATTRIB, Boolean.TRUE.toString());
+        props.put(QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB, Boolean.TRUE.toString());
         try (PhoenixConnection conn =
                 (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
                 Statement stmt = conn.createStatement();
@@ -118,7 +118,7 @@ public class CompliantTimeZoneIT extends ParallelStatsEnabledIT {
     public void testPhoenix5066() throws Exception {
         String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.put(QueryServices.COMPLIANT_TIMEZONE_HANDLING_ATTRIB, Boolean.TRUE.toString());
+        props.put(QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB, Boolean.TRUE.toString());
         try (PhoenixConnection conn =
                 (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
                 Statement stmt = conn.createStatement();
@@ -171,7 +171,7 @@ public class CompliantTimeZoneIT extends ParallelStatsEnabledIT {
         // NOTE that this succeds with either TRUE or FALSE, but the actual HBase value stored
         // is different
         // We are testing that the displacement gets applied both ways
-        props.put(QueryServices.COMPLIANT_TIMEZONE_HANDLING_ATTRIB, Boolean.TRUE.toString());
+        props.put(QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB, Boolean.TRUE.toString());
         try (PhoenixConnection conn =
                 (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
                 Statement stmt = conn.createStatement();) {
@@ -216,7 +216,7 @@ public class CompliantTimeZoneIT extends ParallelStatsEnabledIT {
 
         String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.put(QueryServices.COMPLIANT_TIMEZONE_HANDLING_ATTRIB, Boolean.TRUE.toString());
+        props.put(QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB, Boolean.TRUE.toString());
         try (PhoenixConnection conn =
                 (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
                 Statement stmt = conn.createStatement();

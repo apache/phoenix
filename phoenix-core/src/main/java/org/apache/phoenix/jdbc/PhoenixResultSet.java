@@ -151,7 +151,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
     private final boolean wildcardIncludesDynamicCols;
     private final List<PColumn> staticColumns;
     private final int startPositionForDynamicCols;
-    private final boolean isCompliantTimeZoneHandling;
+    private final boolean isApplyTimeZoneDisplacement;
 
     private RowProjector rowProjectorWithDynamicCols;
     private Tuple currentRow = BEFORE_FIRST;
@@ -186,7 +186,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
             this.staticColumns = null;
             this.startPositionForDynamicCols = 0;
         }
-        this.isCompliantTimeZoneHandling = statement.getConnection().isCompliantTimezoneHandling();
+        this.isApplyTimeZoneDisplacement = statement.getConnection().isApplyTimeZoneDisplacement();
     }
     
     @Override
@@ -452,7 +452,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         if (wasNull) {
             return null;
         }
-        if (isCompliantTimeZoneHandling) {
+        if (isApplyTimeZoneDisplacement) {
             return DateUtil.applyOutputDisplacement(value);
         } else {
             return value;
@@ -606,7 +606,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         ColumnProjector projector = getRowProjector().getColumnProjector(columnIndex-1);
         Object value = projector.getValue(currentRow, projector.getExpression().getDataType(), ptr);
         wasNull = (value == null);
-        if (isCompliantTimeZoneHandling) {
+        if (isApplyTimeZoneDisplacement) {
             PDataType type = projector.getExpression().getDataType();
             if (type == PDate.INSTANCE || type == PUnsignedDate.INSTANCE) {
                 value = DateUtil.applyOutputDisplacement((java.sql.Date)value);
@@ -725,7 +725,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         if (wasNull) {
             return null;
         }
-        if (isCompliantTimeZoneHandling) {
+        if (isApplyTimeZoneDisplacement) {
             return DateUtil.applyOutputDisplacement(value);
         } else {
             return value;
@@ -765,7 +765,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         if (wasNull) {
             return null;
         }
-        if (isCompliantTimeZoneHandling) {
+        if (isApplyTimeZoneDisplacement) {
             return DateUtil.applyOutputDisplacement(value);
         } else {
             return value;

@@ -275,7 +275,7 @@ public class StatementContext {
     }
 
     public long getCurrentTimeWithDisplacement() throws SQLException {
-        if (connection.isCompliantTimezoneHandling()) {
+        if (connection.isApplyTimeZoneDisplacement()) {
             return DateUtil.applyInputDisplacement(new java.sql.Date(getCurrentTime())).getTime();
         } else {
             return getCurrentTime();

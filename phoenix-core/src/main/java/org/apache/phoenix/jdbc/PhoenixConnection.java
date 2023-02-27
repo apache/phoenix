@@ -191,7 +191,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     //For now just the copy constructor paths will have this as true as I don't want to change the
     //public interfaces.
     private final boolean isInternalConnection;
-    private boolean compliantTimezoneHandling;
+    private boolean isApplyTimeZoneDisplacement;
 
     static {
         Tracing.addTraceMetricsSource();
@@ -352,9 +352,9 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
             long maxSizeBytes = this.services.getProps().getLongBytes(
                     QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
                     QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
-            this.compliantTimezoneHandling = this.services.getProps().getBoolean(
-                QueryServices.COMPLIANT_TIMEZONE_HANDLING_ATTRIB,
-                QueryServicesOptions.DEFAULT_COMPLIANT_TIMEZONE_HANDLING);
+            this.isApplyTimeZoneDisplacement = this.services.getProps().getBoolean(
+                QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB,
+                QueryServicesOptions.DEFAULT_APPLY_TIME_ZONE_DISPLACMENT);
             this.dateFormatTimeZoneId = this.services.getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
                     DateUtil.DEFAULT_TIME_ZONE_ID);
             Format dateFormat = DateUtil.getDateFormatter(datePattern, dateFormatTimeZoneId);
@@ -1428,7 +1428,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
         return dateFormatTimeZoneId;
     }
 
-    public boolean isCompliantTimezoneHandling() {
-        return compliantTimezoneHandling;
+    public boolean isApplyTimeZoneDisplacement() {
+        return isApplyTimeZoneDisplacement;
     }
 }

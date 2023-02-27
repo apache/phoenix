@@ -364,7 +364,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
     @Override
     public void setDate(int parameterIndex, Date x) throws SQLException {
         if (x != null) {
-            if (connection.isCompliantTimezoneHandling()) {
+            if (connection.isApplyTimeZoneDisplacement()) {
                 x = DateUtil.applyInputDisplacement(x);
             } else {
                 // Since Date is mutable, make a copy
@@ -447,7 +447,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
     public void setObject(int parameterIndex, Object o) throws SQLException {
         if (o instanceof java.util.Date) {
             //TODO add java.time when implemented
-            if (connection.isCompliantTimezoneHandling()) {
+            if (connection.isApplyTimeZoneDisplacement()) {
                 if (o instanceof java.sql.Timestamp) {
                     o = DateUtil.applyInputDisplacement((java.sql.Timestamp)o);
                 } else if (o instanceof java.sql.Time) {
@@ -504,7 +504,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
     @Override
     public void setTime(int parameterIndex, Time x) throws SQLException {
         if (x != null) {
-            if (connection.isCompliantTimezoneHandling()) {
+            if (connection.isApplyTimeZoneDisplacement()) {
                 x = DateUtil.applyInputDisplacement(x);
             } else {
                 // Since Date is mutable, make a copy
@@ -525,7 +525,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
 
     private void setTimestampParameter(int parameterIndex, Timestamp x, Calendar cal) throws SQLException {
         if (x != null) {
-            if (connection.isCompliantTimezoneHandling()) {
+            if (connection.isApplyTimeZoneDisplacement()) {
                 x = DateUtil.applyInputDisplacement(x);
             } else {
                 int nanos = x.getNanos();
