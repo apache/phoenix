@@ -201,7 +201,6 @@ public class DateUtil {
         return JulianDateFormatParser.getInstance().parseDateTime(dateTimeValue);
     }
 
-    
     /**
      * Parses a date string in the UTC time zone.
      *

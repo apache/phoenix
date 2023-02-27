@@ -297,7 +297,7 @@ public class DateUtilTest {
         LocalDateTime nonExistent = LocalDateTime.of(2023, 3, 12, 2, 0, 0);
         LocalDateTime startOfSummer = LocalDateTime.of(2023, 3, 12, 3, 0, 0);
         LocalDateTime endOfSummer = LocalDateTime.of(2023, 1, 05, 00, 59, 59);
-        // Time warps back to 1:00 instead of reaching 2:00 the first tiome
+        // Time warps back to 1:00 instead of reaching 2:00 the first time
         LocalDateTime ambiguous = LocalDateTime.of(2023, 1, 05, 1, 30, 0);
         LocalDateTime startOfWinter = LocalDateTime.of(2023, 1, 05, 2, 0, 0);
 

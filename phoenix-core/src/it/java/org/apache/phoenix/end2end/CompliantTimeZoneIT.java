@@ -168,7 +168,7 @@ public class CompliantTimeZoneIT extends ParallelStatsEnabledIT {
     public void testCurrent() throws Exception {
         String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        // NOTE that this succeds with either TRUE or FALSE, but the actual HBase value stored
+        // NOTE that this succeeds with either TRUE or FALSE, but the actual HBase value stored
         // is different
         // We are testing that the displacement gets applied both ways
         props.put(QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB, Boolean.TRUE.toString());
@@ -276,7 +276,7 @@ public class CompliantTimeZoneIT extends ParallelStatsEnabledIT {
             assertEquals(3, rs.getInt("ID"));
             assertEquals(sqlDateLocal, rs.getDate("D"));
             assertEquals(sqlDateLocal, rs.getDate("ROWTS"));
-            // the stored timestamp is in UTC, but only becase sqlDateLocal pre-applies the
+            // the stored timestamp is in UTC, but only because sqlDateLocal pre-applies the
             // displacement by parsing the date in the local TZ
             assertEquals(dateString + ".000", rs.getString("ROWTS"));
 
