@@ -37,7 +37,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(ParallelStatsEnabledTest.class)
-public class CompliantTimeZoneIT extends ParallelStatsEnabledIT {
+public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
 
     @Test
     public void testCompliantCorrection() throws Exception {
