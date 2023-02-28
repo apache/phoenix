@@ -32,6 +32,7 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
@@ -42,6 +43,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.HashMap;
 import java.util.Map;
@@ -49,9 +51,12 @@ import java.util.Set;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.stream.Collectors;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.util.MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES;
 
@@ -502,25 +507,77 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         return getColumnInfoString(table, colInfo, columns, pkColumns);
     }
 
-    private boolean shouldContainQualifier(PTable table, List<PColumn> columns)
+    private boolean hasEncodedQualifier(PTable table, List<PColumn> columns)
     {
-        if (columns.size() == 0 || shouldGenerateWithDefaults) {
-            return false;
-        }
+        return columns.size() != 0 &&
+            !shouldGenerateWithDefaults &&
+            table.getType() == PTableType.TABLE &&
+            table.getEncodingScheme() != PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+    }
 
-        return table.getType() == PTableType.TABLE && table.getEncodingScheme() != PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+    private boolean isConsecutive(List<Integer> list) {
+        for (int i = 1; i < list.size(); i++) {
+            if (list.get(i - 1) + 1 != list.get(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private List<String> getNonConsecutiveQualifierCounterFamilies (PTable table) {
+        PTable.QualifierEncodingScheme scheme = table.getEncodingScheme();
+        PTable.EncodedCQCounter encodedCQCounter = table.getEncodedCQCounter();
+        if (table.getImmutableStorageScheme() == SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+            // For this scheme we track column qualifier counters at the column family level
+            List<String> ret = new ArrayList<>();
+            for (PColumnFamily colFamily : table.getColumnFamilies()) {
+                String colFamilyName = colFamily.getName().getString();
+                List<Integer> counterValues = colFamily.getColumns().stream()
+                        .filter(c -> !table.getPKColumns().contains(c))
+                        .map(pColumn -> scheme.decode(pColumn.getColumnQualifierBytes()))
+                        .collect(Collectors.toList());
+                Collections.sort(counterValues);
+                if (!isConsecutive(counterValues) ||
+                        counterValues.get(0) > ENCODED_CQ_COUNTER_INITIAL_VALUE ||
+                        counterValues.get(counterValues.size() - 1) <
+                                encodedCQCounter.getNextQualifier(colFamilyName) - 1) {
+                    ret.add(colFamily.getName().getString());
+                }
+            }
+            return ret;
+        } else {
+            // For other schemes, column qualifier counters are tracked using the default column family.
+            List<Integer> counterValues = table.getColumns().stream()
+                    .filter(c -> !table.getPKColumns().contains(c))
+                    .map(pColumn -> scheme.decode(pColumn.getColumnQualifierBytes()))
+                    .collect(Collectors.toList());
+            Collections.sort(counterValues);
+            String defaultFamilyName = table.getDefaultFamilyName() == null ? DEFAULT_COLUMN_FAMILY :
+                    table.getDefaultFamilyName().getString();
+            if (counterValues.size() > 0 &&
+                    (!isConsecutive(counterValues) ||
+                    counterValues.get(0) > ENCODED_CQ_COUNTER_INITIAL_VALUE ||
+                    counterValues.get(counterValues.size() - 1) <
+                            encodedCQCounter.getNextQualifier(defaultFamilyName) - 1)) {
+                return table.getColumnFamilies().stream()
+                        .map(pColumnFamily -> pColumnFamily.getName().getString())
+                        .collect(Collectors.toList());
+            }
+        }
+        return new ArrayList<>();
     }
 
     private String getColumnInfoString(PTable table, StringBuilder colInfo, List<PColumn> columns,
             List<PColumn> pkColumns) {
-        boolean appendQualifier = shouldContainQualifier(table, columns);
+        boolean appendQualifier = hasEncodedQualifier(table, columns);
+        List<String> nonConsecutiveColumnFamilies = appendQualifier ? getNonConsecutiveQualifierCounterFamilies(table) : new ArrayList<>();
         ArrayList<String> colDefs = new ArrayList<>(columns.size());
         for (PColumn col : columns) {
             String def = extractColumn(col);
             if (pkColumns.size() == 1 && pkColumns.contains(col)) {
                 def += " PRIMARY KEY" + extractPKColumnAttributes(col);
             }
-            if (appendQualifier && !pkColumns.contains(col)) {
+            if (appendQualifier && !pkColumns.contains(col) && nonConsecutiveColumnFamilies.contains(col.getFamilyName().getString())) {
                 def += " ENCODED_QUALIFIER " +
                         table.getEncodingScheme().decode(col.getColumnQualifierBytes());
             }

@@ -45,9 +45,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
 
         String expected = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
-                "INT INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                ", INT2 INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
-                ") IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN'";
+                "INT INTEGER, INT2 INTEGER) IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN'";
         assertTrue("Expected: :" + expected + "\nResult: " + rs.getString(1),
                 rs.getString(1).equals(expected));
     }
@@ -64,8 +62,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
 
         String expected = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
-                "INT INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                ") IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN'";
+                "INT INTEGER) IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN'";
         assertTrue("Expected: :" + expected + "\nResult: " + rs.getString(1),
                 rs.getString(1).equals(expected));
     }
@@ -84,8 +81,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
 
         String expected = "CREATE TABLE " + tableFullName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
-                "INT INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                ") IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN'";
+                "INT INTEGER) IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN'";
         assertTrue("Expected: :" + expected + "\nResult: " + rs.getString(1),
                 rs.getString(1).equals(expected));
     }
@@ -109,13 +105,9 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
 
         String expected = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
-                "\"dF\".INT1 INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                ", \"dF\".INT2 INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
-                ", A.INT3 INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                ", A.INT4 INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
-                ", \"b\".INT5 INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                ", B.INT6 INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                ") IMMUTABLE_ROWS=true, DEFAULT_COLUMN_FAMILY='dF'";
+                "\"dF\".INT1 INTEGER, \"dF\".INT2 INTEGER, A.INT3 INTEGER, A.INT4 INTEGER, " +
+                "\"b\".INT5 INTEGER, B.INT6 INTEGER) " +
+                "IMMUTABLE_ROWS=true, DEFAULT_COLUMN_FAMILY='dF'";
         assertTrue("Expected: :" + expected + "\nResult: " + rs.getString(1),
                 rs.getString(1).equals(expected));
     }
@@ -202,9 +194,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
 
         String expected = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
-                "A.INT INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                ", B.INT2 INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                ") IMMUTABLE_ROWS=true";
+                "A.INT INTEGER, B.INT2 INTEGER) IMMUTABLE_ROWS=true";
         assertTrue("Expected: :" + expected + "\nResult: " + rs.getString(1),
                 rs.getString(1).equals(expected));
     }
@@ -227,11 +217,9 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
 
         String expected = "CREATE TABLE " + tableName + "(K VARCHAR NOT NULL PRIMARY KEY, " +
-                "A.INT INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                ", A.INT2 INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 1) +
-                ", B.INT3 INTEGER ENCODED_QUALIFIER " + (ENCODED_CQ_COUNTER_INITIAL_VALUE) +
-                ") IMMUTABLE_ROWS=true COLUMN_QUALIFIER_COUNTER ('B'=" + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 2)
-                + ")";
+                "A.INT INTEGER, A.INT2 INTEGER, B.INT3 INTEGER ENCODED_QUALIFIER " +
+                (ENCODED_CQ_COUNTER_INITIAL_VALUE) + ") IMMUTABLE_ROWS=true " +
+                "COLUMN_QUALIFIER_COUNTER ('B'=" + (ENCODED_CQ_COUNTER_INITIAL_VALUE + 2) + ")";
         assertTrue("Expected: :" + expected + "\nResult: " + rs.getString(1),
                 rs.getString(1).equals(expected));
     }
