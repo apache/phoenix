@@ -52,14 +52,15 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.Format;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
+import java.util.List;
 import java.util.Properties;
 import java.util.TimeZone;
-import java.util.List;
-import java.util.Arrays;
 
 import org.apache.commons.lang3.time.FastDateFormat;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -69,6 +70,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTime;
@@ -2157,7 +2159,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
 
         String tableName = generateUniqueName();
-        String ddl = "CREATE TABLE IF NOT EXISTS " + tableName +
+        String ddl = "CREATE TABLE " + tableName +
                 " (k1 INTEGER PRIMARY KEY," +
                 " v_date DATE," +
                 " v_time TIME," +
@@ -2211,5 +2213,211 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     private void verifyTimeZoneIDWithFormatter(Format formatter, String timeZoneId) {
         assertTrue(formatter instanceof FastDateFormat);
         assertEquals(((FastDateFormat)formatter).getTimeZone().getID(), timeZoneId);
+    }
+
+    @Test
+    public void testJdbc42ApiWithoutDisplacement() throws SQLException {
+        testJdbc42Api(false);
+    }
+
+    @Test
+    public void testJdbc42ApiWithDisplacement() throws SQLException {
+        testJdbc42Api(true);
+    }
+
+    private void testJdbc42Api(boolean withDisplacement) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        ZoneOffset testOffset;
+        if (withDisplacement) {
+            testOffset = ZoneOffset.systemDefault().getRules().getOffset(Instant.now());
+            props.setProperty(QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB,
+                Boolean.TRUE.toString());
+        } else {
+            testOffset = ZoneOffset.UTC;
+        }
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+
+            String tableName = generateUniqueName();
+            String ddl =
+                    "CREATE TABLE " + tableName
+                            + " (ID INTEGER PRIMARY KEY, D DATE, T TIME, S TIMESTAMP, "
+                            + "UD UNSIGNED_DATE, UT UNSIGNED_TIME, US UNSIGNED_TIMESTAMP)";
+            java.time.LocalDateTime localDateTime = java.time.LocalDateTime.now();
+            java.time.LocalDateTime localDateTimeMs =
+                    localDateTime.withNano((localDateTime.getNano() / 1000000) * 1000000);
+            java.time.LocalDate localDate = localDateTime.toLocalDate();
+            java.time.LocalTime localTime = localDateTime.toLocalTime();
+            java.time.LocalTime localTimeMs =
+                    localTime.withNano((localDateTime.getNano() / 1000000) * 1000000);
+
+            java.sql.Timestamp javaSqlTimestampFull =
+                    java.sql.Timestamp.from(localDateTime.toInstant(testOffset));
+            java.sql.Timestamp javaSqlTimestampFullMs =
+                    new java.sql.Timestamp(javaSqlTimestampFull.getTime());
+            java.sql.Timestamp javaSqlTimestampDatePart =
+                    java.sql.Timestamp.from(localDate.atStartOfDay().toInstant(testOffset));
+            java.sql.Timestamp javaSqlTimestampTimePart =
+                    java.sql.Timestamp
+                            .from(localTime.atDate(DateUtil.LD_EPOCH).toInstant(testOffset));
+            java.sql.Timestamp javaSqlTimestampTimePartMs =
+                    new java.sql.Timestamp(javaSqlTimestampTimePart.getTime());
+
+            java.util.Date javaUtilDateFull = new java.util.Date(javaSqlTimestampFull.getTime());
+            java.util.Date javaUtilDateDatePart =
+                    new java.util.Date(javaSqlTimestampDatePart.getTime());
+            java.util.Date javaUtilDateTimePart =
+                    new java.util.Date(javaSqlTimestampTimePart.getTime());
+
+            java.sql.Date javaSqlDateFull = new java.sql.Date(javaSqlTimestampFull.getTime());
+            java.sql.Time javaSqlTimeFull = new java.sql.Time(javaSqlTimestampFull.getTime());
+
+            // Differ by date
+            String dml = "UPSERT INTO " + tableName + " VALUES (?, ?, ?, ?, ?, ?, ?)";
+            try (Statement stmt = conn.createStatement();
+                    PreparedStatement ps = conn.prepareStatement(dml)) {
+                stmt.executeUpdate(ddl);
+
+                ps.setInt(1, 1);
+                ps.setObject(2, localDateTime);
+                ps.setObject(3, localDateTime);
+                ps.setObject(4, localDateTime);
+                ps.setObject(5, localDateTime);
+                ps.setObject(6, localDateTime);
+                ps.setObject(7, localDateTime);
+                assertEquals(1, ps.executeUpdate());
+
+                ps.setInt(1, 2);
+                ps.setObject(2, localDate);
+                ps.setObject(3, localDate);
+                ps.setObject(4, localDate);
+                ps.setObject(5, localDate);
+                ps.setObject(6, localDate);
+                ps.setObject(7, localDate);
+                assertEquals(1, ps.executeUpdate());
+
+                ps.setInt(1, 3);
+                ps.setObject(2, localTime);
+                ps.setObject(3, localTime);
+                ps.setObject(4, localTime);
+                ps.setObject(5, localTime);
+                ps.setObject(6, localTime);
+                ps.setObject(7, localTime);
+                assertEquals(1, ps.executeUpdate());
+
+                ps.setInt(1, 4);
+                ps.setObject(2, javaSqlTimestampFull);
+                ps.setObject(3, javaSqlTimestampFull);
+                ps.setObject(4, javaSqlTimestampFull);
+                ps.setObject(5, javaSqlTimestampFull);
+                ps.setObject(6, javaSqlTimestampFull);
+                ps.setObject(7, javaSqlTimestampFull);
+                assertEquals(1, ps.executeUpdate());
+
+                ps.setInt(1, 5);
+                ps.setObject(2, javaSqlDateFull);
+                ps.setObject(3, javaSqlDateFull);
+                ps.setObject(4, javaSqlDateFull);
+                ps.setObject(5, javaSqlDateFull);
+                ps.setObject(6, javaSqlDateFull);
+                ps.setObject(7, javaSqlDateFull);
+                assertEquals(1, ps.executeUpdate());
+
+                ps.setInt(1, 6);
+                ps.setObject(2, javaSqlTimeFull);
+                ps.setObject(3, javaSqlTimeFull);
+                ps.setObject(4, javaSqlTimeFull);
+                ps.setObject(5, javaSqlTimeFull);
+                ps.setObject(6, javaSqlTimeFull);
+                ps.setObject(7, javaSqlTimeFull);
+                assertEquals(1, ps.executeUpdate());
+
+                conn.commit();
+                ResultSet rs = stmt.executeQuery("select * from " + tableName + " order by id");
+                assertTrue(rs.next());
+                assertEquals(1, rs.getInt(1));
+                for (int i = 2; i <= 7; i++) {
+                    if (i == 4 || i == 7) {
+                        // Nanos
+                        assertEquals(javaSqlTimestampFull, rs.getTimestamp(i));
+                        assertEquals(localDateTime, rs.getObject(i, java.time.LocalDateTime.class));
+                        // Non-standard extensions
+                        assertEquals(localTime, rs.getObject(i, java.time.LocalTime.class));
+                    } else {
+                        // Millis
+                        assertEquals(javaSqlDateFull, rs.getTimestamp(i));
+                        assertEquals(localDateTimeMs,
+                            rs.getObject(i, java.time.LocalDateTime.class));
+                        // Non-standard extension
+                        assertEquals(localTimeMs, rs.getObject(i, java.time.LocalTime.class));
+
+                    }
+                    // Non-standard extension
+                    assertEquals(localDate, rs.getObject(i, java.time.LocalDate.class));
+                    assertEquals(javaUtilDateFull, rs.getObject(i, java.util.Date.class));
+                }
+                // Make sure name based getObject() works
+                assertEquals(localDateTimeMs, rs.getObject("D", java.time.LocalDateTime.class));
+                assertEquals(localDateTimeMs, rs.getObject("T", java.time.LocalDateTime.class));
+                assertEquals(localDateTime, rs.getObject("S", java.time.LocalDateTime.class));
+                assertEquals(localDateTimeMs, rs.getObject("UD", java.time.LocalDateTime.class));
+                assertEquals(localDateTimeMs, rs.getObject("UT", java.time.LocalDateTime.class));
+                assertEquals(localDateTime, rs.getObject("US", java.time.LocalDateTime.class));
+
+                assertTrue(rs.next());
+                assertEquals(2, rs.getInt(1));
+                for (int i = 2; i <= 7; i++) {
+                    assertEquals(javaSqlTimestampDatePart, rs.getTimestamp(i));
+                    assertEquals(javaUtilDateDatePart, rs.getObject(i, java.util.Date.class));
+                }
+                assertEquals(localDate, rs.getObject(2, java.time.LocalDate.class));
+                assertEquals(localDate, rs.getObject(5, java.time.LocalDate.class));
+
+                assertTrue(rs.next());
+                assertEquals(3, rs.getInt(1));
+                for (int i = 2; i <= 7; i++) {
+                    if (i == 4 || i == 7) {
+                        assertEquals(javaSqlTimestampTimePart, rs.getTimestamp(i));
+                        // Can read nanos from timestamp field
+                        assertEquals(localTime, rs.getObject(i, java.time.LocalTime.class));
+                    } else {
+                        // Millis
+                        assertEquals(javaSqlTimestampTimePartMs, rs.getTimestamp(i));
+                    }
+                    assertEquals(javaUtilDateTimePart, rs.getObject(i, java.util.Date.class));
+                }
+                assertEquals(localTimeMs, rs.getObject(3, java.time.LocalTime.class));
+                assertEquals(localTimeMs, rs.getObject(6, java.time.LocalTime.class));
+
+                assertTrue(rs.next());
+                assertEquals(4, rs.getInt(1));
+                for (int i = 2; i <= 7; i++) {
+                    if (i == 4 || i == 7) {
+                        // Nanos
+                        assertEquals(javaSqlTimestampFull,
+                            rs.getObject(i, java.sql.Timestamp.class));
+                    } else {
+                        // Millis
+                        assertEquals(javaSqlTimestampFullMs,
+                            rs.getObject(i, java.sql.Timestamp.class));
+                    }
+                }
+
+                assertTrue(rs.next());
+                assertEquals(5, rs.getInt(1));
+                for (int i = 2; i <= 7; i++) {
+                    assertEquals(javaSqlDateFull, rs.getObject(i, java.sql.Date.class));
+                }
+
+                assertTrue(rs.next());
+                assertEquals(6, rs.getInt(1));
+                for (int i = 2; i <= 7; i++) {
+                    // java.sql.time doesn't consider fractional seconds when comparing or in
+                    // toString, so we compare the millis values.
+                    assertEquals(javaSqlTimeFull.getTime(),
+                        rs.getObject(i, java.sql.Time.class).getTime());
+                }
+            }
+        }
     }
 }

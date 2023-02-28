@@ -72,8 +72,7 @@ public class DateUtil {
     public static final String DEFAULT_TIMESTAMP_FORMAT = DEFAULT_MS_DATE_FORMAT;
     public static final Format DEFAULT_TIMESTAMP_FORMATTER = DEFAULT_MS_DATE_FORMATTER;
 
-    //Caching for performance. We don't expect the default TZ to changed after startup
-    //private static final java.util.TimeZone LOCAL_TIME_ZONE = TimeZone.getDefault();
+    public static final java.time.LocalDate LD_EPOCH = java.time.LocalDate.of(1970, 1, 1);
 
     private static final DateTimeFormatter JULIAN_DATE_TIME_FORMATTER = new DateTimeFormatterBuilder()
         .append(ISODateTimeFormat.dateParser())
@@ -87,6 +86,7 @@ public class DateUtil {
     }
 
     @NonNull
+    // FIXME why don't we just set these codecs in the Types ?
     public static PDataCodec getCodecFor(PDataType type) {
         PDataCodec codec = type.getCodec();
         if (codec != null) {

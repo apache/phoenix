@@ -759,7 +759,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
             return DateUtil.applyOutputDisplacement(value, cal.getTimeZone());
         } else {
             return value;
-        }    }
+        }
+    }
 
     @Override
     public Timestamp getTimestamp(String columnLabel, Calendar cal) throws SQLException {
@@ -1390,15 +1391,36 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @SuppressWarnings("unchecked")
     @Override
     public <T> T getObject(int columnIndex, Class<T> type) throws SQLException {
-        return (T) getObject(columnIndex); // Just ignore type since we only support built-in types
+        if (type.equals(String.class)) {
+            // Special case, the connection specific formatter is not available in the Type system
+            return (T) getString(columnIndex);
+        } else if (java.util.Date.class.isAssignableFrom(type)) {
+            // The displacement handling code is in the specific getters
+            if (java.sql.Timestamp.class.isAssignableFrom(type)) {
+                return (T) getTimestamp(columnIndex);
+            } else if (java.sql.Date.class.isAssignableFrom(type)) {
+                return (T) getDate(columnIndex);
+            } else if (java.sql.Time.class.isAssignableFrom(type)) {
+                return (T) getTime(columnIndex);
+            } else if (java.util.Date.class.equals(type)) {
+                return (T) new java.util.Date(getDate(columnIndex).getTime());
+            }
+        }
+        checkCursorState();
+        ColumnProjector projector = getRowProjector().getColumnProjector(columnIndex - 1);
+
+        Object value =
+                projector.getValue(currentRow, projector.getExpression().getDataType(), ptr, type);
+
+        wasNull = (value == null);
+        return (T) value;
     }
 
-    @SuppressWarnings("unchecked")
     @Override
     public <T> T getObject(String columnLabel, Class<T> type) throws SQLException {
-        return (T) getObject(columnLabel); // Just ignore type since we only support built-in types
+        return getObject(findColumn(columnLabel), type);
     }
-    
+
     @VisibleForTesting
     public ResultIterator getUnderlyingIterator() {
         return scanner;

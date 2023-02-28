@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Types;
 import java.text.Format;
@@ -43,11 +44,20 @@ public class PUnsignedTime extends PDataType<Time> {
   }
 
   @Override
-  public Object toObject(byte[] b, int o, int l, PDataType actualType, SortOrder sortOrder,
+  public Time toObject(byte[] b, int o, int l, PDataType actualType, SortOrder sortOrder,
       Integer maxLength, Integer scale) {
     java.sql.Time t = (java.sql.Time) PTime.INSTANCE.toObject(b, o, l, actualType, sortOrder);
     throwIfNonNegativeDate(t);
     return t;
+  }
+
+  @Override
+  public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+          SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
+          throws SQLException {
+      java.sql.Time sqlTime =
+              toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
+      return PTime.INSTANCE.timeToClass(sqlTime, actualType, jdbcType);
   }
 
   @Override

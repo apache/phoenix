@@ -84,6 +84,29 @@ public class ExpressionProjector implements ColumnProjector {
     }
 
     @Override
+    public final Object getValue(Tuple tuple, PDataType type, ImmutableBytesWritable ptr,
+            Class jdbcType) throws SQLException {
+        try {
+            Expression expression = getExpression();
+            if (!expression.evaluate(tuple, ptr)) {
+                return null;
+            }
+            if (ptr.getLength() == 0) {
+                return null;
+            }
+            return type.toObject(ptr, expression.getDataType(), expression.getSortOrder(),
+                expression.getMaxLength(), expression.getScale(), jdbcType);
+        } catch (RuntimeException e) {
+            // FIXME: Expression.evaluate does not throw SQLException
+            // so this will unwrap throws from that.
+            if (e.getCause() instanceof SQLException) {
+                throw (SQLException) e.getCause();
+            }
+            throw e;
+        }
+    }
+
+    @Override
     public boolean isCaseSensitive() {
         return isCaseSensitive;
     }
