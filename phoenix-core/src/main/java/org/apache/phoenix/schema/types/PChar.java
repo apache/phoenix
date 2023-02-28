@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.sql.SQLException;
 import java.sql.Types;
 import java.text.Format;
 import java.util.Arrays;
@@ -121,6 +122,17 @@ public class PChar extends PDataType<String> {
         throw newIllegalDataException("CHAR types may only contain single byte characters.");
       }
       return s;
+    }
+
+    @Override
+    public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+            SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
+            throws SQLException {
+        if (String.class.isAssignableFrom(jdbcType)) {
+            //We don't actually get here, we shortcut the String case in ResultSet
+            return toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
+        }
+        throw newMismatchException(actualType, jdbcType);
     }
 
     @Override
@@ -230,4 +242,5 @@ public class PChar extends PDataType<String> {
     public Object getSampleValue(Integer maxLength, Integer arrayLength) {
       return PVarchar.INSTANCE.getSampleValue(maxLength, arrayLength);
     }
+
 }

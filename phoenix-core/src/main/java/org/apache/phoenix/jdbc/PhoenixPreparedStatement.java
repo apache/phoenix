@@ -39,6 +39,7 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLXML;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -369,15 +370,19 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
 
     @Override
     public void setDate(int parameterIndex, Date x, Calendar cal) throws SQLException {
+        setParameter(parameterIndex, processDate(x, cal));
+    }
+
+    private java.sql.Date processDate(Date x, Calendar cal) {
         if (x != null) { // Since Date is mutable, make a copy
             if (connection.isApplyTimeZoneDisplacement()) {
-                x = DateUtil.applyInputDisplacement(x, cal.getTimeZone());
+                return DateUtil.applyInputDisplacement(x, cal.getTimeZone());
             } else {
                 // Since Date is mutable, make a copy
-                x = new Date(x.getTime());
+                return new Date(x.getTime());
             }
         }
-        setParameter(parameterIndex, x);
+        return x;
     }
 
     @Override
@@ -442,30 +447,12 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
 
     @Override
     public void setObject(int parameterIndex, Object o) throws SQLException {
-        if (o instanceof java.util.Date) {
-            // TODO add java.time when implemented
-            if (connection.isApplyTimeZoneDisplacement()) {
-                if (o instanceof java.sql.Timestamp) {
-                    o =
-                            DateUtil.applyInputDisplacement((java.sql.Timestamp) o,
-                                localCalendar.getTimeZone());
-                } else if (o instanceof java.sql.Time) {
-                    o =
-                            DateUtil.applyInputDisplacement((java.sql.Time) o,
-                                localCalendar.getTimeZone());
-                } else if (o instanceof java.sql.Date) {
-                    o =
-                            DateUtil.applyInputDisplacement((java.sql.Date) o,
-                                localCalendar.getTimeZone());
-                }
-            }
-            // FIXME if we make a copy in setDate() from temporals, why not here ?
-        }
-        setParameter(parameterIndex, o);
+        setParameter(parameterIndex, processObject(o));
     }
 
     @Override
     public void setObject(int parameterIndex, Object o, int targetSqlType) throws SQLException {
+        o = processObject(o);
         PDataType targetType = PDataType.fromTypeId(targetSqlType);
         if (o != null) {
             PDataType sourceType = PDataType.fromLiteral(o);
@@ -511,15 +498,19 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
 
     @Override
     public void setTime(int parameterIndex, Time x, Calendar cal) throws SQLException {
+        setParameter(parameterIndex, processTime(x, cal));
+    }
+
+    private java.sql.Time processTime(Time x, Calendar cal) {
         if (x != null) {
             if (connection.isApplyTimeZoneDisplacement()) {
-                x = DateUtil.applyInputDisplacement(x, cal.getTimeZone());
+                return DateUtil.applyInputDisplacement(x, cal.getTimeZone());
             } else {
-                // Since Date is mutable, make a copy
-                x = new Time(x.getTime());
+                // Since Time is mutable, make a copy
+                return new Time(x.getTime());
             }
         }
-        setParameter(parameterIndex, x);
+        return x;
     }
 
     @Override
@@ -529,16 +520,20 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
 
     @Override
     public void setTimestamp(int parameterIndex, Timestamp x, Calendar cal) throws SQLException {
+        setParameter(parameterIndex, processTimestamp(x, cal));
+    }
+
+    private java.sql.Timestamp processTimestamp(Timestamp x, Calendar cal) {
         if (x != null) {
             if (connection.isApplyTimeZoneDisplacement()) {
-                x = DateUtil.applyInputDisplacement(x, cal.getTimeZone());
+                return DateUtil.applyInputDisplacement(x, cal.getTimeZone());
             } else {
                 int nanos = x.getNanos();
                 x = new Timestamp(x.getTime());
                 x.setNanos(nanos);
             }
         }
-        setParameter(parameterIndex, x);
+        return x;
     }
 
     @Override
@@ -549,5 +544,37 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
     @Override
     public void setUnicodeStream(int parameterIndex, InputStream x, int length) throws SQLException {
         throw new SQLFeatureNotSupportedException();
+    }
+
+    // Convert objects to their canonical forms as expected by the Phoenix type system and apply
+    // TZ displacement
+    private Object processObject(Object o) {
+        // We cannot use the direct conversions, as those work in the local TZ.
+        if (o instanceof java.time.temporal.Temporal) {
+            if (o instanceof java.time.LocalDateTime) {
+                return java.sql.Timestamp.from(((java.time.LocalDateTime) o).toInstant(ZoneOffset.UTC));
+            } else if (o instanceof java.time.LocalDate) {
+                // java.sql.Date.from() is inherited from j.u.Date.from() and returns j.u.Date
+                return new java.sql.Date(((java.time.LocalDate) o).atStartOfDay()
+                        .toInstant(ZoneOffset.UTC).toEpochMilli());
+            } else if (o instanceof java.time.LocalTime) {
+                // preserve nanos if writing to timestamp
+                return java.sql.Timestamp.from(
+                    ((java.time.LocalTime) o).atDate(DateUtil.LD_EPOCH).toInstant(ZoneOffset.UTC));
+            }
+        } else if (o instanceof java.util.Date) {
+            if (o instanceof java.sql.Date) {
+                return processDate((java.sql.Date) o, localCalendar);
+            } else if (o instanceof java.sql.Timestamp) {
+                return processTimestamp((java.sql.Timestamp) o, localCalendar);
+            } else if (o instanceof java.sql.Time) {
+                return processTime((java.sql.Time) o, localCalendar);
+            } else {
+                // We could use Timestamp, we don't have millis, and don't differentiate anyway
+                return processDate(new java.sql.Date(((java.util.Date) o).getTime()), localCalendar)
+                        .getTime();
+            }
+        }
+        return o;
     }
 }
