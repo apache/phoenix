@@ -18,9 +18,11 @@
 package org.apache.phoenix.schema.types;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.Format;
+import java.time.ZoneOffset;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -28,10 +30,9 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
-
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 public class PTimestamp extends PDataType<Timestamp> {
     public static final int MAX_NANOS_VALUE_EXCLUSIVE = 1000000;
@@ -164,6 +165,41 @@ public class PTimestamp extends PDataType<Timestamp> {
         }
         throwConstraintViolationException(actualType, this);
         return null;
+    }
+
+    @Override
+    public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+            SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
+            throws SQLException {
+        java.sql.Timestamp sqlTs =
+                toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
+        return dateToClass(sqlTs, actualType, jdbcType);
+    }
+
+    Object dateToClass(java.sql.Timestamp sqlTs, PDataType actualType, Class jdbcType)
+            throws SQLException {
+        // FIXME java.time.Local conversions use ISO chronology, unlike the rest of Phoenix.
+        if (jdbcType == java.time.LocalDateTime.class) {
+            return java.time.LocalDateTime.ofInstant(sqlTs.toInstant(), ZoneOffset.UTC);
+        } else if (jdbcType == java.time.LocalTime.class) {
+            // This is NOT JDBC compliant
+            // This preserves nanos
+            return java.time.LocalDateTime.ofInstant(sqlTs.toInstant(), ZoneOffset.UTC)
+                    .toLocalTime();
+        } else if (jdbcType == java.time.LocalDate.class) {
+            // This is NOT JDBC compliant
+            return java.time.LocalDateTime.ofInstant(sqlTs.toInstant(), ZoneOffset.UTC)
+                    .toLocalDate();
+        } else if (jdbcType == java.sql.Timestamp.class) {
+            return sqlTs;
+        } else if (jdbcType == java.sql.Date.class) {
+            return new java.sql.Date(sqlTs.getTime());
+        } else if (jdbcType == java.util.Date.class) {
+            return new java.util.Date(sqlTs.getTime());
+        } else if (jdbcType == java.sql.Time.class) {
+            return new java.sql.Time(sqlTs.getTime());
+        }
+        throw newMismatchException(actualType, jdbcType);
     }
 
     @Override

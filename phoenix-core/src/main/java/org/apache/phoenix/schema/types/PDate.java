@@ -19,8 +19,10 @@ package org.apache.phoenix.schema.types;
 
 import java.math.BigDecimal;
 import java.sql.Date;
+import java.sql.SQLException;
 import java.sql.Types;
 import java.text.Format;
+import java.time.ZoneOffset;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -92,6 +94,46 @@ public class PDate extends PDataType<Date> {
         }
         throwConstraintViolationException(actualType, this);
         return null;
+    }
+
+    // Keep this in sync with PUnsignedDate
+    @Override
+    public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+            SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
+            throws SQLException {
+        java.sql.Date sqlDate =
+                toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
+        return dateToClass(sqlDate, actualType, jdbcType);
+    }
+
+    Object dateToClass(java.sql.Date sqlDate, PDataType actualType, Class jdbcType)
+            throws SQLException {
+        // FIXME java.time.Local conversions use ISO chronology, unlike the rest of Phoenix.
+        if (jdbcType == java.time.LocalDate.class) {
+            // FIXME this does a lot of unnecessary computation.
+            return java.time.LocalDateTime
+                    .ofInstant(java.time.Instant.ofEpochMilli(sqlDate.getTime()), ZoneOffset.UTC)
+                    .toLocalDate();
+        } else if (jdbcType == java.time.LocalDateTime.class) {
+            // This is NOT JDBC compliant, but is useful because Dates are really Timestamps.
+            // We cannot use toInstant(), as that nulls the time fields.
+            return java.time.LocalDateTime
+                    .ofInstant(java.time.Instant.ofEpochMilli(sqlDate.getTime()), ZoneOffset.UTC);
+        } else if (jdbcType == java.time.LocalTime.class) {
+            // This is NOT JDBC compliant, but is useful because Dates are really Timestamps.
+            return java.time.LocalDateTime
+                    .ofInstant(java.time.Instant.ofEpochMilli(sqlDate.getTime()), ZoneOffset.UTC)
+                    .toLocalTime();
+        } else if (jdbcType == java.sql.Date.class) {
+            return sqlDate;
+        } else if (jdbcType == java.sql.Time.class) {
+            return new java.sql.Time(sqlDate.getTime());
+        } else if (jdbcType == java.sql.Timestamp.class) {
+            return new java.sql.Timestamp(sqlDate.getTime());
+        } else if (jdbcType == java.util.Date.class) {
+            return new java.util.Date(sqlDate.getTime());
+        }
+        throw newMismatchException(actualType, jdbcType);
     }
 
     @Override
