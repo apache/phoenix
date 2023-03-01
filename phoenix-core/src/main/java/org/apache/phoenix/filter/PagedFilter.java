@@ -28,6 +28,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterBase;
@@ -35,9 +36,13 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Writables;
 import org.apache.hadoop.io.Writable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ScanUtil;
 
 /**
- * This filter overrides the behavior of delegate so that we do not scan more rows than pageSizeInRows .
+ * This is a top level Phoenix filter which injected to a scan at the server side. If the scan has
+ * already a filter then PagedFilter wraps it. There two functions this filter implements: paging
+ * and TTL. The paging function makes sure that the scan does not take more than pageSizeInMs.
+ * The TTL function is for masking expired rows.
  */
 public class PagedFilter extends FilterBase implements Writable {
     private enum State {
@@ -48,15 +53,21 @@ public class PagedFilter extends FilterBase implements Writable {
     private long startTime;
     private byte[] rowKeyAtStop;
     private Filter delegate = null;
+    private byte[] emptyCQ;
+    private int ttl;
+    private long ttlWindowStartMs;
+    private boolean expired = false;
 
     public PagedFilter() {
         init();
     }
 
-    public PagedFilter(Filter delegate, long pageSizeMs) {
+    public PagedFilter(Filter delegate, long pageSizeMs, byte[] emptyCQ, int ttl) {
         init();
         this.delegate = delegate;
         this.pageSizeMs = pageSizeMs;
+        this.emptyCQ = emptyCQ;
+        this.ttl = ttl;
     }
 
     public Filter getDelegateFilter() {
@@ -81,6 +92,9 @@ public class PagedFilter extends FilterBase implements Writable {
     public void init() {
         state = State.INITIAL;
         rowKeyAtStop = null;
+        if (ttl != HConstants.FOREVER) {
+            ttlWindowStartMs = EnvironmentEdgeManager.currentTimeMillis() - ttl * 1000;
+        }
     }
 
     public void resetStartTime() {
@@ -91,11 +105,16 @@ public class PagedFilter extends FilterBase implements Writable {
 
     @Override
     public void reset() throws IOException {
+        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
+        expired = false;
         if (state == State.INITIAL) {
-            startTime = EnvironmentEdgeManager.currentTimeMillis();
+            startTime = currentTime;
             state = State.STARTED;
-        } else if (state == State.STARTED && EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
+        } else if (state == State.STARTED && currentTime - startTime >= pageSizeMs) {
             state = State.TIME_TO_STOP;
+        }
+        if (ttl != HConstants.FOREVER) {
+            ttlWindowStartMs = currentTime - ttl * 1000;
         }
         if (delegate != null) {
             delegate.reset();
@@ -209,20 +228,38 @@ public class PagedFilter extends FilterBase implements Writable {
         return super.isFamilyEssential(name);
     }
 
+    private ReturnCode adjustReturnCode(Cell c, ReturnCode rc) {
+        if (!expired && (ttl == HConstants.FOREVER ||
+                !ScanUtil.isEmptyColumn(c, emptyCQ) || c.getTimestamp() > ttlWindowStartMs)) {
+            return rc;
+        }
+        expired = true;
+        if (rc == ReturnCode.INCLUDE_AND_SEEK_NEXT_ROW) {
+             return ReturnCode.SEEK_NEXT_USING_HINT;
+        }
+        return ReturnCode.NEXT_ROW;
+    }
+
     @Override
     public ReturnCode filterKeyValue(Cell v) throws IOException {
+        ReturnCode rc;
         if (delegate != null) {
-            return delegate.filterKeyValue(v);
+            rc = delegate.filterKeyValue(v);
+        } else {
+            rc = super.filterKeyValue(v);
         }
-        return super.filterKeyValue(v);
+        return adjustReturnCode(v, rc);
     }
 
     @Override
     public Filter.ReturnCode filterCell(Cell c) throws IOException {
+        ReturnCode rc;
         if (delegate != null) {
-            return delegate.filterCell(c);
+            rc = delegate.filterCell(c);
+        } else {
+            rc = super.filterCell(c);
         }
-        return super.filterCell(c);
+        return adjustReturnCode(c, rc);
     }
 
     public static PagedFilter parseFrom(final byte [] pbBytes) throws DeserializationException {
@@ -236,6 +273,9 @@ public class PagedFilter extends FilterBase implements Writable {
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeLong(pageSizeMs);
+        out.writeLong(ttl);
+        out.writeInt(emptyCQ.length);
+        out.write(emptyCQ);
         if (delegate != null) {
             out.writeUTF(delegate.getClass().getName());
             byte[] b = delegate.toByteArray();
@@ -249,6 +289,10 @@ public class PagedFilter extends FilterBase implements Writable {
     @Override
     public void readFields(DataInput in) throws IOException {
         pageSizeMs = in.readLong();
+        ttl = in.readInt();
+        int length = in.readInt();
+        emptyCQ = new byte[length];
+        in.readFully(emptyCQ, 0, length);
         String className = in.readUTF();
         if (className.length() == 0) {
             return;
@@ -268,7 +312,7 @@ public class PagedFilter extends FilterBase implements Writable {
             e.printStackTrace();
             throw new DoNotRetryIOException(e);
         }
-        int length = in.readInt();
+        length = in.readInt();
         byte[] b = new byte[length];
         in.readFully(b);
         try {

@@ -82,7 +82,6 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
@@ -1347,7 +1346,7 @@ public class TestUtil {
         throws SQLException, IOException {
         Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
         TableDescriptor td = admin.getDescriptor(tableName);
-        return td.getColumnFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+        return td.getColumnFamilies()[0];
     }
 
     public static void assertRawRowCount(Connection conn, TableName table, int expectedRowCount)

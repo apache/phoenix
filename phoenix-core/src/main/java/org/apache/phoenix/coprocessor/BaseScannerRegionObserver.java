@@ -34,14 +34,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
-import org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker;
-import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.regionserver.ScanOptions;
-import org.apache.hadoop.hbase.regionserver.ScanType;
-import org.apache.hadoop.hbase.regionserver.ScannerContext;
-import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
-import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.regionserver.*;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -264,8 +257,10 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             ScanUtil.setupReverseScan(scan);
             if (!(scan.getFilter() instanceof PagedFilter)) {
                 byte[] pageSizeMsBytes = scan.getAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS);
+                byte[] emptyCQ = scan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
+                int ttl = c.getEnvironment().getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
                 if (pageSizeMsBytes != null) {
-                    scan.setFilter(new PagedFilter(scan.getFilter(), getPageSizeMsForFilter(scan)));
+                    scan.setFilter(new PagedFilter(scan.getFilter(), getPageSizeMsForFilter(scan), emptyCQ, ttl));
                 }
             }
         }
@@ -426,58 +421,39 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public void preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
                                              ScanType scanType, ScanOptions options, CompactionLifeCycleTracker tracker,
                                              CompactionRequest request) throws IOException {
-        Configuration conf = c.getEnvironment().getConfiguration();
-        if (isMaxLookbackTimeEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(conf, options, store, scanType);
-        }
+        setScanOptionsForFlushesAndCompactions(options);
     }
 
     @Override
     public void preFlushScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
                                                 ScanOptions options, FlushLifeCycleTracker tracker) throws IOException {
-        Configuration conf = c.getEnvironment().getConfiguration();
-        if (isMaxLookbackTimeEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(conf, options, store, ScanType.COMPACT_RETAIN_DELETES);
-        }
+        setScanOptionsForFlushesAndCompactions(options);
     }
 
     @Override
     public void preMemStoreCompactionCompactScannerOpen(
-        ObserverContext<RegionCoprocessorEnvironment> c, Store store, ScanOptions options)
-        throws IOException {
-        Configuration conf = c.getEnvironment().getConfiguration();
-        if (isMaxLookbackTimeEnabled(conf)) {
-            MemoryCompactionPolicy inMemPolicy =
-                store.getColumnFamilyDescriptor().getInMemoryCompaction();
-            ScanType scanType;
-            //the eager and adaptive in-memory compaction policies can purge versions; the others
-            // can't. (Eager always does; adaptive sometimes does)
-            if (inMemPolicy.equals(MemoryCompactionPolicy.EAGER) ||
-                inMemPolicy.equals(MemoryCompactionPolicy.ADAPTIVE)) {
-                scanType = ScanType.COMPACT_DROP_DELETES;
-            } else {
-                scanType = ScanType.COMPACT_RETAIN_DELETES;
-            }
-            setScanOptionsForFlushesAndCompactions(conf, options, store, scanType);
-        }
+        ObserverContext<RegionCoprocessorEnvironment> c, Store store, ScanOptions options) {
+        setScanOptionsForFlushesAndCompactions(options);
+
     }
 
     @Override
     public void preStoreScannerOpen(ObserverContext<RegionCoprocessorEnvironment> ctx, Store store,
                                            ScanOptions options) throws IOException {
 
-        if (!storeFileScanDoesntNeedAlteration(options)) {
-            //PHOENIX-4277 -- When doing a point-in-time (SCN) Scan, HBase by default will hide
-            // mutations that happen before a delete marker. This overrides that behavior.
-            options.setMinVersions(options.getMinVersions());
-            KeepDeletedCells keepDeletedCells = KeepDeletedCells.TRUE;
-            if (store.getColumnFamilyDescriptor().getTimeToLive() != HConstants.FOREVER) {
-                keepDeletedCells = KeepDeletedCells.TTL;
-            }
-            options.setKeepDeletedCells(keepDeletedCells);
-        }
+        setScanOptionsForFlushesAndCompactions(options);
     }
 
+    @Override
+    public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
+            InternalScanner scanner, ScanType scanType, CompactionLifeCycleTracker tracker,
+            CompactionRequest request) throws IOException {
+        if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
+            return new StoreCompactionScanner(c.getEnvironment(), store, scanner,
+                    getMaxLookbackInMillis(c.getEnvironment().getConfiguration()));
+        }
+        return scanner;
+    }
     private boolean storeFileScanDoesntNeedAlteration(ScanOptions options) {
         Scan scan = options.getScan();
         boolean isRaw = scan.isRaw();
@@ -498,69 +474,16 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         return ts > (long) (EnvironmentEdgeManager.currentTime() * 1.1);
     }
 
-    /*
-     * If KeepDeletedCells.FALSE, KeepDeletedCells.TTL ,
-     * let delete markers age once lookback age is done.
-     */
-    public KeepDeletedCells getKeepDeletedCells(ScanOptions options, ScanType scanType) {
-        //if we're doing a minor compaction or flush, always set keep deleted cells
-        //to true. Otherwise, if keep deleted cells is false or TTL, use KeepDeletedCells TTL,
-        //where the value of the ttl might be overriden to the max lookback age elsewhere
-        return (options.getKeepDeletedCells() == KeepDeletedCells.TRUE
-                || scanType.equals(ScanType.COMPACT_RETAIN_DELETES)) ?
-                KeepDeletedCells.TRUE : KeepDeletedCells.TTL;
-    }
-
-    /*
-     * if the user set a TTL we should leave MIN_VERSIONS at the default (0 in most of the cases).
-     * Otherwise the data (1st version) will not be removed after the TTL. If no TTL, we want
-     * Math.max(maxVersions, minVersions, 1)
-     */
-    public int getMinVersions(ScanOptions options, ColumnFamilyDescriptor cfDescriptor) {
-        return cfDescriptor.getTimeToLive() != HConstants.FOREVER ? options.getMinVersions()
-            : Math.max(Math.max(options.getMinVersions(),
-            cfDescriptor.getMaxVersions()),1);
-    }
-
-    /**
-     *
-     * @param conf HBase Configuration
-     * @param columnDescriptor ColumnFamilyDescriptor for the store being compacted
-     * @param options ScanOptions of overrides to the compaction scan
-     * @return Time to live in milliseconds, based on both HBase TTL and Phoenix max lookback age
-     */
-    public long getTimeToLiveForCompactions(Configuration conf,
-                                                   ColumnFamilyDescriptor columnDescriptor,
-                                                   ScanOptions options) {
-        long ttlConfigured = columnDescriptor.getTimeToLive();
-        long ttlInMillis = ttlConfigured * 1000;
-        long maxLookbackTtl = getMaxLookbackInMillis(conf);
-        if (isMaxLookbackTimeEnabled(maxLookbackTtl)) {
-            if (ttlConfigured == HConstants.FOREVER
-                && columnDescriptor.getKeepDeletedCells() != KeepDeletedCells.TRUE) {
-                // If user configured default TTL(FOREVER) and keep deleted cells to false or
-                // TTL then to remove unwanted delete markers we should change ttl to max lookback age
-                ttlInMillis = maxLookbackTtl;
-            } else {
-                //if there is a TTL, use TTL instead of max lookback age.
-                // Max lookback age should be more recent or equal to TTL
-                ttlInMillis = Math.max(ttlInMillis, maxLookbackTtl);
-            }
+    public void setScanOptionsForFlushesAndCompactions(ScanOptions options) {
+        // We want the store to give us all the deleted cells to StoreCompactionScanner
+        KeepDeletedCells keepDeletedCells = options.getKeepDeletedCells();
+        if (keepDeletedCells == KeepDeletedCells.FALSE) {
+            keepDeletedCells = KeepDeletedCells.TRUE;
         }
-
-        return ttlInMillis;
-    }
-
-    public void setScanOptionsForFlushesAndCompactions(Configuration conf,
-                                                               ScanOptions options,
-                                                               final Store store,
-                                                               ScanType type) {
-        ColumnFamilyDescriptor cfDescriptor = store.getColumnFamilyDescriptor();
-        options.setTTL(getTimeToLiveForCompactions(conf, cfDescriptor,
-            options));
-        options.setKeepDeletedCells(getKeepDeletedCells(options, type));
+        options.setKeepDeletedCells(keepDeletedCells);
+        options.setTTL(HConstants.FOREVER);
         options.setMaxVersions(Integer.MAX_VALUE);
-        options.setMinVersions(getMinVersions(options, cfDescriptor));
+        options.setMinVersions(Integer.MAX_VALUE);
     }
 
     public static long getMaxLookbackInMillis(Configuration conf){

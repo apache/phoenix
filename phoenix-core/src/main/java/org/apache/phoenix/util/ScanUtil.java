@@ -1050,6 +1050,11 @@ public class ScanUtil {
                         cell.getQualifierLength(), emptyCQ, 0, emptyCQ.length) == 0;
     }
 
+    public static boolean isEmptyColumn(Cell cell, byte[] emptyCQ) {
+        return Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
+                cell.getQualifierLength(), emptyCQ, 0, emptyCQ.length) == 0;
+    }
+
     public static long getMaxTimestamp(List<Cell> cellList) {
         long maxTs = 0;
         long ts = 0;
@@ -1341,6 +1346,11 @@ public class ScanUtil {
         byte[] emptyCQ = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME);
         if (emptyCF != null && emptyCQ != null) {
             addEmptyColumnToScan(scan, emptyCF, emptyCQ);
+        } else {
+            emptyCQ = table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
+                    QueryConstants.EMPTY_COLUMN_BYTES :
+                    table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
         }
         Long pageSizeMs = getPageSizeInMs(phoenixConnection.getQueryServices().getProps());
         if (pageSizeMs != null) {
