@@ -113,7 +113,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testShowCreateTableDefaultFamilyDrop() throws Exception {
+    public void testShowCreateTableDefaultFamilyNonConsecutive() throws Exception {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
@@ -163,7 +163,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testShowCreateTableColumnQualifierDrop() throws Exception {
+    public void testShowCreateTableColumnQualifierNonConsecutive() throws Exception {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
@@ -268,7 +268,7 @@ public class ShowCreateTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testShowCreateTableColumnQualifierMultipleFamiliesDrop() throws Exception {
+    public void testShowCreateTableColumnQualifierMultipleFamiliesNonConsecutive() throws Exception {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();;

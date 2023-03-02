@@ -512,16 +512,24 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
                 && table.getEncodingScheme() != PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
     }
 
-    private boolean isConsecutive(List<Integer> list) {
-        for (int i = 1; i < list.size(); i++) {
-            if (list.get(i - 1) + 1 != list.get(i)) {
+    private boolean areEncodedIdsComplete(List<Integer> encodedIds, Integer initialID,
+                                         Integer lastEncodedID) {
+        if (encodedIds.size() == 0) {
+            return true;
+        }
+        if (encodedIds.get(0) > initialID ||
+                encodedIds.get(encodedIds.size() - 1) < lastEncodedID) {
+            return false;
+        }
+        for (int i = 1; i < encodedIds.size(); i++) {
+            if (encodedIds.get(i - 1) + 1 != encodedIds.get(i)) {
                 return false;
             }
         }
         return true;
     }
 
-    private List<String> getNonConsecutiveQualifierCounterFamilies(PTable table) {
+    private List<String> getNonConsecutiveQualifierFamilies(PTable table) {
         List<String> ret = new ArrayList<>();
         if (!hasEncodedQualifier(table)) {
             return ret;
@@ -533,35 +541,31 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             // For this scheme we track column qualifier counters at the column family level
             for (PColumnFamily colFamily : table.getColumnFamilies()) {
                 String colFamilyName = colFamily.getName().getString();
-                List<Integer> counterValues = colFamily.getColumns().stream()
+                List<Integer> encodedIds = colFamily.getColumns().stream()
                         .filter(c -> !table.getPKColumns().contains(c))
                         .map(pColumn -> scheme.decode(pColumn.getColumnQualifierBytes()))
                         .collect(Collectors.toList());
-                Collections.sort(counterValues);
-                if (counterValues.size() > 0
-                        && (!isConsecutive(counterValues)
-                            || counterValues.get(0) > QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE
-                            || counterValues.get(counterValues.size() - 1)
-                            < encodedCQCounter.getNextQualifier(colFamilyName) - 1)) {
+                Collections.sort(encodedIds);
+                if (!areEncodedIdsComplete(encodedIds,
+                        QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE,
+                        encodedCQCounter.getNextQualifier(colFamilyName) - 1)) {
                     ret.add(colFamilyName);
                 }
             }
         } else {
             // For other schemes, column qualifier counters are tracked using the default column
             // family.
-            List<Integer> counterValues = table.getColumns().stream()
+            List<Integer> encodedIds = table.getColumns().stream()
                     .filter(c -> !table.getPKColumns().contains(c))
                     .map(pColumn -> scheme.decode(pColumn.getColumnQualifierBytes()))
                     .collect(Collectors.toList());
-            Collections.sort(counterValues);
+            Collections.sort(encodedIds);
             String defaultFamilyName = table.getDefaultFamilyName() == null ?
                     QueryConstants.DEFAULT_COLUMN_FAMILY
                     : table.getDefaultFamilyName().getString();
-            if (counterValues.size() > 0
-                    && (!isConsecutive(counterValues)
-                        || counterValues.get(0) > QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE
-                        || counterValues.get(counterValues.size() - 1)
-                            < encodedCQCounter.getNextQualifier(defaultFamilyName) - 1)) {
+            if (!areEncodedIdsComplete(encodedIds,
+                    QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE,
+                    encodedCQCounter.getNextQualifier(defaultFamilyName) - 1)) {
                 ret = table.getColumnFamilies().stream()
                         .map(pColumnFamily -> pColumnFamily.getName().getString())
                         .collect(Collectors.toList());
@@ -572,8 +576,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
 
     private String getColumnInfoString(PTable table, StringBuilder colInfo, List<PColumn> columns,
             List<PColumn> pkColumns) {
-        List<String> nonConsecutiveCounterFamilies =
-                getNonConsecutiveQualifierCounterFamilies(table);
+        List<String> nonConsecutiveCounterFamilies = getNonConsecutiveQualifierFamilies(table);
         ArrayList<String> colDefs = new ArrayList<>(columns.size());
         for (PColumn col : columns) {
             String def = extractColumn(col);
