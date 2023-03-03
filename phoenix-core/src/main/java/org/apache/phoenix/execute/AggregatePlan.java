@@ -96,17 +96,10 @@ public class AggregatePlan extends BaseQueryPlan {
 
     public AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
-            ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having, QueryPlan dataPlan) throws SQLException {
-        this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, groupBy, having,
-                null, dataPlan);
-    }
-
-    private AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
-            RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
             ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having,
-            Expression dynamicFilter, QueryPlan dataPlan) throws SQLException {
+            QueryPlan dataPlan) throws SQLException {
         super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, offset,
-                orderBy, groupBy, parallelIteratorFactory, dynamicFilter, dataPlan);
+                orderBy, groupBy, parallelIteratorFactory, dataPlan);
         this.having = having;
         this.aggregators = context.getAggregationManager().getAggregators();
         boolean hasSerialHint = statement.getHint().hasHint(HintNode.Hint.SERIAL);

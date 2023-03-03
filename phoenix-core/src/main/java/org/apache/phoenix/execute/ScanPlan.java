@@ -101,17 +101,11 @@ public class ScanPlan extends BaseQueryPlan {
     private OrderBy actualOutputOrderBy;
     private Optional<byte[]> rowOffset;
 
-    public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit,
-            Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, 
-            QueryPlan dataPlan, Optional<byte[]> rowOffset) throws SQLException {
-        this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, allowPageFilter, null, dataPlan, rowOffset);
-    }
-    
-    private ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, Integer offset,
-            OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, Expression dynamicFilter, QueryPlan dataPlan, Optional<byte[]> rowOffset) throws SQLException {
+    public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, Integer offset,
+            OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, QueryPlan dataPlan, Optional<byte[]> rowOffset) throws SQLException {
         super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit,offset, orderBy, GroupBy.EMPTY_GROUP_BY,
                 parallelIteratorFactory != null ? parallelIteratorFactory :
-                        buildResultIteratorFactory(context, statement, table, orderBy, limit, offset, allowPageFilter), dynamicFilter, dataPlan);
+                        buildResultIteratorFactory(context, statement, table, orderBy, limit, offset, allowPageFilter), dataPlan);
         this.allowPageFilter = allowPageFilter;
         boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
         if (isOrdered) { // TopN
