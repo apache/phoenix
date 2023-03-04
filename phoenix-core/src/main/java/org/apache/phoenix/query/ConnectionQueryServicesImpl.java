@@ -74,6 +74,8 @@ import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_FAIL
 import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS;
 import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
+import static org.apache.phoenix.query.QueryConstants.UNVERIFIED_BYTES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
@@ -174,6 +176,7 @@ import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.compile.MutationPlan;
+import org.apache.phoenix.coprocessor.ChildLinkMetaDataObserver;
 import org.apache.phoenix.coprocessor.ChildLinkMetaDataEndpoint;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
@@ -291,7 +294,9 @@ import org.apache.phoenix.transaction.TransactionFactory.Provider;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -304,7 +309,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.StringUtil;
-import org.apache.phoenix.util.TimeKeeper;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -393,6 +397,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public static final byte[] MUTEX_LOCKED = "MUTEX_LOCKED".getBytes(StandardCharsets.UTF_8);
     private ServerSideRPCControllerFactory serverSideRPCControllerFactory;
     private boolean localIndexUpgradeRequired;
+
+    private static boolean failPhaseThreeChildLinkWriteForTesting = false;
+    public static void setFailPhaseThreeChildLinkWriteForTesting(boolean fail) {
+        failPhaseThreeChildLinkWriteForTesting = fail;
+    }
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
@@ -1227,6 +1236,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     builder.setCoprocessor(
                             CoprocessorDescriptorBuilder
                                     .newBuilder(ChildLinkMetaDataEndpoint.class.getName())
+                                    .setPriority(priority)
+                                    .setProperties(Collections.emptyMap())
+                                    .build());
+                }
+                if (!newDesc.hasCoprocessor(ChildLinkMetaDataObserver.class.getName())) {
+                    builder.setCoprocessor(
+                            CoprocessorDescriptorBuilder
+                                    .newBuilder(ChildLinkMetaDataObserver.class.getName())
                                     .setPriority(priority)
                                     .setProperties(Collections.emptyMap())
                                     .build());
@@ -2146,29 +2163,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
 
         // Avoid the client-server RPC if this is not a view creation
+        // For view creation, write UNVERIFIED child_link rows
         if (!childLinkMutations.isEmpty()) {
-            // Send mutations for parent-child links to SYSTEM.CHILD_LINK
-            // We invoke this using rowKey available in the first element
-            // of childLinkMutations.
-            final byte[] rowKey = childLinkMutations.get(0).getRow();
-            final RpcController controller = getController(PhoenixDatabaseMetaData.SYSTEM_LINK_HBASE_TABLE_NAME);
-            final MetaDataMutationResult result =
-                childLinkMetaDataCoprocessorExec(rowKey,
-                    new ChildLinkMetaDataServiceCallBack(controller, childLinkMutations));
-
-            switch (result.getMutationCode()) {
-                case UNABLE_TO_CREATE_CHILD_LINK:
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNABLE_TO_CREATE_CHILD_LINK)
-                            .setSchemaName(Bytes.toString(schemaBytes))
-                            .setTableName(Bytes.toString(physicalTableNameBytes)).build().buildException();
-                default:
-                    break;
-            }
+            sendChildLinkMutations(childLinkMutations, false, false, physicalTableNameBytes, schemaBytes);
         }
 
         // Send the remaining metadata mutations to SYSTEM.CATALOG
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
-        return metaDataCoprocessorExec(SchemaUtil.getPhysicalHBaseTableName(schemaBytes, tableBytes,
+        MetaDataMutationResult result = metaDataCoprocessorExec(SchemaUtil.getPhysicalHBaseTableName(schemaBytes, tableBytes,
                 SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, this.props)).toString(),
                 tableKey,
                 new Batch.Call<MetaDataService, MetaDataResponse>() {
@@ -2195,6 +2197,71 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 return rpcCallback.get();
             }
         });
+
+        //For view creation, if SYSCAT rpc succeeds, mark child_link rows as VERIFIED
+        if (!childLinkMutations.isEmpty()) {
+            try {
+                if (result.getMutationCode() == MutationCode.TABLE_NOT_FOUND) {
+                    sendChildLinkMutations(childLinkMutations, true, false, physicalTableNameBytes, schemaBytes);
+                } else {
+                    sendChildLinkMutations(childLinkMutations, true, true, physicalTableNameBytes, schemaBytes);
+                }
+            }
+            catch (SQLException e) {
+                //unverified rows will be repaired during read
+                LOGGER.debug("Exception in phase-3 of view creation: " + e.getMessage());
+            }
+        }
+        return result;
+    }
+
+    /*
+    Helper method to send mutations to SYSTEM.CHILD_LINK using its endpoint coprocessor
+     */
+    private void sendChildLinkMutations(List<Mutation> mutations, boolean isVerified, boolean isDelete,
+                                        byte[] physicalTableNameBytes, byte[] schemaBytes)
+            throws SQLException {
+
+        if ((isDelete || isVerified) && failPhaseThreeChildLinkWriteForTesting) {
+            throw new SQLException("Simulating phase-3 write failure");
+        }
+        // get empty column information
+        PTable childLinkLogicalTable = getTable(null, PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME, HConstants.LATEST_TIMESTAMP);
+        byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(childLinkLogicalTable);
+        byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(childLinkLogicalTable).getFirst();
+
+        // add empty column value to mutations or create delete mutations for phase-3
+        List<Mutation> childLinkMutations = new ArrayList<>();
+        for (Mutation m : mutations) {
+            if (isDelete) {
+                Delete delete = new Delete(m.getRow());
+                childLinkMutations.add(delete);
+            }
+            else {
+                Put put = new Put(m.getRow());
+                byte[] emptyColumnValue = isVerified ? VERIFIED_BYTES : UNVERIFIED_BYTES;
+                put.addColumn(emptyCF, emptyCQ, IndexUtil.getMaxTimestamp(m), emptyColumnValue);
+                childLinkMutations.add(put);
+            }
+        }
+
+        // Send mutations for parent-child links to SYSTEM.CHILD_LINK
+        // We invoke this using rowKey available in the first element
+        // of childLinkMutations.
+        final byte[] rowKey = childLinkMutations.get(0).getRow();
+        final RpcController controller = getController(PhoenixDatabaseMetaData.SYSTEM_LINK_HBASE_TABLE_NAME);
+        final MetaDataMutationResult result =
+                childLinkMetaDataCoprocessorExec(rowKey,
+                        new ChildLinkMetaDataServiceCallBack(controller, childLinkMutations));
+
+        switch (result.getMutationCode()) {
+            case UNABLE_TO_CREATE_CHILD_LINK:
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNABLE_TO_CREATE_CHILD_LINK)
+                        .setSchemaName(Bytes.toString(schemaBytes))
+                        .setTableName(Bytes.toString(physicalTableNameBytes)).build().buildException();
+            default:
+                break;
+        }
     }
 
     @Override
