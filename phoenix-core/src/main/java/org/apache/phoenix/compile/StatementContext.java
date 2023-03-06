@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TimeZone;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -274,7 +275,8 @@ public class StatementContext {
 
     public long getCurrentTimeWithDisplacement() throws SQLException {
         if (connection.isApplyTimeZoneDisplacement()) {
-            return DateUtil.applyInputDisplacement(new java.sql.Date(getCurrentTime())).getTime();
+            return DateUtil.applyInputDisplacement(new java.sql.Date(getCurrentTime()),
+                statement.getLocalCalendar().getTimeZone()).getTime();
         } else {
             return getCurrentTime();
         }

@@ -214,6 +214,8 @@ public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
         // When using ROW_TIMESTAMP with COMPLIANT_TIMEZONE_HANDLING, the ROWTS should always be
         // set from string or long types, NOT from java temporal types to avoid this.
 
+        TimeZone tz = TimeZone.getDefault();
+
         String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB, Boolean.TRUE.toString());
@@ -258,9 +260,9 @@ public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
             assertEquals(sqlDateLocal, rs.getDate("D"));
             // UTC now() rowTs gets gets applied the displacement when read as java.sql.Date
             // This is NOT intuitive, but at least the TS contains the current UTC epoch.
-            assertTrue(Math.abs(
-                DateUtil.applyOutputDisplacement(new java.sql.Date(new java.util.Date().getTime()))
-                        .getTime() - rs.getDate("ROWTS").getTime()) < 10000);
+            assertTrue(Math.abs(DateUtil
+                    .applyOutputDisplacement(new java.sql.Date(new java.util.Date().getTime()), tz)
+                    .getTime() - rs.getDate("ROWTS").getTime()) < 10000);
 
             assertTrue(rs.next());
             assertEquals(2, rs.getInt("ID"));
@@ -290,7 +292,7 @@ public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
             assertEquals(nowDate, rs.getDate("ROWTS"));
             // To further demonstrate that the HBase TS is NOT the current epoch value.
             assertEquals(DateUtil.getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT)
-                    .format(DateUtil.applyInputDisplacement(nowDate)),
+                    .format(DateUtil.applyInputDisplacement(nowDate, tz)),
                 rs.getString("ROWTS"));
         }
     }

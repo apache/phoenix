@@ -363,24 +363,20 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
 
     @Override
     public void setDate(int parameterIndex, Date x) throws SQLException {
-        if (x != null) {
+        setDate(parameterIndex, x, localCalendar);
+    }
+
+    @Override
+    public void setDate(int parameterIndex, Date x, Calendar cal) throws SQLException {
+        if (x != null) { // Since Date is mutable, make a copy
             if (connection.isApplyTimeZoneDisplacement()) {
-                x = DateUtil.applyInputDisplacement(x);
+                x = DateUtil.applyInputDisplacement(x, cal.getTimeZone());
             } else {
                 // Since Date is mutable, make a copy
                 x = new Date(x.getTime());
             }
         }
         setParameter(parameterIndex, x);
-    }
-
-    @Override
-    public void setDate(int parameterIndex, Date x, Calendar cal) throws SQLException {
-        if (x != null) { // Since Date is mutable, make a copy
-            x = new Date(x.getTime());
-        }
-        cal.setTime(x);
-        setParameter(parameterIndex, new Date(cal.getTimeInMillis()));
     }
 
     @Override
@@ -446,17 +442,23 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
     @Override
     public void setObject(int parameterIndex, Object o) throws SQLException {
         if (o instanceof java.util.Date) {
-            //TODO add java.time when implemented
+            // TODO add java.time when implemented
             if (connection.isApplyTimeZoneDisplacement()) {
                 if (o instanceof java.sql.Timestamp) {
-                    o = DateUtil.applyInputDisplacement((java.sql.Timestamp) o);
+                    o =
+                            DateUtil.applyInputDisplacement((java.sql.Timestamp) o,
+                                localCalendar.getTimeZone());
                 } else if (o instanceof java.sql.Time) {
-                    o = DateUtil.applyInputDisplacement((java.sql.Time) o);
+                    o =
+                            DateUtil.applyInputDisplacement((java.sql.Time) o,
+                                localCalendar.getTimeZone());
                 } else if (o instanceof java.sql.Date) {
-                    o = DateUtil.applyInputDisplacement((java.sql.Date) o);
+                    o =
+                            DateUtil.applyInputDisplacement((java.sql.Date) o,
+                                localCalendar.getTimeZone());
                 }
             }
-            //FIXME if we make a copy in setDate() from temporals, why not here ?
+            // FIXME if we make a copy in setDate() from temporals, why not here ?
         }
         setParameter(parameterIndex, o);
     }
@@ -503,9 +505,14 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
 
     @Override
     public void setTime(int parameterIndex, Time x) throws SQLException {
+        setTime(parameterIndex, x, localCalendar);
+    }
+
+    @Override
+    public void setTime(int parameterIndex, Time x, Calendar cal) throws SQLException {
         if (x != null) {
             if (connection.isApplyTimeZoneDisplacement()) {
-                x = DateUtil.applyInputDisplacement(x);
+                x = DateUtil.applyInputDisplacement(x, cal.getTimeZone());
             } else {
                 // Since Date is mutable, make a copy
                 x = new Time(x.getTime());
@@ -515,37 +522,22 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
     }
 
     @Override
-    public void setTime(int parameterIndex, Time x, Calendar cal) throws SQLException {
-        if (x != null) { // Since Time is mutable, make a copy
-            x = new Time(x.getTime());
-        }
-        cal.setTime(x);
-        setParameter(parameterIndex, new Time(cal.getTimeInMillis()));
+    public void setTimestamp(int parameterIndex, Timestamp x) throws SQLException {
+        setTimestamp(parameterIndex, x, localCalendar);
     }
 
-    private void setTimestampParameter(int parameterIndex, Timestamp x, Calendar cal) throws SQLException {
+    @Override
+    public void setTimestamp(int parameterIndex, Timestamp x, Calendar cal) throws SQLException {
         if (x != null) {
             if (connection.isApplyTimeZoneDisplacement()) {
-                x = DateUtil.applyInputDisplacement(x);
+                x = DateUtil.applyInputDisplacement(x, cal.getTimeZone());
             } else {
                 int nanos = x.getNanos();
                 x = new Timestamp(x.getTime());
                 x.setNanos(nanos);
             }
         }
-        // TODO: deal with Calendar
-        // FIXME we don't need the offset correction when calendar is specified
         setParameter(parameterIndex, x);
-    }
-    
-    @Override
-    public void setTimestamp(int parameterIndex, Timestamp x) throws SQLException {
-        setTimestampParameter(parameterIndex, x, null);
-    }
-
-    @Override
-    public void setTimestamp(int parameterIndex, Timestamp x, Calendar cal) throws SQLException {
-        setTimestampParameter(parameterIndex, x, cal);
     }
 
     @Override
