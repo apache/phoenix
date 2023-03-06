@@ -342,15 +342,6 @@
       <artifactId>hbase-zookeeper</artifactId>
     </dependency>
 
-    <dependency>
-      <groupId>org.apache.hbase.thirdparty</groupId>
-      <artifactId>hbase-shaded-miscellaneous</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase.thirdparty</groupId>
-      <artifactId>hbase-shaded-protobuf</artifactId>
-    </dependency>
-
     <!-- HBase test dependencies -->
     <dependency>
       <groupId>org.apache.hbase</groupId>
