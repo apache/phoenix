@@ -25,7 +25,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeepDeletedCells;
-import org.apache.hadoop.hbase.MemoryCompactionPolicy;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.Scan;
@@ -42,7 +41,8 @@ import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.phoenix.execute.TupleProjector;
-import org.apache.phoenix.filter.PagedFilter;
+import org.apache.phoenix.filter.PagingFilter;
+import org.apache.phoenix.filter.TTLFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
@@ -255,12 +255,29 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             // last possible moment. You need to swap the start/stop and make the
             // start exclusive and the stop inclusive.
             ScanUtil.setupReverseScan(scan);
-            if (!(scan.getFilter() instanceof PagedFilter)) {
-                byte[] pageSizeMsBytes = scan.getAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS);
+            // Set the paging and TTL filters. Make sure that the paging filter is the top level
+            // filter if paging is enabled, that is pageSizeMsBytes != null.
+            if (!(scan.getFilter() instanceof PagingFilter)) {
+                byte[] pageSizeMsBytes =
+                        scan.getAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS);
                 byte[] emptyCQ = scan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
-                int ttl = c.getEnvironment().getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
-                if (pageSizeMsBytes != null) {
-                    scan.setFilter(new PagedFilter(scan.getFilter(), getPageSizeMsForFilter(scan), emptyCQ, ttl));
+                if (emptyCQ == null) {
+                    int a = 1;
+                }
+                long currentTime =
+                        org.apache.phoenix.util.EnvironmentEdgeManager.currentTimeMillis();
+                long maxLookbackWindowStart = currentTime -
+                        getMaxLookbackInMillis(c.getEnvironment().getConfiguration());
+                int ttl = c.getEnvironment().getRegion().getTableDescriptor().
+                        getColumnFamilies()[0].getTimeToLive();
+                long ttlWindowStart = ttl == HConstants.FOREVER ? 1 :
+                        Math.min(maxLookbackWindowStart, currentTime - ttl * 1000);
+               if (pageSizeMsBytes != null) {
+                    scan.setFilter(new PagingFilter(new TTLFilter(scan.getFilter(), emptyCQ,
+                            ttlWindowStart), getPageSizeMsForFilter(scan)));
+               }
+               else if (!(scan.getFilter() instanceof TTLFilter)) {
+                    scan.setFilter(new TTLFilter(scan.getFilter(), emptyCQ, ttlWindowStart));
                 }
             }
         }
@@ -368,7 +385,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             // Make sure PageRegionScanner wraps only the lowest region scanner, i.e., HBase region scanner. We assume
             // here every Phoenix region scanner extends BaseRegionScanner
             return new RegionScannerHolder(c, scan, s instanceof BaseRegionScanner ? s :
-                    new PagedRegionScanner(c.getEnvironment().getRegion(), s, scan));
+                    new PagingRegionScanner(c.getEnvironment().getRegion(), s, scan));
         } catch (Throwable t) {
             // If the exception is NotServingRegionException then throw it as
             // StaleRegionBoundaryCacheException to handle it by phoenix client other wise hbase

@@ -23,7 +23,6 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -39,9 +38,8 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.filter.PagedFilter;
+import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
-import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.filter.AllVersionsIndexRebuildFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
@@ -1373,8 +1371,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         // For rebuilds we need all columns and all versions
 
         Filter filter = scan.getFilter();
-        if (filter instanceof PagedFilter) {
-            PagedFilter pageFilter = (PagedFilter) filter;
+        if (filter instanceof PagingFilter) {
+            PagingFilter pageFilter = (PagingFilter) filter;
             Filter delegateFilter = pageFilter.getDelegateFilter();
             if (delegateFilter instanceof FirstKeyOnlyFilter) {
                 pageFilter.setDelegateFilter(null);
@@ -1411,7 +1409,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 incrScan.withStartRow(nextStartKey);
             }
             List<KeyRange> keys = new ArrayList<>();
-            try (RegionScanner scanner = new PagedRegionScanner(region, region.getScanner(incrScan), incrScan)) {
+            try (RegionScanner scanner = new PagingRegionScanner(region, region.getScanner(incrScan), incrScan)) {
                 List<Cell> row = new ArrayList<>();
                 int rowCount = 0;
                 // collect row keys that have been modified in the given time-range

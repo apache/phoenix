@@ -22,100 +22,40 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterBase;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Writables;
 import org.apache.hadoop.io.Writable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 
 /**
- * This is a top level Phoenix filter which injected to a scan at the server side. If the scan has
- * already a filter then PagedFilter wraps it. There two functions this filter implements: paging
- * and TTL. The paging function makes sure that the scan does not take more than pageSizeInMs.
- * The TTL function is for masking expired rows.
+ * This is a filter which is injected to a scan at the server side. If the scan has
+ * already a filter then TTLFilter wraps it.  This filter is for masking expired rows.
  */
-public class PagedFilter extends FilterBase implements Writable {
-    private enum State {
-        INITIAL, STARTED, TIME_TO_STOP, STOPPED
-    }
-    State state;
-    private long pageSizeMs;
-    private long startTime;
-    private byte[] rowKeyAtStop;
+public class TTLFilter extends FilterBase implements Writable {
     private Filter delegate = null;
     private byte[] emptyCQ;
-    private int ttl;
     private long ttlWindowStartMs;
     private boolean expired = false;
+    private ReturnCode returnCodeWhenExpired;
 
-    public PagedFilter() {
-        init();
-    }
-
-    public PagedFilter(Filter delegate, long pageSizeMs, byte[] emptyCQ, int ttl) {
-        init();
+    public TTLFilter() {}
+    public TTLFilter(Filter delegate,  byte[] emptyCQ, long ttlWindowStartMs) {
         this.delegate = delegate;
-        this.pageSizeMs = pageSizeMs;
         this.emptyCQ = emptyCQ;
-        this.ttl = ttl;
-    }
-
-    public Filter getDelegateFilter() {
-        return delegate;
-    }
-
-    public void setDelegateFilter (Filter delegate) {
-        this.delegate = delegate;
-    }
-
-    public byte[] getRowKeyAtStop() {
-        if (rowKeyAtStop != null) {
-            return Arrays.copyOf(rowKeyAtStop, rowKeyAtStop.length);
-        }
-        return null;
-    }
-
-    public boolean isStopped() {
-        return state == State.STOPPED;
-    }
-
-    public void init() {
-        state = State.INITIAL;
-        rowKeyAtStop = null;
-        if (ttl != HConstants.FOREVER) {
-            ttlWindowStartMs = EnvironmentEdgeManager.currentTimeMillis() - ttl * 1000;
-        }
-    }
-
-    public void resetStartTime() {
-        if (state == State.STARTED) {
-            init();
-        }
+        this.ttlWindowStartMs = ttlWindowStartMs;
     }
 
     @Override
     public void reset() throws IOException {
-        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         expired = false;
-        if (state == State.INITIAL) {
-            startTime = currentTime;
-            state = State.STARTED;
-        } else if (state == State.STARTED && currentTime - startTime >= pageSizeMs) {
-            state = State.TIME_TO_STOP;
-        }
-        if (ttl != HConstants.FOREVER) {
-            ttlWindowStartMs = currentTime - ttl * 1000;
-        }
         if (delegate != null) {
             delegate.reset();
             return;
@@ -132,13 +72,6 @@ public class PagedFilter extends FilterBase implements Writable {
     }
 
     public boolean filterRowKey(byte[] buffer, int offset, int length) throws IOException {
-        if (state == State.TIME_TO_STOP) {
-            if (rowKeyAtStop == null) {
-                rowKeyAtStop = new byte[length];
-                Bytes.putBytes(rowKeyAtStop, 0, buffer, offset, length);
-            }
-            return true;
-        }
         if (delegate != null) {
             return delegate.filterRowKey(buffer, offset, length);
         }
@@ -147,12 +80,6 @@ public class PagedFilter extends FilterBase implements Writable {
 
     @Override
     public boolean filterRowKey(Cell cell) throws IOException {
-        if (state == State.TIME_TO_STOP) {
-            if (rowKeyAtStop == null) {
-                rowKeyAtStop = CellUtil.cloneRow(cell);
-            }
-            return true;
-        }
         if (delegate != null) {
             return delegate.filterRowKey(cell);
         }
@@ -161,10 +88,6 @@ public class PagedFilter extends FilterBase implements Writable {
 
     @Override
     public boolean filterAllRemaining() throws IOException {
-        if (state == State.TIME_TO_STOP && rowKeyAtStop != null) {
-            state = State.STOPPED;
-            return true;
-        }
         if (delegate != null) {
             return delegate.filterAllRemaining();
         }
@@ -173,12 +96,15 @@ public class PagedFilter extends FilterBase implements Writable {
 
     @Override
     public boolean hasFilterRow() {
-        return true;
+        if (delegate != null) {
+            return delegate.hasFilterRow();
+        }
+        return super.hasFilterRow();
     }
 
     @Override
     public boolean filterRow() throws IOException {
-        if (state == State.TIME_TO_STOP) {
+        if (expired) {
             return true;
         }
         if (delegate != null) {
@@ -228,43 +154,48 @@ public class PagedFilter extends FilterBase implements Writable {
         return super.isFamilyEssential(name);
     }
 
-    private ReturnCode adjustReturnCode(Cell c, ReturnCode rc) {
-        if (!expired && (ttl == HConstants.FOREVER ||
-                !ScanUtil.isEmptyColumn(c, emptyCQ) || c.getTimestamp() > ttlWindowStartMs)) {
+    private ReturnCode skipExpiredRow(Cell c, ReturnCode rc) {
+        if (!expired &&
+                (!ScanUtil.isEmptyColumn(c, emptyCQ) || c.getTimestamp() >= ttlWindowStartMs)) {
             return rc;
         }
         expired = true;
-        if (rc == ReturnCode.INCLUDE_AND_SEEK_NEXT_ROW) {
-             return ReturnCode.SEEK_NEXT_USING_HINT;
-        }
-        return ReturnCode.NEXT_ROW;
+        returnCodeWhenExpired = rc == ReturnCode.INCLUDE_AND_SEEK_NEXT_ROW ?
+             ReturnCode.SEEK_NEXT_USING_HINT : ReturnCode.NEXT_ROW;
+        return returnCodeWhenExpired;
     }
 
     @Override
     public ReturnCode filterKeyValue(Cell v) throws IOException {
+        if (expired) {
+            return returnCodeWhenExpired;
+        }
         ReturnCode rc;
         if (delegate != null) {
             rc = delegate.filterKeyValue(v);
         } else {
             rc = super.filterKeyValue(v);
         }
-        return adjustReturnCode(v, rc);
+        return skipExpiredRow(v, rc);
     }
 
     @Override
-    public Filter.ReturnCode filterCell(Cell c) throws IOException {
+    public ReturnCode filterCell(Cell c) throws IOException {
+        if (expired) {
+            return returnCodeWhenExpired;
+        }
         ReturnCode rc;
         if (delegate != null) {
             rc = delegate.filterCell(c);
         } else {
             rc = super.filterCell(c);
         }
-        return adjustReturnCode(c, rc);
+        return skipExpiredRow(c, rc);
     }
 
-    public static PagedFilter parseFrom(final byte [] pbBytes) throws DeserializationException {
+    public static TTLFilter parseFrom(final byte [] pbBytes) throws DeserializationException {
         try {
-            return (PagedFilter) Writables.getWritable(pbBytes, new PagedFilter());
+            return (TTLFilter) Writables.getWritable(pbBytes, new TTLFilter());
         } catch (IOException e) {
             throw new DeserializationException(e);
         }
@@ -272,8 +203,7 @@ public class PagedFilter extends FilterBase implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        out.writeLong(pageSizeMs);
-        out.writeLong(ttl);
+        out.writeLong(ttlWindowStartMs);
         out.writeInt(emptyCQ.length);
         out.write(emptyCQ);
         if (delegate != null) {
@@ -288,8 +218,7 @@ public class PagedFilter extends FilterBase implements Writable {
 
     @Override
     public void readFields(DataInput in) throws IOException {
-        pageSizeMs = in.readLong();
-        ttl = in.readInt();
+        ttlWindowStartMs = in.readLong();
         int length = in.readInt();
         emptyCQ = new byte[length];
         in.readFully(emptyCQ, 0, length);

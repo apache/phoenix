@@ -37,8 +37,6 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -58,7 +56,7 @@ import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseRegionScanner;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.filter.PagedFilter;
+import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
@@ -298,8 +296,8 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         private PageFilter removePageFilter(Scan scan) {
             Filter filter = scan.getFilter();
             if (filter != null) {
-                if (filter instanceof PagedFilter) {
-                    filter = ((PagedFilter) filter).getDelegateFilter();
+                if (filter instanceof PagingFilter) {
+                    filter = ((PagingFilter) filter).getDelegateFilter();
                     if (filter == null) {
                         return null;
                     }
@@ -337,6 +335,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
                 buildIndexScan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD));
                 buildIndexScan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
                 buildIndexScan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes.toBytes(true));
+                buildIndexScan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
                 // Scan only columns included in the index table plus the empty column
                 for (ColumnReference column : indexMaintainer.getAllColumnsForDataTable()) {
                     buildIndexScan.addColumn(column.getFamily(), column.getQualifier());

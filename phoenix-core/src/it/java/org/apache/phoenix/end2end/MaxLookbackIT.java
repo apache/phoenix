@@ -362,12 +362,10 @@ public class MaxLookbackIT extends BaseTest {
             String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
             createTable(dataTableName);
-            populateTable(dataTableName);
             createIndex(dataTableName, indexName, versions);
             injectEdge.setValue(System.currentTimeMillis());
             EnvironmentEdgeManager.injectEdge(injectEdge);
-            //increment to make sure we don't "look back" past table creation
-            injectEdge.incrementValue(WAIT_AFTER_TABLE_CREATION_MILLIS);
+            populateTable(dataTableName);
             injectEdge.incrementValue(1); //increment by 1 so we can see our write
             long afterInsertSCN = EnvironmentEdgeManager.currentTimeMillis();
             //make sure table and index metadata is set up right for versions
@@ -411,13 +409,16 @@ public class MaxLookbackIT extends BaseTest {
             // at the appropriate times
             assertMultiVersionLookbacks(dataTableSelectSql, allValues, allSCNs);
             assertMultiVersionLookbacks(indexTableSelectSql, allValues, allSCNs);
-            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
+            // Make the first row versions outside the max lookback window
+            injectEdge.setValue(afterInsertSCN + MAX_LOOKBACK_AGE * 1000);
             long afterLookbackAgeSCN = EnvironmentEdgeManager.currentTimeMillis();
             majorCompact(dataTable);
             majorCompact(indexTable);
-            //empty column, 1 version of val 1, 3 versions of val2, 1 version of val3 = 6
+            // At this moment, the data table has two row version within the max lookback window.
+            // These versions have their own empty column and val2 cells and share cells for val1
+            // and val3 columns. This means that there will be 2 + 2 + 2 = 6 cells
             assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), 6);
-            //2 versions of empty column, 2 versions of val2,
+            // 2 versions of empty column, 2 versions of val2,
             // 2 versions of val3 (since we write whole rows to index) = 6
             assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), 6);
             //empty column + 1 version each of val1,2 and 3 = 4

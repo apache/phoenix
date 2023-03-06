@@ -933,7 +933,7 @@ public class TestUtil {
                 while (cellScanner.advance()) {
                     current = cellScanner.current();
                     System.out.println(current + " column= " +
-                        Bytes.toString(CellUtil.cloneQualifier(current)) +
+                        Bytes.toStringBinary(CellUtil.cloneQualifier(current)) +
                         " val=" + Bytes.toStringBinary(CellUtil.cloneValue(current)));
                 }
             }

@@ -69,7 +69,7 @@ import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
-import org.apache.phoenix.filter.PagedFilter;
+import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
@@ -92,7 +92,6 @@ import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueSchema.Field;
-import org.apache.phoenix.schema.tool.SchemaExtractionProcessor;
 import org.apache.phoenix.schema.transform.SystemTransformRecord;
 import org.apache.phoenix.schema.transform.Transform;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
@@ -790,8 +789,8 @@ public class ScanUtil {
         if (filter == null) {
             return;
         }
-        if (filter instanceof PagedFilter) {
-            filter = ((PagedFilter) filter).getDelegateFilter();
+        if (filter instanceof PagingFilter) {
+            filter = ((PagingFilter) filter).getDelegateFilter();
             if (filter == null) {
                 return;
             }
@@ -1416,10 +1415,10 @@ public class ScanUtil {
         return false;
     }
 
-    public static PagedFilter getPhoenixPagedFilter(Scan scan) {
+    public static PagingFilter getPhoenixPagingFilter(Scan scan) {
         Filter filter = scan.getFilter();
-        if (filter != null && filter instanceof PagedFilter) {
-            PagedFilter pageFilter = (PagedFilter) filter;
+        if (filter != null && filter instanceof PagingFilter) {
+            PagingFilter pageFilter = (PagingFilter) filter;
             return pageFilter;
         }
         return null;
@@ -1427,12 +1426,13 @@ public class ScanUtil {
 
     /**
      *
-     * The server page size expressed in ms is the maximum time we want the Phoenix server code to spend
-     * for each iteration of ResultScanner. For each ResultScanner#next() can be translated into one or more
-     * HBase RegionScanner#next() calls by a Phoenix RegionScanner object in a loop. To ensure that the total
-     * time spent by the Phoenix server code will not exceed the configured page size value, SERVER_PAGE_SIZE_MS,
-     * the loop time in a Phoenix region scanner is limited by 0.6 * SERVER_PAGE_SIZE_MS and
-     * each HBase RegionScanner#next() time which is controlled by PagedFilter is set to 0.3 * SERVER_PAGE_SIZE_MS.
+     * The server page size expressed in ms is the maximum time we want the Phoenix server code to
+     * spend for each iteration of ResultScanner. For each ResultScanner#next() can be translated
+     * into one or more HBase RegionScanner#next() calls by a Phoenix RegionScanner object in
+     * a loop. To ensure that the total time spent by the Phoenix server code will not exceed
+     * the configured page size value, SERVER_PAGE_SIZE_MS, the loop time in a Phoenix region
+     * scanner is limited by 0.6 * SERVER_PAGE_SIZE_MS and each HBase RegionScanner#next() time
+     * which is controlled by PagingFilter is set to 0.3 * SERVER_PAGE_SIZE_MS.
      *
      */
     private static long getPageSizeMs(Scan scan, double factor) {
