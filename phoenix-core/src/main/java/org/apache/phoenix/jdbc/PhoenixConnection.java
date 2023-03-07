@@ -156,6 +156,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private boolean isAutoFlush = false;
     private boolean isAutoCommit = false;
     private final PName tenantId;
+    private final String dateFormatTimeZoneId;
     private final String datePattern;
     private final String timePattern;
     private final String timestampPattern;
@@ -185,6 +186,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     //For now just the copy constructor paths will have this as true as I don't want to change the
     //public interfaces.
     private final boolean isInternalConnection;
+    private boolean isApplyTimeZoneDisplacement;
 
     static {
         Tracing.addTraceMetricsSource();
@@ -346,11 +348,14 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         long maxSizeBytes = this.services.getProps().getLong(
                 QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
                 QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
-        String timeZoneID = this.services.getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
+        this.isApplyTimeZoneDisplacement = this.services.getProps().getBoolean(
+            QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB,
+            QueryServicesOptions.DEFAULT_APPLY_TIME_ZONE_DISPLACMENT);
+        this.dateFormatTimeZoneId = this.services.getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
                 DateUtil.DEFAULT_TIME_ZONE_ID);
-        Format dateFormat = DateUtil.getDateFormatter(datePattern, timeZoneID);
-        Format timeFormat = DateUtil.getDateFormatter(timePattern, timeZoneID);
-        Format timestampFormat = DateUtil.getDateFormatter(timestampPattern, timeZoneID);
+        Format dateFormat = DateUtil.getDateFormatter(datePattern, dateFormatTimeZoneId);
+        Format timeFormat = DateUtil.getDateFormatter(timePattern, dateFormatTimeZoneId);
+        Format timestampFormat = DateUtil.getDateFormatter(timestampPattern, dateFormatTimeZoneId);
         formatters.put(PDate.INSTANCE, dateFormat);
         formatters.put(PTime.INSTANCE, timeFormat);
         formatters.put(PTimestamp.INSTANCE, timestampFormat);
@@ -652,6 +657,14 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     public String getDatePattern() {
         return datePattern;
+    }
+
+    public String getTimePattern() {
+        return timePattern;
+    }
+
+    public String getTimestampPattern() {
+        return timestampPattern;
     }
 
     public Format getFormatter(PDataType type) {
@@ -1361,5 +1374,13 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
      */
     public String getSourceOfOperation() {
         return sourceOfOperation;
+    }
+
+    public String getDateFormatTimeZoneId() {
+        return dateFormatTimeZoneId;
+    }
+
+    public boolean isApplyTimeZoneDisplacement() {
+        return isApplyTimeZoneDisplacement;
     }
 }

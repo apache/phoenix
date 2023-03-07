@@ -329,7 +329,7 @@
               <id>ParallelStatsEnabledTest</id>
               <configuration>
                 <reuseForks>true</reuseForks>
-                <argLine>@{jacocoArgLine} -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
+                <argLine>@{jacocoArgLine} -Duser.timezone="America/Los_Angeles" -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
               </configuration>
               <goals>
@@ -341,7 +341,7 @@
               <id>ParallelStatsDisabledTest</id>
               <configuration>
                 <reuseForks>true</reuseForks>
-                <argLine>@{jacocoArgLine} -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
+                <argLine>@{jacocoArgLine} -Duser.timezone="America/Los_Angeles" -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
               </configuration>
               <goals>
@@ -353,7 +353,7 @@
               <id>NeedTheirOwnClusterTests</id>
               <configuration>
                  <reuseForks>false</reuseForks>
-                 <argLine>@{jacocoArgLine} -enableassertions -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
+                 <argLine>@{jacocoArgLine} -Duser.timezone="America/Los_Angeles" -enableassertions -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
               </configuration>
               <goals>
@@ -574,7 +574,7 @@
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
-          <argLine>@{jacocoArgLine} -enableassertions -Xmx2250m
+          <argLine>@{jacocoArgLine} -enableassertions -Xmx2250m -Duser.timezone="America/Los_Angeles"
             -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
           <shutdown>exit</shutdown>
