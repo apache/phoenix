@@ -2,13 +2,9 @@ package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Optional;
 
 import org.apache.hadoop.conf.Configuration;
@@ -19,9 +15,10 @@ import org.apache.hadoop.hbase.coprocessor.MasterCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.MasterObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.schema.SaltingUtil;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.SchemaUtil;
 
 public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor {
 
@@ -46,6 +43,7 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
             RegionInfo[] regionsToMerge) throws SQLException {
         TableName table = regionsToMerge[0].getTable();
         int saltBuckets = getTableSalt(ctx, table.toString());
+        System.out.println("Number of buckets="+saltBuckets);
         if(saltBuckets > 0 ) {
             System.out.println("Number of buckets="+saltBuckets);
             return !regionsHaveSameSalt(regionsToMerge);
@@ -56,38 +54,17 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
 
     private int getTableSalt(ObserverContext<MasterCoprocessorEnvironment> ctx, String table) throws SQLException {
         int saltBucket = 0;
-        String schemaName = SchemaUtil.getSchemaNameFromFullName(table);
-        String tableName = SchemaUtil.getTableNameFromFullName(table);
-        String sql =
-                "SELECT salt_buckets FROM system.catalog WHERE table_name = ? "
-                        + "AND (table_schem = ? OR table_schem IS NULL)";
-
-        if (schemaName == null || schemaName.isEmpty()) {
-            sql = sql + "   and table_schem is null";
-        } else {
-            sql = sql + String.format(" and table_schem=%s", schemaName);
-        }
-
         Configuration conf = ctx.getEnvironment().getConfiguration();
-        PreparedStatement stmt;
-        ResultSet resultSet;
         try (Connection conn = QueryUtil.getConnectionOnServer(conf)) {
-            stmt = conn.prepareStatement(sql);
-            stmt.setString(1, tableName);
-            stmt.setString(2, schemaName);
-            resultSet = stmt.executeQuery();
-            if (resultSet.next()) {
-                saltBucket = resultSet.getInt("salt_buckets");
-            }
-            resultSet.close();
-            stmt.close();
+            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+            PTable pTable = pConn.getTable(new PTableKey(pConn.getTenantId(), table));
+            saltBucket = pTable.getBucketNum();
         } 
         return saltBucket;
     }
 
     private boolean regionsHaveSameSalt(RegionInfo[] regionsToMerge) {
         Collection<Integer> saltKeys = new HashSet<>();
-        List<RegionInfo> filteredRegionsToMerge= new ArrayList<>();
         for (final RegionInfo region : regionsToMerge) {
             saltKeys.add(extractSaltByteFromRegionName(region));
         }
