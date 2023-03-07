@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,6 +73,7 @@ public class StoreCompactionScanner implements InternalScanner {
         ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
         long ttl = cfd.getTimeToLive();
         this.ttlWindowStart = ttl == HConstants.FOREVER ? 1 : compactionTime - ttl * 1000;
+        this.maxLookbackWindowStart = Math.max(ttlWindowStart, maxLookbackWindowStart);
         this.minVersion = cfd.getMinVersions();
         this.maxVersion = cfd.getMaxVersions();
         this.keepDeletedCells = cfd.getKeepDeletedCells();

@@ -257,26 +257,21 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             ScanUtil.setupReverseScan(scan);
             // Set the paging and TTL filters. Make sure that the paging filter is the top level
             // filter if paging is enabled, that is pageSizeMsBytes != null.
-            if (!(scan.getFilter() instanceof PagingFilter)) {
+            if (!(scan.getFilter() instanceof PagingFilter) &&
+                    !(scan.getFilter() instanceof TTLFilter)) {
                 byte[] pageSizeMsBytes =
                         scan.getAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS);
                 byte[] emptyCQ = scan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
-                if (emptyCQ == null) {
-                    int a = 1;
-                }
                 long currentTime =
                         org.apache.phoenix.util.EnvironmentEdgeManager.currentTimeMillis();
-                long maxLookbackWindowStart = currentTime -
-                        getMaxLookbackInMillis(c.getEnvironment().getConfiguration());
                 int ttl = c.getEnvironment().getRegion().getTableDescriptor().
                         getColumnFamilies()[0].getTimeToLive();
-                long ttlWindowStart = ttl == HConstants.FOREVER ? 1 :
-                        Math.min(maxLookbackWindowStart, currentTime - ttl * 1000);
-               if (pageSizeMsBytes != null) {
+                long ttlWindowStart = ttl == HConstants.FOREVER ? 1 : currentTime - ttl * 1000;
+                if (pageSizeMsBytes != null) {
                     scan.setFilter(new PagingFilter(new TTLFilter(scan.getFilter(), emptyCQ,
                             ttlWindowStart), getPageSizeMsForFilter(scan)));
-               }
-               else if (!(scan.getFilter() instanceof TTLFilter)) {
+                }
+                else if (!(scan.getFilter() instanceof TTLFilter)) {
                     scan.setFilter(new TTLFilter(scan.getFilter(), emptyCQ, ttlWindowStart));
                 }
             }
@@ -451,44 +446,12 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public void preMemStoreCompactionCompactScannerOpen(
         ObserverContext<RegionCoprocessorEnvironment> c, Store store, ScanOptions options) {
         setScanOptionsForFlushesAndCompactions(options);
-
     }
 
     @Override
     public void preStoreScannerOpen(ObserverContext<RegionCoprocessorEnvironment> ctx, Store store,
                                            ScanOptions options) throws IOException {
-
         setScanOptionsForFlushesAndCompactions(options);
-    }
-
-    @Override
-    public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
-            InternalScanner scanner, ScanType scanType, CompactionLifeCycleTracker tracker,
-            CompactionRequest request) throws IOException {
-        if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
-            return new StoreCompactionScanner(c.getEnvironment(), store, scanner,
-                    getMaxLookbackInMillis(c.getEnvironment().getConfiguration()));
-        }
-        return scanner;
-    }
-    private boolean storeFileScanDoesntNeedAlteration(ScanOptions options) {
-        Scan scan = options.getScan();
-        boolean isRaw = scan.isRaw();
-        //true if keep deleted cells is either TRUE or TTL
-        boolean keepDeletedCells = options.getKeepDeletedCells().equals(KeepDeletedCells.TRUE) ||
-            options.getKeepDeletedCells().equals(KeepDeletedCells.TTL);
-        boolean timeRangeIsLatest = scan.getTimeRange().getMax() == HConstants.LATEST_TIMESTAMP;
-        boolean timestampIsTransactional =
-            isTransactionalTimestamp(scan.getTimeRange().getMax());
-        return isRaw
-            || keepDeletedCells
-            || timeRangeIsLatest
-            || timestampIsTransactional;
-    }
-
-    private boolean isTransactionalTimestamp(long ts) {
-        //have to use the HBase edge manager because the Phoenix one is in phoenix-core
-        return ts > (long) (EnvironmentEdgeManager.currentTime() * 1.1);
     }
 
     public void setScanOptionsForFlushesAndCompactions(ScanOptions options) {

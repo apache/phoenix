@@ -53,6 +53,12 @@ public class TTLFilter extends FilterBase implements Writable {
         this.ttlWindowStartMs = ttlWindowStartMs;
     }
 
+    public Filter getDelegateFilter() {
+        return delegate;
+    }
+    public void setDelegateFilter (Filter delegate) {
+        this.delegate = delegate;
+    }
     @Override
     public void reset() throws IOException {
         expired = false;

@@ -588,6 +588,49 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 @Override
                 public InternalScanner run() throws Exception {
                     InternalScanner internalScanner = scanner;
+                    boolean isDisabled = false;
+                    if (request.isMajor()) {
+                        final String
+                                fullTableName =
+                                c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+                        if (!PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.equals(fullTableName)) {
+                            try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
+                                    compactionConfig).unwrap(PhoenixConnection.class)) {
+                                PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+                                List<PTable>
+                                        indexes =
+                                        PTableType.INDEX.equals(table.getType()) ?
+                                                Lists.newArrayList(table) :
+                                                table.getIndexes();
+                                // FIXME need to handle views and indexes on views as well
+                                for (PTable index : indexes) {
+                                    if (index.getIndexDisableTimestamp() != 0) {
+                                        LOGGER.info("Modifying major compaction scanner to retain "
+                                                + "deleted cells for a table with disabled index: "
+                                                + fullTableName);
+                                        isDisabled = true;
+                                        break;
+                                    }
+                                }
+                            } catch (Exception e) {
+                                if (e instanceof TableNotFoundException) {
+                                    LOGGER.debug(
+                                            "Ignoring HBase table that is not a Phoenix table: "
+                                                    + fullTableName);
+                                    // non-Phoenix HBase tables won't be found, do nothing
+                                } else {
+                                    LOGGER.error(
+                                            "Unable to modify compaction scanner to retain deleted "
+                                                    + "cells for a table with disabled Index; "
+                                                    + fullTableName, e);
+                                }
+                            }
+                        }
+                    }
+                    if (!isDisabled) {
+                        internalScanner = new StoreCompactionScanner(c.getEnvironment(), store, scanner,
+                                getMaxLookbackInMillis(c.getEnvironment().getConfiguration()));
+                    }
                     try {
                         long clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
                         DelegateRegionCoprocessorEnvironment compactionConfEnv =
@@ -915,51 +958,5 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     @Override
     protected boolean isRegionObserverFor(Scan scan) {
         return scan.getAttribute(BaseScannerRegionObserver.UNGROUPED_AGG) != null;
-    }
-
-    @Override
-    public void preCompactScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
-                                      ScanType scanType, ScanOptions options, CompactionLifeCycleTracker tracker,
-                                      final CompactionRequest request) throws IOException {
-        // Compaction and split upcalls run with the effective user context of the requesting user.
-        // This will lead to failure of cross cluster RPC if the effective user is not
-        // the login user. Switch to the login user context to ensure we have the expected
-        // security context.
-
-        final String fullTableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
-        // since we will make a call to syscat, do nothing if we are compacting syscat itself
-        if (request.isMajor() && !PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.equals(fullTableName)) {
-            User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-                @Override
-                public Void run() throws Exception {
-                    // If the index is disabled, keep the deleted cells so the rebuild doesn't corrupt the index
-                    try (PhoenixConnection conn =
-                                 QueryUtil.getConnectionOnServer(compactionConfig).unwrap(PhoenixConnection.class)) {
-                        PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
-                        List<PTable> indexes = PTableType.INDEX.equals(table.getType()) ? Lists.newArrayList(table) : table.getIndexes();
-                        // FIXME need to handle views and indexes on views as well
-                        for (PTable index : indexes) {
-                            if (index.getIndexDisableTimestamp() != 0) {
-                                LOGGER.info(
-                                        "Modifying major compaction scanner to retain deleted cells for a table with disabled index: "
-                                                + fullTableName);
-                                options.setKeepDeletedCells(KeepDeletedCells.TRUE);
-                                options.readAllVersions();
-                                options.setTTL(Long.MAX_VALUE);
-                            }
-                        }
-                    } catch (Exception e) {
-                        if (e instanceof TableNotFoundException) {
-                            LOGGER.debug("Ignoring HBase table that is not a Phoenix table: " + fullTableName);
-                            // non-Phoenix HBase tables won't be found, do nothing
-                        } else {
-                            LOGGER.error("Unable to modify compaction scanner to retain deleted cells for a table with disabled Index; "
-                                            + fullTableName, e);
-                        }
-                    }
-                    return null;
-                }
-            });
-        }
     }
 }
