@@ -397,7 +397,12 @@
               </ignoredUnusedDeclaredDependencies>
               <ignoredUsedUndeclaredDependencies>
                 <ignoredUsedUndeclaredDependency>
+                  <!-- couldn't figure out what's the deal with this -->
                   dnsjava:dnsjava
+                </ignoredUsedUndeclaredDependency>
+                <ignoredUsedUndeclaredDependency>
+                  <!-- These change too frequently, so we just rely on the hbase transitive deps -->
+                  org.apache.hbase.thirdparty:*
                 </ignoredUsedUndeclaredDependency>
               </ignoredUsedUndeclaredDependencies>
             </configuration>
