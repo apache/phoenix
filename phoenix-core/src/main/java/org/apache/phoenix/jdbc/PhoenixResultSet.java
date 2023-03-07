@@ -89,8 +89,12 @@ import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PTinyint;
+import org.apache.phoenix.schema.types.PUnsignedDate;
+import org.apache.phoenix.schema.types.PUnsignedTime;
+import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -144,6 +148,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     private final boolean wildcardIncludesDynamicCols;
     private final List<PColumn> staticColumns;
     private final int startPositionForDynamicCols;
+    private final boolean isApplyTimeZoneDisplacement;
 
     private RowProjector rowProjectorWithDynamicCols;
     private Tuple currentRow = BEFORE_FIRST;
@@ -156,6 +161,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     private Long count = 0L;
 
     private Object exception;
+    private final Calendar localCalendar;
 
     public PhoenixResultSet(ResultIterator resultIterator, RowProjector rowProjector,
             StatementContext ctx) throws SQLException {
@@ -177,6 +183,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
             this.staticColumns = null;
             this.startPositionForDynamicCols = 0;
         }
+        this.isApplyTimeZoneDisplacement = statement.getConnection().isApplyTimeZoneDisplacement();
+        this.localCalendar = statement.getLocalCalendar();
     }
     
     @Override
@@ -341,7 +349,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         PDataType type = colProjector.getExpression().getDataType();
         Object value = colProjector.getValue(currentRow, type, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return false;
         }
         if (type == PBoolean.INSTANCE) {
@@ -427,14 +435,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
 
     @Override
     public Date getDate(int columnIndex) throws SQLException {
-        checkCursorState();
-        Date value = (Date)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
-            PDate.INSTANCE, ptr);
-        wasNull = (value == null);
-        if (value == null) {
-            return null;
-        }
-        return value;
+        return getDate(columnIndex, localCalendar);
     }
 
     @Override
@@ -445,14 +446,18 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public Date getDate(int columnIndex, Calendar cal) throws SQLException {
         checkCursorState();
-        Date value = (Date)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
-            PDate.INSTANCE, ptr);
+        Date value =
+                (Date) getRowProjector().getColumnProjector(columnIndex - 1).getValue(currentRow,
+                    PDate.INSTANCE, ptr);
         wasNull = (value == null);
         if (wasNull) {
             return null;
         }
-        cal.setTime(value);
-        return new Date(cal.getTimeInMillis());
+        if (isApplyTimeZoneDisplacement) {
+            return DateUtil.applyOutputDisplacement(value, cal.getTimeZone());
+        } else {
+            return value;
+        }
     }
 
     @Override
@@ -466,7 +471,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         Double value = (Double)getRowProjector().getColumnProjector(columnIndex-1)
                 .getValue(currentRow, PDouble.INSTANCE, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return 0;
         }
         return value;
@@ -493,7 +498,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         Float value = (Float)getRowProjector().getColumnProjector(columnIndex-1)
                 .getValue(currentRow, PFloat.INSTANCE, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return 0;
         }
         return value;
@@ -515,7 +520,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         Integer value = (Integer)getRowProjector().getColumnProjector(columnIndex-1)
                 .getValue(currentRow, PInteger.INSTANCE, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return 0;
         }
         return value;
@@ -532,7 +537,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         Long value = (Long)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
             PLong.INSTANCE, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return 0;
         }
         return value;
@@ -581,9 +586,25 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
     @Override
     public Object getObject(int columnIndex) throws SQLException {
         checkCursorState();
-        ColumnProjector projector = getRowProjector().getColumnProjector(columnIndex-1);
+        ColumnProjector projector = getRowProjector().getColumnProjector(columnIndex - 1);
         Object value = projector.getValue(currentRow, projector.getExpression().getDataType(), ptr);
         wasNull = (value == null);
+        if (isApplyTimeZoneDisplacement) {
+            PDataType type = projector.getExpression().getDataType();
+            if (type == PDate.INSTANCE || type == PUnsignedDate.INSTANCE) {
+                value =
+                        DateUtil.applyOutputDisplacement((java.sql.Date) value,
+                            localCalendar.getTimeZone());
+            } else if (type == PTime.INSTANCE || type == PUnsignedTime.INSTANCE) {
+                value =
+                        DateUtil.applyOutputDisplacement((java.sql.Time) value,
+                            localCalendar.getTimeZone());
+            } else if (type == PTimestamp.INSTANCE || type == PUnsignedTimestamp.INSTANCE) {
+                value =
+                        DateUtil.applyOutputDisplacement((java.sql.Timestamp) value,
+                            localCalendar.getTimeZone());
+            }
+        }
         return value;
     }
 
@@ -644,7 +665,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         Short value = (Short)getRowProjector().getColumnProjector(columnIndex-1)
                 .getValue(currentRow, PSmallint.INSTANCE, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return 0;
         }
         return value;
@@ -668,7 +689,8 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         ColumnProjector projector = getRowProjector().getColumnProjector(columnIndex-1);
         PDataType type = projector.getExpression().getDataType();
         Object value = projector.getValue(currentRow,type, ptr);
-        if (wasNull = (value == null)) {
+        wasNull = (value == null);
+        if (wasNull) {
             return null;
         }
         // Run Object through formatter to get String.
@@ -685,11 +707,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
 
     @Override
     public Time getTime(int columnIndex) throws SQLException {
-        checkCursorState();
-        Time value = (Time)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
-            PTime.INSTANCE, ptr);
-        wasNull = (value == null);
-        return value;
+        return getTime(columnIndex, localCalendar);
     }
 
     @Override
@@ -703,12 +721,14 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         Time value = (Time)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
             PTime.INSTANCE, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return null;
         }
-        cal.setTime(value);
-        value.setTime(cal.getTimeInMillis());
-        return value;
+        if (isApplyTimeZoneDisplacement) {
+            return DateUtil.applyOutputDisplacement(value, cal.getTimeZone());
+        } else {
+            return value;
+        }
     }
 
     @Override
@@ -718,11 +738,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
 
     @Override
     public Timestamp getTimestamp(int columnIndex) throws SQLException {
-        checkCursorState();
-        Timestamp value = (Timestamp)getRowProjector().getColumnProjector(columnIndex-1)
-                .getValue(currentRow, PTimestamp.INSTANCE, ptr);
-        wasNull = (value == null);
-        return value;
+        return getTimestamp(columnIndex, localCalendar);
     }
 
     @Override
@@ -732,8 +748,18 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
 
     @Override
     public Timestamp getTimestamp(int columnIndex, Calendar cal) throws SQLException {
-        return getTimestamp(columnIndex);
-    }
+        checkCursorState();
+        Timestamp value = (Timestamp)getRowProjector().getColumnProjector(columnIndex-1)
+                .getValue(currentRow, PTimestamp.INSTANCE, ptr);
+        wasNull = (value == null);
+        if (wasNull) {
+            return null;
+        }
+        if (isApplyTimeZoneDisplacement) {
+            return DateUtil.applyOutputDisplacement(value, cal.getTimeZone());
+        } else {
+            return value;
+        }    }
 
     @Override
     public Timestamp getTimestamp(String columnLabel, Calendar cal) throws SQLException {
@@ -751,7 +777,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable {
         String value = (String)getRowProjector().getColumnProjector(columnIndex-1)
                 .getValue(currentRow, PVarchar.INSTANCE, ptr);
         wasNull = (value == null);
-        if (value == null) {
+        if (wasNull) {
             return null;
         }
         try {

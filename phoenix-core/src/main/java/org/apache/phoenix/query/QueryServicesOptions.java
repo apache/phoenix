@@ -379,6 +379,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_PENDING_MUTATIONS_DDL_THROW = false;
 
     public static final boolean DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK = false;
+    public static final boolean DEFAULT_APPLY_TIME_ZONE_DISPLACMENT = false;
 
     private final Configuration config;
 

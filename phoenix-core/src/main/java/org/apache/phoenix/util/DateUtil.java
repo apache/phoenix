@@ -54,6 +54,7 @@ import edu.umd.cs.findbugs.annotations.NonNull;
 
 @SuppressWarnings({ "serial", "deprecation" })
 public class DateUtil {
+
     public static final String DEFAULT_TIME_ZONE_ID = "GMT";
     public static final String LOCAL_TIME_ZONE_ID = "LOCAL";
     private static final TimeZone DEFAULT_TIME_ZONE = TimeZone.getTimeZone(DEFAULT_TIME_ZONE_ID);
@@ -70,6 +71,9 @@ public class DateUtil {
 
     public static final String DEFAULT_TIMESTAMP_FORMAT = DEFAULT_MS_DATE_FORMAT;
     public static final Format DEFAULT_TIMESTAMP_FORMATTER = DEFAULT_MS_DATE_FORMATTER;
+
+    //Caching for performance. We don't expect the default TZ to changed after startup
+    //private static final java.util.TimeZone LOCAL_TIME_ZONE = TimeZone.getDefault();
 
     private static final DateTimeFormatter JULIAN_DATE_TIME_FORMATTER = new DateTimeFormatterBuilder()
         .append(ISODateTimeFormat.dateParser())
@@ -187,18 +191,42 @@ public class DateUtil {
                 : FastDateFormat.getInstance(pattern, getTimeZone(timeZoneID));
     }
 
+    /**
+     * Parses a datetime string in the UTC time zone.
+     *
+     * @param dateValue datetime string in UTC
+     * @return epoch ms
+     */
     private static long parseDateTime(String dateTimeValue) {
         return JulianDateFormatParser.getInstance().parseDateTime(dateTimeValue);
     }
 
+    /**
+     * Parses a date string in the UTC time zone.
+     *
+     * @param dateValue date string in UTC
+     * @return epoch ms
+     */
     public static Date parseDate(String dateValue) {
         return new Date(parseDateTime(dateValue));
     }
 
+    /**
+     * Parses a time string in the UTC time zone.
+     *
+     * @param dateValue time string in UTC
+     * @return epoch ms
+     */
     public static Time parseTime(String timeValue) {
         return new Time(parseDateTime(timeValue));
     }
 
+    /**
+     * Parses the timestsamp string in the UTC time zone.
+     *
+     * @param timestampValue timestamp string in UTC
+     * @return Timestamp parsed in UTC
+     */
     public static Timestamp parseTimestamp(String timestampValue) {
         Timestamp timestamp = new Timestamp(parseDateTime(timestampValue));
         int period = timestampValue.indexOf('.');
@@ -392,4 +420,93 @@ public class DateUtil {
             }
         }
     }
+
+    // These implementations favour speed over historical correctness, and use
+    // java.util.TimeZone#getOffset(epoch millis) and inherit its limitations.
+
+    // When we switch to java.time, we might want to revisit this, and add an option for
+    // slower but more correct conversions.
+    // However, any conversion for TZs with DST is best effort anyway.
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the UTC time zone as the Input in the specified time zone.
+     * @param jdbc Date interpreted in timeZone
+     * @param timeZone for displacement calculation
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Date applyInputDisplacement(java.sql.Date jdbc, TimeZone timeZone) {
+        long epoch = jdbc.getTime();
+        return new java.sql.Date(epoch + timeZone.getOffset(epoch));
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the UTC time zone as the Input in the specified time zone.
+     * @param jdbc Time interpreted in timeZone
+     * @param timeZone for displacement calculation
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Time applyInputDisplacement(java.sql.Time jdbc, TimeZone timeZone) {
+        long epoch = jdbc.getTime();
+        return new java.sql.Time(epoch + timeZone.getOffset(epoch));
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the UTC time zone as the Input in the specified time zone.
+     * @param jdbc Timestamp interpreted in timeZone
+     * @param timeZone for displacement calculation
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Timestamp applyInputDisplacement(java.sql.Timestamp jdbc, TimeZone timeZone) {
+        long epoch = jdbc.getTime();
+        java.sql.Timestamp ts = new java.sql.Timestamp(epoch + timeZone.getOffset(epoch));
+        ts.setNanos(jdbc.getNanos());
+        return ts;
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the specified time zone as the Input in the UTC time zone.
+     * @param internal Date as UTC epoch
+     * @param timeZone for displacement calculation
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Date applyOutputDisplacement(java.sql.Date internal, TimeZone timeZone) {
+        long epoch = internal.getTime();
+        return new java.sql.Date(epoch - getReverseOffset(epoch, timeZone));
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the specified time zone as the Input in the UTC time zone.
+     * @param internal Date as UTC epoch
+     * @param timeZone for displacement calculation
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Time applyOutputDisplacement(java.sql.Time internal, TimeZone timeZone) {
+        long epoch = internal.getTime();
+        return new java.sql.Time(epoch - getReverseOffset(epoch, timeZone));
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the specified time zone as the Input in the UTC time zone.
+     * @param internal Timestamp as UTC epoch
+     * @param timeZone for displacement calculation
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Timestamp applyOutputDisplacement(java.sql.Timestamp internal, TimeZone timeZone) {
+        long epoch = internal.getTime();
+        java.sql.Timestamp ts = new java.sql.Timestamp(epoch - getReverseOffset(epoch, timeZone));
+        ts.setNanos(internal.getNanos());
+        return ts;
+    }
+
+    private static int getReverseOffset(long epoch, TimeZone tz) {
+        return tz.getOffset(
+            epoch - tz.getRawOffset() - tz.getDSTSavings());
+    }
+
 }

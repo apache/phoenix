@@ -34,6 +34,7 @@ import java.sql.Statement;
 import java.text.Format;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -257,7 +258,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     private int maxRows;
     private int fetchSize = -1;
     private int queryTimeoutMillis;
-    
+    // Caching per Statement
+    protected final Calendar localCalendar = Calendar.getInstance();
+
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
         this.queryTimeoutMillis = getDefaultQueryTimeoutMillis();
@@ -2328,4 +2331,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             }
         }
     }
+
+    public Calendar getLocalCalendar() {
+        return localCalendar;
+    }
+
 }
