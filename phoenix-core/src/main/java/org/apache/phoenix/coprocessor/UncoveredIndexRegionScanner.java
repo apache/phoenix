@@ -74,7 +74,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     protected State state = State.INITIAL;
     protected final byte[][] viewConstants;
     protected final RegionCoprocessorEnvironment env;
-    protected final int pageSizeInRows;
+    protected long pageSizeInRows;
     protected final long ageThreshold;
     protected byte[] emptyCF;
     protected byte[] emptyCQ;
@@ -102,7 +102,8 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                                              final IndexMaintainer indexMaintainer,
                                              final byte[][] viewConstants,
                                              final ImmutableBytesWritable ptr,
-                                             final long pageSizeMs) {
+                                             final long pageSizeMs,
+                                             final long queryLimit) {
         super(innerScanner);
         final Configuration config = env.getConfiguration();
 
@@ -115,6 +116,10 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                     config.getLong(INDEX_PAGE_SIZE_IN_ROWS,
                             QueryServicesOptions.DEFAULT_INDEX_PAGE_SIZE_IN_ROWS);
         }
+        if (queryLimit != -1) {
+            pageSizeInRows = Long.min(pageSizeInRows, queryLimit);
+        }
+
         ageThreshold = env.getConfiguration().getLong(
                 QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB,
                 QueryServicesOptions.DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS);

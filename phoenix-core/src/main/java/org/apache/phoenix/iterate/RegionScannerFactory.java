@@ -190,11 +190,11 @@ public abstract class RegionScannerFactory {
                   if (ScanUtil.isLocalIndex(scan)) {
                     s = new UncoveredLocalIndexRegionScanner(regionScanner, dataRegion, scan, env,
                             dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
-                            pageSizeMs, offset, actualStartKey);
+                            pageSizeMs, offset, actualStartKey, extraLimit);
                   } else {
                     s = new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
                             dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
-                            pageSizeMs);
+                            pageSizeMs, extraLimit);
                   }
               }
           }
