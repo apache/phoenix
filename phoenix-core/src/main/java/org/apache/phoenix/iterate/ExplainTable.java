@@ -243,7 +243,7 @@ public abstract class ExplainTable {
             if (pageFilter != null) {
                 limit = pageFilter.getPageSize();
             } else {
-                byte[] limitBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_LIMIT);
+                byte[] limitBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_LIMIT);
                 if (limitBytes != null) {
                     limit = Bytes.toLong(limitBytes);
                 }

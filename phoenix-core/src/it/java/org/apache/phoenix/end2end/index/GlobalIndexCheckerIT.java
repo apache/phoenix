@@ -133,6 +133,16 @@ public class GlobalIndexCheckerIT extends BaseTest {
         IndexToolIT.assertExplainPlan(false, actualExplainPlan, dataTableFullName, indexTableFullName);
     }
 
+    public static void assertExplainPlanWithLimit(Connection conn, String selectSql,
+                                                  String dataTableFullName, String indexTableFullName, int limit) throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
+        String actualExplainPlan = QueryUtil.getExplainPlan(rs);
+        IndexToolIT.assertExplainPlan(false, actualExplainPlan, dataTableFullName, indexTableFullName);
+        String expectedLimitPlan = String.format("SERVER %d ROW LIMIT", limit);
+        assertTrue(actualExplainPlan + "\n expected to contain \n" + expectedLimitPlan,
+                actualExplainPlan.contains(expectedLimitPlan));
+    }
+
     private void populateTable(String tableName) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("create table " + tableName +
