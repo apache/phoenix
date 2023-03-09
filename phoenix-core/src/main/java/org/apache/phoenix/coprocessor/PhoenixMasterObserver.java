@@ -15,9 +15,9 @@ import org.apache.hadoop.hbase.coprocessor.MasterCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.MasterObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 
 public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor {
@@ -29,38 +29,51 @@ public class PhoenixMasterObserver implements MasterObserver, MasterCoprocessor 
 
     @Override
     public void preMergeRegions(final ObserverContext<MasterCoprocessorEnvironment> ctx, RegionInfo[] regionsToMerge) throws IOException {
+        // proceed if it is a phoenix table
         try {
-            if (blockMergeForSaltedTables(ctx, regionsToMerge)) {
+            if (shouldBlockMerge(ctx, regionsToMerge)) {
                 //different salt so block merge
                 throw new IOException("Don't merge regions with different salt bits");
             }
         } catch (SQLException e) {
+            // should we block here??
+            // this exception can be because of something wrong on cluster
+            // but to be on safe side we block merge here assuming blocking of merge would have no impact
+            // but merging wrong regions can have data consistency issue
             throw new IOException("SQLException while fetching data from phoenix", e);
         }
     }
 
-    private boolean blockMergeForSaltedTables(ObserverContext<MasterCoprocessorEnvironment> ctx,
-            RegionInfo[] regionsToMerge) throws SQLException {
-        TableName table = regionsToMerge[0].getTable();
-        int saltBuckets = getTableSalt(ctx, table.toString());
-        System.out.println("Number of buckets="+saltBuckets);
-        if(saltBuckets > 0 ) {
-            System.out.println("Number of buckets="+saltBuckets);
-            return !regionsHaveSameSalt(regionsToMerge);
+    private boolean shouldBlockMerge(ObserverContext<MasterCoprocessorEnvironment> ctx,
+                                     RegionInfo[] regionsToMerge) throws SQLException {
+        TableName tableName = regionsToMerge[0].getTable();
+        PTable phoenixTable = getPhoenixTable(ctx, tableName);
+        if(phoenixTable == null) {
+            // it is not a phoenix table
+            return false;
         }
-        // table is not salted so don't block merge
-        return false;
+        int saltBuckets = phoenixTable.getBucketNum();
+        System.out.println("Number of buckets="+saltBuckets);
+        if(saltBuckets <= 0 ) {
+            // table is not salted so don't block merge
+            return false;
+        }
+        // if regions have same salt they can be merged
+        return !regionsHaveSameSalt(regionsToMerge);
     }
 
-    private int getTableSalt(ObserverContext<MasterCoprocessorEnvironment> ctx, String table) throws SQLException {
-        int saltBucket = 0;
+    private PTable getPhoenixTable(ObserverContext<MasterCoprocessorEnvironment> ctx, TableName tableName) throws SQLException {
         Configuration conf = ctx.getEnvironment().getConfiguration();
-        try (Connection conn = QueryUtil.getConnectionOnServer(conf)) {
-            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
-            PTable pTable = pConn.getTable(new PTableKey(pConn.getTenantId(), table));
-            saltBucket = pTable.getBucketNum();
-        } 
-        return saltBucket;
+        PTable pTable;
+        try (Connection hbaseConn= QueryUtil.getConnectionOnServer(conf)) {
+            try {
+                pTable = PhoenixRuntime.getTable(hbaseConn, tableName.toString());
+            } catch (TableNotFoundException e) {
+                // assuming this is not a phoenix table
+                return null;
+            }
+        }
+        return pTable;
     }
 
     private boolean regionsHaveSameSalt(RegionInfo[] regionsToMerge) {
