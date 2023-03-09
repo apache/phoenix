@@ -18,7 +18,7 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
-
+import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -230,14 +230,16 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             String indexTableName = generateUniqueName();
             conn.createStatement().execute("CREATE INDEX " + indexTableName + " on " +
                     dataTableName + " (val1) include (val2)");
+            int limit = 10;
             // Verify that without hint, the index table is not selected
             assertIndexTableNotSelected(conn, dataTableName, indexTableName,
-                    "SELECT val3 from " + dataTableName + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')");
+                    "SELECT val3 from " + dataTableName + " WHERE val1 = 'bc' AND " +
+                            "(val2 = 'bcd' OR val3 ='bcde') LIMIT " + limit);
 
             //Verify that with index hint, we will read from the index table even though val3 is not included by the index table
             String selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ val3 from "
-                    + dataTableName + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')";
-            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+                    + dataTableName + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde') LIMIT " + limit;
+            assertExplainPlanWithLimit(conn, selectSql, dataTableName, indexTableName, limit);
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
             assertEquals("bcde", rs.getString(1));

@@ -68,7 +68,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     protected final byte[][] viewConstants;
     protected final RegionCoprocessorEnvironment env;
     protected byte[][] regionEndKeys;
-    protected final int pageSizeInRows;
+    protected long pageSizeInRows;
     protected final Scan scan;
     protected final Scan dataTableScan;
     protected final RegionScanner innerScanner;
@@ -94,7 +94,8 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                                              final IndexMaintainer indexMaintainer,
                                              final byte[][] viewConstants,
                                              final ImmutableBytesWritable ptr,
-                                             final long pageSizeMs) {
+                                             final long pageSizeMs,
+                                             final long queryLimit) {
         super(innerScanner);
         final Configuration config = env.getConfiguration();
 
@@ -107,7 +108,9 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                     config.getLong(INDEX_PAGE_SIZE_IN_ROWS,
                             QueryServicesOptions.DEFAULT_INDEX_PAGE_SIZE_IN_ROWS);
         }
-
+        if (queryLimit != -1) {
+            pageSizeInRows = Long.min(pageSizeInRows, queryLimit);
+        }
         this.indexMaintainer = indexMaintainer;
         this.viewConstants = viewConstants;
         this.scan = scan;
