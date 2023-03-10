@@ -43,7 +43,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The store scanner that implements Phoenix TTL and Max Lookback
+ * The store scanner that implements Phoenix TTL and Max Lookback. Phoenix overrides the
+ * implementation data retention policies in HBase which is built at the cell and implements
+ * its row level data retention within this store scanner.
  */
 public class StoreCompactionScanner implements InternalScanner {
     private static final Logger LOGGER = LoggerFactory.getLogger(StoreCompactionScanner.class);
@@ -87,12 +89,19 @@ public class StoreCompactionScanner implements InternalScanner {
                 equals(store.getColumnFamilyName());
     }
 
+    /**
+     * Any coprocessors within a JVM can extend the max lookback window for a column family
+     * by calling this static method.
+     * @param columnFamilyName
+     * @param maxLookback
+     */
     public static void overrideMaxLookback(String columnFamilyName, long maxLookback) {
         Long old = maxLookbackMap.putIfAbsent(columnFamilyName, maxLookback);
         if (old == null || old < maxLookback) {
             maxLookbackMap.put(columnFamilyName, maxLookback);
         }
     }
+
     @Override
     public boolean next(List<Cell> result) throws IOException {
         boolean hasMore = storeScanner.next(result);
@@ -110,6 +119,17 @@ public class StoreCompactionScanner implements InternalScanner {
     public void close() throws IOException {
         storeScanner.close();
     }
+
+    /**
+     * The cells of row (i.e., result) read from HBase store are lexographically ordered for user
+     * tables using the key part of the cells which includes row, family, qualifier,
+     * timestamp and type. The cells belong of a column are ordered from the latest to the oldest.
+     * The method leverages this ordering and groups the cells into their columns.
+     * columns.
+     * @param result
+     * @param columns
+     * @param deleteMarkers
+     */
     private void formColumns(List<Cell> result, List<List<Cell>> columns,
             List<Cell> deleteMarkers) {
         Cell currentColumnCell = null;
@@ -142,18 +162,23 @@ public class StoreCompactionScanner implements InternalScanner {
     }
 
     /**
-     * A row version that does not share a cell with any other row version is called a
-     * compaction row version.
-     * The latest live or deleted row version at the compaction time (compactionTime) is the first
-     * compaction row version. The next row version which does not share a cell with the
-     * first compaction row version is the next compaction row version.
+     * A compaction row version includes the latest put cell versions from each column such that
+     * the cell versions do not cross delete family markers. In other words, the compaction row
+     * versions are built from cell versions that are all either before or after the next delete
+     * family or delete family version maker if family delete markers exist. Also, when the cell
+     * timestamps are ordered for a given row version, the difference between two subsequent
+     * timestamps has to be less than the ttl value.
      *
-     * The first compaction row version is a valid row version (i.e., a row version at a given
-     * time). The subsequent compactions row versions may not represent a valid row version if
-     * the rows are updated partially.
+     * Compaction row versions are disjoint sets. A compaction row version does not share a cell
+     * version with the next compaction row version. A compaction row version includes at most
+     * one cell version from a column.
      *
-     * Compaction row versions are used for compaction purposes to determine which row versions to
-     * retain.
+     * After creating the first compaction row version, we form the next compaction row version
+     * from the remaining cell versions.
+     *
+     * Compaction row versions are used for compaction purposes to determine which row versions
+     * to retain. With the compaction row version concept, we can apply HBase data retention
+     * parameters to the compaction process at the Phoenix level.
      */
     class CompactionRowVersion {
         // Cells included in the row version
@@ -165,6 +190,10 @@ public class StoreCompactionScanner implements InternalScanner {
         int version = 0;
     }
 
+    /**
+     * The context for a given row during compaction. A row may have multiple compaction row
+     * versions. StoreCompactionScanner uses the same row context for these versions.
+     */
     class RowContext {
         Cell familyDeleteMarker = null;
         Cell familyVersionDeleteMarker = null;
@@ -180,6 +209,13 @@ public class StoreCompactionScanner implements InternalScanner {
         }
     }
 
+    /**
+     * This method finds out the maximum and minimum timestamp of the cells of the next row
+     * version.
+     *
+     * @param columns
+     * @param rowContext
+     */
     private void getNextRowVersionTimestamp(List<List<Cell>> columns, RowContext rowContext) {
         rowContext.maxTimestamp = 0;
         rowContext.minTimestamp = Long.MAX_VALUE;
@@ -355,6 +391,8 @@ public class StoreCompactionScanner implements InternalScanner {
                     Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
                             dm.getQualifierArray(), dm.getQualifierOffset(), dm.getQualifierLength()) == 0) {
                 if (dm.getType() == Cell.Type.Delete) {
+                    // Delete is for deleting for a specific cell version. Thus, it can be used
+                    // to delete only one cell.
                     rowContext.columnDeleteMarkers.remove(i);
                 }
                 if (rowContext.maxTimestamp >= maxLookbackWindowStart) {
@@ -479,6 +517,7 @@ public class StoreCompactionScanner implements InternalScanner {
         if (!formCompactionRowVersions(columns, result, regionLevel)) {
             filterRegionLevel(result, rowKey);
         }
+        // Filter delete markers
         for (Cell cell : deleteMarkers) {
             if (cell.getTimestamp() >= maxLookbackWindowStart) {
                 result.add(cell);
