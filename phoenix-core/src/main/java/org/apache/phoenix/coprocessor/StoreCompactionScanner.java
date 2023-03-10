@@ -49,6 +49,7 @@ import org.slf4j.LoggerFactory;
  */
 public class StoreCompactionScanner implements InternalScanner {
     private static final Logger LOGGER = LoggerFactory.getLogger(StoreCompactionScanner.class);
+    public static final String SEPARATOR = ":";
     private final InternalScanner storeScanner;
     private final Region region;
     private final Store store;
@@ -75,7 +76,9 @@ public class StoreCompactionScanner implements InternalScanner {
         this.config = env.getConfiguration();
         compactionTime = EnvironmentEdgeManager.currentTimeMillis();
         String columnFamilyName = region.getStores().get(0).getColumnFamilyName();
-        Long overriddenMaxLookback = maxLookbackMap.remove(columnFamilyName);
+        String tableName = region.getRegionInfo().getTable().getNameAsString();
+        Long overriddenMaxLookback =
+                maxLookbackMap.remove(tableName + SEPARATOR + columnFamilyName);
         this.maxLookbackWindowStart = compactionTime - (overriddenMaxLookback == null ?
                 maxLookback : Math.max(maxLookback, overriddenMaxLookback));
         ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
@@ -92,11 +95,13 @@ public class StoreCompactionScanner implements InternalScanner {
     /**
      * Any coprocessors within a JVM can extend the max lookback window for a column family
      * by calling this static method.
-     * @param columnFamilyName
-     * @param maxLookback
      */
-    public static void overrideMaxLookback(String columnFamilyName, long maxLookback) {
-        Long old = maxLookbackMap.putIfAbsent(columnFamilyName, maxLookback);
+    public static void overrideMaxLookback(String tableName, String columnFamilyName,
+            long maxLookback) {
+        if (tableName == null || columnFamilyName == null) {
+            return;
+        }
+        Long old = maxLookbackMap.putIfAbsent(tableName + SEPARATOR + columnFamilyName, maxLookback);
         if (old == null || old < maxLookback) {
             maxLookbackMap.put(columnFamilyName, maxLookback);
         }
