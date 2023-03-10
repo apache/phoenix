@@ -333,7 +333,7 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
 
         @Override
         public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
-            return new PhoenixTTLRegionScanner(env, scan, ((BaseRegionScanner)delegate).getNewRegionScanner(scan));
+            return new PhoenixTTLRegionScanner(env, scan, ((DelegateRegionScanner)delegate).getNewRegionScanner(scan));
         }
     }
 }

@@ -29,25 +29,18 @@ import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableSet;
-import java.util.TreeMap;
+import java.util.*;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.RegionInfo;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.*;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
+import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -58,6 +51,7 @@ import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -73,6 +67,7 @@ import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -1049,11 +1044,6 @@ public class ScanUtil {
                         cell.getQualifierLength(), emptyCQ, 0, emptyCQ.length) == 0;
     }
 
-    public static boolean isEmptyColumn(Cell cell, byte[] emptyCQ) {
-        return Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
-                cell.getQualifierLength(), emptyCQ, 0, emptyCQ.length) == 0;
-    }
-
     public static long getMaxTimestamp(List<Cell> cellList) {
         long maxTs = 0;
         long ts = 0;
@@ -1074,15 +1064,18 @@ public class ScanUtil {
         return ts + ttl < nowTS;
     }
 
-    private static boolean containsOneOrMoreColumn(Scan scan) {
+    private static boolean containsOneOrMoreColumn(Scan scan, byte[] emptyCF) {
         Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
         if (familyMap == null || familyMap.isEmpty()) {
             return false;
         }
         for (Map.Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
-            NavigableSet<byte[]> family = entry.getValue();
-            if (family != null && !family.isEmpty()) {
-                return true;
+            byte[] cf = entry.getKey();
+            if (java.util.Arrays.equals(cf, emptyCF)) {
+                NavigableSet<byte[]> family = entry.getValue();
+                if (family != null && !family.isEmpty()) {
+                    return true;
+                }
             }
         }
         return false;
@@ -1091,14 +1084,14 @@ public class ScanUtil {
     private static boolean addEmptyColumnToFilter(Scan scan, byte[] emptyCF, byte[] emptyCQ, Filter filter,  boolean addedEmptyColumn) {
         if (filter instanceof EncodedQualifiersColumnProjectionFilter) {
             ((EncodedQualifiersColumnProjectionFilter) filter).addTrackedColumn(ENCODED_EMPTY_COLUMN_NAME);
-            if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
+            if (!addedEmptyColumn && containsOneOrMoreColumn(scan, emptyCF)) {
                 scan.addColumn(emptyCF, emptyCQ);
                 return true;
             }
         }
         else if (filter instanceof ColumnProjectionFilter) {
             ((ColumnProjectionFilter) filter).addTrackedColumn(new ImmutableBytesPtr(emptyCF), new ImmutableBytesPtr(emptyCQ));
-            if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
+            if (!addedEmptyColumn && containsOneOrMoreColumn(scan, emptyCF)) {
                 scan.addColumn(emptyCF, emptyCQ);
                 return true;
             }
@@ -1106,15 +1099,12 @@ public class ScanUtil {
         else if (filter instanceof MultiEncodedCQKeyValueComparisonFilter) {
             ((MultiEncodedCQKeyValueComparisonFilter) filter).setMinQualifier(ENCODED_EMPTY_COLUMN_NAME);
         }
-        else if (!addedEmptyColumn && filter instanceof FirstKeyOnlyFilter) {
-            scan.addColumn(emptyCF, emptyCQ);
-            return true;
-        }
         return addedEmptyColumn;
     }
 
     private static boolean addEmptyColumnToFilterList(Scan scan, byte[] emptyCF, byte[] emptyCQ, FilterList filterList, boolean addedEmptyColumn) {
         Iterator<Filter> filterIterator = filterList.getFilters().iterator();
+        int i = 0;
         while (filterIterator.hasNext()) {
             Filter filter = filterIterator.next();
             if (filter instanceof FilterList) {
@@ -1122,10 +1112,14 @@ public class ScanUtil {
                     addedEmptyColumn =  true;
                 }
             } else {
-                if (addEmptyColumnToFilter(scan, emptyCF, emptyCQ, filter, addedEmptyColumn)) {
+                if (filter instanceof FirstKeyOnlyFilter) {
+                    filterIterator.remove();
+                }
+                else if (addEmptyColumnToFilter(scan, emptyCF, emptyCQ, filter, addedEmptyColumn)) {
                     addedEmptyColumn =  true;
                 }
             }
+            i++;
         }
         return addedEmptyColumn;
     }
@@ -1138,13 +1132,17 @@ public class ScanUtil {
                 if (addEmptyColumnToFilterList(scan, emptyCF, emptyCQ, (FilterList) filter, addedEmptyColumn)) {
                     addedEmptyColumn = true;
                 }
-            } else {
-                if (addEmptyColumnToFilter(scan, emptyCF, emptyCQ, filter, addedEmptyColumn)) {
+            }
+            else {
+                if (filter instanceof FirstKeyOnlyFilter) {
+                    scan.setFilter(null);
+                }
+                else if (addEmptyColumnToFilter(scan, emptyCF, emptyCQ, filter, addedEmptyColumn)) {
                     addedEmptyColumn = true;
                 }
             }
         }
-        if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
+        if (!addedEmptyColumn && containsOneOrMoreColumn(scan, emptyCF)) {
             scan.addColumn(emptyCF, emptyCQ);
         }
     }
@@ -1346,10 +1344,13 @@ public class ScanUtil {
         if (emptyCF != null && emptyCQ != null) {
             addEmptyColumnToScan(scan, emptyCF, emptyCQ);
         } else {
+            emptyCF = SchemaUtil.getEmptyColumnFamily(table);
             emptyCQ = table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
                     QueryConstants.EMPTY_COLUMN_BYTES :
                     table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
             scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
+            addEmptyColumnToScan(scan, emptyCF, emptyCQ);
         }
         Long pageSizeMs = getPageSizeInMs(phoenixConnection.getQueryServices().getProps());
         if (pageSizeMs != null) {
@@ -1467,5 +1468,52 @@ public class ScanUtil {
                     Bytes.toBytes(table.getExternalSchemaId()));
             }
         }
+    }
+    public static PageFilter removePageFilterFromFilterList(FilterList filterList) {
+        Iterator<Filter> filterIterator = filterList.getFilters().iterator();
+        while (filterIterator.hasNext()) {
+            Filter filter = filterIterator.next();
+            if (filter instanceof PageFilter) {
+                filterIterator.remove();
+                return (PageFilter) filter;
+            } else if (filter instanceof FilterList) {
+                PageFilter pageFilter = removePageFilterFromFilterList((FilterList) filter);
+                if (pageFilter != null) {
+                    return pageFilter;
+                }
+            }
+        }
+        return null;
+    }
+
+    // This method assumes that there is at most one instance of PageFilter in a scan
+    public static PageFilter removePageFilter(Scan scan) {
+        Filter filter = scan.getFilter();
+        if (filter != null) {
+            if (filter instanceof PagingFilter) {
+                filter = ((PagingFilter) filter).getDelegateFilter();
+                if (filter == null) {
+                    return null;
+                }
+            }
+            if (filter instanceof PageFilter) {
+                scan.setFilter(null);
+                return (PageFilter) filter;
+            } else if (filter instanceof FilterList) {
+                return removePageFilterFromFilterList((FilterList) filter);
+            }
+        }
+        return null;
+    }
+    public static boolean hasCoprocessor(RegionCoprocessorEnvironment env,
+            String CoprocessorClassName) {
+        Collection<CoprocessorDescriptor> coprocessors =
+                env.getRegion().getTableDescriptor().getCoprocessorDescriptors();
+        for (CoprocessorDescriptor coprocessor:  coprocessors) {
+            if (coprocessor.getClassName().equals(CoprocessorClassName)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

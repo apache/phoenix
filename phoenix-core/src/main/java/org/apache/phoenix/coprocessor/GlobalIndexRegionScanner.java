@@ -39,7 +39,6 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.filter.PagingFilter;
-import org.apache.phoenix.filter.TTLFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.filter.AllVersionsIndexRebuildFilter;
@@ -1372,21 +1371,14 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         // For rebuilds we need all columns and all versions
 
         Filter filter = scan.getFilter();
-        TTLFilter ttlFilter = null;
         if (filter instanceof PagingFilter) {
-            PagingFilter pagingFilter = (PagingFilter) filter;
-            ttlFilter = (TTLFilter) pagingFilter.getDelegateFilter();
-        }
-        else if (filter instanceof TTLFilter) {
-            ttlFilter = (TTLFilter) filter;
-        }
-        if (ttlFilter != null) {
-            Filter delegateFilter = ttlFilter.getDelegateFilter();
+            PagingFilter pageFilter = (PagingFilter) filter;
+            Filter delegateFilter = pageFilter.getDelegateFilter();
             if (delegateFilter instanceof FirstKeyOnlyFilter) {
-                ttlFilter.setDelegateFilter(null);
+                pageFilter.setDelegateFilter(null);
             } else if (delegateFilter != null) {
                 // Override the filter so that we get all versions
-                ttlFilter.setDelegateFilter(new AllVersionsIndexRebuildFilter(delegateFilter));
+                pageFilter.setDelegateFilter(new AllVersionsIndexRebuildFilter(delegateFilter));
             }
         } else if (filter instanceof FirstKeyOnlyFilter) {
             scan.setFilter(null);
@@ -1417,7 +1409,9 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 incrScan.withStartRow(nextStartKey);
             }
             List<KeyRange> keys = new ArrayList<>();
-            try (RegionScanner scanner = new PagingRegionScanner(region, region.getScanner(incrScan), incrScan)) {
+
+            try (RegionScanner scanner = new TTLRegionScanner(env, incrScan,
+                    new PagingRegionScanner(region, region.getScanner(incrScan), incrScan))) {
                 List<Cell> row = new ArrayList<>();
                 int rowCount = 0;
                 // collect row keys that have been modified in the given time-range

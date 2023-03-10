@@ -40,7 +40,7 @@ import org.apache.phoenix.util.ScanUtil;
 
 /**
  * This is a top level Phoenix filter which is injected to a scan at the server side. If the scan has
- * already a filter then PagedFilter wraps it. This filter for server paging. It makes sure that
+ * already a filter then PagingFilter wraps it. This filter for server paging. It makes sure that
  * the scan does not take more than pageSizeInMs.
  */
 public class PagingFilter extends FilterBase implements Writable {

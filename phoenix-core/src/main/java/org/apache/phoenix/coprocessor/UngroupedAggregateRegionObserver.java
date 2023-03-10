@@ -45,7 +45,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
@@ -65,7 +64,6 @@ import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControlle
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.regionserver.ScanOptions;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
@@ -593,7 +591,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         final String
                                 fullTableName =
                                 c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
-                        if (!PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.equals(fullTableName)) {
+                        if (!PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.equals(fullTableName) &&
+                                !ScanUtil.hasCoprocessor(c.getEnvironment(),
+                                        GlobalIndexChecker.class.getName())) {
                             try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
                                     compactionConfig).unwrap(PhoenixConnection.class)) {
                                 PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
@@ -628,7 +628,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         }
                     }
                     if (!isDisabled) {
-                        internalScanner = new StoreCompactionScanner(c.getEnvironment(), store, scanner,
+                        internalScanner = new StoreCompactionScanner(c.getEnvironment(), store,
+                                scanner,
                                 getMaxLookbackInMillis(c.getEnvironment().getConfiguration()));
                     }
                     try {
@@ -636,11 +637,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         DelegateRegionCoprocessorEnvironment compactionConfEnv =
                                 new DelegateRegionCoprocessorEnvironment(c.getEnvironment(),
                                         ConnectionType.COMPACTION_CONNECTION);
-                        StatisticsCollector statisticsCollector = StatisticsCollectorFactory.createStatisticsCollector(
+                        StatisticsCollector statisticsCollector =
+                                StatisticsCollectorFactory.createStatisticsCollector(
                                 compactionConfEnv, table.getNameAsString(), clientTimeStamp,
                                 store.getColumnFamilyDescriptor().getName());
                         statisticsCollector.init();
-                        internalScanner = statisticsCollector.createCompactionScanner(compactionConfEnv, store, internalScanner);
+                        internalScanner =
+                                statisticsCollector.createCompactionScanner(compactionConfEnv,
+                                        store, internalScanner);
                     } catch (Exception e) {
                         // If we can't reach the stats table, don't interrupt the normal
                         // compaction operation, just log a warning.
@@ -698,11 +702,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             for (byte[] family : scan.getFamilyMap().keySet()) {
                 rawScan.addFamily(family);
             }
-            scanner = ((BaseRegionScanner)innerScanner).getNewRegionScanner(rawScan);
+            scanner = ((DelegateRegionScanner)innerScanner).getNewRegionScanner(rawScan);
             innerScanner.close();
         } else {
             if (adjustScanFilter(scan)) {
-                scanner = ((BaseRegionScanner) innerScanner).getNewRegionScanner(scan);
+                scanner = ((DelegateRegionScanner) innerScanner).getNewRegionScanner(scan);
                 innerScanner.close();
             } else {
                 scanner = innerScanner;

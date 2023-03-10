@@ -60,8 +60,4 @@ public abstract class BaseRegionScanner extends DelegateRegionScanner {
     public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
         throw new IOException("NextRaw with scannerContext should not be called in Phoenix environment");
     }
-
-    public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
-        return ((BaseRegionScanner)delegate).getNewRegionScanner(scan);
-    }
 }

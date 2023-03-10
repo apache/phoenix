@@ -25,9 +25,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.filter.PagingFilter;
-
-import static org.apache.phoenix.util.ScanUtil.getDummyResult;
-import static org.apache.phoenix.util.ScanUtil.getPhoenixPagingFilter;
+import org.apache.phoenix.util.ScanUtil;
 
 /**
  *  PagingRegionScanner works with PagingFilter to make sure that the time between two rows
@@ -42,50 +40,50 @@ import static org.apache.phoenix.util.ScanUtil.getPhoenixPagingFilter;
  *  ResultScanner#next().
  */
 public class PagingRegionScanner extends BaseRegionScanner {
-    protected Region region;
-    protected Scan scan;
-    protected PagingFilter pageFilter;
+    private Region region;
+    private Scan scan;
+    private PagingFilter pagingFilter;
 	public PagingRegionScanner(Region region, RegionScanner scanner, Scan scan) {
 	    super(scanner);
 	    this.region = region;
 	    this.scan = scan;
-	    pageFilter = getPhoenixPagingFilter(scan);
-	    if (pageFilter != null) {
-	        pageFilter.init();
+        pagingFilter = ScanUtil.getPhoenixPagingFilter(scan);
+        if (pagingFilter != null) {
+            pagingFilter.init();
         }
 	}
 
     private boolean next(List<Cell> results, boolean raw) throws IOException {
 	    try {
             boolean hasMore = raw ? delegate.nextRaw(results) : delegate.next(results);
-            if (pageFilter == null) {
+            if (pagingFilter == null) {
                 return hasMore;
             }
             if (!hasMore) {
                 // There is no more row from the HBase region scanner. We need to check if PageFilter
                 // has stopped the region scanner
-                if (pageFilter.isStopped()) {
+                if (pagingFilter.isStopped()) {
                     // Close the current region scanner, start a new one and return a dummy result
                     delegate.close();
-                    byte[] rowKey = pageFilter.getRowKeyAtStop();
+                    byte[] rowKey = pagingFilter.getRowKeyAtStop();
                     scan.withStartRow(rowKey, true);
                     delegate = region.getScanner(scan);
                     if (results.isEmpty()) {
-                        getDummyResult(rowKey, results);
+                        ScanUtil.getDummyResult(rowKey, results);
                     }
-                    pageFilter.init();
+                    pagingFilter.init();
                     return true;
                 }
                 return false;
             } else {
                 // We got a row from the HBase scanner within the configured time (i.e., the page size). We need to
                 // start a new page on the next next() call.
-                pageFilter.resetStartTime();
+                pagingFilter.resetStartTime();
                 return true;
             }
         } catch (Exception e) {
-            if (pageFilter != null) {
-                pageFilter.init();
+            if (pagingFilter != null) {
+                pagingFilter.init();
             }
             throw e;
         }

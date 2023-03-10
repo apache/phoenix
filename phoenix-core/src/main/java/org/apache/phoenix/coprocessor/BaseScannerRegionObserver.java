@@ -26,7 +26,6 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.NotServingRegionException;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -37,12 +36,10 @@ import org.apache.hadoop.hbase.regionserver.*;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.filter.PagingFilter;
-import org.apache.phoenix.filter.TTLFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
@@ -255,24 +252,14 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             // last possible moment. You need to swap the start/stop and make the
             // start exclusive and the stop inclusive.
             ScanUtil.setupReverseScan(scan);
-            // Set the paging and TTL filters. Make sure that the paging filter is the top level
+            // Set the paging filter. Make sure that the paging filter is the top level
             // filter if paging is enabled, that is pageSizeMsBytes != null.
-            if (!(scan.getFilter() instanceof PagingFilter) &&
-                    !(scan.getFilter() instanceof TTLFilter)) {
+            if (!(scan.getFilter() instanceof PagingFilter)) {
                 byte[] pageSizeMsBytes =
                         scan.getAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS);
-                byte[] emptyCQ = scan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
-                long currentTime =
-                        org.apache.phoenix.util.EnvironmentEdgeManager.currentTimeMillis();
-                int ttl = c.getEnvironment().getRegion().getTableDescriptor().
-                        getColumnFamilies()[0].getTimeToLive();
-                long ttlWindowStart = ttl == HConstants.FOREVER ? 1 : currentTime - ttl * 1000;
                 if (pageSizeMsBytes != null) {
-                    scan.setFilter(new PagingFilter(new TTLFilter(scan.getFilter(), emptyCQ,
-                            ttlWindowStart), getPageSizeMsForFilter(scan)));
-                }
-                else if (!(scan.getFilter() instanceof TTLFilter)) {
-                    scan.setFilter(new TTLFilter(scan.getFilter(), emptyCQ, ttlWindowStart));
+                    scan.setFilter(new PagingFilter(scan.getFilter(),
+                            getPageSizeMsForFilter(scan)));
                 }
             }
         }
@@ -361,10 +348,14 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 overrideDelegate();
                 return super.nextRaw(result);
             }
+            @Override
+            public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
+                return new RegionScannerHolder(c, scan,
+                        ((DelegateRegionScanner) delegate).getNewRegionScanner(scan));
+            }
         }
-        
 
-        /**
+    /**
      * Wrapper for {@link #postScannerOpen(ObserverContext, Scan, RegionScanner)} that ensures no non IOException is thrown,
      * to prevent the coprocessor from becoming blacklisted.
      *
@@ -377,10 +368,26 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             if (!isRegionObserverFor(scan)) {
                 return s;
             }
-            // Make sure PageRegionScanner wraps only the lowest region scanner, i.e., HBase region scanner. We assume
-            // here every Phoenix region scanner extends BaseRegionScanner
-            return new RegionScannerHolder(c, scan, s instanceof BaseRegionScanner ? s :
-                    new PagingRegionScanner(c.getEnvironment().getRegion(), s, scan));
+            // Make sure PageRegionScanner wraps only the lowest region scanner, i.e., HBase region
+            // scanner. We assume here every Phoenix region scanner extends DelegateRegionScanner.
+            if (s instanceof DelegateRegionScanner) {
+                return new RegionScannerHolder(c, scan, s);
+            } else {
+                // An old client may not set these attributes which are required by TTLRegionScanner
+                byte[] emptyCF = scan.getAttribute(
+                        BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME);
+                byte[] emptyCQ = scan.getAttribute(
+                        BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME);
+                if (emptyCF != null && emptyCQ != null) {
+                    return new RegionScannerHolder(c, scan,
+                            new TTLRegionScanner(c.getEnvironment(), scan,
+                                    new PagingRegionScanner(c.getEnvironment().getRegion(), s,
+                                            scan)));
+                }
+                return new RegionScannerHolder(c, scan,
+                        new PagingRegionScanner(c.getEnvironment().getRegion(), s, scan));
+
+            }
         } catch (Throwable t) {
             // If the exception is NotServingRegionException then throw it as
             // StaleRegionBoundaryCacheException to handle it by phoenix client other wise hbase
