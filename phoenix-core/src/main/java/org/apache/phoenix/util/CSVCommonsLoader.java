@@ -75,7 +75,7 @@ public class CSVCommonsLoader {
     public enum PhoenixHeaderSource {
         FROM_TABLE,
         IN_LINE,
-        SUPPLIED_BY_USER;
+        SUPPLIED_BY_USER
     }
 
     public CSVCommonsLoader(PhoenixConnection conn, String tableName,
