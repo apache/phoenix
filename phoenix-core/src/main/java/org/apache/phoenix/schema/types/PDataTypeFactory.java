@@ -101,7 +101,7 @@ public class PDataTypeFactory {
     for (PDataType t : types) {
       classToInstance.put(t.getClass(), t);
     }
-    orderedTypes = types.toArray(new PDataType[types.size()]);
+    orderedTypes = types.toArray(new PDataType[0]);
   }
 
   public Set<PDataType> getTypes() {

@@ -45,7 +45,7 @@ public class ClientAggregators extends Aggregators {
     }
     
     public ClientAggregators(List<SingleAggregateFunction> functions, int minNullableIndex) {
-        super(functions.toArray(new SingleAggregateFunction[functions.size()]), getAggregators(functions), minNullableIndex);
+        super(functions.toArray(new SingleAggregateFunction[0]), getAggregators(functions), minNullableIndex);
         this.tempValueSet = ValueBitSet.newInstance(schema);
     }
     

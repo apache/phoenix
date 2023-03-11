@@ -188,7 +188,7 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
             }
             if (!localUpdates.isEmpty()) {
                 miniBatchOp.addOperationsFromCP(0,
-                    localUpdates.toArray(new Mutation[localUpdates.size()]));
+                    localUpdates.toArray(new Mutation[0]));
             }
             if (!indexUpdates.isEmpty()) {
                 context.indexUpdates = indexUpdates;

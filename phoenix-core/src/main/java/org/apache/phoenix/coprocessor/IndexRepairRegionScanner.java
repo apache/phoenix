@@ -130,7 +130,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
 
     protected void commitBatch(List<Mutation> indexUpdates) throws IOException, InterruptedException {
         ungroupedAggregateRegionObserver.checkForRegionClosingOrSplitting();
-        region.batchMutate(indexUpdates.toArray(new Mutation[indexUpdates.size()]));
+        region.batchMutate(indexUpdates.toArray(new Mutation[0]));
     }
 
     protected void repairIndexRows(Map<byte[], List<Mutation>> indexMutationMap,

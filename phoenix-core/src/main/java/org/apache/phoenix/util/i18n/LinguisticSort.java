@@ -894,7 +894,7 @@ public enum LinguisticSort {
         if (alphabet.size() > 6) {
             // Strip off first and last (which are ...)
             List<String> alphabetWithoutEllipses = alphabet.subList(1, alphabet.size() - 1);
-            return alphabetWithoutEllipses.toArray(new String[alphabetWithoutEllipses.size()]);
+            return alphabetWithoutEllipses.toArray(new String[0]);
         } else {
             return new String[0];
         }

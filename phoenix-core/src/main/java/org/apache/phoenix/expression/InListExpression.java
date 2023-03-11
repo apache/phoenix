@@ -184,7 +184,7 @@ public class InListExpression extends BaseSingleExpression {
         }
         this.fixedWidth = isFixedLength ? fixedWidth : -1;
         // Sort values by byte value so we can get min/max easily
-        ImmutableBytesPtr[] valuesArray = values.toArray(new ImmutableBytesPtr[values.size()]);
+        ImmutableBytesPtr[] valuesArray = values.toArray(new ImmutableBytesPtr[0]);
         Arrays.sort(valuesArray, ByteUtil.BYTES_PTR_COMPARATOR);
         if (values.isEmpty()) {
             this.minValue = ByteUtil.EMPTY_BYTE_ARRAY_PTR;
