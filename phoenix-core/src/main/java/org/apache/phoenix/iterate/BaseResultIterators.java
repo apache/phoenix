@@ -454,8 +454,17 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 preventSeekToColumn = referencedCfCount == 1 && hbaseServerVersion < MIN_SEEK_TO_COLUMN_VERSION;
             }
         }
-        // Making sure that where condition CFs are getting scanned at HRS.
-        for (Pair<byte[], byte[]> whereCol : context.getWhereConditionColumns()) {
+        // Making sure that where condition CFs and the empty column are getting scanned at HRS.
+        // Empty column is required for determining the row timestamp. It is used by Phoenix TTL
+
+        List<Pair<byte[], byte[]>> whereConditionColumns =
+                new ArrayList<>(context.getWhereConditionColumns());
+        whereConditionColumns.add(new Pair(SchemaUtil.getEmptyColumnFamily(table),
+                table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
+                        QueryConstants.EMPTY_COLUMN_BYTES :
+                        table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME)));
+
+        for (Pair<byte[], byte[]> whereCol : whereConditionColumns) {
             byte[] family = whereCol.getFirst();
             if (preventSeekToColumn) {
                 if (!(familyMap.containsKey(family))) {

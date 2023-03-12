@@ -170,7 +170,6 @@ public class MaxLookbackIT extends BaseTest {
             // 6 upserts for row b but max version is 2 so there should be two versions of row b
             if (multiCF) {
                 // 4 cells for each version plus 6 delete markers (3CFs) = 14
-
                 assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), 14);
             } else {
                 // 4 cells for each version plus 2 delete markers = 10

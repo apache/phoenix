@@ -1065,7 +1065,7 @@ public class ScanUtil {
         return ts + ttl < nowTS;
     }
 
-    private static boolean containsOneOrMoreColumn(Scan scan, byte[] emptyCF) {
+    private static boolean shouldAddEmptyColumn(Scan scan, byte[] emptyCF) {
         Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
         if (familyMap == null || familyMap.isEmpty()) {
             return false;
@@ -1077,73 +1077,38 @@ public class ScanUtil {
                 if (family != null && !family.isEmpty()) {
                     return true;
                 }
+                return false;
             }
         }
-        return false;
+        // The colum family is not found
+        return true;
     }
 
-    private static boolean addEmptyColumnToFilter(Scan scan, byte[] emptyCF, byte[] emptyCQ, Filter filter,  boolean addedEmptyColumn) {
-        if (filter instanceof EncodedQualifiersColumnProjectionFilter) {
-            ((EncodedQualifiersColumnProjectionFilter) filter).addTrackedColumn(ENCODED_EMPTY_COLUMN_NAME);
-            if (!addedEmptyColumn && containsOneOrMoreColumn(scan, emptyCF)) {
-                scan.addColumn(emptyCF, emptyCQ);
-                return true;
-            }
-        }
-        else if (filter instanceof ColumnProjectionFilter) {
-            ((ColumnProjectionFilter) filter).addTrackedColumn(new ImmutableBytesPtr(emptyCF), new ImmutableBytesPtr(emptyCQ));
-            if (!addedEmptyColumn && containsOneOrMoreColumn(scan, emptyCF)) {
-                scan.addColumn(emptyCF, emptyCQ);
-                return true;
-            }
-        }
-        else if (filter instanceof MultiEncodedCQKeyValueComparisonFilter) {
-            ((MultiEncodedCQKeyValueComparisonFilter) filter).setMinQualifier(ENCODED_EMPTY_COLUMN_NAME);
-        }
-        return addedEmptyColumn;
-    }
-
-    private static boolean addEmptyColumnToFilterList(Scan scan, byte[] emptyCF, byte[] emptyCQ, FilterList filterList, boolean addedEmptyColumn) {
+    private static void addEmptyColumnToFilterList(FilterList filterList) {
         Iterator<Filter> filterIterator = filterList.getFilters().iterator();
-        int i = 0;
         while (filterIterator.hasNext()) {
             Filter filter = filterIterator.next();
             if (filter instanceof FilterList) {
-                if (addEmptyColumnToFilterList(scan, emptyCF, emptyCQ, (FilterList) filter, addedEmptyColumn)) {
-                    addedEmptyColumn =  true;
-                }
-            } else {
-                if (filter instanceof FirstKeyOnlyFilter) {
-                    filterIterator.remove();
-                }
-                else if (addEmptyColumnToFilter(scan, emptyCF, emptyCQ, filter, addedEmptyColumn)) {
-                    addedEmptyColumn =  true;
-                }
+                addEmptyColumnToFilterList((FilterList) filter);
             }
-            i++;
+            else if (filter instanceof FirstKeyOnlyFilter) {
+                filterIterator.remove();
+            }
         }
-        return addedEmptyColumn;
     }
 
     public static void addEmptyColumnToScan(Scan scan, byte[] emptyCF, byte[] emptyCQ) {
-        boolean addedEmptyColumn = false;
         Filter filter = scan.getFilter();
+        boolean add = false;
         if (filter != null) {
             if (filter instanceof FilterList) {
-                if (addEmptyColumnToFilterList(scan, emptyCF, emptyCQ, (FilterList) filter, addedEmptyColumn)) {
-                    addedEmptyColumn = true;
-                }
+                addEmptyColumnToFilterList((FilterList) filter);
             }
-            else {
-                if (filter instanceof FirstKeyOnlyFilter) {
-                    scan.setFilter(null);
-                }
-                else if (addEmptyColumnToFilter(scan, emptyCF, emptyCQ, filter, addedEmptyColumn)) {
-                    addedEmptyColumn = true;
-                }
+            else if (filter instanceof FirstKeyOnlyFilter) {
+                scan.setFilter(null);
             }
         }
-        if (!addedEmptyColumn && containsOneOrMoreColumn(scan, emptyCF)) {
+        if (shouldAddEmptyColumn(scan, emptyCF)) {
             scan.addColumn(emptyCF, emptyCQ);
         }
     }
@@ -1230,7 +1195,9 @@ public class ScanUtil {
                 scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
             }
             if (IndexUtil.isCoveredGlobalIndex(indexTable)) {
-                scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
+                if (!isIndexRebuild(scan)) {
+                    scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
+                }
             } else {
                 scan.setAttribute(BaseScannerRegionObserver.UNCOVERED_GLOBAL_INDEX, TRUE_BYTES);
             }
@@ -1243,7 +1210,6 @@ public class ScanUtil {
             if (scan.getAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS) == null) {
                 BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
             }
-            addEmptyColumnToScan(scan, emptyCF, emptyCQ);
         }
     }
 

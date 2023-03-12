@@ -42,6 +42,8 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
+
 /**
  * The store scanner that implements Phoenix TTL and Max Lookback. Phoenix overrides the
  * implementation data retention policies in HBase which is built at the cell and implements
@@ -57,7 +59,7 @@ public class StoreCompactionScanner implements InternalScanner {
     private final RegionCoprocessorEnvironment env;
     private long maxLookbackWindowStart;
     private long ttlWindowStart;
-    private int ttl;
+    private long ttl;
     private int minVersion;
     private int maxVersion;
     private final boolean firstStore;
@@ -68,28 +70,29 @@ public class StoreCompactionScanner implements InternalScanner {
     public StoreCompactionScanner(RegionCoprocessorEnvironment env,
                                 Store store,
                                 InternalScanner storeScanner,
-                                long maxLookback) {
+                                long maxLookbackInMillis) {
         this.storeScanner = storeScanner;
         this.region = env.getRegion();
         this.store = store;
         this.env = env;
         this.config = env.getConfiguration();
         compactionTime = EnvironmentEdgeManager.currentTimeMillis();
-        String columnFamilyName = region.getStores().get(0).getColumnFamilyName();
+        String columnFamilyName = store.getColumnFamilyName();
         String tableName = region.getRegionInfo().getTable().getNameAsString();
         Long overriddenMaxLookback =
                 maxLookbackMap.remove(tableName + SEPARATOR + columnFamilyName);
         this.maxLookbackWindowStart = compactionTime - (overriddenMaxLookback == null ?
-                maxLookback : Math.max(maxLookback, overriddenMaxLookback));
+                maxLookbackInMillis : Math.max(maxLookbackInMillis, overriddenMaxLookback));
         ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
         ttl = cfd.getTimeToLive();
         this.ttlWindowStart = ttl == HConstants.FOREVER ? 1 : compactionTime - ttl * 1000;
+        ttl *= 1000;
         this.maxLookbackWindowStart = Math.max(ttlWindowStart, maxLookbackWindowStart);
         this.minVersion = cfd.getMinVersions();
         this.maxVersion = cfd.getMaxVersions();
         this.keepDeletedCells = cfd.getKeepDeletedCells();
-        firstStore = region.getStores().get(0).getColumnFamilyName().
-                equals(store.getColumnFamilyName());
+        firstStore = columnFamilyName.equals(region.getStores().get(0).getColumnFamilyName()) ||
+                columnFamilyName.startsWith(LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
     }
 
     /**
@@ -97,13 +100,14 @@ public class StoreCompactionScanner implements InternalScanner {
      * by calling this static method.
      */
     public static void overrideMaxLookback(String tableName, String columnFamilyName,
-            long maxLookback) {
+            long maxLookbackInMillis) {
         if (tableName == null || columnFamilyName == null) {
             return;
         }
-        Long old = maxLookbackMap.putIfAbsent(tableName + SEPARATOR + columnFamilyName, maxLookback);
-        if (old == null || old < maxLookback) {
-            maxLookbackMap.put(columnFamilyName, maxLookback);
+        Long old = maxLookbackMap.putIfAbsent(tableName + SEPARATOR + columnFamilyName,
+                maxLookbackInMillis);
+        if (old == null || old < maxLookbackInMillis) {
+            maxLookbackMap.put(columnFamilyName, maxLookbackInMillis);
         }
     }
 
@@ -131,9 +135,6 @@ public class StoreCompactionScanner implements InternalScanner {
      * timestamp and type. The cells belong of a column are ordered from the latest to the oldest.
      * The method leverages this ordering and groups the cells into their columns.
      * columns.
-     * @param result
-     * @param columns
-     * @param deleteMarkers
      */
     private void formColumns(List<Cell> result, List<List<Cell>> columns,
             List<Cell> deleteMarkers) {
@@ -225,7 +226,8 @@ public class StoreCompactionScanner implements InternalScanner {
         rowContext.maxTimestamp = 0;
         rowContext.minTimestamp = Long.MAX_VALUE;
         long ts;
-        int  count = 0;
+        long deleteFamilyTimestamp = 0;
+        int count = 0;
         for (List<Cell> column : columns) {
             Cell firstCell = column.get(0);
             if (firstCell.getType() == Cell.Type.Put) {
@@ -237,9 +239,17 @@ public class StoreCompactionScanner implements InternalScanner {
                 if (rowContext.minTimestamp > ts) {
                     rowContext.minTimestamp = ts;
                 }
+            } else if (firstCell.getType() == Cell.Type.DeleteFamily ||
+                    firstCell.getType() == Cell.Type.DeleteFamilyVersion) {
+                if (count == 0) {
+                    deleteFamilyTimestamp = firstCell.getTimestamp();
+                }
+                else if (firstCell.getTimestamp() != deleteFamilyTimestamp) {
+                    break;
+                }
             }
         }
-        if (rowContext.maxTimestamp - rowContext.maxTimestamp <= ttl * 1000) {
+        if (rowContext.maxTimestamp - rowContext.minTimestamp <= ttl) {
             return;
         }
         List<Long> tsList = new ArrayList<>(count);
@@ -252,7 +262,7 @@ public class StoreCompactionScanner implements InternalScanner {
         Collections.sort(tsList);
         long previous = rowContext.minTimestamp;
         for (Long timestamp : tsList) {
-            if (timestamp - previous > ttl * 1000) {
+            if (timestamp - previous > ttl) {
                 rowContext.minTimestamp = timestamp;
             }
             previous = timestamp;
@@ -372,6 +382,10 @@ public class StoreCompactionScanner implements InternalScanner {
         if (rowVersion.ts >= maxLookbackWindowStart) {
             // All rows within the max lookback window are retained
             result.addAll(rowVersion.cells);
+            if (rowContext.familyVersionDeleteMarker != null) {
+                // Set it to null so it will be used once
+                rowContext.familyVersionDeleteMarker = null;
+            }
             return true;
         }
         else if (rowVersion.ts >= ttlWindowStart) {
@@ -433,12 +447,14 @@ public class StoreCompactionScanner implements InternalScanner {
         CompactionRowVersion rowVersion = null;
         getNextRowVersionTimestamp(columns, rowContext);
         boolean firstColumn = true;
+        long deleteFamilyTimestamp = 0;
         for (List<Cell> column : columns) {
             if (firstColumn) {
                 firstColumn = false;
                 Cell cell = column.get(0);
                 if (cell.getType() == Cell.Type.DeleteFamily) {
                     if (cell.getTimestamp() >= rowContext.maxTimestamp) {
+                        deleteFamilyTimestamp = cell.getTimestamp();
                         rowContext.familyDeleteMarker = cell;
                         column.remove(0);
                         continue;
@@ -446,20 +462,34 @@ public class StoreCompactionScanner implements InternalScanner {
                 }
                 else if (cell.getType() == Cell.Type.DeleteFamilyVersion) {
                     if (cell.getTimestamp() >= rowContext.maxTimestamp) {
+                        deleteFamilyTimestamp = cell.getTimestamp();
                         rowContext.familyVersionDeleteMarker = cell;
                         column.remove(0);
                         continue;
                     }
                 }
             }
+
             Cell firstCell = column.get(0);
+            if (rowContext.maxTimestamp != 0 &&
+                    column.get(0).getTimestamp() < rowContext.minTimestamp) {
+                continue;
+            }
             if (firstCell.getType() == Cell.Type.DeleteColumn ||
                     firstCell.getType() == Cell.Type.Delete) {
                 rowContext.addColumnDeleteMarker(firstCell);
                 column.remove(0);
-            }
-            if (column.get(0).getTimestamp() < rowContext.minTimestamp) {
                 continue;
+            }
+            if ((firstCell.getType() == Cell.Type.DeleteFamily ||
+                    firstCell.getType() == Cell.Type.DeleteFamilyVersion)) {
+                if (firstCell.getTimestamp() != deleteFamilyTimestamp) {
+                break;
+                }
+                else {
+                    column.remove(0);
+                    continue;
+                }
             }
             column.remove(0);
             if (!shouldRetainCell(rowContext, firstCell, regionLevel)) {
@@ -523,12 +553,37 @@ public class StoreCompactionScanner implements InternalScanner {
             filterRegionLevel(result, rowKey);
         }
         // Filter delete markers
+        if (deleteMarkers.isEmpty()) {
+            return;
+        }
+        int version = 0;
+        Cell last = deleteMarkers.get(0);
         for (Cell cell : deleteMarkers) {
+            if (cell.getType() != last.getType() ||
+                    Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(),
+                            cell.getFamilyLength(),
+                            last.getFamilyArray(), last.getFamilyOffset(),
+                            last.getFamilyLength()) != 0 ||
+                    Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
+                            cell.getQualifierLength(),
+                            last.getQualifierArray(), last.getQualifierOffset(),
+                            last.getQualifierLength()) != 0) {
+                version = 0;
+                last = cell;
+            }
             if (cell.getTimestamp() >= maxLookbackWindowStart) {
+                version++;
                 result.add(cell);
             }
             else if (cell.getTimestamp() >= ttlWindowStart) {
-                if (keepDeletedCells != KeepDeletedCells.FALSE) {
+                if (keepDeletedCells == KeepDeletedCells.TRUE) {
+                    if (version < maxVersion) {
+                        version++;
+                        result.add(cell);
+                    }
+                }
+                else if (keepDeletedCells == KeepDeletedCells.TTL) {
+                    version++;
                     result.add(cell);
                 }
             }

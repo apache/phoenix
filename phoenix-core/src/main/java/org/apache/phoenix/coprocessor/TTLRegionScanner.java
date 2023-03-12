@@ -18,17 +18,18 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
@@ -36,7 +37,6 @@ import org.slf4j.LoggerFactory;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME;
-import static org.apache.phoenix.util.ScanUtil.*;
 
 /**
  *  TTLRegionScanner masks expired rows.
@@ -48,7 +48,8 @@ public class TTLRegionScanner extends BaseRegionScanner {
     private Scan scan;
     private long rowCount = 0;
     private long pageSize = Long.MAX_VALUE;
-    long ttlWindowStart = 0;
+    long ttl;
+    long ttlWindowStart;
     byte[] emptyCQ;
     byte[] emptyCF;
     private boolean initialized = false;
@@ -61,8 +62,9 @@ public class TTLRegionScanner extends BaseRegionScanner {
         emptyCQ = scan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
         emptyCF = scan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
-        int ttl = env.getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
+        ttl = env.getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
         ttlWindowStart = ttl == HConstants.FOREVER ? 1 : currentTime - ttl * 1000;
+        ttl *= 1000;
 	}
 
     private void init() throws IOException {
@@ -76,20 +78,67 @@ public class TTLRegionScanner extends BaseRegionScanner {
         }
     }
 
-    private boolean isExpired(List<Cell> result) {
+    private boolean isExpired(List<Cell> result) throws IOException {
+        long maxTimestamp = 0;
+        long minTimestamp = Long.MAX_VALUE;
+        long ts;
         boolean found = false;
         for (Cell c : result) {
-            if (ScanUtil.isEmptyColumn(c, emptyCF, emptyCQ)) {
-                found = true;
-                if (c.getTimestamp() < ttlWindowStart) {
+            ts = c.getTimestamp();
+            if (!found && ScanUtil.isEmptyColumn(c, emptyCF, emptyCQ)) {
+                if (ts < ttlWindowStart) {
                     return true;
                 }
-                break;
+                found = true;
+            }
+            ts = c.getTimestamp();
+            if (maxTimestamp < ts) {
+                maxTimestamp = ts;
+            }
+            if (minTimestamp > ts) {
+                minTimestamp = ts;
             }
         }
-
         if (!found) {
             LOG.warn("No empty column cell " + env.getRegion().getRegionInfo().getTable());
+        }
+        if (maxTimestamp == HConstants.LATEST_TIMESTAMP) {
+            return false;
+        }
+        if (maxTimestamp - minTimestamp <= ttl) {
+            return false;
+        }
+        // We need check if the gap between two consecutive cell timestamps is more than ttl
+        // and if so trim the cell beyond the gap
+        Scan singleRowScan = new Scan();
+        byte[] rowKey = CellUtil.cloneRow(result.get(0));
+        singleRowScan.withStartRow(rowKey, true);
+        singleRowScan.withStopRow(rowKey, true);
+        RegionScanner scanner = ((DelegateRegionScanner)delegate).getNewRegionScanner(singleRowScan);
+        List<Cell> row = new ArrayList<>();
+        scanner.next(row);
+        scanner.close();
+        if (row.isEmpty()) {
+            return true;
+        }
+
+        List<Long> tsList = new ArrayList<>(row.size());
+        for (Cell c : row) {
+            tsList.add(c.getTimestamp());
+        }
+        Collections.sort(tsList);
+        long previous = minTimestamp;
+        for (Long timestamp : tsList) {
+            if (timestamp - previous > ttl) {
+                minTimestamp = timestamp;
+            }
+            previous = timestamp;
+        }
+        Iterator<Cell> iterator = result.iterator();
+        while(iterator.hasNext()) {
+            if (iterator.next().getTimestamp() < minTimestamp) {
+                iterator.remove();
+            }
         }
         return false;
     }
@@ -106,7 +155,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
         do {
             hasMore = raw ? delegate.nextRaw(result) : delegate.next(result);
-            if (result.isEmpty() || isDummy(result)) {
+            if (result.isEmpty() || ScanUtil.isDummy(result)) {
                 return hasMore;
             }
             if (!isExpired(result)) {
@@ -115,7 +164,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
             Cell cell = result.get(0);
             result.clear();
             if (EnvironmentEdgeManager.currentTimeMillis() - startTime > pageSize) {
-                getDummyResult(CellUtil.cloneRow(cell), result);
+                ScanUtil.getDummyResult(CellUtil.cloneRow(cell), result);
                 return hasMore;
             }
         } while (hasMore);
@@ -128,11 +177,11 @@ public class TTLRegionScanner extends BaseRegionScanner {
             initialized = true;
         }
         boolean hasMore = raw ? delegate.nextRaw(result) : delegate.next(result);
-        if (result.isEmpty() || isDummy(result)) {
+        if (result.isEmpty() || ScanUtil.isDummy(result)) {
             return hasMore;
         }
         hasMore = skipExpired(result, raw, hasMore);
-        if (result.isEmpty() || isDummy(result)) {
+        if (result.isEmpty() || ScanUtil.isDummy(result)) {
             return hasMore;
         }
         rowCount++;

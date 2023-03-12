@@ -2408,11 +2408,12 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         try {
             conn.createStatement().execute("CREATE TABLE t(k INTEGER PRIMARY KEY, a.v1 VARCHAR, b.v2 VARCHAR, c.v3 VARCHAR)");
+            // Family A should be included in the projected families by default for the empty column
             assertFamilies(projectQuery("SELECT k FROM t"), "A");
             assertFamilies(projectQuery("SELECT k FROM t WHERE k = 5"), "A");
             assertFamilies(projectQuery("SELECT v2 FROM t WHERE k = 5"), "A", "B");
-            assertFamilies(projectQuery("SELECT v2 FROM t WHERE v2 = 'a'"), "B");
-            assertFamilies(projectQuery("SELECT v3 FROM t WHERE v2 = 'a'"), "B", "C");
+            assertFamilies(projectQuery("SELECT v2 FROM t WHERE v2 = 'a'"), "A", "B");
+            assertFamilies(projectQuery("SELECT v3 FROM t WHERE v2 = 'a'"), "A", "B", "C");
             assertFamilies(projectQuery("SELECT v3 FROM t WHERE v2 = 'a' AND v3 is null"), "A", "B", "C");
         } finally {
             conn.close();
