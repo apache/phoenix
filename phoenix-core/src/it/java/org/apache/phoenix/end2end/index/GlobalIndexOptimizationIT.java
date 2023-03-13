@@ -80,7 +80,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             String expected =
                     "DELETE ROWS CLIENT SELECT\n" +
                     "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + dataTableName +" [1,*] - [1,100]\n" +
-                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                    "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                     "CLIENT MERGE SORT";
             String actual = QueryUtil.getExplainPlan(rs);
             assertEquals(expected, actual);
@@ -158,7 +158,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             String expected =
                     "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " ['a']\n" +
                             "    SERVER MERGE [0.K3]\n" +
-                            "    SERVER FILTER BY FIRST KEY ONLY";
+                            "    SERVER FILTER BY EMPTY COLUMN ONLY";
             String actual = QueryUtil.getExplainPlan(rs);
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual,
                     actual.equals(expected));
@@ -182,7 +182,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             expected =
                     "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " ['a']\n" +
                             "    SERVER MERGE [0.K3]\n" +
-                            "    SERVER FILTER BY FIRST KEY ONLY";
+                            "    SERVER FILTER BY EMPTY COLUMN ONLY";
             actual = QueryUtil.getExplainPlan(rs);
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual,
                     actual.equals(expected));
@@ -208,7 +208,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             expected =
                     "CLIENT SERIAL 1-WAY RANGE SCAN OVER " + indexTableName + " ['a']\n" +
                             "    SERVER MERGE [0.K3]\n" +
-                            "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                            "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                             "    SERVER 1 ROW LIMIT\n" +
                             "CLIENT 1 ROW LIMIT";
             actual = QueryUtil.getExplainPlan(rs);
@@ -230,7 +230,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             expected =
                     "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " [*] - ['z']\n"+
                     "    SERVER MERGE [0.K3]\n" +
-                    "    SERVER FILTER BY FIRST KEY ONLY AND \"K3\" > 1";
+                    "    SERVER FILTER BY EMPTY COLUMN ONLY AND \"K3\" > 1";
             actual = QueryUtil.getExplainPlan(rs);
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, actual.equals(expected));
             
@@ -260,7 +260,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             expected =
                     "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " [*] - ['z']\n"+
                     "    SERVER MERGE [0.K3]\n" +
-                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                    "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                     "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"V1\", \"T_ID\", \"K3\"]\n"+
                     "CLIENT MERGE SORT";
 
@@ -292,7 +292,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             expected =
                     "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " [*] - ['z']\n"+
                             "    SERVER MERGE [0.K3]\n" +
-                            "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                            "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                             "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"V1\"]";
             actual = QueryUtil.getExplainPlan(rs);
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, actual.equals(expected));
@@ -329,7 +329,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             String actual = QueryUtil.getExplainPlan(rs);
             String expected = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " ['tid1','a']\n" +
                     "    SERVER MERGE [0.K3]\n" +
-                    "    SERVER FILTER BY FIRST KEY ONLY";
+                    "    SERVER FILTER BY EMPTY COLUMN ONLY";
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, actual.equals(expected));
             
             rs = conn1.createStatement().executeQuery(query);
@@ -384,7 +384,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
                     "CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER _IDX_" + dataTableName +
                             " [" + Short.MIN_VALUE + ",1] - [" + Short.MIN_VALUE + ",2]\n" +
                     "    SERVER MERGE [0.K3]\n" +
-                    "    SERVER FILTER BY FIRST KEY ONLY";
+                    "    SERVER FILTER BY EMPTY COLUMN ONLY";
 
             assertEquals(expected,actual);
             
@@ -422,7 +422,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             
             assertEquals(
                         "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " ['a']\n"
-                                + "    SERVER FILTER BY FIRST KEY ONLY",
+                                + "    SERVER FILTER BY EMPTY COLUMN ONLY",
                         QueryUtil.getExplainPlan(rs));
             
             rs = conn1.createStatement().executeQuery(query);

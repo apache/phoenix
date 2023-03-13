@@ -55,7 +55,6 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
@@ -76,10 +75,11 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.util.PhoenixRuntime;
+ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -1126,6 +1126,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
             conn.createStatement().executeUpdate("ALTER TABLE " + tableName + " DROP COLUMN col1");
 
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
             rs = conn.createStatement().executeQuery("SELECT count(1) FROM " + tableName);
             assertTrue(rs.next());
             assertEquals(2, rs.getLong(1));

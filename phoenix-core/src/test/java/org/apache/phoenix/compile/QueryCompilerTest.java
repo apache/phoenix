@@ -78,6 +78,7 @@ import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.TimeUnit;
+import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
@@ -1604,7 +1605,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         QueryPlan plan = getQueryPlan(query,Collections.emptyList());
         plan.iterator();
         Scan scan = plan.getContext().getScan();
-        assertTrue(scan.getFilter() instanceof FirstKeyOnlyFilter);
+        assertTrue(scan.getFilter() instanceof EmptyColumnOnlyFilter);
         assertEquals(1, scan.getFamilyMap().size());
     }
     
@@ -2503,24 +2504,24 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN "+query);
             String explainPlan = QueryUtil.getExplainPlan(rs);
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
-                    "    SERVER FILTER BY FIRST KEY ONLY",explainPlan);
+                    "    SERVER FILTER BY EMPTY COLUMN ONLY",explainPlan);
             query = "SELECT k,j from t3 b join t1 a ON k = j where a.col1 || a.col2 = 'foobar'";
             rs = conn.createStatement().executeQuery("EXPLAIN "+query);
             explainPlan = QueryUtil.getExplainPlan(rs);
             assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER T3\n" + 
-                    "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                     "    PARALLEL INNER-JOIN TABLE 0\n" + 
                     "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
-                    "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "            SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                     "    DYNAMIC SERVER FILTER BY B.J IN (\"A.:K\")",explainPlan);
             query = "SELECT a.k,b.k from t2 b join t1 a ON a.k = b.k where a.col1 || a.col2 = 'foobar'";
             rs = conn.createStatement().executeQuery("EXPLAIN "+query);
             explainPlan = QueryUtil.getExplainPlan(rs);
             assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER T2\n" + 
-                    "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                     "    PARALLEL INNER-JOIN TABLE 0\n" + 
                     "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
-                    "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "            SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                     "    DYNAMIC SERVER FILTER BY B.K IN (\"A.:K\")",explainPlan);
         } finally {
             conn.close();

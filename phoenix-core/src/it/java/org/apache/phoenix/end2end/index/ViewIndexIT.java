@@ -244,7 +244,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
             assertEquals(
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName), isNamespaceMapped) + " [1,'10',100]\n" +
                     "    SERVER MERGE [0.V1]\n" +
-                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                    "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                     "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
             rs = conn1.prepareStatement(sql).executeQuery();
             assertTrue(rs.next());

@@ -400,11 +400,11 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if (localIndex) {
                 assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + "    SERVER FILTER BY EMPTY COLUMN ONLY\n"
                         + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName + "\n"
-                           + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
+                           + "    SERVER FILTER BY EMPTY COLUMN ONLY", QueryUtil.getExplainPlan(rs));
             }
             //make sure the data table looks like what we expect
             rs = conn.createStatement().executeQuery(query);
@@ -527,12 +527,12 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if(localIndex) {
                 assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + "    SERVER FILTER BY EMPTY COLUMN ONLY\n"
                         + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName + "\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY",
+                        + "    SERVER FILTER BY EMPTY COLUMN ONLY",
                     QueryUtil.getExplainPlan(rs));
             }
         

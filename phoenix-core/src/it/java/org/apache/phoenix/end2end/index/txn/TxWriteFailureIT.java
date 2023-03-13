@@ -173,11 +173,11 @@ public class TxWriteFailureIT extends BaseTest {
         if(localIndex) {
             assertEquals(
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + dataTableFullName + " [1]\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                 "CLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
         } else {
-	        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + indexFullName + "\n    SERVER FILTER BY FIRST KEY ONLY",
+	        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + indexFullName + "\n    SERVER FILTER BY EMPTY COLUMN ONLY",
 	                QueryUtil.getExplainPlan(rs));
         }
         rs = conn.createStatement().executeQuery(indexSql);

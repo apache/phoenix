@@ -217,7 +217,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
                         hasMore = scanner.next(result);
                     }
                     if (result.isEmpty()) {
-                        break;
+                        return hasMore;
                     }
                     if (isDummy(result)) {
                         return true;
@@ -509,11 +509,6 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
                                 VERIFIED_BYTES, 0, VERIFIED_BYTES.length) != 0) {
                             return false;
                         }
-                    }
-                    // Empty column is not supposed to be returned to the client except it is the only column included
-                    // in the scan
-                    if (cellListSize > 1) {
-                        cellIterator.remove();
                     }
                     return true;
                 }

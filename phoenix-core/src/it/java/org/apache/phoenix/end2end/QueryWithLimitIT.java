@@ -95,7 +95,7 @@ public class QueryWithLimitIT extends BaseTest {
                 explainPlanAttributes.getExplainScanType());
             assertEquals(tableName,
                 explainPlanAttributes.getTableName());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             assertEquals(1, explainPlanAttributes.getServerRowLimit().intValue());
             assertEquals(1, explainPlanAttributes.getClientRowLimit().intValue());

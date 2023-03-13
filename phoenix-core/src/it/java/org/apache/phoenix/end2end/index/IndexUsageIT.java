@@ -142,7 +142,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
                 plan.getPlanStepsAsAttributes();
             assertEquals("PARALLEL 1-WAY",
                 explainPlanAttributes.getIteratorTypeAndScanSize());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY "
                     + "[TO_BIGINT(\"(A.INT_COL1 + B.INT_COL2)\")]",
@@ -214,7 +214,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             assertEquals("SERVER DISTINCT PREFIX FILTER OVER [TO_BIGINT(\"(A.INT_COL1 + 1)\")]",
                 explainPlanAttributes.getServerDistinctFilter());
@@ -289,7 +289,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             if (localIndex) {
                 assertEquals(fullDataTableName,
@@ -356,7 +356,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
                 plan.getPlanStepsAsAttributes();
             assertEquals("PARALLEL 1-WAY",
                 explainPlanAttributes.getIteratorTypeAndScanSize());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             if (localIndex) {
                 assertEquals("RANGE SCAN ",
@@ -577,7 +577,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
                     explainPlanAttributes.getKeyRanges());
                 assertEquals("CLIENT MERGE SORT",
                     explainPlanAttributes.getClientSortAlgo());
-                assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                     explainPlanAttributes.getServerWhereFilter());
             } else {
                 assertEquals("FULL SCAN ",
@@ -673,7 +673,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             if (local) {
                 assertEquals(dataTableName,
@@ -750,7 +750,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
                 explainPlanAttributes.getTableName());
             assertEquals(" [1,'abc_cab','foo']",
                 explainPlanAttributes.getKeyRanges());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                 explainPlanAttributes.getServerWhereFilter());
 
 	        rs = conn.createStatement().executeQuery(query);
@@ -764,7 +764,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
             String queryPlan = QueryUtil.getExplainPlan(rs);
 	        assertEquals(
 	                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName1 + " [1]\n" +
-	                "    SERVER FILTER BY FIRST KEY ONLY AND ((\"S2\" || '_' || \"S3\") = 'abc_cab' AND \"S1\" = 'foo')", queryPlan);
+	                "    SERVER FILTER BY EMPTY COLUMN ONLY AND ((\"S2\" || '_' || \"S3\") = 'abc_cab' AND \"S1\" = 'foo')", queryPlan);
 	        rs = conn.createStatement().executeQuery(query);
 	        assertTrue(rs.next());
 	        assertEquals("abc_cab", rs.getString(1));
@@ -857,7 +857,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             if (localIndex) {
                 assertEquals(dataTableName,
@@ -939,19 +939,19 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
             String explainPlan = QueryUtil.getExplainPlan(rs);
             if (localIndex) {
             	assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1,'1David']\n" + 
-                        "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                        "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                         "CLIENT MERGE SORT\n" +
                         "    PARALLEL LEFT-JOIN TABLE 0 (SKIP MERGE)\n" +
                         "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1]\n" + 
-                        "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                        "            SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                         "        CLIENT MERGE SORT", explainPlan);
             }
             else {
             	assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName + " ['1David']\n" + 
-                        "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                        "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                         "    PARALLEL LEFT-JOIN TABLE 0 (SKIP MERGE)\n" +
                         "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + indexName + "\n" + 
-                        "            SERVER FILTER BY FIRST KEY ONLY", explainPlan);
+                        "            SERVER FILTER BY EMPTY COLUMN ONLY", explainPlan);
             }
             
             rs = conn.createStatement().executeQuery(query);

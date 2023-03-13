@@ -66,7 +66,6 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
-import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -89,6 +88,7 @@ import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
+import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
@@ -276,9 +276,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     }
                 }
             }
-            // Add FirstKeyOnlyFilter if there are no references to key value columns
+            // Add EmptyColumnOnlyFilter if there are no references to key value columns
             if (keyOnlyFilter) {
-                ScanUtil.andFilterAtBeginning(scan, new FirstKeyOnlyFilter());
+                byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
+                byte[] ecq = table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
+                        QueryConstants.EMPTY_COLUMN_BYTES :
+                        table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+                ScanUtil.andFilterAtBeginning(scan, new EmptyColumnOnlyFilter(ecf, ecq));
             }
 
             if (perScanLimit != null) {

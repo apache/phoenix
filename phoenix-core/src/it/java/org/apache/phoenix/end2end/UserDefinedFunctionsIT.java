@@ -809,7 +809,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         assertEquals("FULL SCAN ",
             explainPlanAttributes.getExplainScanType());
         assertEquals("IDX", explainPlanAttributes.getTableName());
-        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+        assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
             explainPlanAttributes.getServerWhereFilter());
 
         ResultSet rs = stmt.executeQuery(query);
@@ -830,7 +830,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
             explainPlanAttributes.getExplainScanType());
         assertEquals("T5", explainPlanAttributes.getTableName());
         assertEquals(" [1,'kcoj']", explainPlanAttributes.getKeyRanges());
-        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+        assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
             explainPlanAttributes.getServerWhereFilter());
         assertEquals("CLIENT MERGE SORT",
             explainPlanAttributes.getClientSortAlgo());

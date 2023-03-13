@@ -97,7 +97,7 @@ public class ReverseScanIT extends ParallelStatsDisabledIT {
             assertEquals("FULL SCAN ",
                 explainPlanAttributes.getExplainScanType());
             assertEquals(tableName, explainPlanAttributes.getTableName());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY AND ENTITY_ID >= '00A323122312312'",
+            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY AND ENTITY_ID >= '00A323122312312'",
                 explainPlanAttributes.getServerWhereFilter());
 
             PreparedStatement statement = conn.prepareStatement(
@@ -204,7 +204,7 @@ public class ReverseScanIT extends ParallelStatsDisabledIT {
                 explainPlanAttributes.getExplainScanType());
             assertEquals(indexName, explainPlanAttributes.getTableName());
             assertEquals(" [not null]", explainPlanAttributes.getKeyRanges());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             assertEquals(1, explainPlanAttributes.getServerRowLimit().intValue());
             assertEquals(1, explainPlanAttributes.getClientRowLimit().intValue());

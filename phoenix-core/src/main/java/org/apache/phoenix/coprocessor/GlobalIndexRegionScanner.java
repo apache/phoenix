@@ -38,6 +38,7 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.compile.ScanRanges;
@@ -1374,13 +1375,13 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         if (filter instanceof PagingFilter) {
             PagingFilter pageFilter = (PagingFilter) filter;
             Filter delegateFilter = pageFilter.getDelegateFilter();
-            if (delegateFilter instanceof FirstKeyOnlyFilter) {
+            if (delegateFilter instanceof EmptyColumnOnlyFilter) {
                 pageFilter.setDelegateFilter(null);
             } else if (delegateFilter != null) {
                 // Override the filter so that we get all versions
                 pageFilter.setDelegateFilter(new AllVersionsIndexRebuildFilter(delegateFilter));
             }
-        } else if (filter instanceof FirstKeyOnlyFilter) {
+        } else if (filter instanceof EmptyColumnOnlyFilter) {
             scan.setFilter(null);
             return true;
         } else if (filter != null) {

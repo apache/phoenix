@@ -23,13 +23,20 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_AN
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
-import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -61,9 +68,7 @@ import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
-import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
-import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
@@ -1045,6 +1050,17 @@ public class ScanUtil {
                         cell.getQualifierLength(), emptyCQ, 0, emptyCQ.length) == 0;
     }
 
+    public static boolean isEmptyColumn(Cell cell, byte[] emptyCF) {
+        return Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(),
+                cell.getFamilyLength(), emptyCF, 0, emptyCF.length) == 0 &&
+                (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
+                        cell.getQualifierLength(), QueryConstants.EMPTY_COLUMN_BYTES, 0,
+                        QueryConstants.EMPTY_COLUMN_BYTES.length) == 0 ||
+                        Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
+                                cell.getQualifierLength(), QueryConstants.ENCODED_EMPTY_COLUMN_BYTES, 0,
+                                QueryConstants.ENCODED_EMPTY_COLUMN_BYTES.length) == 0);
+    }
+
     public static long getMaxTimestamp(List<Cell> cellList) {
         long maxTs = 0;
         long ts = 0;
@@ -1065,9 +1081,15 @@ public class ScanUtil {
         return ts + ttl < nowTS;
     }
 
+    /**
+     * This determines if we need to add the empty column to the scan. The empty column is
+     * added only when the scan includes another column family but not the empty column family or
+     * the empty column family includes at least one column.
+     */
     private static boolean shouldAddEmptyColumn(Scan scan, byte[] emptyCF) {
         Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
         if (familyMap == null || familyMap.isEmpty()) {
+            // This means that scan includes all columns. Nothing more to do.
             return false;
         }
         for (Map.Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
@@ -1075,12 +1097,16 @@ public class ScanUtil {
             if (java.util.Arrays.equals(cf, emptyCF)) {
                 NavigableSet<byte[]> family = entry.getValue();
                 if (family != null && !family.isEmpty()) {
+                    // Found the empty column family, and it is not empty. The empty column
+                    // may be already included but no need to check as adding a new one will replace
+                    // the old one
                     return true;
                 }
                 return false;
             }
         }
-        // The colum family is not found
+        // The colum family is not found and there is another column family in the scan. In this
+        // we need to add the empty column
         return true;
     }
 
@@ -1092,6 +1118,8 @@ public class ScanUtil {
                 addEmptyColumnToFilterList((FilterList) filter);
             }
             else if (filter instanceof FirstKeyOnlyFilter) {
+                // Phoenix now uses EmptyColumnOnlyFilter instead of FirstKeyOnlyFilter
+                LOGGER.warn("Found FirstKeyOnlyFilter in FilterList");
                 filterIterator.remove();
             }
         }
@@ -1099,12 +1127,13 @@ public class ScanUtil {
 
     public static void addEmptyColumnToScan(Scan scan, byte[] emptyCF, byte[] emptyCQ) {
         Filter filter = scan.getFilter();
-        boolean add = false;
         if (filter != null) {
             if (filter instanceof FilterList) {
                 addEmptyColumnToFilterList((FilterList) filter);
             }
             else if (filter instanceof FirstKeyOnlyFilter) {
+                // Phoenix now uses EmptyColumnOnlyFilter instead of FirstKeyOnlyFilter
+                LOGGER.warn("Found FirstKeyOnlyFilter in Scan " + scan);
                 scan.setFilter(null);
             }
         }

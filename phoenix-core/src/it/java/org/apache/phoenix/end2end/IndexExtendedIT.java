@@ -271,7 +271,7 @@ public class IndexExtendedIT extends BaseTest {
                 explainPlanAttributes.getExplainScanType());
             assertEquals(indexTableFullName,
                 explainPlanAttributes.getTableName());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                 explainPlanAttributes.getServerWhereFilter());
 
             ResultSet rs = conn.createStatement().executeQuery(query);

@@ -180,7 +180,7 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
         }
         assertEquals(iteratorTypeAndScanSize,
             explainPlanAttributes.getIteratorTypeAndScanSize());
-        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+        assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
             explainPlanAttributes.getServerWhereFilter());
         assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
         assertEquals(clientSortAlgo, explainPlanAttributes.getClientSortAlgo());
@@ -201,7 +201,7 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
             plan.getPlanStepsAsAttributes();
         assertEquals("PARALLEL 1-WAY",
             explainPlanAttributes.getIteratorTypeAndScanSize());
-        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+        assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
             explainPlanAttributes.getServerWhereFilter());
         assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
         assertEquals(tableName, explainPlanAttributes.getTableName());

@@ -221,7 +221,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
             explainPlanAttributes.getIteratorTypeAndScanSize());
         assertEquals("RANGE SCAN ",
             explainPlanAttributes.getExplainScanType());
-        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+        assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
             explainPlanAttributes.getServerWhereFilter());
         if (localIndex) {
             assertEquals(SchemaUtil.getPhysicalTableName(
@@ -355,7 +355,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
             String exptectedIndexName = SchemaUtil.getTableName(SCHEMA1, "IDX");
             String expectedPlanFormat = "CLIENT SERIAL 1-WAY RANGE SCAN OVER " + exptectedIndexName
                     + " ['tenant1        ','001','%s 00:00:00.001'] - ['tenant1        ','001','%s 00:00:00.000']" + "\n" +
-                        "    SERVER FILTER BY FIRST KEY ONLY" + "\n" +
+                        "    SERVER FILTER BY EMPTY COLUMN ONLY" + "\n" +
                         "    SERVER 501 ROW LIMIT" + "\n" +
                         "CLIENT 501 ROW LIMIT";
             assertEquals(String.format(expectedPlanFormat, "2011-01-01", "2016-10-31"), QueryUtil.getExplainPlan(rs));

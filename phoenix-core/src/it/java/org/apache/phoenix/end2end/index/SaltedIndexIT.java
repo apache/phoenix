@@ -148,11 +148,11 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         expectedPlan = indexSaltBuckets == null ? 
              "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableFullName + " [~'y']\n" +
-             "    SERVER FILTER BY FIRST KEY ONLY" :
+             "    SERVER FILTER BY EMPTY COLUMN ONLY" :
             ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + indexTableFullName + " [X'00',~'y'] - [" +
              PVarbinary.INSTANCE.toStringLiteral(new byte[] {(byte)(indexSaltBuckets - 1)}) +
              ",~'y']\n" +
-             "    SERVER FILTER BY FIRST KEY ONLY\n" +
+             "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
              "CLIENT MERGE SORT");
         assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
 
@@ -171,11 +171,11 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         expectedPlan = indexSaltBuckets == null ? 
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableFullName + " [*] - [~'x']\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY" :
+          + "    SERVER FILTER BY EMPTY COLUMN ONLY" :
             ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + indexTableFullName + " [X'00',*] - ["
           + PVarbinary.INSTANCE.toStringLiteral(new byte[] {(byte)(indexSaltBuckets - 1)})
           + ",~'x']\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n" +
+          + "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
              "CLIENT MERGE SORT");
         assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
         
@@ -228,12 +228,12 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         expectedPlan = indexSaltBuckets == null ?
             "CLIENT SERIAL 1-WAY FULL SCAN OVER " + indexTableFullName + "\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n"
+          + "    SERVER FILTER BY EMPTY COLUMN ONLY\n"
           + "    SERVER 1 ROW LIMIT\n"
           + "CLIENT 1 ROW LIMIT"
             :
             "CLIENT PARALLEL 4-WAY FULL SCAN OVER " + indexTableFullName + "\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n"
+          + "    SERVER FILTER BY EMPTY COLUMN ONLY\n"
           + "    SERVER 1 ROW LIMIT\n"
           + "CLIENT MERGE SORT\n"
           + "CLIENT 1 ROW LIMIT";

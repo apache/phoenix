@@ -60,7 +60,7 @@ public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
                 }, {
                 "SORT-MERGE-JOIN (LEFT) TABLES\n" +
                 "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +JOIN_SUPPLIER_TABLE_FULL_NAME + " [1]\n" +
-                "        SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "        SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                 "        SERVER SORTED BY [\"S.:supplier_id\"]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND\n" +
@@ -77,7 +77,7 @@ public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
                 
                 "SORT-MERGE-JOIN (INNER) TABLES\n" +
                 "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " [1]\n" +
-                "        SERVER FILTER BY FIRST KEY ONLY\n" +
+                "        SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                 "        SERVER SORTED BY [\"I.:item_id\"]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND\n" +
@@ -88,12 +88,12 @@ public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
                 
                 "SORT-MERGE-JOIN (INNER) TABLES\n" +
                 "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " [1]\n" +
-                "        SERVER FILTER BY FIRST KEY ONLY\n" +
+                "        SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                 "        SERVER SORTED BY [\"I1.:item_id\"]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND\n" +
                 "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " [1]\n" +
-                "        SERVER FILTER BY FIRST KEY ONLY\n" +
+                "        SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                 "        SERVER SORTED BY [\"I2.:item_id\"]\n" +
                 "    CLIENT MERGE SORT"
                 }});

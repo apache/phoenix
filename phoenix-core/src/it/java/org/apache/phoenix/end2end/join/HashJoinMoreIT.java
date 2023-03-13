@@ -840,21 +840,21 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
                     
                 String p = i == 0 ?
                         "CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER EVENT_COUNT [X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']\n" +
-                        "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                        "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                         "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"E.TIMESTAMP\", E.BUCKET]\n" +
                         "CLIENT MERGE SORT\n" +
                         "    PARALLEL INNER-JOIN TABLE 0 (SKIP MERGE)\n" +
                         "        CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + t[i] + " [X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']\n" +
-                        "            SERVER FILTER BY FIRST KEY ONLY AND SRC_LOCATION = DST_LOCATION\n" +
+                        "            SERVER FILTER BY EMPTY COLUMN ONLY AND SRC_LOCATION = DST_LOCATION\n" +
                         "        CLIENT MERGE SORT"
                         :
                         "CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER EVENT_COUNT [X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']\n" +
-                        "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                        "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                         "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"E.TIMESTAMP\", E.BUCKET]\n" +
                         "CLIENT MERGE SORT\n" +
                         "    PARALLEL INNER-JOIN TABLE 0 (SKIP MERGE)\n" +
                         "        CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + t[i] + " [X'00','5SEC',1462993420000000001,'Tr/Bal'] - [X'01','5SEC',1462993520000000000,'Tr/Bal']\n" +
-                        "            SERVER FILTER BY FIRST KEY ONLY AND SRC_LOCATION = DST_LOCATION\n" +
+                        "            SERVER FILTER BY EMPTY COLUMN ONLY AND SRC_LOCATION = DST_LOCATION\n" +
                         "        CLIENT MERGE SORT";
                 
                 ResultSet rs = conn.createStatement().executeQuery("explain " + q);

@@ -1068,7 +1068,7 @@ public class ViewIT extends SplitSystemCatalogIT {
                 assertEquals(fullTableName,
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1,51]", explainPlanAttributes.getKeyRanges());
-                assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                     explainPlanAttributes.getServerWhereFilter());
                 assertEquals("CLIENT MERGE SORT",
                     explainPlanAttributes.getClientSortAlgo());
@@ -1128,7 +1128,7 @@ public class ViewIT extends SplitSystemCatalogIT {
             explainPlanAttributes = plan.getPlanStepsAsAttributes();
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             if (localIndex) {
                 physicalTableName = fullTableName;

@@ -318,11 +318,6 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
                 if (ScanUtil.isEmptyColumn(cell, this.emptyCF, this.emptyCQ)) {
                     LOG.trace(String.format("** PHOENIX-TTL: Row expired for [%s], expired = %s **",
                             cell.toString(), ScanUtil.isTTLExpired(cell, this.scan, this.now)));
-                    // Empty column is not supposed to be returned to the client
-                    // except when it is the only column included in the scan.
-                    if (cellListSize > 1) {
-                        cellIterator.remove();
-                    }
                     return !ScanUtil.isTTLExpired(cell, this.scan, this.now);
                 }
             }

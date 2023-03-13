@@ -79,7 +79,7 @@ public class SortMergeJoinNoIndexIT extends SortMergeJoinIT {
                 "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + "\n" +
                 "AND\n" +
                 "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + "\n" +
-                "        SERVER FILTER BY FIRST KEY ONLY"
+                "        SERVER FILTER BY EMPTY COLUMN ONLY"
                 }});
         return testCases;
     }

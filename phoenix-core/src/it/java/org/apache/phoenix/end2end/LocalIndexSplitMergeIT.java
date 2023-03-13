@@ -160,7 +160,7 @@ public class LocalIndexSplitMergeIT extends BaseTest {
                 assertEquals(indexPhysicalTableName,
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
-                assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                     explainPlanAttributes.getServerWhereFilter());
                 assertEquals("CLIENT MERGE SORT",
                     explainPlanAttributes.getClientSortAlgo());
@@ -180,7 +180,7 @@ public class LocalIndexSplitMergeIT extends BaseTest {
                 assertEquals(indexPhysicalTableName,
                     explainPlanAttributes.getTableName());
                 assertEquals(" [2]", explainPlanAttributes.getKeyRanges());
-                assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                     explainPlanAttributes.getServerWhereFilter());
                 assertEquals("CLIENT MERGE SORT",
                     explainPlanAttributes.getClientSortAlgo());
@@ -275,7 +275,7 @@ public class LocalIndexSplitMergeIT extends BaseTest {
             assertEquals(indexPhysicalTableName,
                 explainPlanAttributes.getTableName());
             assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             assertEquals("CLIENT MERGE SORT",
                 explainPlanAttributes.getClientSortAlgo());
@@ -292,7 +292,7 @@ public class LocalIndexSplitMergeIT extends BaseTest {
             assertEquals(indexPhysicalTableName,
                 explainPlanAttributes.getTableName());
             assertEquals(" [2]", explainPlanAttributes.getKeyRanges());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             assertEquals("CLIENT MERGE SORT",
                 explainPlanAttributes.getClientSortAlgo());
