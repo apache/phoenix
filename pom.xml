@@ -131,6 +131,7 @@
     <mockito.version>1.10.19</mockito.version>
     <junit.version>4.13.1</junit.version>
     <hamcrest.version>1.3</hamcrest.version>
+    <hdrhistogram.version>2.1.12</hdrhistogram.version>
 
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
@@ -385,10 +386,6 @@
                 </ignoredUnusedDeclaredDependency>
                 <ignoredUnusedDeclaredDependency>
                   org.apache.logging.log4j:log4j-core
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  <!-- Needed for Hbase 2.5 -->
-                  com.sun.xml.bind:jaxb-impl
                 </ignoredUnusedDeclaredDependency>
               </ignoredUnusedDeclaredDependencies>
               <ignoredUsedUndeclaredDependencies>
@@ -718,6 +715,26 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-common</artifactId>
+        <version>${hadoop.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.htrace</groupId>
+            <artifactId>htrace-core4</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-common</artifactId>
+        <type>test-jar</type>
         <version>${hadoop.version}</version>
         <exclusions>
           <exclusion>
@@ -1432,6 +1449,11 @@
         <groupId>org.jruby.jcodings</groupId>
         <artifactId>jcodings</artifactId>
         <version>${jcodings.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.hdrhistogram</groupId>
+        <artifactId>HdrHistogram</artifactId>
+        <version>${hdrhistogram.version}</version>
       </dependency>
 
       <!-- Other test dependencies -->
