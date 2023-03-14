@@ -27,6 +27,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIM
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.schema.PTable.IndexType.LOCAL;
+import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 import static org.apache.phoenix.util.EncodedColumnsUtil.isPossibleToUseEncodedCQFilter;
@@ -66,6 +67,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -276,13 +278,20 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     }
                 }
             }
-            // Add EmptyColumnOnlyFilter if there are no references to key value columns
+            // Add FirstKeyOnlyFilter or EmptyColumnOnlyFilter if there are no references
+            // to key value columns
             if (keyOnlyFilter) {
-                byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
-                byte[] ecq = table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
-                        QueryConstants.EMPTY_COLUMN_BYTES :
-                        table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
-                ScanUtil.andFilterAtBeginning(scan, new EmptyColumnOnlyFilter(ecf, ecq));
+                if (table.getEncodingScheme() == NON_ENCODED_QUALIFIERS) {
+                    byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
+                    byte[]
+                            ecq =
+                            table.getEncodingScheme() == NON_ENCODED_QUALIFIERS ?
+                                    QueryConstants.EMPTY_COLUMN_BYTES :
+                                    table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+                    ScanUtil.andFilterAtBeginning(scan, new EmptyColumnOnlyFilter(ecf, ecq));
+                } else {
+                    ScanUtil.andFilterAtBeginning(scan, new FirstKeyOnlyFilter());
+                }
             }
 
             if (perScanLimit != null) {
@@ -458,17 +467,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 preventSeekToColumn = referencedCfCount == 1 && hbaseServerVersion < MIN_SEEK_TO_COLUMN_VERSION;
             }
         }
-        // Making sure that where condition CFs and the empty column are getting scanned at HRS.
-        // Empty column is required for determining the row timestamp. It is used by Phoenix TTL
-
-        List<Pair<byte[], byte[]>> whereConditionColumns =
-                new ArrayList<>(context.getWhereConditionColumns());
-        whereConditionColumns.add(new Pair(SchemaUtil.getEmptyColumnFamily(table),
-                table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
-                        QueryConstants.EMPTY_COLUMN_BYTES :
-                        table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME)));
-
-        for (Pair<byte[], byte[]> whereCol : whereConditionColumns) {
+        // Making sure that where condition CFs are getting scanned at HRS.
+        for (Pair<byte[], byte[]> whereCol : context.getWhereConditionColumns()) {
             byte[] family = whereCol.getFirst();
             if (preventSeekToColumn) {
                 if (!(familyMap.containsKey(family))) {

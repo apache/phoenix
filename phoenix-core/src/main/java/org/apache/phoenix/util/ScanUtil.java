@@ -23,6 +23,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_AN
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
+import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
@@ -49,7 +50,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
-import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
@@ -68,7 +68,9 @@ import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
+import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
+import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
@@ -1110,17 +1112,28 @@ public class ScanUtil {
         return true;
     }
 
-    private static void addEmptyColumnToFilterList(FilterList filterList) {
+    private static void addEmptyColumnToFilter(Filter filter, byte[] emptyCF, byte[] emptyCQ) {
+        if (filter instanceof EncodedQualifiersColumnProjectionFilter) {
+            ((EncodedQualifiersColumnProjectionFilter) filter).
+                    addTrackedColumn(ENCODED_EMPTY_COLUMN_NAME);
+        } else if (filter instanceof ColumnProjectionFilter) {
+            ((ColumnProjectionFilter) filter).addTrackedColumn(new ImmutableBytesPtr(emptyCF),
+                    new ImmutableBytesPtr(emptyCQ));
+        } else if (filter instanceof MultiEncodedCQKeyValueComparisonFilter) {
+            ((MultiEncodedCQKeyValueComparisonFilter) filter).
+                    setMinQualifier(ENCODED_EMPTY_COLUMN_NAME);
+        }
+    }
+
+    private static void addEmptyColumnToFilterList(FilterList filterList,
+            byte[] emptyCF, byte[] emptyCQ) {
         Iterator<Filter> filterIterator = filterList.getFilters().iterator();
         while (filterIterator.hasNext()) {
             Filter filter = filterIterator.next();
             if (filter instanceof FilterList) {
-                addEmptyColumnToFilterList((FilterList) filter);
-            }
-            else if (filter instanceof FirstKeyOnlyFilter) {
-                // Phoenix now uses EmptyColumnOnlyFilter instead of FirstKeyOnlyFilter
-                LOGGER.warn("Found FirstKeyOnlyFilter in FilterList");
-                filterIterator.remove();
+                addEmptyColumnToFilterList((FilterList) filter, emptyCF, emptyCQ);
+            } else {
+                addEmptyColumnToFilter(filter, emptyCF, emptyCQ);
             }
         }
     }
@@ -1129,12 +1142,9 @@ public class ScanUtil {
         Filter filter = scan.getFilter();
         if (filter != null) {
             if (filter instanceof FilterList) {
-                addEmptyColumnToFilterList((FilterList) filter);
-            }
-            else if (filter instanceof FirstKeyOnlyFilter) {
-                // Phoenix now uses EmptyColumnOnlyFilter instead of FirstKeyOnlyFilter
-                LOGGER.warn("Found FirstKeyOnlyFilter in Scan " + scan);
-                scan.setFilter(null);
+                addEmptyColumnToFilterList((FilterList) filter, emptyCF, emptyCQ);
+            } else {
+                addEmptyColumnToFilter(filter, emptyCF, emptyCQ);
             }
         }
         if (shouldAddEmptyColumn(scan, emptyCF)) {

@@ -209,7 +209,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
             expectedTableName = fullTableName;
             keyRanges = "[1,51]";
             clientSortAlgo = "CLIENT MERGE SORT";
-            serverFilterBy = "SERVER FILTER BY EMPTY COLUMN ONLY";
+            serverFilterBy = "SERVER FILTER BY FIRST KEY ONLY";
         } else {
             iteratorTypeAndScanSize = saltBuckets == null ? "PARALLEL 1-WAY"
                 : "PARALLEL " + saltBuckets + "-WAY";
@@ -283,7 +283,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
             explainPlanAttributes.getIteratorTypeAndScanSize());
         assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
         assertEquals(keyRanges, explainPlanAttributes.getKeyRanges());
-        assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
             explainPlanAttributes.getServerWhereFilter());
         assertEquals(clientSortAlgo, explainPlanAttributes.getClientSortAlgo());
 

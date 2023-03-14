@@ -155,7 +155,7 @@ public class CostBasedDecisionIT extends BaseTest {
                 explainPlanAttributes.getExplainScanType());
             assertEquals(tableName, explainPlanAttributes.getTableName());
             assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
-            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY AND \"ROWKEY\" <= 'z'",
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY AND \"ROWKEY\" <= 'z'",
                 explainPlanAttributes.getServerWhereFilter());
             assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]",
                 explainPlanAttributes.getServerAggregate());
@@ -363,12 +363,12 @@ public class CostBasedDecisionIT extends BaseTest {
                     "UNION ALL OVER 2 QUERIES\n" +
                     "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1]\n" +
                     "        SERVER MERGE [0.C2]\n" +
-                    "        SERVER FILTER BY EMPTY COLUMN ONLY AND \"ROWKEY\" <= 'z'\n" +
+                    "        SERVER FILTER BY FIRST KEY ONLY AND \"ROWKEY\" <= 'z'\n" +
                     "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]\n" +
                     "    CLIENT MERGE SORT\n" +
                     "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1]\n" +
                     "        SERVER MERGE [0.C2]\n" +
-                    "        SERVER FILTER BY EMPTY COLUMN ONLY AND \"ROWKEY\" >= 'a'\n" +
+                    "        SERVER FILTER BY FIRST KEY ONLY AND \"ROWKEY\" >= 'a'\n" +
                     "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]\n" +
                     "    CLIENT MERGE SORT");
         } finally {
@@ -417,13 +417,13 @@ public class CostBasedDecisionIT extends BaseTest {
             verifyQueryPlan(query,
                     "CLIENT PARALLEL 626-WAY RANGE SCAN OVER " + tableName + " [1,'X0'] - [1,'X1']\n" +
                     "    SERVER MERGE [0.C2]\n" +
-                    "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    SERVER SORTED BY [\"T1.:ROWKEY\"]\n" +
                     "CLIENT MERGE SORT\n" +
                     "    PARALLEL INNER-JOIN TABLE 0\n" +
                     "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1]\n" +
                     "            SERVER MERGE [0.C2]\n" +
-                    "            SERVER FILTER BY EMPTY COLUMN ONLY AND \"ROWKEY\" <= 'z'\n" +
+                    "            SERVER FILTER BY FIRST KEY ONLY AND \"ROWKEY\" <= 'z'\n" +
                     "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]\n" +
                     "        CLIENT MERGE SORT\n" +
                     "    DYNAMIC SERVER FILTER BY \"T1.:ROWKEY\" IN (T2.MRK)");
@@ -449,7 +449,7 @@ public class CostBasedDecisionIT extends BaseTest {
             String hintedQuery = query.replaceFirst("SELECT",
                     "SELECT  /*+ INDEX(" + tableName + " " + tableName + "_idx) */");
             String dataPlan = "[C1]";
-            String indexPlan = "SERVER FILTER BY EMPTY COLUMN ONLY AND (\"ROWKEY\" >= 1 AND \"ROWKEY\" <= 10)";
+            String indexPlan = "SERVER FILTER BY FIRST KEY ONLY AND (\"ROWKEY\" >= 1 AND \"ROWKEY\" <= 10)";
 
             // Use the index table plan that opts out order-by when stats are not available.
             ExplainPlan plan = conn.prepareStatement(query)
@@ -552,7 +552,7 @@ public class CostBasedDecisionIT extends BaseTest {
             assertEquals("PARALLEL 1-WAY",
                 rhsTable.getIteratorTypeAndScanSize());
             assertEquals("FULL SCAN ", rhsTable.getExplainScanType());
-            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
                 rhsTable.getServerWhereFilter());
             assertEquals(testTable1000, rhsTable.getTableName());
         }

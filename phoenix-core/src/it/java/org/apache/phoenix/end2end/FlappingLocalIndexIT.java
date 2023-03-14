@@ -172,7 +172,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
                 explainPlanAttributes.getTableName());
             assertEquals(" [1,'a'] - [1,'b']",
                 explainPlanAttributes.getKeyRanges());
-            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             assertEquals("CLIENT MERGE SORT",
                 explainPlanAttributes.getClientSortAlgo());
@@ -205,7 +205,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
                 explainPlanAttributes.getTableName());
             assertEquals(" [1,'a']",
                 explainPlanAttributes.getKeyRanges());
-            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             assertEquals("CLIENT MERGE SORT",
                 explainPlanAttributes.getClientSortAlgo());
@@ -234,7 +234,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
                 explainPlanAttributes.getTableName());
             assertEquals(" [1,*] - [1,'z']",
                 explainPlanAttributes.getKeyRanges());
-            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             assertEquals("CLIENT MERGE SORT",
                 explainPlanAttributes.getClientSortAlgo());
@@ -268,7 +268,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
             assertEquals(indexPhysicalTableName,
                 explainPlanAttributes.getTableName());
             assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
-            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             assertEquals("CLIENT MERGE SORT",
                 explainPlanAttributes.getClientSortAlgo());

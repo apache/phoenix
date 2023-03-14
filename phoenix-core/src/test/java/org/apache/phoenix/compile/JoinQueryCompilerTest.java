@@ -94,7 +94,7 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
         ResultSet rs = conn.createStatement().executeQuery(query);
         assertEquals(
         		"CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
-        		"    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+        		"    SERVER FILTER BY FIRST KEY ONLY\n" +
         		"    PARALLEL LEFT-JOIN TABLE 0\n" +
         		"        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
         		"            PARALLEL LEFT-JOIN TABLE 0\n" +

@@ -1377,6 +1377,9 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             Filter delegateFilter = pageFilter.getDelegateFilter();
             if (delegateFilter instanceof EmptyColumnOnlyFilter) {
                 pageFilter.setDelegateFilter(null);
+            } else if (delegateFilter instanceof FirstKeyOnlyFilter) {
+                scan.setFilter(null);
+                return true;
             } else if (delegateFilter != null) {
                 // Override the filter so that we get all versions
                 pageFilter.setDelegateFilter(new AllVersionsIndexRebuildFilter(delegateFilter));
@@ -1384,6 +1387,9 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         } else if (filter instanceof EmptyColumnOnlyFilter) {
             scan.setFilter(null);
             return true;
+        } else if (filter instanceof FirstKeyOnlyFilter) {
+                scan.setFilter(null);
+                return true;
         } else if (filter != null) {
             // Override the filter so that we get all versions
             scan.setFilter(new AllVersionsIndexRebuildFilter(filter));

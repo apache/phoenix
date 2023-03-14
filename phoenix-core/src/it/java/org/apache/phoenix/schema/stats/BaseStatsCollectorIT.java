@@ -265,7 +265,7 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
         assertEquals("PARALLEL 1-WAY", planAttributes.getIteratorTypeAndScanSize());
         assertEquals("FULL SCAN ", planAttributes.getExplainScanType());
         assertEquals(physicalTableName, planAttributes.getTableName());
-        assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY", planAttributes.getServerWhereFilter());
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY", planAttributes.getServerWhereFilter());
         conn.close();
     }
 

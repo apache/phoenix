@@ -168,7 +168,7 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
             plan.getPlanStepsAsAttributes();
         assertEquals("PARALLEL 1-WAY",
             explainPlanAttributes.getIteratorTypeAndScanSize());
-        assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
             explainPlanAttributes.getServerWhereFilter());
         assertEquals("SKIP SCAN ON 3 KEYS ",
             explainPlanAttributes.getExplainScanType());
@@ -291,7 +291,7 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
             plan.getPlanStepsAsAttributes();
         assertEquals("PARALLEL 1-WAY",
             explainPlanAttributes.getIteratorTypeAndScanSize());
-        assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
             explainPlanAttributes.getServerWhereFilter());
         assertEquals("SKIP SCAN ON 5 RANGES ",
             explainPlanAttributes.getExplainScanType());

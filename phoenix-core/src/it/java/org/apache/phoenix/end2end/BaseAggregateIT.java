@@ -384,7 +384,7 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
         assertEquals(tableName, explainPlanAttributes.getTableName());
         assertEquals(" ['000001111122222','333334444455555',0,*] - ['000001111122222','333334444455555',0,1]",
             explainPlanAttributes.getKeyRanges());
-        assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
             explainPlanAttributes.getServerWhereFilter());
         assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [MATCH_STATUS, EXTERNAL_DATASOURCE_KEY]",
             explainPlanAttributes.getServerAggregate());
@@ -438,7 +438,7 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
         assertEquals("REVERSE", explainPlanAttributes.getClientSortedBy());
         assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
         assertEquals(tableName, explainPlanAttributes.getTableName());
-        assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
             explainPlanAttributes.getServerWhereFilter());
         assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]",
             explainPlanAttributes.getServerAggregate());
@@ -499,7 +499,7 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
         assertEquals("REVERSE", explainPlanAttributes.getClientSortedBy());
         assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
         assertEquals(tableName, explainPlanAttributes.getTableName());
-        assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
             explainPlanAttributes.getServerWhereFilter());
         assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]",
             explainPlanAttributes.getServerAggregate());
@@ -566,7 +566,7 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
             explainPlanAttributes.getIteratorTypeAndScanSize());
         assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
         assertEquals(tableName, explainPlanAttributes.getTableName());
-        assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
             explainPlanAttributes.getServerWhereFilter());
         assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]",
             explainPlanAttributes.getServerAggregate());

@@ -1605,7 +1605,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         QueryPlan plan = getQueryPlan(query,Collections.emptyList());
         plan.iterator();
         Scan scan = plan.getContext().getScan();
-        assertTrue(scan.getFilter() instanceof EmptyColumnOnlyFilter);
+        assertTrue(scan.getFilter() instanceof FirstKeyOnlyFilter);
         assertEquals(1, scan.getFamilyMap().size());
     }
     
@@ -2409,12 +2409,11 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         try {
             conn.createStatement().execute("CREATE TABLE t(k INTEGER PRIMARY KEY, a.v1 VARCHAR, b.v2 VARCHAR, c.v3 VARCHAR)");
-            // Family A should be included in the projected families by default for the empty column
             assertFamilies(projectQuery("SELECT k FROM t"), "A");
             assertFamilies(projectQuery("SELECT k FROM t WHERE k = 5"), "A");
             assertFamilies(projectQuery("SELECT v2 FROM t WHERE k = 5"), "A", "B");
-            assertFamilies(projectQuery("SELECT v2 FROM t WHERE v2 = 'a'"), "A", "B");
-            assertFamilies(projectQuery("SELECT v3 FROM t WHERE v2 = 'a'"), "A", "B", "C");
+            assertFamilies(projectQuery("SELECT v2 FROM t WHERE v2 = 'a'"), "B");
+            assertFamilies(projectQuery("SELECT v3 FROM t WHERE v2 = 'a'"), "B", "C");
             assertFamilies(projectQuery("SELECT v3 FROM t WHERE v2 = 'a' AND v3 is null"), "A", "B", "C");
         } finally {
             conn.close();
@@ -2504,24 +2503,24 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN "+query);
             String explainPlan = QueryUtil.getExplainPlan(rs);
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
-                    "    SERVER FILTER BY EMPTY COLUMN ONLY",explainPlan);
+                    "    SERVER FILTER BY FIRST KEY ONLY",explainPlan);
             query = "SELECT k,j from t3 b join t1 a ON k = j where a.col1 || a.col2 = 'foobar'";
             rs = conn.createStatement().executeQuery("EXPLAIN "+query);
             explainPlan = QueryUtil.getExplainPlan(rs);
             assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER T3\n" + 
-                    "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    PARALLEL INNER-JOIN TABLE 0\n" + 
                     "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
-                    "            SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                    "            SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    DYNAMIC SERVER FILTER BY B.J IN (\"A.:K\")",explainPlan);
             query = "SELECT a.k,b.k from t2 b join t1 a ON a.k = b.k where a.col1 || a.col2 = 'foobar'";
             rs = conn.createStatement().executeQuery("EXPLAIN "+query);
             explainPlan = QueryUtil.getExplainPlan(rs);
             assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER T2\n" + 
-                    "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    PARALLEL INNER-JOIN TABLE 0\n" + 
                     "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
-                    "            SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                    "            SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    DYNAMIC SERVER FILTER BY B.K IN (\"A.:K\")",explainPlan);
         } finally {
             conn.close();

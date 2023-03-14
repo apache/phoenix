@@ -134,7 +134,7 @@ public class CountDistinctApproximateHyperLogLogIT extends ParallelStatsDisabled
 			assertEquals("PARALLEL 1-WAY",
 				explainPlanAttributes.getIteratorTypeAndScanSize());
 			assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-			assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+			assertEquals("SERVER FILTER BY FIRST KEY ONLY",
 				explainPlanAttributes.getServerWhereFilter());
 			assertEquals("SERVER AGGREGATE INTO SINGLE ROW",
 				explainPlanAttributes.getServerAggregate());

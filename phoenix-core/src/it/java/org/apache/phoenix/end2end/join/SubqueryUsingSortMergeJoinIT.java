@@ -128,7 +128,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
                 "        CLIENT MERGE SORT\n" +
                 "    AND\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_supplier\n" +
-                "            SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "            SERVER SORTED BY [\"S.:supplier_id\"]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    CLIENT SORTED BY [\"I.:item_id\"]\n" +
@@ -144,7 +144,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
                 "        CLIENT MERGE SORT\n" +
                 "    AND\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
-                "            SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n" +
                 "        CLIENT SORTED BY \\[\".+.:item_id\", \".+.0:NAME\"\\]\n"+
                 "            PARALLEL ANTI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
@@ -154,7 +154,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
                 "    CLIENT SORTED BY \\[.*.CO_ITEM_ID, .*.CO_ITEM_NAME\\]\n" +
                 "AND\n" +
                 "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
-                "        SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n" +
                 "    CLIENT SORTED BY \\[\".+.:item_id\", \".+.0:NAME\"\\]\n"+
                 "        PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
@@ -165,12 +165,12 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
                 
                 "SORT-MERGE-JOIN \\(SEMI\\) TABLES\n" +
                 "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_customer\n" +
-                "        SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER SORTED BY \\[\"Join.idx_customer.:customer_id\"\\]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND \\(SKIP MERGE\\)\n" +
                 "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
-                "        SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"O.customer_id\"\\]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "        PARALLEL INNER-JOIN TABLE 0\n" +
@@ -194,7 +194,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
                 "        CLIENT MERGE SORT\n" +
                 "    AND\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SUPPLIER_TABLE_FULL_NAME + " [1]\n" +
-                "            SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "            SERVER SORTED BY [\"S.:supplier_id\"]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    CLIENT SORTED BY [\"I.:item_id\"]\n" +
@@ -210,7 +210,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
                 "        CLIENT MERGE SORT\n" +
                 "    AND\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " \\[1\\]\n" +
-                "            SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n" +
                 "        CLIENT MERGE SORT\n" + 
                 "        CLIENT SORTED BY \\[\".+.:item_id\", \".+.0:NAME\"\\]\n" +
@@ -221,7 +221,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
                 "    CLIENT SORTED BY \\[.*.CO_ITEM_ID, .*.CO_ITEM_NAME\\]\n" +
                 "AND\n" +
                 "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " \\[1\\]\n" +
-                "        SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n" +
                 "    CLIENT MERGE SORT\n" + 
                 "    CLIENT SORTED BY \\[\".+.:item_id\", \".+.0:NAME\"\\]\n" +
@@ -234,12 +234,12 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
                 
                 "SORT-MERGE-JOIN \\(SEMI\\) TABLES\n" +
                 "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_TABLE_FULL_NAME + " \\[1\\]\n" +
-                "        SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER SORTED BY \\[\"Join.idx_customer.:customer_id\"\\]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND \\(SKIP MERGE\\)\n" +
                 "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " \\[1\\]\n" +
-                "        SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"O.customer_id\"\\]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "        PARALLEL INNER-JOIN TABLE 0\n" +

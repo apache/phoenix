@@ -41,27 +41,27 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
 
                 "SELECT host FROM PTSDB WHERE inst IS NULL AND host IS NOT NULL AND \"DATE\" >= to_date('2013-01-01')",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [null,not null]\n" + 
-                "    SERVER FILTER BY EMPTY COLUMN ONLY AND \"DATE\" >= DATE '2013-01-01 00:00:00.000'",
+                "    SERVER FILTER BY FIRST KEY ONLY AND \"DATE\" >= DATE '2013-01-01 00:00:00.000'",
 
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id > '000000000000002' AND entity_id < '000000000000008' AND (organization_id,entity_id) >= ('000000000000001','000000000000005') ",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000005'] - ['000000000000001','000000000000008']",
 
                 "SELECT host FROM PTSDB3 WHERE host IN ('na1', 'na2','na3')",
                 "CLIENT PARALLEL 1-WAY SKIP SCAN ON 3 KEYS OVER PTSDB3 [~'na3'] - [~'na1']\n" + 
-                "    SERVER FILTER BY EMPTY COLUMN ONLY",
+                "    SERVER FILTER BY FIRST KEY ONLY",
 
                 "SELECT /*+ SMALL*/ host FROM PTSDB3 WHERE host IN ('na1', 'na2','na3')",
                 "CLIENT PARALLEL 1-WAY SMALL SKIP SCAN ON 3 KEYS OVER PTSDB3 [~'na3'] - [~'na1']\n" + 
-                "    SERVER FILTER BY EMPTY COLUMN ONLY",
+                "    SERVER FILTER BY FIRST KEY ONLY",
 
                 "SELECT inst,\"DATE\" FROM PTSDB2 WHERE inst = 'na1' ORDER BY inst DESC, \"DATE\" DESC",
                 "CLIENT PARALLEL 1-WAY REVERSE RANGE SCAN OVER PTSDB2 ['na1']\n" +
-                "    SERVER FILTER BY EMPTY COLUMN ONLY",
+                "    SERVER FILTER BY FIRST KEY ONLY",
 
                 // Since inst IS NOT NULL is unbounded, we won't continue optimizing
                 "SELECT host FROM PTSDB WHERE inst IS NOT NULL AND host IS NULL AND \"DATE\" >= to_date('2013-01-01')",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [not null]\n" + 
-                "    SERVER FILTER BY EMPTY COLUMN ONLY AND (HOST IS NULL AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')",
+                "    SERVER FILTER BY FIRST KEY ONLY AND (HOST IS NULL AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')",
 
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id = '000000000000002' AND x_integer = 2 AND a_integer < 5 ",
                 "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER ATABLE\n" + 
@@ -79,20 +79,20 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
 
                 "SELECT inst,host FROM PTSDB WHERE inst IN ('na1', 'na2','na3') AND host IN ('a','b') AND \"DATE\" >= to_date('2013-01-01') AND \"DATE\" < to_date('2013-01-02')",
                 "CLIENT PARALLEL 1-WAY SKIP SCAN ON 6 RANGES OVER PTSDB ['na1','a','2013-01-01'] - ['na3','b','2013-01-02']\n" + 
-                "    SERVER FILTER BY EMPTY COLUMN ONLY",
+                "    SERVER FILTER BY FIRST KEY ONLY",
 
                 "SELECT inst,host FROM PTSDB WHERE inst LIKE 'na%' AND host IN ('a','b') AND \"DATE\" >= to_date('2013-01-01') AND \"DATE\" < to_date('2013-01-02')",
                 "CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 RANGES OVER PTSDB ['na','a','2013-01-01'] - ['nb','b','2013-01-02']\n" + 
-                "    SERVER FILTER BY EMPTY COLUMN ONLY",
+                "    SERVER FILTER BY FIRST KEY ONLY",
 
                 "SELECT count(*) FROM atable",
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER ATABLE\n" + 
-                "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    SERVER AGGREGATE INTO SINGLE ROW",
 
                 "SELECT count(*) FROM atable WHERE organization_id='000000000000001' AND SUBSTR(entity_id,1,3) > '002' AND SUBSTR(entity_id,1,3) <= '003'",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','003            '] - ['000000000000001','004            ']\n" + 
-                "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    SERVER AGGREGATE INTO SINGLE ROW",
 
                 "SELECT a_string FROM atable WHERE organization_id='000000000000001' AND SUBSTR(entity_id,1,3) > '002' AND SUBSTR(entity_id,1,3) <= '003'",
@@ -168,7 +168,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
 
                 "SELECT inst,host FROM PTSDB WHERE REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1', 'na2','na3')",
                 "CLIENT PARALLEL 1-WAY SKIP SCAN ON 3 RANGES OVER PTSDB ['na1'] - ['na4']\n" + 
-                "    SERVER FILTER BY EMPTY COLUMN ONLY AND REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1','na2','na3')",
+                "    SERVER FILTER BY FIRST KEY ONLY AND REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1','na2','na3')",
 
         };
         for (int i = 0; i < queryPlans.length; i+=2) {
@@ -249,7 +249,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
             String queryPlan = QueryUtil.getExplainPlan(rs);
             assertEquals(
                     "CLIENT PARALLEL 20-WAY RANGE SCAN OVER FOO [X'00','a',~'2016-01-28 23:59:59.999'] - [X'13','a',~'2016-01-28 00:00:00.000']\n" +
-                    "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
                     "CLIENT MERGE SORT", queryPlan);
         } finally {
             conn.close();
@@ -275,7 +275,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
             String queryPlan = QueryUtil.getExplainPlan(rs);
             assertEquals(
                     "CLIENT PARALLEL 20-WAY ROUND ROBIN RANGE SCAN OVER " + tableName + " [X'00','a',~'2016-01-28 23:59:59.999'] - [X'13','a',~'2016-01-28 00:00:00.000']\n" +
-                    "    SERVER FILTER BY EMPTY COLUMN ONLY", queryPlan);
+                    "    SERVER FILTER BY FIRST KEY ONLY", queryPlan);
         } finally {
             conn.close();
         }
@@ -298,7 +298,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
             String queryPlan = QueryUtil.getExplainPlan(rs);
             assertEquals(
                     "CLIENT PARALLEL 1-WAY RANGE SCAN OVER FOO ['a']\n" + 
-                    "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    SERVER SORTED BY [B, C]\n" +        
                     "CLIENT MERGE SORT", queryPlan);
         } finally {

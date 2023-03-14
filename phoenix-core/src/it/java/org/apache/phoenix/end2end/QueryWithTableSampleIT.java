@@ -222,7 +222,7 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
                 explainPlanAttributes.getExplainScanType());
             assertEquals(0.45D, explainPlanAttributes.getSamplingRate(), 0D);
             assertEquals(tableName, explainPlanAttributes.getTableName());
-            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
                 explainPlanAttributes.getServerWhereFilter());
         }
     }
@@ -238,9 +238,9 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
             
             assertEquals("UNION ALL OVER 2 QUERIES\n" +
 						"    CLIENT PARALLEL 1-WAY 1.0-SAMPLED RANGE SCAN OVER " + tableName+" [*] - [2]\n"+
-						"        SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+						"        SERVER FILTER BY FIRST KEY ONLY\n" +
 						"    CLIENT PARALLEL 1-WAY 0.02-SAMPLED FULL SCAN OVER " + tableName + "\n" +
-						"        SERVER FILTER BY EMPTY COLUMN ONLY AND I2 < 6000",QueryUtil.getExplainPlan(rs));
+						"        SERVER FILTER BY FIRST KEY ONLY AND I2 < 6000",QueryUtil.getExplainPlan(rs));
         } finally {
             conn.close();
         }
@@ -257,11 +257,11 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
             ResultSet rs = conn.createStatement().executeQuery(query);
             
             assertEquals("CLIENT PARALLEL 1-WAY 0.45-SAMPLED FULL SCAN OVER " + tableName + "\n" +
-						"    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+						"    SERVER FILTER BY FIRST KEY ONLY\n" +
 						"    SERVER AGGREGATE INTO SINGLE ROW\n" +
 						"    PARALLEL INNER-JOIN TABLE 0 (SKIP MERGE)\n" +
 						"        CLIENT PARALLEL 1-WAY 0.75-SAMPLED FULL SCAN OVER " + joinedTableName + "\n" +
-						"            SERVER FILTER BY EMPTY COLUMN ONLY\n" +
+						"            SERVER FILTER BY FIRST KEY ONLY\n" +
 						"    DYNAMIC SERVER FILTER BY A.I1 IN (B.I1)",QueryUtil.getExplainPlan(rs));
         } finally {
             conn.close();

@@ -157,7 +157,7 @@ public class KeyOnlyIT extends ParallelStatsEnabledIT {
         assertEquals("FULL SCAN ",
             explainPlanAttributes.getExplainScanType());
         assertEquals(tableName, explainPlanAttributes.getTableName());
-        assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+        assertEquals("SERVER FILTER BY FIRST KEY ONLY",
             explainPlanAttributes.getServerWhereFilter());
         assertEquals(1, explainPlanAttributes.getServerRowLimit().intValue());
         assertEquals(1, explainPlanAttributes.getClientRowLimit().intValue());
