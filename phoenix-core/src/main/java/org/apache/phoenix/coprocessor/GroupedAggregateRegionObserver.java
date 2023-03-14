@@ -50,6 +50,8 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
+import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
@@ -400,6 +402,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         private final long pageSizeMs;
         private RegionScanner regionScanner = null;
         private final GroupByCache groupByCache;
+        private final ScannerContext groupScannerContext;
 
         private UnorderedGroupByRegionScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
                                               final Scan scan, final RegionScanner scanner, final List<Expression> expressions,
@@ -410,6 +413,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             this.limit = limit;
             this.pageSizeMs = pageSizeMs;
             this.expressions = expressions;
+            this.groupScannerContext = null;
             RegionCoprocessorEnvironment env = c.getEnvironment();
             Configuration conf = env.getConfiguration();
             int estDistVals = conf.getInt(GROUPBY_ESTIMATED_DISTINCT_VALUES_ATTRIB, DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES);
@@ -462,7 +466,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         // since this is an indication of whether or not there are
                         // more values after the
                         // ones returned
-                        hasMore = delegate.nextRaw(results);
+                        if (groupScannerContext == null) {
+                            hasMore = delegate.nextRaw(results);
+                        } else {
+                            hasMore = delegate.nextRaw(results, groupScannerContext);
+                        }
                         if (!results.isEmpty()) {
                             if (isDummy(results)) {
                                 getDummyResult(resultsToReturn);
@@ -542,8 +550,14 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         ScanUtil.getCustomAnnotations(scan)));
             }
         }
+
         @Override
         public boolean next(List<Cell> results) throws IOException {
+            return next(results, null);
+        }
+
+        @Override
+        public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
             boolean hasMore;
             boolean atLimit;
             boolean aggBoundary = false;
@@ -570,7 +584,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         // since this is an indication of whether or not there
                         // are more values after the
                         // ones returned
-                        hasMore = delegate.nextRaw(kvs);
+                        if (scannerContext == null) {
+                            hasMore = delegate.nextRaw(kvs);
+                        } else {
+                            hasMore = delegate.nextRaw(kvs, scannerContext);
+                        }
                         if (!kvs.isEmpty()) {
                             if (isDummy(kvs)) {
                                 getDummyResult(results);

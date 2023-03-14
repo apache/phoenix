@@ -1460,6 +1460,15 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         return overAllQueryMetrics.publish();
     }
 
+    public Map<String, Map<MetricType, Long>> getCombinedReadMetrics() {
+        ReadMetricQueue one = context.getReadMetricsQueue();
+        for (StatementContext sub : context.getSubStatementContexts()) {
+            ReadMetricQueue subMetric = sub.getReadMetricsQueue();
+            one.combineReadMetrics(subMetric);
+        }
+        return one.aggregate();
+    }
+
     @Override
     public void resetMetrics() {
         readMetricsQueue.clearMetrics();

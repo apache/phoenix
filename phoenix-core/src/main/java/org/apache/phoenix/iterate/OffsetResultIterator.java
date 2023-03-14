@@ -22,6 +22,7 @@ import java.util.List;
 
 import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 
@@ -37,10 +38,12 @@ public class OffsetResultIterator extends DelegateResultIterator {
     private int rowCount;
     private int offset;
     private long pageSizeMs = Long.MAX_VALUE;
+    private boolean hasRegionScannerContext;
 
     public OffsetResultIterator(ResultIterator delegate, Integer offset) {
         super(delegate);
         this.offset = offset == null ? -1 : offset;
+        this.hasRegionScannerContext = delegate instanceof RegionScannerResultIterator;
     }
 
     public OffsetResultIterator(ResultIterator delegate, Integer offset, long pageSizeMs) {
@@ -82,5 +85,12 @@ public class OffsetResultIterator extends DelegateResultIterator {
 
     public Integer getRemainingOffset() {
         return (offset - rowCount) > 0 ? (offset - rowCount) : 0;
+    }
+
+    public ScannerContext getRegionScannerContext() {
+        if (hasRegionScannerContext) {
+            return ((RegionScannerResultIterator)getDelegate()).getRegionScannerContext();
+        }
+        return null;
     }
 }

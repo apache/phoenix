@@ -25,6 +25,8 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.PrivateCellUtil;
 
+import java.util.Map;
+
 /**
  * ScannerContext has all methods package visible. To properly update the context progress for our scanners we
  * need this helper
@@ -35,5 +37,17 @@ public class ScannerContextUtil {
             sc.incrementSizeProgress(PrivateCellUtil.estimatedSerializedSizeOf(cell),
                     cell.heapSize());
         }
+    }
+
+    public static void updateMetrics(ScannerContext src, ScannerContext dst) {
+        if (src != null && dst != null && src.isTrackingMetrics() && dst.isTrackingMetrics()) {
+            for (Map.Entry<String, Long> entry : src.getMetrics().getMetricsMap().entrySet()) {
+                dst.metrics.addToCounter(entry.getKey(), entry.getValue());
+            }
+        }
+    }
+
+    public static ScannerContext copyNoLimitScanner(ScannerContext sc) {
+        return new ScannerContext(sc.keepProgress, null, sc.isTrackingMetrics());
     }
 }

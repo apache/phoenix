@@ -63,6 +63,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.GlobalCache;
@@ -160,6 +161,8 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
     private boolean incrScanRefCount = false;
     private byte[] indexMaintainersPtr;
     private boolean useIndexProto;
+    private final ScannerContext groupScannerContext;
+
 
     public UngroupedAggregateRegionScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
                                            final RegionScanner innerScanner, final Region region, final Scan scan,
@@ -172,6 +175,12 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         this.scan = scan;
         this.ungroupedAggregateRegionObserver = ungroupedAggregateRegionObserver;
         this.innerScanner = innerScanner;
+        if (scan.isScanMetricsEnabled()) {
+            this.groupScannerContext = ScannerContext.newBuilder()
+                    .setTrackMetrics(scan.isScanMetricsEnabled()).build();
+        } else {
+            this.groupScannerContext = null;
+        }
         Configuration conf = env.getConfiguration();
         pageSizeMs = getPageSizeMsForRegionScanner(scan);
         ts = scan.getTimeRange().getMax();
@@ -576,7 +585,11 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                         // Results are potentially returned even when the return value of s.next is false
                         // since this is an indication of whether or not there are more values after the
                         // ones returned
-                        hasMore = innerScanner.nextRaw(results);
+                        if (groupScannerContext == null) {
+                            hasMore = innerScanner.nextRaw(results);
+                        } else {
+                            hasMore = innerScanner.nextRaw(results, groupScannerContext);
+                        }
                         if (isDummy(results)) {
                             if (!hasAny) {
                                 resultsToReturn.addAll(results);
