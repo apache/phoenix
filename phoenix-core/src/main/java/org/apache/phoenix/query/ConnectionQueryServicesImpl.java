@@ -176,7 +176,6 @@ import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.compile.MutationPlan;
-import org.apache.phoenix.coprocessor.ChildLinkMetaDataObserver;
 import org.apache.phoenix.coprocessor.ChildLinkMetaDataEndpoint;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
@@ -1236,14 +1235,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     builder.setCoprocessor(
                             CoprocessorDescriptorBuilder
                                     .newBuilder(ChildLinkMetaDataEndpoint.class.getName())
-                                    .setPriority(priority)
-                                    .setProperties(Collections.emptyMap())
-                                    .build());
-                }
-                if (!newDesc.hasCoprocessor(ChildLinkMetaDataObserver.class.getName())) {
-                    builder.setCoprocessor(
-                            CoprocessorDescriptorBuilder
-                                    .newBuilder(ChildLinkMetaDataObserver.class.getName())
                                     .setPriority(priority)
                                     .setProperties(Collections.emptyMap())
                                     .build());
