@@ -5,6 +5,7 @@ import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -13,6 +14,7 @@ import org.junit.experimental.categories.Category;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.util.HashMap;
 import java.util.Map;
 
 @Category(NeedsOwnMiniClusterTest.class)
@@ -28,9 +30,9 @@ public class OrphanChildLinkRowsIT extends BaseTest {
      * 1. Create 2 tables - T1 and T2. Create a view V1 on T1. Create a view with the same name V1 on T2.
      * The second CREATE VIEW will fail, verify if there was no orphan child link because of that.
      *
-     * 2. Instrument CQSI to fail phase three of CREATE VIEW. Crate a view V2 on T2 and V1 on T2 again which will fail.
+     * 2. Instrument CQSI to fail phase three of CREATE VIEW. Crate a view V2 on T2 (passes) and V1 on T2 which will fail.
      * Both links T2->V2 and T2->V1 will be in UNVERIFIED state, repaired during read.
-     * Check if only 2 child links are returned: T2->V2 and T1->V1 from previous test.
+     * Check if only 2 child links are returned: T2->V2 and T1->V1.
      */
     @Test
     public void testNoOrphanChildLinkRow() throws Exception {
@@ -51,7 +53,9 @@ public class OrphanChildLinkRowsIT extends BaseTest {
         catch (TableAlreadyExistsException e) {
         }
 
-        verifyNoOrphanChildLinkRow(1);
+        Map<String, String> expectedChildLinks = new HashMap<>();
+        expectedChildLinks.put("S1.T1", "VS1.V1");
+        verifyNoOrphanChildLinkRow(expectedChildLinks);
 
         // configure CQSI to fail the last write phase of CREATE VIEW
         // where child link mutations are set to VERIFIED or are deleted
@@ -64,20 +68,25 @@ public class OrphanChildLinkRowsIT extends BaseTest {
         }
         catch (TableAlreadyExistsException e) {
         }
-        verifyNoOrphanChildLinkRow(2);
+        expectedChildLinks.put("S2.T2", "VS2.V2");
+        verifyNoOrphanChildLinkRow(expectedChildLinks);
     }
 
 
-    private void verifyNoOrphanChildLinkRow(int expectedChildLinkRows) throws Exception {
+    private void verifyNoOrphanChildLinkRow(Map<String, String> expectedChildLinks) throws Exception {
         String childLinkQuery = "SELECT * FROM SYSTEM.CHILD_LINK";
         try (Connection connection = DriverManager.getConnection(getUrl())) {
             ResultSet rs = connection.createStatement().executeQuery(childLinkQuery);
             int count = 0;
             while (rs.next()) {
-                //System.out.println(rs.getString(3) + " " + rs.getString(5));
+                String parentFullName = SchemaUtil.getTableName(rs.getString(2), rs.getString(3));
+                Assert.assertTrue("Child Link not found for table: " + parentFullName, expectedChildLinks.containsKey(parentFullName));
+                Assert.assertEquals(String.format("Child was not correct in Child Link. Expected : %s, Actual: %s", expectedChildLinks.get(parentFullName), rs.getString(5)),
+                        expectedChildLinks.get(parentFullName), rs.getString(5));
                 count++;
             }
-            Assert.assertEquals("Found Orphan Linking Row", expectedChildLinkRows, count);
+            Assert.assertTrue("Found Orphan Linking Row", count <= expectedChildLinks.size());
+            Assert.assertTrue("All expected Child Links not returned by query", count >= expectedChildLinks.size());
         }
     }
 
