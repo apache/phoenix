@@ -93,12 +93,14 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
     private final boolean transactional;
     private final TransactionFactory.Provider transactionProvider;
     private final boolean mutable;
+    private final boolean columnEncoded;
     private final String tableDDLOptions;
 
     protected BaseIndexIT(boolean localIndex, boolean uncovered, boolean mutable, String transactionProvider, boolean columnEncoded) {
         this.localIndex = localIndex;
         this.uncovered = uncovered;
         this.mutable = mutable;
+        this.columnEncoded = columnEncoded;
         StringBuilder optionBuilder = new StringBuilder();
         if (!columnEncoded) {
             if (optionBuilder.length()!=0)
@@ -156,7 +158,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
             if (!uncovered) {
                 // Optimizer would not select the uncovered index for this query
-                assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
+                assertEquals(columnEncoded ? "SERVER FILTER BY FIRST KEY ONLY" :
+                                "SERVER FILTER BY EMPTY COLUMN ONLY",
                         explainPlanAttributes.getServerWhereFilter());
             }
 
@@ -584,8 +587,9 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 plan.getPlanStepsAsAttributes();
             assertEquals("PARALLEL 1-WAY",
                 explainPlanAttributes.getIteratorTypeAndScanSize());
-            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
-                explainPlanAttributes.getServerWhereFilter());
+            assertEquals(columnEncoded ? "SERVER FILTER BY FIRST KEY ONLY" :
+                            "SERVER FILTER BY EMPTY COLUMN ONLY",
+                    explainPlanAttributes.getServerWhereFilter());
             if (localIndex) {
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
@@ -618,8 +622,9 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             explainPlanAttributes = plan.getPlanStepsAsAttributes();
             assertEquals("PARALLEL 1-WAY",
                 explainPlanAttributes.getIteratorTypeAndScanSize());
-            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
-                explainPlanAttributes.getServerWhereFilter());
+            assertEquals(columnEncoded ? "SERVER FILTER BY FIRST KEY ONLY" :
+                            "SERVER FILTER BY EMPTY COLUMN ONLY",
+                    explainPlanAttributes.getServerWhereFilter());
             if (localIndex) {
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
@@ -994,8 +999,9 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 .getExplainPlan();
             ExplainPlanAttributes explainPlanAttributes =
                 plan.getPlanStepsAsAttributes();
-            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
-                explainPlanAttributes.getServerWhereFilter());
+            assertEquals(columnEncoded ? "SERVER FILTER BY FIRST KEY ONLY" :
+                            "SERVER FILTER BY EMPTY COLUMN ONLY",
+                    explainPlanAttributes.getServerWhereFilter());
             if (localIndex) {
                 assertEquals("PARALLEL 2-WAY",
                     explainPlanAttributes.getIteratorTypeAndScanSize());

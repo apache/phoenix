@@ -27,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
@@ -114,8 +115,10 @@ public class StoreCompactionScanner implements InternalScanner {
     @Override
     public boolean next(List<Cell> result) throws IOException {
         boolean hasMore = storeScanner.next(result);
-        filter(result, false);
-        Collections.sort(result, CellComparator.getInstance());
+        if (!result.isEmpty()) {
+            filter(result, false);
+            //filterRegionLevel(new ArrayList(result), result);
+        }
         return hasMore;
     }
 
@@ -149,10 +152,7 @@ public class StoreCompactionScanner implements InternalScanner {
                 currentColumnCell = cell;
                 currentColumn.add(cell);
             }
-            else if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
-                    cell.getQualifierLength(),
-                    currentColumnCell.getQualifierArray(), currentColumnCell.getQualifierOffset(),
-                    currentColumnCell.getQualifierLength()) != 0) {
+            else if (!CellUtil.matchingQualifier(cell, currentColumnCell)) {
                 columns.add(currentColumn);
                 currentColumn = new ArrayList<>();
                 currentColumnCell = cell;
@@ -194,6 +194,16 @@ public class StoreCompactionScanner implements InternalScanner {
         // The version of a row version. It is the minimum of the versions of the cells included
         // in the row version
         int version = 0;
+        @Override
+        public String toString() {
+            StringBuilder output = new StringBuilder();
+            output.append("Cell count: " + cells.size() + "\n");
+            for (Cell cell : cells) {
+                output.append(cell + "\n");
+            }
+            output.append("ts:" + ts + " v:" + version);
+            return output.toString();
+        }
     }
 
     /**
@@ -226,33 +236,61 @@ public class StoreCompactionScanner implements InternalScanner {
         rowContext.maxTimestamp = 0;
         rowContext.minTimestamp = Long.MAX_VALUE;
         long ts;
-        long deleteFamilyTimestamp = 0;
-        int count = 0;
+        long currentDeleteFamilyTimestamp = 0;
+        long nextDeleteFamilyTimestamp = 0;
+        int columnIndex = 0;
         for (List<Cell> column : columns) {
             Cell firstCell = column.get(0);
-            if (firstCell.getType() == Cell.Type.Put) {
-                count++;
-                ts = firstCell.getTimestamp();
+            ts = firstCell.getTimestamp();
+            if (ts <= nextDeleteFamilyTimestamp) {
+                continue;
+            }
+            if (firstCell.getType() == Cell.Type.DeleteFamily ||
+                    firstCell.getType() == Cell.Type.DeleteFamilyVersion) {
+                if (columnIndex == 0) {
+                    // Family delete markers are always found in the first column of a column family
+                    // When Phoenix deletes a row, it places a family delete marker in each column
+                    // family with the same timestamp. We just need to process the delete column
+                    // family markers of the first column family, which would be in the column
+                    // with columnIndex=0.
+                    currentDeleteFamilyTimestamp = firstCell.getTimestamp();
+                    // We need to check if the next delete family marker exits. If so, we need
+                    // to record its timestamp as by definition a compaction row version cannot
+                    // cross a family delete marker
+                    if (column.size() > 1) {
+                        nextDeleteFamilyTimestamp = column.get(1).getTimestamp();
+                    } else {
+                        nextDeleteFamilyTimestamp = 0;
+                    }
+                }
+            } if (firstCell.getType() == Cell.Type.Put) {
+                // Compaction row versions are constructed from put cells. So, we use only
+                // put cell timestamps to find the time range for a compaction row version
                 if (rowContext.maxTimestamp < ts) {
                     rowContext.maxTimestamp = ts;
                 }
-                if (rowContext.minTimestamp > ts) {
+                if (currentDeleteFamilyTimestamp != 0 && currentDeleteFamilyTimestamp < rowContext.maxTimestamp) {
+                    // A compaction row version do not cross a family delete marker. This means
+                    // min timestamp cannot be lower than currentDeleteFamilyTimestamp
+                    rowContext.minTimestamp = currentDeleteFamilyTimestamp + 1;
+                } else if (rowContext.minTimestamp > ts) {
                     rowContext.minTimestamp = ts;
                 }
-            } else if (firstCell.getType() == Cell.Type.DeleteFamily ||
-                    firstCell.getType() == Cell.Type.DeleteFamilyVersion) {
-                if (count == 0) {
-                    deleteFamilyTimestamp = firstCell.getTimestamp();
-                }
-                else if (firstCell.getTimestamp() != deleteFamilyTimestamp) {
-                    break;
-                }
             }
+            columnIndex++;
         }
+
+        // The gap between two back to back mutations if more than ttl then we know that the row
+        // is expired before the newer mutation. If the length of the time range of a compaction
+        // row version is not more than ttl, then we know the mutations covered by the next
+        // compaction row version are not apart from each other more than ttl.
         if (rowContext.maxTimestamp - rowContext.minTimestamp <= ttl) {
             return;
         }
-        List<Long> tsList = new ArrayList<>(count);
+        // The quick time range check did not pass. We need sort the timestamps and check
+        // the gaps one by one and determine which cells should be covered by the next
+        // compaction row version
+        List<Long> tsList = new ArrayList<>(columnIndex);
         for (List<Cell> column : columns) {
             Cell firstCell = column.get(0);
             if (firstCell.getType() == Cell.Type.Put) {
@@ -270,55 +308,50 @@ public class StoreCompactionScanner implements InternalScanner {
     }
     /**
      * Decide if compaction row versions outside the max lookback window but inside the TTL window
-     * should be retained. The retention rules are as follows.
-     * 1. Live rows whose version is less than the max version are retained at the region
-     * level compaction or if the store is the first store in the region (i.e., for the first colum
-     * family).
-     * 2. If the store is not the first store, compaction has to be done at the region level when
-     * a live row versions exist. This is because we cannot calculate the actual row versions.
-     * 3. All deleted rows are retained if KeepDeletedCells is TTL
-     * 4. When KeepDeletedCells is TRUE, deleted rows whose version is less than max version are
-     * retained at the region level or if the store is the first store in the region (i.e., for
-     * the first column family).
-     * 5. If the store is not the first store and compaction is done at the store level,
-     * compaction has to be done at the region level when KeepDeletedCells is TRUE. This is because
-     * we cannot calculate the actual row versions.
+     * should be retained.
+     * If the store is not the first store and one of the following conditions holds, then we need
+     * to do region level compaction.  This is because we cannot calculate the actual row versions
+     * (we cannot determine if these store level row versions are part of which region level row
+     * versions).
+     * 1. The compaction row version is alive
+     * 2. The compaction row version is deleted and KeepDeletedCells is not TTL
+     *
+     * If the compaction can be done at store level because none of the above conditions hold or
+     * the compaction is done at the region level, and one of the following conditions holds then
+     * the cells of the compaction row version are retained
+     * 3 The compaction row version is alive and its version is less than VERSIONS
+     * 4. The compaction row version is deleted and KeepDeletedCells is TTL
+     * 5. The compaction row version is deleted, its version less than MIN_VERSIONS and
+     * KeepDeletedCells is TRUE
      *
      */
     private boolean retainOutsideMaxLookbackButInsideTTLWindow(List<Cell> result,
             CompactionRowVersion rowVersion, RowContext rowContext, boolean regionLevel) {
-        if (firstStore || regionLevel) {
-            if (rowContext.familyDeleteMarker == null &&
-                    rowContext.familyVersionDeleteMarker == null) {
-                // The compaction row version is alive
-                if (rowVersion.version < maxVersion) {
-                    // Rule 1
-                    result.addAll(rowVersion.cells);
-                }
+        // Decide if the compaction should be done at the region level
+        if (!firstStore && !regionLevel) {
+            if (rowContext.familyDeleteMarker == null
+                    && rowContext.familyVersionDeleteMarker == null) {
+                // Rule 1
+                return false;
             }
-            else {
-                // Deleted rows
-                if ((rowVersion.version < maxVersion && keepDeletedCells == KeepDeletedCells.TRUE)
-                        || keepDeletedCells == KeepDeletedCells.TTL) {
-                    // Retain based on rule 3 or 4
-                    result.addAll(rowVersion.cells);
-                }
-            }
-        }
-        else {
-            // Store level compaction for the store that is not the first store
-            if (rowContext.familyDeleteMarker == null &&
-                    rowContext.familyVersionDeleteMarker == null) {
+            if (keepDeletedCells != KeepDeletedCells.TTL) {
                 // Rule 2
                 return false;
             }
-            if (keepDeletedCells == KeepDeletedCells.TTL) {
-                // Retain base on rule 3
+        }
+        // We can do compaction at the store level
+        if (rowContext.familyDeleteMarker == null && rowContext.familyVersionDeleteMarker == null) {
+            // The compaction row version is alive
+            if (rowVersion.version < maxVersion) {
+                // Rule 3
                 result.addAll(rowVersion.cells);
             }
-            else if (keepDeletedCells == KeepDeletedCells.TRUE) {
-                // Rule 5
-                return false;
+        } else {
+            // Deleted
+            if ((rowVersion.version < maxVersion && keepDeletedCells == KeepDeletedCells.TRUE) ||
+                    keepDeletedCells == KeepDeletedCells.TTL) {
+                // Retain based on rule 4 or 5
+                result.addAll(rowVersion.cells);
             }
         }
         if (rowContext.familyVersionDeleteMarker != null) {
@@ -330,42 +363,59 @@ public class StoreCompactionScanner implements InternalScanner {
 
     /**
      * Decide if compaction row versions outside the TTL window should be retained.
-     * 1. Live rows whose version less than the min version are retained if The store level is
-     * the first store in the region (i.e., for the first colum family)
-     * 2. For the store that is not the first store, we cannot determine if live rows should be
-     * retained at the store level. This is because we cannot calculate the actual row versions.
-     * The calculated versions can be lower than the actual versions. In this case, the compaction
-     * should be redone at the region level. The region level rules are the same as the first
-     * store level rules.
-     * 3. Delete rows whose delete markers are inside the TTL window and KeepDeletedCells is TTL
-     * are retained regardless if the compaction is at the store or region level
+     * If the store is not the first store and one of the following conditions holds, then we need
+     * to do region level compaction.  This is because we cannot calculate the actual row versions
+     * (we cannot determine if these store level row versions are part of which region level row
+     * versions).
+     *
+     * 1. The compaction row version is alive
+     * 2. The compaction row version is deleted, KeepDeletedCells is TRUE, and the delete family
+     *    marker is not outside the TTL window
+     *
+     * If the compaction can be done at store level because none of the above conditions hold or
+     * the compaction is done at the region level, and one of the following conditions holds then
+     * the cells of the compaction row version are retained
+     *
+     * 3. Live row versions less than MIN_VERSIONS are retained
+     * 4. Delete row versions whose delete markers are inside the TTL window and
+     *    KeepDeletedCells is TTL are retained
      *
      */
     private boolean retainOutsideTTLWindow(List<Cell> result,
             CompactionRowVersion rowVersion, RowContext rowContext, boolean regionLevel) {
-        if (firstStore || regionLevel) {
-            if (rowContext.familyDeleteMarker == null &&
-                    rowContext.familyVersionDeleteMarker == null) {
-                // Live rows
-                if (rowVersion.version < minVersion) {
-                    // Rule 1
-                    result.addAll(rowVersion.cells);
-                }
+        // Decide if the compaction should be done at the region level
+        if (!firstStore && !regionLevel) {
+            if (rowContext.familyDeleteMarker == null
+                    && rowContext.familyVersionDeleteMarker == null) {
+                // Rule 1
+                return false;
             }
-            else {
-                // Delete rows
-                if (keepDeletedCells == KeepDeletedCells.TTL) {
-                    // Rule 2
-                    result.addAll(rowVersion.cells);
-                }
-            }
-        } else {
-            if (rowContext.familyDeleteMarker == null &&
-                    rowContext.familyVersionDeleteMarker == null) {
+            if (keepDeletedCells == KeepDeletedCells.TRUE && (
+                    (rowContext.familyVersionDeleteMarker != null &&
+                            rowContext.familyVersionDeleteMarker.getTimestamp() >= ttlWindowStart) ||
+                            (rowContext.familyDeleteMarker != null &&
+                                    rowContext.familyDeleteMarker.getTimestamp() >= ttlWindowStart)
+            )) {
                 // Rule 2
                 return false;
             }
-            if (keepDeletedCells == KeepDeletedCells.TTL) {
+        }
+        // We can do compaction at the store level
+        if (rowContext.familyDeleteMarker == null
+                && rowContext.familyVersionDeleteMarker == null) {
+            // Live row
+            if (rowVersion.version < minVersion) {
+                // Rule 3
+                result.addAll(rowVersion.cells);
+            }
+        } else {
+            // Deleted row
+            if (keepDeletedCells == KeepDeletedCells.TTL && (
+                    (rowContext.familyVersionDeleteMarker != null &&
+                    rowContext.familyVersionDeleteMarker.getTimestamp() > ttlWindowStart) ||
+                            (rowContext.familyDeleteMarker != null &&
+                                    rowContext.familyDeleteMarker.getTimestamp() > ttlWindowStart)
+            )) {
                 // Rule 3
                 result.addAll(rowVersion.cells);
             }
@@ -405,10 +455,8 @@ public class StoreCompactionScanner implements InternalScanner {
             if (cell.getTimestamp() > dm.getTimestamp()) {
                 continue;
             }
-            if ((!regionLevel || Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
-                    dm.getFamilyArray(), dm.getFamilyOffset(), dm.getFamilyLength()) == 0) &&
-                    Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                            dm.getQualifierArray(), dm.getQualifierOffset(), dm.getQualifierLength()) == 0) {
+            if ((!regionLevel || CellUtil.matchingFamily(cell, dm)) &&
+                    CellUtil.matchingQualifier(cell, dm)){
                 if (dm.getType() == Cell.Type.Delete) {
                     // Delete is for deleting for a specific cell version. Thus, it can be used
                     // to delete only one cell.
@@ -446,62 +494,46 @@ public class StoreCompactionScanner implements InternalScanner {
             RowContext rowContext, boolean regionLevel) {
         CompactionRowVersion rowVersion = null;
         getNextRowVersionTimestamp(columns, rowContext);
-        boolean firstColumn = true;
-        long deleteFamilyTimestamp = 0;
         for (List<Cell> column : columns) {
-            if (firstColumn) {
-                firstColumn = false;
-                Cell cell = column.get(0);
-                if (cell.getType() == Cell.Type.DeleteFamily) {
-                    if (cell.getTimestamp() >= rowContext.maxTimestamp) {
-                        deleteFamilyTimestamp = cell.getTimestamp();
-                        rowContext.familyDeleteMarker = cell;
-                        column.remove(0);
-                        continue;
-                    }
+            Cell cell = column.get(0);
+            if (cell.getType() == Cell.Type.DeleteFamily) {
+                if (cell.getTimestamp() >= rowContext.maxTimestamp) {
+                    rowContext.familyDeleteMarker = cell;
+                    column.remove(0);
                 }
-                else if (cell.getType() == Cell.Type.DeleteFamilyVersion) {
-                    if (cell.getTimestamp() >= rowContext.maxTimestamp) {
-                        deleteFamilyTimestamp = cell.getTimestamp();
-                        rowContext.familyVersionDeleteMarker = cell;
-                        column.remove(0);
-                        continue;
-                    }
-                }
+                continue;
             }
-
-            Cell firstCell = column.get(0);
+            else if (cell.getType() == Cell.Type.DeleteFamilyVersion) {
+                if (cell.getTimestamp() >= rowContext.maxTimestamp) {
+                    rowContext.familyVersionDeleteMarker = cell;
+                    column.remove(0);
+                }
+                continue;
+            }
             if (rowContext.maxTimestamp != 0 &&
                     column.get(0).getTimestamp() < rowContext.minTimestamp) {
                 continue;
             }
-            if (firstCell.getType() == Cell.Type.DeleteColumn ||
-                    firstCell.getType() == Cell.Type.Delete) {
-                rowContext.addColumnDeleteMarker(firstCell);
-                column.remove(0);
+            column.remove(0);
+            if (cell.getType() == Cell.Type.DeleteColumn ||
+                    cell.getType() == Cell.Type.Delete) {
+                rowContext.addColumnDeleteMarker(cell);
                 continue;
             }
-            if ((firstCell.getType() == Cell.Type.DeleteFamily ||
-                    firstCell.getType() == Cell.Type.DeleteFamilyVersion)) {
-                if (firstCell.getTimestamp() != deleteFamilyTimestamp) {
-                break;
-                }
-                else {
-                    column.remove(0);
-                    continue;
-                }
-            }
-            column.remove(0);
-            if (!shouldRetainCell(rowContext, firstCell, regionLevel)) {
+            if (!shouldRetainCell(rowContext, cell, regionLevel)) {
                 continue;
             }
             if (rowVersion == null) {
                 rowVersion = new CompactionRowVersion();
                 rowVersion.ts = rowContext.maxTimestamp;
-                rowVersion.cells.add(firstCell);
+                rowVersion.cells.add(cell);
+                if (rowVersion.ts >= maxLookbackWindowStart) {
+                    rowContext.version = 0;
+                }
                 rowVersion.version = rowContext.version++;
+
             } else {
-                rowVersion.cells.add(firstCell);
+                rowVersion.cells.add(cell);
             }
         }
         return rowVersion;
@@ -542,15 +574,13 @@ public class StoreCompactionScanner implements InternalScanner {
         if (result.isEmpty()) {
             return;
         }
-        Cell firstCell = result.get(0);
-        byte[] rowKey = Bytes.copy(firstCell.getRowArray(), firstCell.getRowOffset(),
-                firstCell.getRowLength());
         List<List<Cell>> columns = new ArrayList<>();
         List<Cell> deleteMarkers = new ArrayList<>();
         formColumns(result, columns, deleteMarkers);
+        List<Cell> originalResult = new ArrayList<>(result);
         result.clear();
         if (!formCompactionRowVersions(columns, result, regionLevel)) {
-            filterRegionLevel(result, rowKey);
+            filterRegionLevel(originalResult, result);
         }
         // Filter delete markers
         if (deleteMarkers.isEmpty()) {
@@ -559,57 +589,151 @@ public class StoreCompactionScanner implements InternalScanner {
         int version = 0;
         Cell last = deleteMarkers.get(0);
         for (Cell cell : deleteMarkers) {
-            if (cell.getType() != last.getType() ||
-                    Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(),
-                            cell.getFamilyLength(),
-                            last.getFamilyArray(), last.getFamilyOffset(),
-                            last.getFamilyLength()) != 0 ||
-                    Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
-                            cell.getQualifierLength(),
-                            last.getQualifierArray(), last.getQualifierOffset(),
-                            last.getQualifierLength()) != 0) {
+            if (cell.getType() != last.getType() || !CellUtil.matchingColumn(cell, last)) {
                 version = 0;
                 last = cell;
             }
             if (cell.getTimestamp() >= maxLookbackWindowStart) {
-                version++;
                 result.add(cell);
             }
             else if (cell.getTimestamp() >= ttlWindowStart) {
-                if (keepDeletedCells == KeepDeletedCells.TRUE) {
+                if (keepDeletedCells == KeepDeletedCells.TTL) {
+                    result.add(cell);
+                } else {
                     if (version < maxVersion) {
                         version++;
                         result.add(cell);
                     }
                 }
-                else if (keepDeletedCells == KeepDeletedCells.TTL) {
-                    version++;
-                    result.add(cell);
-                }
             }
         }
+        Collections.sort(result, CellComparator.getInstance());
     }
 
-    private void filterRegionLevel(List<Cell> result, byte[] rowKey) throws IOException {
+    private static int compareQualifiers(Cell a, Cell b) {
+        return Bytes.compareTo(a.getQualifierArray(), a.getQualifierOffset(),
+                a.getQualifierLength(),
+                b.getQualifierArray(), b.getQualifierOffset(), a.getQualifierLength());
+    }
+    private static int compareTypes(Cell a, Cell b) {
+        Cell.Type aType = a.getType();
+        Cell.Type bType = b.getType();
+
+        if (aType == bType) {
+            return 0;
+        }
+        if (aType == Cell.Type.Put) {
+            return 1;
+        }
+        if (bType == Cell.Type.Put) {
+            return -1;
+        }
+        if (aType == Cell.Type.DeleteFamily) {
+            return -1;
+        }
+        if (bType == Cell.Type.DeleteFamily) {
+            return 1;
+        }
+        if (aType == Cell.Type.DeleteFamilyVersion) {
+            return -1;
+        }
+        if (bType == Cell.Type.DeleteFamilyVersion) {
+            return 1;
+        }
+        if (aType == Cell.Type.DeleteColumn) {
+            return -1;
+        }
+        return 1;
+    }
+    private void filterRegionLevel(List<Cell> originalResult, List<Cell> result) throws IOException {
+        byte[] rowKey = CellUtil.cloneRow(originalResult.get(0));
         Scan scan = new Scan();
         scan.setRaw(true);
         scan.readAllVersions();
         scan.setTimeRange(0, compactionTime);
         scan.withStartRow(rowKey, true);
         scan.withStopRow(rowKey, true);
-        result.clear();
         RegionScanner scanner = region.getScanner(scan);
-        List<Cell> regionResults = new ArrayList<>(result.size());
-        scanner.next(regionResults);
+        List<Cell> regionResult = new ArrayList<>(result.size());
+        scanner.next(regionResult);
         scanner.close();
-        filter(regionResults, true);
-        byte[] familyName = store.getColumnFamilyDescriptor().getName();
-        for (Cell cell : regionResults) {
-            if (Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(),
-                    cell.getFamilyLength(),
-                    familyName, 0, familyName.length) == 0) {
-                result.add(cell);
+        filter(regionResult, true);
+
+        result.clear();
+        int index = 0;
+        int size = regionResult.size();
+        int compare = 0;
+
+        for (Cell originalCell : originalResult) {
+            if (index == size) {
+                break;
             }
+            Cell regionCell = regionResult.get(index);
+            while (!CellUtil.matchingFamily(originalCell, regionCell)) {
+                index++;
+                if (index == size) {
+                    break;
+                }
+                regionCell = regionResult.get(index);
+            }
+            if (index == size) {
+                break;
+            }
+            compare = compareTypes(originalCell, regionCell);
+            while  (compare > 0) {
+                index++;
+                if (index == size) {
+                    break;
+                }
+                regionCell = regionResult.get(index);
+                if (!CellUtil.matchingFamily(originalCell, regionCell)) {
+                    break;
+                }
+                compare = compareTypes(originalCell, regionCell);
+            }
+            if (index == size || !CellUtil.matchingFamily(originalCell, regionCell)) {
+                break;
+            }
+            if (compare != 0) {
+                continue;
+            }
+            compare = compareQualifiers(originalCell, regionCell);
+            while  (compare > 0) {
+                index++;
+                if (index == size) {
+                    break;
+                }
+                regionCell = regionResult.get(index);
+                if (!CellUtil.matchingFamily(originalCell, regionCell)) {
+                        break;
+                }
+                compare = compareQualifiers(originalCell, regionCell);
+            }
+            if (index == size || !CellUtil.matchingFamily(originalCell, regionCell)) {
+                break;
+            }
+            if (compare != 0 || originalCell.getTimestamp() > regionCell.getTimestamp()) {
+                continue;
+            }
+            while (originalCell.getTimestamp() < regionCell.getTimestamp()) {
+                index++;
+                if (index == size) {
+                    break;
+                }
+                regionCell = regionResult.get(index);
+                if (!CellUtil.matchingColumn(originalCell, regionCell)) {
+                    break;
+                }
+            }
+            if (index == size) {
+                break;
+            }
+            if (!CellUtil.matchingColumn(originalCell, regionCell) ||
+                    originalCell.getTimestamp() != regionCell.getTimestamp()) {
+                continue;
+            }
+            result.add(originalCell);
+            index++;
         }
     }
 }

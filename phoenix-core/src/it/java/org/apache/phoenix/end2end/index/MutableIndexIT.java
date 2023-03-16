@@ -67,9 +67,11 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(MutableIndexIT.class);
     protected final boolean localIndex;
     private final String tableDDLOptions;
+    private final boolean columnEncoded;
     
     public MutableIndexIT(Boolean localIndex, String txProvider, Boolean columnEncoded) {
         this.localIndex = localIndex;
+        this.columnEncoded = columnEncoded;
         StringBuilder optionBuilder = new StringBuilder();
         if (txProvider != null) {
             optionBuilder.append("TRANSACTIONAL=true," + PhoenixDatabaseMetaData.TRANSACTION_PROVIDER + "='" + txProvider + "'");
@@ -400,11 +402,13 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if (localIndex) {
                 assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\n"
-                        + "    SERVER FILTER BY EMPTY COLUMN ONLY\n"
+                        + "    SERVER FILTER BY " + (columnEncoded ? "FIRST KEY" :  "EMPTY COLUMN") + " ONLY\n"
                         + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName + "\n"
-                           + "    SERVER FILTER BY EMPTY COLUMN ONLY", QueryUtil.getExplainPlan(rs));
+                           + "    SERVER FILTER BY " +
+                        (columnEncoded ? "FIRST KEY" :  "EMPTY COLUMN") + " ONLY",
+                        QueryUtil.getExplainPlan(rs));
             }
             //make sure the data table looks like what we expect
             rs = conn.createStatement().executeQuery(query);
@@ -527,12 +531,12 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if(localIndex) {
                 assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\n"
-                        + "    SERVER FILTER BY EMPTY COLUMN ONLY\n"
+                        + "    SERVER FILTER BY " + (columnEncoded ? "FIRST KEY" :  "EMPTY COLUMN") + " ONLY\n"
                         + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName + "\n"
-                        + "    SERVER FILTER BY EMPTY COLUMN ONLY",
+                        + "    SERVER FILTER BY " + (columnEncoded ? "FIRST KEY" :  "EMPTY COLUMN") + " ONLY",
                     QueryUtil.getExplainPlan(rs));
             }
         
