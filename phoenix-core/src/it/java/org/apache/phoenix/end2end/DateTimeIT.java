@@ -52,8 +52,8 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.Format;
-import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -2227,13 +2227,13 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     private void testJdbc42Api(boolean withDisplacement) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        ZoneOffset testOffset;
+        ZoneId testZoneId;
         if (withDisplacement) {
-            testOffset = ZoneOffset.systemDefault().getRules().getOffset(Instant.now());
+            testZoneId = ZoneOffset.systemDefault();
             props.setProperty(QueryServices.APPLY_TIME_ZONE_DISPLACMENT_ATTRIB,
                 Boolean.TRUE.toString());
         } else {
-            testOffset = ZoneOffset.UTC;
+            testZoneId = ZoneId.of("UTC");
         }
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -2252,14 +2252,15 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
                     localTime.withNano((localDateTime.getNano() / 1000000) * 1000000);
 
             java.sql.Timestamp javaSqlTimestampFull =
-                    java.sql.Timestamp.from(localDateTime.toInstant(testOffset));
+                    java.sql.Timestamp.from(localDateTime.atZone(testZoneId).toInstant());
             java.sql.Timestamp javaSqlTimestampFullMs =
                     new java.sql.Timestamp(javaSqlTimestampFull.getTime());
             java.sql.Timestamp javaSqlTimestampDatePart =
-                    java.sql.Timestamp.from(localDate.atStartOfDay().toInstant(testOffset));
-            java.sql.Timestamp javaSqlTimestampTimePart =
                     java.sql.Timestamp
-                            .from(localTime.atDate(DateUtil.LD_EPOCH).toInstant(testOffset));
+                            .from(localDate.atStartOfDay().atZone(testZoneId).toInstant());
+            java.sql.Timestamp javaSqlTimestampTimePart =
+                    java.sql.Timestamp.from(
+                        localTime.atDate(DateUtil.LD_EPOCH).atZone(testZoneId).toInstant());
             java.sql.Timestamp javaSqlTimestampTimePartMs =
                     new java.sql.Timestamp(javaSqlTimestampTimePart.getTime());
 
