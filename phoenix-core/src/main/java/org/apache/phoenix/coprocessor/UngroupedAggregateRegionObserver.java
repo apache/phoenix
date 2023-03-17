@@ -628,7 +628,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         }
                     }
                     if (!isDisabled) {
-                        internalScanner = new StoreCompactionScanner(c.getEnvironment(), store,
+                        internalScanner = new CompactionScanner(c.getEnvironment(), store,
                                 scanner,
                                 getMaxLookbackInMillis(c.getEnvironment().getConfiguration()));
                     }

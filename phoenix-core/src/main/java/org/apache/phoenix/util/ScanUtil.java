@@ -1052,6 +1052,7 @@ public class ScanUtil {
                         cell.getQualifierLength(), emptyCQ, 0, emptyCQ.length) == 0;
     }
 
+
     public static boolean isEmptyColumn(Cell cell, byte[] emptyCF) {
         return Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(),
                 cell.getFamilyLength(), emptyCF, 0, emptyCF.length) == 0 &&
@@ -1063,6 +1064,27 @@ public class ScanUtil {
                                 QueryConstants.ENCODED_EMPTY_COLUMN_BYTES.length) == 0);
     }
 
+    public static void removeEmptyColumn(List<Cell> result, byte[] emptyCF) {
+        if (result.isEmpty()) {
+            return;
+        }
+        int size = result.size();
+        if (size == 1) {
+            return;
+        }
+        if (isEmptyColumn(result.get(0), emptyCF)) {
+            result.remove(1);
+        } else if (isEmptyColumn(result.get(size - 1), emptyCF)) {
+            result.remove(size - 1);
+        } else {
+            for (int i = 1; i < size -1; i++) {
+                if (isEmptyColumn(result.get(i), emptyCF)) {
+                    result.remove(i);
+                    break;
+                }
+            }
+        }
+    }
     public static long getMaxTimestamp(List<Cell> cellList) {
         long maxTs = 0;
         long ts = 0;

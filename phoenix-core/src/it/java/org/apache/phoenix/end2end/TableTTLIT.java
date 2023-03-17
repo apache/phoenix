@@ -24,7 +24,11 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ManualEnvironmentEdge;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -53,7 +57,7 @@ public class TableTTLIT extends BaseTest {
     private static final Logger LOG =
             LoggerFactory.getLogger(TableTTLIT.class);
     private static final Random RAND = new Random(11);
-    private static final int MAX_COLUMN_INDEX = 5;
+    private static final int MAX_COLUMN_INDEX = 6;
     private static final int MAX_LOOKBACK_AGE = 8;
     private static final int TTL = 30;
     private String tableDDLOptions;
@@ -121,9 +125,9 @@ public class TableTTLIT extends BaseTest {
     }
 
     /**
-     * This test creates two tables with the same schema. The same row is updated in loop on
-     * both tables with the same content. Each update changes the value of one column chosen
-     * randomly with a randomly generated value.
+     * This test creates two tables with the same schema. The same row is updated in a loop on
+     * both tables with the same content. Each update changes one or more columns chosen
+     * randomly with randomly generated values.
      *
      * After every upsert, all versions of the rows are retrieved from each table and compared.
      * The test also occasionally deletes the row from both tables and but compacts only the
@@ -136,46 +140,64 @@ public class TableTTLIT extends BaseTest {
     @Test
     public void testMaskingAndCompaction() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String dataTableName = generateUniqueName();
-            createTable(dataTableName);
-            String noCompactDataTableName = generateUniqueName();
-            createTable(noCompactDataTableName);
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            String noCompactTableName = generateUniqueName();
+            createTable(noCompactTableName);
             long startTime = System.currentTimeMillis() + 1000;
             startTime = (startTime/1000)*1000;
             EnvironmentEdgeManager.injectEdge(injectEdge);
             injectEdge.setValue(startTime);
             for (int i = 1; i < 200; i++) {
-                int columnIndex = RAND.nextInt(MAX_COLUMN_INDEX) + 1;
-                String value = Integer.toString(RAND.nextInt(1000));
-                //TODO write null too
-                updateColumn(conn, dataTableName, "a", columnIndex, value);
-                updateColumn(conn, noCompactDataTableName, "a", columnIndex, value);
-                compareRow(conn, dataTableName, noCompactDataTableName, "a", MAX_COLUMN_INDEX);
-
+                updateRow(conn, tableName, noCompactTableName, "a");
+                compareRow(conn, tableName, noCompactTableName, "a", MAX_COLUMN_INDEX);
                 long scn = injectEdge.currentTime() - MAX_LOOKBACK_AGE * 1000;
                 long scnEnd = injectEdge.currentTime() - 1000;
                 long scnStart = Math.max(scn, startTime);
                 for (scn = scnEnd; scn >= scnStart; scn -= 1000) {
+                    // Compare all row versions using scn queries
                     Properties props = new Properties();
                     props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
                     try (Connection scnConn = DriverManager.getConnection(url, props)) {
-                        compareRow(scnConn, dataTableName, noCompactDataTableName, "a",
+                        compareRow(scnConn, tableName, noCompactTableName, "a",
                                 MAX_COLUMN_INDEX);
                     }
                 }
-
                 if (i % 5 == 0) {
                     injectEdge.incrementValue(1000);
-                    deleteRow(conn, dataTableName, "a");
-                    deleteRow(conn, noCompactDataTableName, "a");
+                    deleteRow(conn, tableName, "a");
+                    deleteRow(conn, noCompactTableName, "a");
                 }
                 if (i % 28 == 0) {
                     injectEdge.incrementValue(1000);
-                    flush(TableName.valueOf(dataTableName));
-                    majorCompact(TableName.valueOf(dataTableName));
+                    flush(TableName.valueOf(tableName));
+                    majorCompact(TableName.valueOf(tableName));
+                }
+                if (i % (TTL + 1) == 0) {
+                    // Once in a while we update the last column that is not updated or checked
+                    // regularly. Then we read this column from both tables after the TTL period.
+                    // On the table that is compacted the column value would be masked and also
+                    // removed by compaction. On the no compact table, the column value would be
+                    // masked. So, both tables would return null value.
+                    if (i != TTL + 1) {
+                        compareRow(conn, tableName, noCompactTableName, "a", MAX_COLUMN_INDEX + 1);
+                        ResultSet
+                                rs =
+                                conn.createStatement().executeQuery(
+                                        "Select val" + (MAX_COLUMN_INDEX + 1) + " from "
+                                                + noCompactTableName + " where id = 'a'");
+                        if (rs.next()) {
+                            Assert.assertTrue(rs.getString(1) == null);
+                        }
+
+                    }
+                    updateColumn(conn, tableName, "a", MAX_COLUMN_INDEX + 1,
+                            "invisible");
+                    updateColumn(conn, noCompactTableName, "a", MAX_COLUMN_INDEX + 1,
+                            "invisible");
+                    conn.commit();
                 }
                 injectEdge.incrementValue(1000);
-                //TODO add masking testing
             }
         }
     }
@@ -197,9 +219,31 @@ public class TableTTLIT extends BaseTest {
     private void updateColumn(Connection conn, String dataTableName, String id,
             int columnIndex, String value)
             throws SQLException {
-        String upsertSql = String.format("UPSERT INTO %s (id, %s) VALUES ('%s', '%s')",
-                dataTableName, "val" + columnIndex, id, value);
+        String upsertSql;
+        if (value == null) {
+            upsertSql = String.format("UPSERT INTO %s (id, %s) VALUES ('%s', null)",
+                    dataTableName, "val" + columnIndex, id);
+        } else {
+            upsertSql = String.format("UPSERT INTO %s (id, %s) VALUES ('%s', '%s')",
+                    dataTableName, "val" + columnIndex, id, value);
+        }
         conn.createStatement().execute(upsertSql);
+    }
+
+    private void updateRow(Connection conn, String tableName1, String tableName2, String id)
+            throws SQLException {
+
+        int columnCount =  RAND.nextInt(MAX_COLUMN_INDEX) + 1;
+        for (int i = 0; i < columnCount; i++) {
+            int columnIndex = RAND.nextInt(MAX_COLUMN_INDEX) + 1;
+            String value = null;
+            // Leave the value null once in a while
+            if (RAND.nextInt(MAX_COLUMN_INDEX) > 0) {
+                value = Integer.toString(RAND.nextInt(1000));
+            }
+            updateColumn(conn, tableName1, id, columnIndex, value);
+            updateColumn(conn, tableName2, id, columnIndex, value);
+        }
         conn.commit();
     }
 

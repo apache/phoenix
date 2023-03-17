@@ -1068,8 +1068,10 @@ public class ViewIT extends SplitSystemCatalogIT {
                 assertEquals(fullTableName,
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1,51]", explainPlanAttributes.getKeyRanges());
-                assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
-                    explainPlanAttributes.getServerWhereFilter());
+                assertTrue(explainPlanAttributes.getServerWhereFilter().
+                        equals("SERVER FILTER BY FIRST KEY ONLY") ||
+                        explainPlanAttributes.getServerWhereFilter().
+                                equals("SERVER FILTER BY EMPTY COLUMN ONLY"));
                 assertEquals("CLIENT MERGE SORT",
                     explainPlanAttributes.getClientSortAlgo());
             } else {
@@ -1128,8 +1130,10 @@ public class ViewIT extends SplitSystemCatalogIT {
             explainPlanAttributes = plan.getPlanStepsAsAttributes();
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
-                explainPlanAttributes.getServerWhereFilter());
+            assertTrue(explainPlanAttributes.getServerWhereFilter().
+                    equals("SERVER FILTER BY FIRST KEY ONLY") ||
+                    explainPlanAttributes.getServerWhereFilter().
+                            equals("SERVER FILTER BY EMPTY COLUMN ONLY"));
             if (localIndex) {
                 physicalTableName = fullTableName;
                 assertEquals("PARALLEL " + (saltBuckets == null ? 1 : saltBuckets)

@@ -410,16 +410,16 @@ public class MaxLookbackIT extends BaseTest {
             assertMultiVersionLookbacks(indexTableSelectSql, allValues, allSCNs);
             // Make the first row versions outside the max lookback window
             injectEdge.setValue(afterInsertSCN + MAX_LOOKBACK_AGE * 1000);
-            long afterLookbackAgeSCN = EnvironmentEdgeManager.currentTimeMillis();
             majorCompact(dataTable);
             majorCompact(indexTable);
-            // At this moment, the data table has two row version within the max lookback window.
-            // These versions have their own empty column and val2 cells and share cells for val1
-            // and val3 columns. This means that there will be 2 + 2 + 2 = 6 cells
-            assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), 6);
-            // 2 versions of empty column, 2 versions of val2,
-            // 2 versions of val3 (since we write whole rows to index) = 6
-            assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), 6);
+            // At this moment, the data table has three row versions for row a within the max
+            // lookback window.
+            // These versions have the following cells {empty, ab, abc, abcd}, {empty, def} and
+            // {empty, ghi}.
+            assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), 8);
+            // The index table will have three full row versions for "a" and each will have 3 cells,
+            // one for each of columns empty, val2, and val3.
+            assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), 9);
             //empty column + 1 version each of val1,2 and 3 = 4
             assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), 4);
             //1 version of empty column, 1 version of val2, 1 version of val3 = 3

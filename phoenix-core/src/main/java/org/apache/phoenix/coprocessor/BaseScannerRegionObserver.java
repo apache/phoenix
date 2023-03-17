@@ -269,16 +269,27 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             private final Scan scan;
             private final ObserverContext<RegionCoprocessorEnvironment> c;
             private boolean wasOverriden;
+            private boolean removeEmptyColumn = true;
+            private byte[] emptyCF;
             
-            public RegionScannerHolder(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan, final RegionScanner scanner) {
+            public RegionScannerHolder(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
+                    final RegionScanner scanner, byte[] emptyCF) {
                 super(scanner);
                 this.c = c;
                 this.scan = scan;
+                this.emptyCF = emptyCF;
+                if (emptyCF == null) {
+                    this.removeEmptyColumn = false;
+                }
             }
     
             private void overrideDelegate() throws IOException {
                 if (wasOverriden) {
                     return;
+                }
+                if (delegate instanceof RegionScannerHolder) {
+                    // Only the top level RegionScannerHolder needs to remove the empty column
+                    ((RegionScannerHolder)delegate).setRemoveEmptyColumn(false);
                 }
                 boolean success = false;
                 // Save the current span. When done with the child span, reset the span back to
@@ -320,11 +331,17 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                     }
                 }
             }
-            
+
+            public void setRemoveEmptyColumn(boolean removeEmptyColumn) {
+                this.removeEmptyColumn = removeEmptyColumn;
+            }
             @Override
             public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
                 overrideDelegate();
                 boolean res = super.next(result);
+                if (removeEmptyColumn) {
+                    ScanUtil.removeEmptyColumn(result, emptyCF);
+                }
                 ScannerContextUtil.incrementSizeProgress(scannerContext, result);
                 return res;
             }
@@ -332,13 +349,20 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             @Override
             public boolean next(List<Cell> result) throws IOException {
                 overrideDelegate();
-                return super.next(result);
+                boolean res = super.next(result);
+                if (removeEmptyColumn) {
+                    ScanUtil.removeEmptyColumn(result, emptyCF);
+                }
+                return res;
             }
 
             @Override
             public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
                 overrideDelegate();
                 boolean res = super.nextRaw(result);
+                if (removeEmptyColumn) {
+                    ScanUtil.removeEmptyColumn(result, emptyCF);
+                }
                 ScannerContextUtil.incrementSizeProgress(scannerContext, result);
                 return res;
             }
@@ -346,12 +370,16 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             @Override
             public boolean nextRaw(List<Cell> result) throws IOException {
                 overrideDelegate();
-                return super.nextRaw(result);
+                boolean res = super.nextRaw(result);
+                if (removeEmptyColumn) {
+                    ScanUtil.removeEmptyColumn(result, emptyCF);
+                }
+                return res;
             }
             @Override
             public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
                 return new RegionScannerHolder(c, scan,
-                        ((DelegateRegionScanner) delegate).getNewRegionScanner(scan));
+                        ((DelegateRegionScanner) delegate).getNewRegionScanner(scan), emptyCF);
             }
         }
 
@@ -368,24 +396,24 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             if (!isRegionObserverFor(scan)) {
                 return s;
             }
+            byte[] emptyCF = scan.getAttribute(
+                    BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME);
+            byte[] emptyCQ = scan.getAttribute(
+                    BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME);
             // Make sure PageRegionScanner wraps only the lowest region scanner, i.e., HBase region
             // scanner. We assume here every Phoenix region scanner extends DelegateRegionScanner.
             if (s instanceof DelegateRegionScanner) {
-                return new RegionScannerHolder(c, scan, s);
+                return new RegionScannerHolder(c, scan, s, emptyCF);
             } else {
                 // An old client may not set these attributes which are required by TTLRegionScanner
-                byte[] emptyCF = scan.getAttribute(
-                        BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME);
-                byte[] emptyCQ = scan.getAttribute(
-                        BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME);
                 if (emptyCF != null && emptyCQ != null) {
                     return new RegionScannerHolder(c, scan,
                             new TTLRegionScanner(c.getEnvironment(), scan,
                                     new PagingRegionScanner(c.getEnvironment().getRegion(), s,
-                                            scan)));
+                                            scan)), emptyCF);
                 }
                 return new RegionScannerHolder(c, scan,
-                        new PagingRegionScanner(c.getEnvironment().getRegion(), s, scan));
+                        new PagingRegionScanner(c.getEnvironment().getRegion(), s, scan), emptyCF);
 
             }
         } catch (Throwable t) {

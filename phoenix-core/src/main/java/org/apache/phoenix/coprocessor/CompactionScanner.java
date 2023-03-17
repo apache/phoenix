@@ -50,8 +50,8 @@ import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_
  * implementation data retention policies in HBase which is built at the cell and implements
  * its row level data retention within this store scanner.
  */
-public class StoreCompactionScanner implements InternalScanner {
-    private static final Logger LOGGER = LoggerFactory.getLogger(StoreCompactionScanner.class);
+public class CompactionScanner implements InternalScanner {
+    private static final Logger LOGGER = LoggerFactory.getLogger(CompactionScanner.class);
     public static final String SEPARATOR = ":";
     private final InternalScanner storeScanner;
     private final Region region;
@@ -68,7 +68,7 @@ public class StoreCompactionScanner implements InternalScanner {
     private long compactionTime;
     private static Map<String, Long> maxLookbackMap = new ConcurrentHashMap<>();
 
-    public StoreCompactionScanner(RegionCoprocessorEnvironment env,
+    public CompactionScanner(RegionCoprocessorEnvironment env,
                                 Store store,
                                 InternalScanner storeScanner,
                                 long maxLookbackInMillis) {
@@ -208,7 +208,7 @@ public class StoreCompactionScanner implements InternalScanner {
 
     /**
      * The context for a given row during compaction. A row may have multiple compaction row
-     * versions. StoreCompactionScanner uses the same row context for these versions.
+     * versions. CompactionScanner uses the same row context for these versions.
      */
     class RowContext {
         Cell familyDeleteMarker = null;
@@ -416,7 +416,7 @@ public class StoreCompactionScanner implements InternalScanner {
                             (rowContext.familyDeleteMarker != null &&
                                     rowContext.familyDeleteMarker.getTimestamp() > ttlWindowStart)
             )) {
-                // Rule 3
+                // Rule 4
                 result.addAll(rowVersion.cells);
             }
         }
@@ -458,7 +458,7 @@ public class StoreCompactionScanner implements InternalScanner {
             if ((!regionLevel || CellUtil.matchingFamily(cell, dm)) &&
                     CellUtil.matchingQualifier(cell, dm)){
                 if (dm.getType() == Cell.Type.Delete) {
-                    // Delete is for deleting for a specific cell version. Thus, it can be used
+                    // Delete is for deleting a specific cell version. Thus, it can be used
                     // to delete only one cell.
                     rowContext.columnDeleteMarkers.remove(i);
                 }
@@ -466,7 +466,8 @@ public class StoreCompactionScanner implements InternalScanner {
                     return true;
                 }
                 if (rowContext.maxTimestamp >= ttlWindowStart) {
-                    if (keepDeletedCells == KeepDeletedCells.FALSE) {
+                    if (keepDeletedCells == KeepDeletedCells.FALSE &&
+                            dm.getTimestamp() < maxLookbackWindowStart ) {
                         return false;
                     }
                     return true;
@@ -577,10 +578,10 @@ public class StoreCompactionScanner implements InternalScanner {
         List<List<Cell>> columns = new ArrayList<>();
         List<Cell> deleteMarkers = new ArrayList<>();
         formColumns(result, columns, deleteMarkers);
-        List<Cell> originalResult = new ArrayList<>(result);
+        List<Cell> input = new ArrayList<>(result);
         result.clear();
         if (!formCompactionRowVersions(columns, result, regionLevel)) {
-            filterRegionLevel(originalResult, result);
+            filterRegionLevel(input, result);
         }
         // Filter delete markers
         if (deleteMarkers.isEmpty()) {
@@ -599,7 +600,7 @@ public class StoreCompactionScanner implements InternalScanner {
             else if (cell.getTimestamp() >= ttlWindowStart) {
                 if (keepDeletedCells == KeepDeletedCells.TTL) {
                     result.add(cell);
-                } else {
+                } else if (keepDeletedCells == KeepDeletedCells.TRUE) {
                     if (version < maxVersion) {
                         version++;
                         result.add(cell);
@@ -615,18 +616,13 @@ public class StoreCompactionScanner implements InternalScanner {
                 a.getQualifierLength(),
                 b.getQualifierArray(), b.getQualifierOffset(), a.getQualifierLength());
     }
+
     private static int compareTypes(Cell a, Cell b) {
         Cell.Type aType = a.getType();
         Cell.Type bType = b.getType();
 
         if (aType == bType) {
             return 0;
-        }
-        if (aType == Cell.Type.Put) {
-            return 1;
-        }
-        if (bType == Cell.Type.Put) {
-            return -1;
         }
         if (aType == Cell.Type.DeleteFamily) {
             return -1;
@@ -645,26 +641,13 @@ public class StoreCompactionScanner implements InternalScanner {
         }
         return 1;
     }
-    private void filterRegionLevel(List<Cell> originalResult, List<Cell> result) throws IOException {
-        byte[] rowKey = CellUtil.cloneRow(originalResult.get(0));
-        Scan scan = new Scan();
-        scan.setRaw(true);
-        scan.readAllVersions();
-        scan.setTimeRange(0, compactionTime);
-        scan.withStartRow(rowKey, true);
-        scan.withStopRow(rowKey, true);
-        RegionScanner scanner = region.getScanner(scan);
-        List<Cell> regionResult = new ArrayList<>(result.size());
-        scanner.next(regionResult);
-        scanner.close();
-        filter(regionResult, true);
 
-        result.clear();
+    private void trimRegionResult(List<Cell> regionResult, List<Cell> input, List<Cell> result) {
         int index = 0;
         int size = regionResult.size();
         int compare = 0;
 
-        for (Cell originalCell : originalResult) {
+        for (Cell originalCell : input) {
             if (index == size) {
                 break;
             }
@@ -705,7 +688,7 @@ public class StoreCompactionScanner implements InternalScanner {
                 }
                 regionCell = regionResult.get(index);
                 if (!CellUtil.matchingFamily(originalCell, regionCell)) {
-                        break;
+                    break;
                 }
                 compare = compareQualifiers(originalCell, regionCell);
             }
@@ -735,5 +718,22 @@ public class StoreCompactionScanner implements InternalScanner {
             result.add(originalCell);
             index++;
         }
+    }
+    private void filterRegionLevel(List<Cell> input, List<Cell> result) throws IOException {
+        byte[] rowKey = CellUtil.cloneRow(input.get(0));
+        Scan scan = new Scan();
+        scan.setRaw(true);
+        scan.readAllVersions();
+        scan.setTimeRange(0, compactionTime);
+        scan.withStartRow(rowKey, true);
+        scan.withStopRow(rowKey, true);
+        RegionScanner scanner = region.getScanner(scan);
+        List<Cell> regionResult = new ArrayList<>(result.size());
+        scanner.next(regionResult);
+        scanner.close();
+        filter(regionResult, true);
+        result.clear();
+        trimRegionResult(regionResult, input, result);
+
     }
 }
