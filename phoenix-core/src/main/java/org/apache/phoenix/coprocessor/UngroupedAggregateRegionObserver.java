@@ -173,6 +173,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private Configuration compactionConfig;
     private Configuration indexWriteConfig;
     private ReadOnlyProps indexWriteProps;
+    private boolean isPhoenixTableTTLEnabled;
 
     @Override
     public Optional<RegionObserver> getRegionObserver() {
@@ -203,6 +204,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 e.getConfiguration().getInt(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER,
                         QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER));
         indexWriteProps = new ReadOnlyProps(indexWriteConfig.iterator());
+        isPhoenixTableTTLEnabled =
+                e.getConfiguration().getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
+                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
     }
 
     Configuration getUpsertSelectConfig() {
@@ -627,7 +631,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             }
                         }
                     }
-                    if (!isDisabled) {
+                    if (!isDisabled && isPhoenixTableTTLEnabled) {
                         internalScanner = new CompactionScanner(c.getEnvironment(), store,
                                 scanner,
                                 getMaxLookbackInMillis(c.getEnvironment().getConfiguration()));

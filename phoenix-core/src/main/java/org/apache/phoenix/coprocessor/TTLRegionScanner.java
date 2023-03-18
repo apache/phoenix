@@ -30,6 +30,8 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
@@ -44,6 +46,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COL
 public class TTLRegionScanner extends BaseRegionScanner {
     private static final Logger LOG =
             LoggerFactory.getLogger(TTLRegionScanner.class);
+    private final boolean isPhoenixTableTTLEnabled;
     private final RegionCoprocessorEnvironment env;
     private Scan scan;
     private long rowCount = 0;
@@ -65,6 +68,9 @@ public class TTLRegionScanner extends BaseRegionScanner {
         ttl = env.getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
         ttlWindowStart = ttl == HConstants.FOREVER ? 1 : currentTime - ttl * 1000;
         ttl *= 1000;
+        isPhoenixTableTTLEnabled =
+                env.getConfiguration().getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
+                        QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);;
 	}
 
     private void init() throws IOException {
@@ -172,6 +178,9 @@ public class TTLRegionScanner extends BaseRegionScanner {
     }
 
     private boolean next(List<Cell> result, boolean raw) throws IOException {
+        if (!isPhoenixTableTTLEnabled) {
+            return raw ? delegate.nextRaw(result) : delegate.next(result);
+        }
         if (!initialized) {
             init();
             initialized = true;

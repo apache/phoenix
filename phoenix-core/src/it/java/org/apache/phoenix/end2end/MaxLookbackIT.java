@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.CompactionScanner;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -59,6 +60,7 @@ import static org.apache.phoenix.util.TestUtil.assertRowExistsAtSCN;
 import static org.apache.phoenix.util.TestUtil.assertRowHasExpectedValueAtSCN;
 import static org.apache.phoenix.util.TestUtil.assertTableHasTtl;
 import static org.apache.phoenix.util.TestUtil.assertTableHasVersions;
+import static org.junit.Assert.assertTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
@@ -87,7 +89,7 @@ public class MaxLookbackIT extends BaseTest {
     public void beforeTest(){
         EnvironmentEdgeManager.reset();
         optionBuilder = new StringBuilder();
-        ttl = 20;
+        ttl = 30;
         optionBuilder.append(" TTL=" + ttl);
         this.tableDDLOptions = optionBuilder.toString();
         injectEdge = new ManualEnvironmentEdge();
@@ -427,6 +429,52 @@ public class MaxLookbackIT extends BaseTest {
         }
     }
 
+    @Test(timeout=60000)
+    public void testOverrideMaxLookbackForCompaction() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableNameOne = generateUniqueName();
+            createTable(tableNameOne);
+            String tableNameTwo = generateUniqueName();
+            createTable(tableNameTwo);
+            injectEdge.setValue(System.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            // Change the max lookback window for each table
+            int maxLookbackOne = 20;
+            int maxLookbackTwo = 25;
+            CompactionScanner.overrideMaxLookback(tableNameOne, "0", maxLookbackOne * 1000);
+            CompactionScanner.overrideMaxLookback(tableNameTwo, "0", maxLookbackTwo * 1000);
+            if (multiCF) {
+                CompactionScanner.overrideMaxLookback(tableNameOne, "A", maxLookbackOne * 1000);
+                CompactionScanner.overrideMaxLookback(tableNameOne, "B", maxLookbackOne * 1000);
+                CompactionScanner.overrideMaxLookback(tableNameTwo, "A", maxLookbackTwo * 1000);
+                CompactionScanner.overrideMaxLookback(tableNameTwo, "B", maxLookbackTwo * 1000);
+            }
+            injectEdge.incrementValue(1);
+            populateTable(tableNameOne);
+            populateTable(tableNameTwo);
+            injectEdge.incrementValue(1);
+            conn.createStatement().executeUpdate("DELETE FROM " + tableNameOne);
+            conn.createStatement().executeUpdate("DELETE FROM " + tableNameTwo);
+            conn.commit();
+            // Move the time so that delete will be outside the maxlookback window of tableNameOne
+            injectEdge.incrementValue((maxLookbackOne + 2)  * 1000);
+            // Compact both tables. Deleted rows should be removed from tableNameOne as they
+            // are now outside delete markers but not from tableNameTwo
+            flush(TableName.valueOf(tableNameOne));
+            flush(TableName.valueOf(tableNameTwo));
+            majorCompact(TableName.valueOf(tableNameOne));
+            majorCompact(TableName.valueOf(tableNameTwo));
+            assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("a"), 0);
+            assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("b"), 0);
+            if (multiCF) {
+                assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("a"), 7);
+                assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("b"), 7);
+            } else {
+                assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("a"), 5);
+                assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("b"), 5);
+            }
+        }
+    }
     private void flush(TableName table) throws IOException {
         Admin admin = getUtility().getAdmin();
         admin.flush(table);

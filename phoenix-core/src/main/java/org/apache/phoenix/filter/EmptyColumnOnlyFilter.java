@@ -3,6 +3,8 @@ package org.apache.phoenix.filter;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Iterator;
+import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
@@ -13,12 +15,14 @@ import org.apache.hbase.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.ScanUtil;
 
 /**
- * For the queries that returns only empty column
+ * This filter returns only the empty column cell if it exists. If an empty column cell
+ * does not exist, then it returns the first cell, that is, behaves like FirstKeyOnlyFilter
  */
 public class EmptyColumnOnlyFilter extends FilterBase implements Writable {
     private byte[] emptyCF;
     private byte[] emptyCQ;
-    private boolean found;
+    private boolean found = false;
+    private boolean first = true;
 
     public EmptyColumnOnlyFilter() {}
     public EmptyColumnOnlyFilter(byte[] emptyCF, byte[] emptyCQ) {
@@ -33,6 +37,7 @@ public class EmptyColumnOnlyFilter extends FilterBase implements Writable {
     @Override
     public void reset() throws IOException {
         found = false;
+        first = true;
     }
     @Deprecated
     @Override
@@ -49,7 +54,18 @@ public class EmptyColumnOnlyFilter extends FilterBase implements Writable {
             found = true;
             return ReturnCode.INCLUDE;
         }
+        if (first) {
+            first = false;
+            return ReturnCode.INCLUDE;
+        }
         return ReturnCode.NEXT_COL;
+    }
+
+    @Override
+    public void filterRowCells(List<Cell> kvs) throws IOException {
+        if (kvs.size() > 1) {
+            kvs.remove(0);
+        }
     }
 
     public static EmptyColumnOnlyFilter parseFrom(final byte [] pbBytes) throws DeserializationException {

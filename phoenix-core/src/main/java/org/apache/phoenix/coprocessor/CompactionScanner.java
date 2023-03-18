@@ -39,6 +39,8 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -308,11 +310,12 @@ public class CompactionScanner implements InternalScanner {
     }
     /**
      * Decide if compaction row versions outside the max lookback window but inside the TTL window
-     * should be retained.
+     * should be retained. The rows that are retained are added to result.
+     *
      * If the store is not the first store and one of the following conditions holds, then we need
      * to do region level compaction.  This is because we cannot calculate the actual row versions
      * (we cannot determine if these store level row versions are part of which region level row
-     * versions).
+     * versions). In this case, this method returns false.
      * 1. The compaction row version is alive
      * 2. The compaction row version is deleted and KeepDeletedCells is not TTL
      *
@@ -362,11 +365,13 @@ public class CompactionScanner implements InternalScanner {
     }
 
     /**
-     * Decide if compaction row versions outside the TTL window should be retained.
+     * Decide if compaction row versions outside the TTL window should be retained. The rows that
+     * are retained are added to result.
+     *
      * If the store is not the first store and one of the following conditions holds, then we need
      * to do region level compaction.  This is because we cannot calculate the actual row versions
      * (we cannot determine if these store level row versions are part of which region level row
-     * versions).
+     * versions). In this case, this method returns false.
      *
      * 1. The compaction row version is alive
      * 2. The compaction row version is deleted, KeepDeletedCells is TRUE, and the delete family
