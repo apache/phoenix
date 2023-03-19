@@ -589,26 +589,24 @@ public class CompactionScanner implements InternalScanner {
             filterRegionLevel(input, result);
         }
         // Filter delete markers
-        if (deleteMarkers.isEmpty()) {
-            return;
-        }
-        int version = 0;
-        Cell last = deleteMarkers.get(0);
-        for (Cell cell : deleteMarkers) {
-            if (cell.getType() != last.getType() || !CellUtil.matchingColumn(cell, last)) {
-                version = 0;
-                last = cell;
-            }
-            if (cell.getTimestamp() >= maxLookbackWindowStart) {
-                result.add(cell);
-            }
-            else if (cell.getTimestamp() >= ttlWindowStart) {
-                if (keepDeletedCells == KeepDeletedCells.TTL) {
+        if (!deleteMarkers.isEmpty()) {
+            int version = 0;
+            Cell last = deleteMarkers.get(0);
+            for (Cell cell : deleteMarkers) {
+                if (cell.getType() != last.getType() || !CellUtil.matchingColumn(cell, last)) {
+                    version = 0;
+                    last = cell;
+                }
+                if (cell.getTimestamp() >= maxLookbackWindowStart) {
                     result.add(cell);
-                } else if (keepDeletedCells == KeepDeletedCells.TRUE) {
-                    if (version < maxVersion) {
-                        version++;
+                } else if (cell.getTimestamp() >= ttlWindowStart) {
+                    if (keepDeletedCells == KeepDeletedCells.TTL) {
                         result.add(cell);
+                    } else if (keepDeletedCells == KeepDeletedCells.TRUE) {
+                        if (version < maxVersion) {
+                            version++;
+                            result.add(cell);
+                        }
                     }
                 }
             }
