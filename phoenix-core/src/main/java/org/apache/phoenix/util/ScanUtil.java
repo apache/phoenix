@@ -1349,7 +1349,7 @@ public class ScanUtil {
         byte[] emptyCQ = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME);
         if (emptyCF != null && emptyCQ != null) {
             addEmptyColumnToScan(scan, emptyCF, emptyCQ);
-        } else {
+        } else if (!isAnalyzeTable(scan)) {
             emptyCF = SchemaUtil.getEmptyColumnFamily(table);
             emptyCQ = table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
                     QueryConstants.EMPTY_COLUMN_BYTES :

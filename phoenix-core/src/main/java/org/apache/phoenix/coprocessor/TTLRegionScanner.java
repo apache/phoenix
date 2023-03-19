@@ -115,7 +115,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
             return false;
         }
         // We need check if the gap between two consecutive cell timestamps is more than ttl
-        // and if so trim the cell beyond the gap
+        // and if so trim the cells beyond the gap
         Scan singleRowScan = new Scan();
         byte[] rowKey = CellUtil.cloneRow(result.get(0));
         singleRowScan.withStartRow(rowKey, true);
