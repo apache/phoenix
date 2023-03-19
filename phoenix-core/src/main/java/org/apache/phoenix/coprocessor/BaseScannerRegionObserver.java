@@ -388,7 +388,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 // An old client may not set these attributes which are required by TTLRegionScanner
                 if (emptyCF != null && emptyCQ != null) {
                     return new RegionScannerHolder(c, scan,
-                            new TTLRegionScanner(c.getEnvironment(), scan,
+                            new PhoenixTTLRegionScanner(c.getEnvironment(), scan,
                                     new PagingRegionScanner(c.getEnvironment().getRegion(), s,
                                             scan)));
                 }

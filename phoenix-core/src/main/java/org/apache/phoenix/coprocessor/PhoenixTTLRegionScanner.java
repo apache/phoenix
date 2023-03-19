@@ -41,11 +41,11 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COL
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME;
 
 /**
- *  TTLRegionScanner masks expired rows.
+ *  PhoenixTTLRegionScanner masks expired rows using the empty column cell timestamp
  */
-public class TTLRegionScanner extends BaseRegionScanner {
+public class PhoenixTTLRegionScanner extends BaseRegionScanner {
     private static final Logger LOG =
-            LoggerFactory.getLogger(TTLRegionScanner.class);
+            LoggerFactory.getLogger(PhoenixTTLRegionScanner.class);
     private final boolean isPhoenixTableTTLEnabled;
     private final RegionCoprocessorEnvironment env;
     private Scan scan;
@@ -57,7 +57,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
     byte[] emptyCF;
     private boolean initialized = false;
 
-	public TTLRegionScanner(final RegionCoprocessorEnvironment env, final Scan scan,
+	public PhoenixTTLRegionScanner(final RegionCoprocessorEnvironment env, final Scan scan,
             final RegionScanner s) {
 	    super(s);
 	    this.env = env;
@@ -68,9 +68,9 @@ public class TTLRegionScanner extends BaseRegionScanner {
         ttl = env.getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
         ttlWindowStart = ttl == HConstants.FOREVER ? 1 : currentTime - ttl * 1000;
         ttl *= 1000;
-        isPhoenixTableTTLEnabled =
+        isPhoenixTableTTLEnabled = emptyCF != null && emptyCQ != null &&
                 env.getConfiguration().getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
-                        QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);;
+                        QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
 	}
 
     private void init() throws IOException {
@@ -212,7 +212,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
 
     @Override
     public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
-        return new TTLRegionScanner(env, scan,
+        return new PhoenixTTLRegionScanner(env, scan,
                 ((DelegateRegionScanner)delegate).getNewRegionScanner(scan));
     }
 }

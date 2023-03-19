@@ -53,9 +53,9 @@ import java.util.Random;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
-public class TableTTLIT extends BaseTest {
+public class PhoenixTableTTLIT extends BaseTest {
     private static final Logger LOG =
-            LoggerFactory.getLogger(TableTTLIT.class);
+            LoggerFactory.getLogger(PhoenixTableTTLIT.class);
     private static final Random RAND = new Random(11);
     private static final int MAX_COLUMN_INDEX = 6;
     private static final int MAX_LOOKBACK_AGE = 8;
@@ -68,7 +68,7 @@ public class TableTTLIT extends BaseTest {
     private final boolean columnEncoded;
     private final KeepDeletedCells keepDeletedCells;
 
-    public TableTTLIT(boolean multiCF, boolean columnEncoded, KeepDeletedCells keepDeletedCells) {
+    public PhoenixTableTTLIT(boolean multiCF, boolean columnEncoded, KeepDeletedCells keepDeletedCells) {
         this.multiCF = multiCF;
         this.columnEncoded = columnEncoded;
         this.keepDeletedCells = keepDeletedCells;

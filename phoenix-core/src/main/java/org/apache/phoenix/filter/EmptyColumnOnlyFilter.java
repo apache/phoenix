@@ -50,7 +50,7 @@ public class EmptyColumnOnlyFilter extends FilterBase implements Writable {
         if (found) {
             return ReturnCode.NEXT_ROW;
         }
-        if (ScanUtil.isEmptyColumn(cell, emptyCF)) {
+        if (ScanUtil.isEmptyColumn(cell, emptyCF, emptyCQ)) {
             found = true;
             return ReturnCode.INCLUDE;
         }
