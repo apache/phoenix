@@ -581,7 +581,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                       InternalScanner scanner, ScanType scanType, CompactionLifeCycleTracker tracker,
                                       CompactionRequest request) throws IOException {
         if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
-            final TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
+            final TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
             // Compaction and split upcalls run with the effective user context of the requesting user.
             // This will lead to failure of cross cluster RPC if the effective user is not
             // the login user. Switch to the login user context to ensure we have the expected
@@ -590,51 +590,50 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 @Override
                 public InternalScanner run() throws Exception {
                     InternalScanner internalScanner = scanner;
-                    boolean isDisabled = false;
                     if (request.isMajor()) {
-                        final String
-                                fullTableName =
-                                c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+                        boolean isDisabled = false;
+                        final String fullTableName = tableName.getNameAsString();
+                        PTable table = null;
+                        try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
+                                compactionConfig).unwrap(PhoenixConnection.class)) {
+                            table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+                        } catch (Exception e) {
+                            if (e instanceof TableNotFoundException) {
+                                LOGGER.debug("Ignoring HBase table that is not a Phoenix table: "
+                                        + fullTableName);
+                                // non-Phoenix HBase tables won't be found, do nothing
+                            } else {
+                                LOGGER.error(
+                                        "Unable to modify compaction scanner to retain deleted "
+                                                + "cells for a table with disabled Index; "
+                                                + fullTableName, e);
+                            }
+                        }
                         if (!PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.equals(fullTableName) &&
                                 !ScanUtil.hasCoprocessor(c.getEnvironment(),
-                                        GlobalIndexChecker.class.getName())) {
-                            try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
-                                    compactionConfig).unwrap(PhoenixConnection.class)) {
-                                PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
-                                List<PTable>
-                                        indexes =
-                                        PTableType.INDEX.equals(table.getType()) ?
-                                                Lists.newArrayList(table) :
-                                                table.getIndexes();
-                                // FIXME need to handle views and indexes on views as well
-                                for (PTable index : indexes) {
-                                    if (index.getIndexDisableTimestamp() != 0) {
-                                        LOGGER.info("Modifying major compaction scanner to retain "
-                                                + "deleted cells for a table with disabled index: "
-                                                + fullTableName);
-                                        isDisabled = true;
-                                        break;
-                                    }
-                                }
-                            } catch (Exception e) {
-                                if (e instanceof TableNotFoundException) {
-                                    LOGGER.debug(
-                                            "Ignoring HBase table that is not a Phoenix table: "
-                                                    + fullTableName);
-                                    // non-Phoenix HBase tables won't be found, do nothing
-                                } else {
-                                    LOGGER.error(
-                                            "Unable to modify compaction scanner to retain deleted "
-                                                    + "cells for a table with disabled Index; "
-                                                    + fullTableName, e);
+                                GlobalIndexChecker.class.getName())) {
+                            List<PTable>
+                                    indexes =
+                                    PTableType.INDEX.equals(table.getType()) ?
+                                            Lists.newArrayList(table) :
+                                            table.getIndexes();
+                            // FIXME need to handle views and indexes on views as well
+                            for (PTable index : indexes) {
+                                if (index.getIndexDisableTimestamp() != 0) {
+                                    LOGGER.info("Modifying major compaction scanner to retain "
+                                            + "deleted cells for a table with disabled index: "
+                                            + fullTableName);
+                                    isDisabled = true;
+                                    break;
                                 }
                             }
                         }
-                    }
-                    if (!isDisabled && isPhoenixTableTTLEnabled) {
-                        internalScanner = new CompactionScanner(c.getEnvironment(), store,
-                                scanner,
-                                getMaxLookbackInMillis(c.getEnvironment().getConfiguration()));
+                        if (!isDisabled && isPhoenixTableTTLEnabled) {
+                            internalScanner =
+                                    new CompactionScanner(c.getEnvironment(), store, scanner,
+                                            getMaxLookbackInMillis(c.getEnvironment().getConfiguration()),
+                                            SchemaUtil.getEmptyColumnFamily(table));
+                        }
                     }
                     try {
                         long clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
@@ -643,7 +642,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                         ConnectionType.COMPACTION_CONNECTION);
                         StatisticsCollector statisticsCollector =
                                 StatisticsCollectorFactory.createStatisticsCollector(
-                                compactionConfEnv, table.getNameAsString(), clientTimeStamp,
+                                compactionConfEnv, tableName.getNameAsString(), clientTimeStamp,
                                 store.getColumnFamilyDescriptor().getName());
                         statisticsCollector.init();
                         internalScanner =
@@ -653,7 +652,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         // If we can't reach the stats table, don't interrupt the normal
                         // compaction operation, just log a warning.
                         if (LOGGER.isWarnEnabled()) {
-                            LOGGER.warn("Unable to collect stats for " + table, e);
+                            LOGGER.warn("Unable to collect stats for " + tableName, e);
                         }
                     }
                     return internalScanner;

@@ -39,8 +39,6 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,7 +63,7 @@ public class CompactionScanner implements InternalScanner {
     private long ttl;
     private int minVersion;
     private int maxVersion;
-    private final boolean firstStore;
+    private final boolean emptyCFStore;
     private KeepDeletedCells keepDeletedCells;
     private long compactionTime;
     private static Map<String, Long> maxLookbackMap = new ConcurrentHashMap<>();
@@ -73,7 +71,8 @@ public class CompactionScanner implements InternalScanner {
     public CompactionScanner(RegionCoprocessorEnvironment env,
                                 Store store,
                                 InternalScanner storeScanner,
-                                long maxLookbackInMillis) {
+                                long maxLookbackInMillis,
+                                byte[] emptyCF) {
         this.storeScanner = storeScanner;
         this.region = env.getRegion();
         this.store = store;
@@ -94,7 +93,8 @@ public class CompactionScanner implements InternalScanner {
         this.minVersion = cfd.getMinVersions();
         this.maxVersion = cfd.getMaxVersions();
         this.keepDeletedCells = cfd.getKeepDeletedCells();
-        firstStore = columnFamilyName.equals(region.getStores().get(0).getColumnFamilyName()) ||
+        emptyCFStore = region.getTableDescriptor().getColumnFamilies().length == 1 ||
+                columnFamilyName.equals(Bytes.toString(emptyCF)) ||
                 columnFamilyName.startsWith(LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
     }
 
@@ -119,7 +119,6 @@ public class CompactionScanner implements InternalScanner {
         boolean hasMore = storeScanner.next(result);
         if (!result.isEmpty()) {
             filter(result, false);
-            //filterRegionLevel(new ArrayList(result), result);
         }
         return hasMore;
     }
@@ -312,10 +311,10 @@ public class CompactionScanner implements InternalScanner {
      * Decide if compaction row versions outside the max lookback window but inside the TTL window
      * should be retained. The rows that are retained are added to result.
      *
-     * If the store is not the first store and one of the following conditions holds, then we need
-     * to do region level compaction.  This is because we cannot calculate the actual row versions
-     * (we cannot determine if these store level row versions are part of which region level row
-     * versions). In this case, this method returns false.
+     * If the store is not the empty column family store and one of the following conditions holds,
+     * then we need to do region level compaction.  This is because we cannot calculate the actual
+     * row versions (we cannot determine if these store level row versions are part of which
+     * region level row versions). In this case, this method returns false.
      * 1. The compaction row version is alive
      * 2. The compaction row version is deleted and KeepDeletedCells is not TTL
      *
@@ -331,7 +330,7 @@ public class CompactionScanner implements InternalScanner {
     private boolean retainOutsideMaxLookbackButInsideTTLWindow(List<Cell> result,
             CompactionRowVersion rowVersion, RowContext rowContext, boolean regionLevel) {
         // Decide if the compaction should be done at the region level
-        if (!firstStore && !regionLevel) {
+        if (!emptyCFStore && !regionLevel) {
             if (rowContext.familyDeleteMarker == null
                     && rowContext.familyVersionDeleteMarker == null) {
                 // Rule 1
@@ -368,10 +367,10 @@ public class CompactionScanner implements InternalScanner {
      * Decide if compaction row versions outside the TTL window should be retained. The rows that
      * are retained are added to result.
      *
-     * If the store is not the first store and one of the following conditions holds, then we need
-     * to do region level compaction.  This is because we cannot calculate the actual row versions
-     * (we cannot determine if these store level row versions are part of which region level row
-     * versions). In this case, this method returns false.
+     * If the store is not the empty column family store and one of the following conditions holds,
+     * then we need to do region level compaction.  This is because we cannot calculate the actual
+     * row versions (we cannot determine if these store level row versions are part of which
+     * region level row versions). In this case, this method returns false.
      *
      * 1. The compaction row version is alive
      * 2. The compaction row version is deleted, KeepDeletedCells is TRUE, and the delete family
@@ -389,7 +388,7 @@ public class CompactionScanner implements InternalScanner {
     private boolean retainOutsideTTLWindow(List<Cell> result,
             CompactionRowVersion rowVersion, RowContext rowContext, boolean regionLevel) {
         // Decide if the compaction should be done at the region level
-        if (!firstStore && !regionLevel) {
+        if (!emptyCFStore && !regionLevel) {
             if (rowContext.familyDeleteMarker == null
                     && rowContext.familyVersionDeleteMarker == null) {
                 // Rule 1
