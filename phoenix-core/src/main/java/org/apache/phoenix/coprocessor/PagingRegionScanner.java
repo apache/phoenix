@@ -51,10 +51,10 @@ public class PagingRegionScanner extends BaseRegionScanner {
         if (pagingFilter != null) {
             pagingFilter.init();
         }
-	}
+    }
 
     private boolean next(List<Cell> results, boolean raw) throws IOException {
-	    try {
+        try {
             boolean hasMore = raw ? delegate.nextRaw(results) : delegate.next(results);
             if (pagingFilter == null) {
                 return hasMore;
@@ -91,7 +91,7 @@ public class PagingRegionScanner extends BaseRegionScanner {
 
     @Override
     public boolean next(List<Cell> results) throws IOException {
-	   return next(results, false);
+        return next(results, false);
     }
 
     @Override

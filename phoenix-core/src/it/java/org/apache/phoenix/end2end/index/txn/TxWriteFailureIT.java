@@ -177,7 +177,8 @@ public class TxWriteFailureIT extends BaseTest {
                 "CLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
         } else {
-	        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + indexFullName + "\n    SERVER FILTER BY EMPTY COLUMN ONLY",
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + indexFullName +
+                            "\n    SERVER FILTER BY EMPTY COLUMN ONLY",
 	                QueryUtil.getExplainPlan(rs));
         }
         rs = conn.createStatement().executeQuery(indexSql);

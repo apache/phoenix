@@ -57,11 +57,11 @@ public class PhoenixTTLRegionScanner extends BaseRegionScanner {
     byte[] emptyCF;
     private boolean initialized = false;
 
-	public PhoenixTTLRegionScanner(final RegionCoprocessorEnvironment env, final Scan scan,
+    public PhoenixTTLRegionScanner(final RegionCoprocessorEnvironment env, final Scan scan,
             final RegionScanner s) {
-	    super(s);
-	    this.env = env;
-	    this.scan = scan;
+        super(s);
+        this.env = env;
+        this.scan = scan;
         emptyCQ = scan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
         emptyCF = scan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
@@ -71,7 +71,7 @@ public class PhoenixTTLRegionScanner extends BaseRegionScanner {
         isPhoenixTableTTLEnabled = emptyCF != null && emptyCQ != null &&
                 env.getConfiguration().getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                         QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
-	}
+    }
 
     private void init() throws IOException {
         // HBase PageFilter will also count the expired rows.
@@ -202,7 +202,7 @@ public class PhoenixTTLRegionScanner extends BaseRegionScanner {
 
     @Override
     public boolean next(List<Cell> results) throws IOException {
-	   return next(results, false);
+        return next(results, false);
     }
 
     @Override

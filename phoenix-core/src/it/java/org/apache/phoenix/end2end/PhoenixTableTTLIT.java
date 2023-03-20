@@ -131,9 +131,9 @@ public class PhoenixTableTTLIT extends BaseTest {
      *
      * After every upsert, all versions of the rows are retrieved from each table and compared.
      * The test also occasionally deletes the row from both tables and but compacts only the
-     * first tables during this test.
+     * first table during this test.
      *
-     * This test expects that both table returns the same row content for the same row version.
+     * This test expects that both tables return the same row content for the same row version.
      *
      * @throws Exception
      */

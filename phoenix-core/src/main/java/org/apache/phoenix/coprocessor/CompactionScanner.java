@@ -319,12 +319,12 @@ public class CompactionScanner implements InternalScanner {
      * 1. The compaction row version is alive
      * 2. The compaction row version is deleted and KeepDeletedCells is not TTL
      *
-     * If the compaction can be done at store level because none of the above conditions hold or
-     * the compaction is done at the region level, and one of the following conditions holds then
+     * If the compaction can be done at store level (because none of the above conditions hold or
+     * the compaction is done at the region level), and one of the following conditions holds then
      * the cells of the compaction row version are retained
      * 3 The compaction row version is alive and its version is less than VERSIONS
      * 4. The compaction row version is deleted and KeepDeletedCells is TTL
-     * 5. The compaction row version is deleted, its version less than MIN_VERSIONS and
+     * 5. The compaction row version is deleted, its version is less than MIN_VERSIONS and
      * KeepDeletedCells is TRUE
      *
      */
