@@ -62,11 +62,17 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.*;
+
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CHECK_VERIFY_COLUMN;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME;
 import static org.apache.phoenix.coprocessor.MetaDataEndpointImpl.mutateRowsWithLocks;
 import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
-import static org.apache.phoenix.util.ScanUtil.*;
+import static org.apache.phoenix.util.ScanUtil.getDummyResult;
+import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;
+import static org.apache.phoenix.util.ScanUtil.isDummy;
+
 
 /**
  * Endpoint co-processor through which Phoenix metadata mutations for SYSTEM.CHILD_LINK flow.
