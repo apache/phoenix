@@ -168,13 +168,14 @@ public class MaxLookbackExtendedIT extends BaseTest {
             } else {
                 assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), 5);
             }
-            // 6 upserts for row b but max version is 2 so there should be two versions of row b
+            // 6 upserts for row b but max version is 2 plus one deleted version outside the
+            // max lookback window. So there should be three versions of row b
             if (multiCF) {
-                // 4 cells for each version plus 6 delete markers (3CFs) = 14
-                assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), 14);
+                // 4 cells for each version plus 2 delete markers (3CFs) = 16
+                assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), 16);
             } else {
-                // 4 cells for each version plus 2 delete markers = 10
-                assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), 10);
+                // 4 cells for each version plus 2 delete markers = 14
+                assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), 14);
             }
         }
     }
@@ -257,9 +258,10 @@ public class MaxLookbackExtendedIT extends BaseTest {
             injectEdge.incrementValue(1L);
             majorCompact(dataTable);
             majorCompact(indexTable);
-            //should still be ROWS_POPULATED because we added one and deleted one
-            assertRawRowCount(conn, dataTable, ROWS_POPULATED);
-            assertRawRowCount(conn, indexTable, ROWS_POPULATED);
+            // Deleted row versions except the last versions should be removed. The deleted row
+            // version should be still preserved
+            assertRawRowCount(conn, dataTable, ROWS_POPULATED + 1);
+            assertRawRowCount(conn, indexTable, ROWS_POPULATED + 1);
 
             //deleted row should be gone, but not deleted row should still be there.
             assertRowExistsAtSCN(getUrl(), sql, beforeSecondCompactSCN, false);
@@ -452,25 +454,31 @@ public class MaxLookbackExtendedIT extends BaseTest {
             populateTable(tableNameOne);
             populateTable(tableNameTwo);
             injectEdge.incrementValue(1);
+            populateTable(tableNameOne);
+            populateTable(tableNameTwo);
+            injectEdge.incrementValue(1);
             conn.createStatement().executeUpdate("DELETE FROM " + tableNameOne);
             conn.createStatement().executeUpdate("DELETE FROM " + tableNameTwo);
             conn.commit();
             // Move the time so that delete will be outside the maxlookback window of tableNameOne
             injectEdge.incrementValue((maxLookbackOne + 2)  * 1000);
-            // Compact both tables. Deleted rows should be removed from tableNameOne as they
-            // are now outside delete markers but not from tableNameTwo
+            // Compact both tables. Deleted row version except the last versions should be removed
+            // from tableNameOne as they are now outside the max lookback window, but not from
+            // tableNameTwo
             flush(TableName.valueOf(tableNameOne));
             flush(TableName.valueOf(tableNameTwo));
             majorCompact(TableName.valueOf(tableNameOne));
             majorCompact(TableName.valueOf(tableNameTwo));
-            assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("a"), 0);
-            assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("b"), 0);
             if (multiCF) {
-                assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("a"), 7);
-                assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("b"), 7);
+                assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("a"), 3);
+                assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("b"), 3);
+                assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("a"), 11);
+                assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("b"), 11);
             } else {
-                assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("a"), 5);
-                assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("b"), 5);
+                assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("a"), 1);
+                assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("b"), 1);
+                assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("a"), 9);
+                assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("b"), 9);
             }
         }
     }

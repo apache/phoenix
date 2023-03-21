@@ -58,7 +58,8 @@ public class PhoenixTableTTLIT extends BaseTest {
             LoggerFactory.getLogger(PhoenixTableTTLIT.class);
     private static final Random RAND = new Random(11);
     private static final int MAX_COLUMN_INDEX = 6;
-    private static final int MAX_LOOKBACK_AGE = 8;
+    private static final int LAST_COLUMN_INDEX = 7;
+    private static final int MAX_LOOKBACK_AGE = 10;
     private static final int TTL = 30;
     private String tableDDLOptions;
     private StringBuilder optionBuilder;
@@ -85,7 +86,7 @@ public class PhoenixTableTTLIT extends BaseTest {
     public void beforeTest(){
         EnvironmentEdgeManager.reset();
         optionBuilder = new StringBuilder();
-        versions = 2;
+        versions = 5;
         optionBuilder.append(" TTL=" + TTL);
         optionBuilder.append(", VERSIONS=" + versions);
         if (keepDeletedCells == KeepDeletedCells.FALSE) {
@@ -145,16 +146,16 @@ public class PhoenixTableTTLIT extends BaseTest {
             String noCompactTableName = generateUniqueName();
             createTable(noCompactTableName);
             long startTime = System.currentTimeMillis() + 1000;
-            startTime = (startTime/1000)*1000;
+            startTime = (startTime / 1000) * 1000;
             EnvironmentEdgeManager.injectEdge(injectEdge);
             injectEdge.setValue(startTime);
-            for (int i = 1; i < 200; i++) {
+            for (int i = 0; i < 500; i++) {
                 updateRow(conn, tableName, noCompactTableName, "a");
                 compareRow(conn, tableName, noCompactTableName, "a", MAX_COLUMN_INDEX);
                 long scn = injectEdge.currentTime() - MAX_LOOKBACK_AGE * 1000;
                 long scnEnd = injectEdge.currentTime() - 1000;
                 long scnStart = Math.max(scn, startTime);
-                for (scn = scnEnd; scn >= scnStart; scn -= 1000) {
+                for (scn = scnEnd; scn > scnStart; scn -= 1000) {
                     // Compare all row versions using scn queries
                     Properties props = new Properties();
                     props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
@@ -163,38 +164,31 @@ public class PhoenixTableTTLIT extends BaseTest {
                                 MAX_COLUMN_INDEX);
                     }
                 }
-                if (i % 5 == 0) {
+                if (RAND.nextInt(10) == 0) {
                     injectEdge.incrementValue(1000);
                     deleteRow(conn, tableName, "a");
                     deleteRow(conn, noCompactTableName, "a");
                 }
-                if (i % 28 == 0) {
+                if (RAND.nextInt(50) == 0) {
                     injectEdge.incrementValue(1000);
                     flush(TableName.valueOf(tableName));
                     majorCompact(TableName.valueOf(tableName));
                 }
-                if (i % (TTL + 1) == 0) {
+                if (i % (2 * TTL + 1) == 0) {
                     // Once in a while we update the last column that is not updated or checked
                     // regularly. Then we read this column from both tables after the TTL period.
                     // On the table that is compacted the column value would be masked and also
                     // removed by compaction. On the no compact table, the column value would be
                     // masked. So, both tables would return null value.
-                    if (i != TTL + 1) {
-                        compareRow(conn, tableName, noCompactTableName, "a", MAX_COLUMN_INDEX + 1);
-                        ResultSet
-                                rs =
-                                conn.createStatement().executeQuery(
-                                        "Select val" + (MAX_COLUMN_INDEX + 1) + " from "
-                                                + noCompactTableName + " where id = 'a'");
-                        if (rs.next()) {
-                            Assert.assertTrue(rs.getString(1) == null);
-                        }
-
+                    compareRow(conn, tableName, noCompactTableName, "a", LAST_COLUMN_INDEX);
+                    ResultSet rs = conn.createStatement().executeQuery(
+                            "Select val" + LAST_COLUMN_INDEX + " from "
+                                    + noCompactTableName + " where id = 'a'");
+                    if (rs.next()) {
+                        Assert.assertTrue(rs.getString(1) == null);
                     }
-                    updateColumn(conn, tableName, "a", MAX_COLUMN_INDEX + 1,
-                            "invisible");
-                    updateColumn(conn, noCompactTableName, "a", MAX_COLUMN_INDEX + 1,
-                            "invisible");
+                    updateColumn(conn, tableName, "a", LAST_COLUMN_INDEX, "invisible");
+                    updateColumn(conn, noCompactTableName, "a", LAST_COLUMN_INDEX, "invisible");
                     conn.commit();
                 }
                 injectEdge.incrementValue(1000);

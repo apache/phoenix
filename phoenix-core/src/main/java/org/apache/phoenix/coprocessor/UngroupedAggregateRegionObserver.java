@@ -609,7 +609,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                                 + fullTableName, e);
                             }
                         }
-                        if (!PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.equals(fullTableName) &&
+                        if (table != null &&
+                                !PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.equals(fullTableName) &&
                                 !ScanUtil.hasCoprocessor(c.getEnvironment(),
                                 GlobalIndexChecker.class.getName())) {
                             List<PTable>
@@ -628,7 +629,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 }
                             }
                         }
-                        if (!isDisabled && isPhoenixTableTTLEnabled) {
+                        if (table != null && !isDisabled && isPhoenixTableTTLEnabled) {
                             internalScanner =
                                     new CompactionScanner(c.getEnvironment(), store, scanner,
                                             getMaxLookbackInMillis(c.getEnvironment().getConfiguration()),

@@ -325,6 +325,10 @@ public class CompactionScanner implements InternalScanner {
      * 4. The compaction row version is deleted and KeepDeletedCells is TTL
      * 5. The compaction row version is deleted, its version is less than MIN_VERSIONS and
      * KeepDeletedCells is TRUE
+     * 6. The compaction row version is deleted, its version is zero, and the delete marker is
+     *    inside the max lookback window. (Note this is the first compaction row version outside
+     *    the max lookback window. This version should be visible through the scn connection with
+     *    the timestamp >= the delete marker's timestamp
      *
      */
     private boolean retainOutsideMaxLookbackButInsideTTLWindow(List<Cell> result,
@@ -353,6 +357,13 @@ public class CompactionScanner implements InternalScanner {
             if ((rowVersion.version < maxVersion && keepDeletedCells == KeepDeletedCells.TRUE) ||
                     keepDeletedCells == KeepDeletedCells.TTL) {
                 // Retain based on rule 4 or 5
+                result.addAll(rowVersion.cells);
+            } else if (maxLookbackWindowStart != compactionTime && rowVersion.version == 0 &&
+                    (rowContext.familyVersionDeleteMarker != null &&
+                    rowContext.familyVersionDeleteMarker.getTimestamp() > maxLookbackWindowStart) ||
+                    (rowContext.familyDeleteMarker != null &&
+                            rowContext.familyDeleteMarker.getTimestamp() > maxLookbackWindowStart)) {
+                // Retained based on rule 6
                 result.addAll(rowVersion.cells);
             }
         }
@@ -383,7 +394,10 @@ public class CompactionScanner implements InternalScanner {
      * 3. Live row versions less than MIN_VERSIONS are retained
      * 4. Delete row versions whose delete markers are inside the TTL window and
      *    KeepDeletedCells is TTL are retained
-     *
+     * 5. The compaction row version is deleted, its version is zero, and the delete marker is
+     *    inside the max lookback window. (Note this is the first compaction row version outside
+     *    the max lookback window. This version should be visible through the scn connection with
+     *    the timestamp >= the delete marker's timestamp
      */
     private boolean retainOutsideTTLWindow(List<Cell> result,
             CompactionRowVersion rowVersion, RowContext rowContext, boolean regionLevel) {
@@ -407,13 +421,13 @@ public class CompactionScanner implements InternalScanner {
         // We can do compaction at the store level
         if (rowContext.familyDeleteMarker == null
                 && rowContext.familyVersionDeleteMarker == null) {
-            // Live row
+            // Live compaction row version
             if (rowVersion.version < minVersion) {
                 // Rule 3
                 result.addAll(rowVersion.cells);
             }
         } else {
-            // Deleted row
+            // Deleted compaction row version
             if (keepDeletedCells == KeepDeletedCells.TTL && (
                     (rowContext.familyVersionDeleteMarker != null &&
                     rowContext.familyVersionDeleteMarker.getTimestamp() > ttlWindowStart) ||
@@ -421,6 +435,13 @@ public class CompactionScanner implements InternalScanner {
                                     rowContext.familyDeleteMarker.getTimestamp() > ttlWindowStart)
             )) {
                 // Rule 4
+                result.addAll(rowVersion.cells);
+            } else if (maxLookbackWindowStart != compactionTime && rowVersion.version == 0 &&
+                    (rowContext.familyVersionDeleteMarker != null &&
+                            rowContext.familyVersionDeleteMarker.getTimestamp() > maxLookbackWindowStart) ||
+                    (rowContext.familyDeleteMarker != null &&
+                            rowContext.familyDeleteMarker.getTimestamp() > maxLookbackWindowStart)) {
+                // Rule 6
                 result.addAll(rowVersion.cells);
             }
         }
@@ -467,17 +488,26 @@ public class CompactionScanner implements InternalScanner {
                     rowContext.columnDeleteMarkers.remove(i);
                 }
                 if (rowContext.maxTimestamp >= maxLookbackWindowStart) {
+                    // Inside the max lookback window
                     return true;
                 }
                 if (rowContext.maxTimestamp >= ttlWindowStart) {
+                    // Outside the max lookback window but inside the TTL window
                     if (keepDeletedCells == KeepDeletedCells.FALSE &&
                             dm.getTimestamp() < maxLookbackWindowStart ) {
                         return false;
                     }
-                    return true;
                 }
                 if (keepDeletedCells == KeepDeletedCells.TTL &&
                         dm.getTimestamp() >= ttlWindowStart) {
+                    return true;
+                }
+                if (maxLookbackWindowStart != compactionTime &&
+                        dm.getTimestamp() > maxLookbackWindowStart && rowContext.version == 0) {
+                    // The delete marker is inside the max lookback window and this is the first
+                    // cell version outside the max lookback window. This cell should be
+                    // visible through the scn connection with the timestamp >= the delete
+                    // marker's timestamp
                     return true;
                 }
                 return false;
@@ -533,9 +563,10 @@ public class CompactionScanner implements InternalScanner {
                 rowVersion.ts = rowContext.maxTimestamp;
                 rowVersion.cells.add(cell);
                 if (rowVersion.ts >= maxLookbackWindowStart) {
-                    rowContext.version = 0;
+                    rowVersion.version = 0;
+                } else {
+                    rowVersion.version = rowContext.version++;
                 }
-                rowVersion.version = rowContext.version++;
 
             } else {
                 rowVersion.cells.add(cell);
@@ -544,10 +575,8 @@ public class CompactionScanner implements InternalScanner {
         return rowVersion;
     }
 
-    private boolean formCompactionRowVersions(List<List<Cell>> columns,
-            List<Cell> result,
-            boolean regionLevel) {
-        RowContext rowContext = new RowContext();
+    private boolean formCompactionRowVersions(RowContext rowContext, List<List<Cell>> columns,
+            List<Cell> result, boolean regionLevel) {
         while (!columns.isEmpty()) {
             CompactionRowVersion compactionRowVersion =
                     formNextCompactionRowVersion(columns, rowContext, regionLevel);
@@ -584,7 +613,8 @@ public class CompactionScanner implements InternalScanner {
         formColumns(result, columns, deleteMarkers);
         List<Cell> input = new ArrayList<>(result);
         result.clear();
-        if (!formCompactionRowVersions(columns, result, regionLevel)) {
+        RowContext rowContext = new RowContext();
+        if (!formCompactionRowVersions(rowContext, columns, result, regionLevel)) {
             filterRegionLevel(input, result);
         }
         // Filter delete markers
@@ -606,6 +636,8 @@ public class CompactionScanner implements InternalScanner {
                             version++;
                             result.add(cell);
                         }
+                    } else if (cell.getTimestamp() >= rowContext.maxTimestamp) {
+                        result.add(cell);
                     }
                 }
             }
