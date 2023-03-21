@@ -155,7 +155,7 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
         private long pageSize = Long.MAX_VALUE;
         private long rowCount = 0;
         private long maxTimestamp;
-        private long AGE_THRESHOLD = 1*60*60*1000; // 1 hour
+        private long ageThreshold;
 
         public ChildLinkMetaDataScanner(RegionCoprocessorEnvironment env,
                                         Scan scan,
@@ -169,6 +169,9 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
             emptyCQ = scan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
             pageSizeMs = getPageSizeMsForRegionScanner(scan);
             maxTimestamp = scan.getTimeRange().getMax();
+            ageThreshold = env.getConfiguration().getLong(
+                    QueryServices.CHILD_LINK_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB,
+                    QueryServicesOptions.DEFAULT_CHILD_LINK_ROW_AGE_THRESHOLD_TO_DELETE_MS);
         }
 
         public boolean next(List<Cell> result, boolean raw) throws IOException {
@@ -337,7 +340,7 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
         }
 
         private void deleteIfAgedEnough(byte[] rowKey, long ts, Region region) throws IOException {
-            if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > AGE_THRESHOLD) {
+            if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold) {
                 Delete del = new Delete(rowKey);
                 Mutation[] mutations = new Mutation[]{del};
                 region.batchMutate(mutations);
