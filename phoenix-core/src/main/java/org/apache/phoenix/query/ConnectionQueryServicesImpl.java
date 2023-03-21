@@ -49,6 +49,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_HBASE_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
@@ -97,6 +98,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -276,6 +278,8 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
+import org.apache.phoenix.schema.task.SystemTaskParams;
+import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
@@ -2201,6 +2205,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             catch (SQLException e) {
                 //unverified rows will be repaired during read
                 LOGGER.debug("Exception in phase-3 of view creation: " + e.getMessage());
+                addChildLinkScanTask();
             }
         }
         return result;
@@ -2252,6 +2257,26 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         .setTableName(Bytes.toString(physicalTableNameBytes)).build().buildException();
             default:
                 break;
+        }
+    }
+
+    /*
+    Add a task to SYSTEM.TASK table which does a simple select * query on SYSTEM.CHILD_LINK table.
+    This should trigger the read repair step and verify any unverified rows.
+     */
+    private void addChildLinkScanTask() {
+
+        try {
+            PhoenixConnection conn = QueryUtil.getConnection(config).unwrap(PhoenixConnection.class);
+            Task.addTask(new SystemTaskParams.SystemTaskParamsBuilder()
+                    .setConn(conn)
+                    .setTaskType(PTable.TaskType.CHILD_LINK_SCAN)
+                    .setTaskStatus(PTable.TaskStatus.CREATED.toString())
+                    .setStartTs(new Timestamp(EnvironmentEdgeManager.currentTimeMillis()))
+                    .setTableName(SYSTEM_CHILD_LINK_TABLE)
+                    .build());
+        } catch (Throwable t) {
+            LOGGER.error("Adding a task to scan SYSTEM.CHILD_LINK failed!", t);
         }
     }
 
