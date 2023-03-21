@@ -61,6 +61,7 @@ public class CompactionScanner implements InternalScanner {
     private long maxLookbackWindowStart;
     private long ttlWindowStart;
     private long ttl;
+    private final long maxLookbackInMillis;
     private int minVersion;
     private int maxVersion;
     private final boolean emptyCFStore;
@@ -79,6 +80,7 @@ public class CompactionScanner implements InternalScanner {
         this.env = env;
         this.config = env.getConfiguration();
         compactionTime = EnvironmentEdgeManager.currentTimeMillis();
+        this.maxLookbackInMillis = maxLookbackInMillis;
         String columnFamilyName = store.getColumnFamilyName();
         String tableName = region.getRegionInfo().getTable().getNameAsString();
         Long overriddenMaxLookback =
@@ -358,7 +360,7 @@ public class CompactionScanner implements InternalScanner {
                     keepDeletedCells == KeepDeletedCells.TTL) {
                 // Retain based on rule 4 or 5
                 result.addAll(rowVersion.cells);
-            } else if (maxLookbackWindowStart != compactionTime && rowVersion.version == 0 &&
+            } else if (maxLookbackInMillis != 0 && rowVersion.version == 0 &&
                     (rowContext.familyVersionDeleteMarker != null &&
                     rowContext.familyVersionDeleteMarker.getTimestamp() > maxLookbackWindowStart) ||
                     (rowContext.familyDeleteMarker != null &&
@@ -436,7 +438,7 @@ public class CompactionScanner implements InternalScanner {
             )) {
                 // Rule 4
                 result.addAll(rowVersion.cells);
-            } else if (maxLookbackWindowStart != compactionTime && rowVersion.version == 0 &&
+            } else if (maxLookbackInMillis != 0 && rowVersion.version == 0 &&
                     (rowContext.familyVersionDeleteMarker != null &&
                             rowContext.familyVersionDeleteMarker.getTimestamp() > maxLookbackWindowStart) ||
                     (rowContext.familyDeleteMarker != null &&
@@ -454,7 +456,7 @@ public class CompactionScanner implements InternalScanner {
 
     private boolean prepareResults(List<Cell> result, CompactionRowVersion rowVersion,
             RowContext rowContext, boolean regionLevel) {
-        if (rowVersion.ts >= maxLookbackWindowStart) {
+        if (maxLookbackInMillis != 0 && rowVersion.ts >= maxLookbackWindowStart) {
             // All rows within the max lookback window are retained
             result.addAll(rowVersion.cells);
             if (rowContext.familyVersionDeleteMarker != null) {
@@ -487,7 +489,7 @@ public class CompactionScanner implements InternalScanner {
                     // to delete only one cell.
                     rowContext.columnDeleteMarkers.remove(i);
                 }
-                if (rowContext.maxTimestamp >= maxLookbackWindowStart) {
+                if (maxLookbackInMillis != 0 && rowContext.maxTimestamp >= maxLookbackWindowStart) {
                     // Inside the max lookback window
                     return true;
                 }
@@ -502,7 +504,7 @@ public class CompactionScanner implements InternalScanner {
                         dm.getTimestamp() >= ttlWindowStart) {
                     return true;
                 }
-                if (maxLookbackWindowStart != compactionTime &&
+                if (maxLookbackInMillis != 0 &&
                         dm.getTimestamp() > maxLookbackWindowStart && rowContext.version == 0) {
                     // The delete marker is inside the max lookback window and this is the first
                     // cell version outside the max lookback window. This cell should be
@@ -562,7 +564,7 @@ public class CompactionScanner implements InternalScanner {
                 rowVersion = new CompactionRowVersion();
                 rowVersion.ts = rowContext.maxTimestamp;
                 rowVersion.cells.add(cell);
-                if (rowVersion.ts >= maxLookbackWindowStart) {
+                if (maxLookbackInMillis != 0 && rowVersion.ts >= maxLookbackWindowStart) {
                     rowVersion.version = 0;
                 } else {
                     rowVersion.version = rowContext.version++;
@@ -626,7 +628,7 @@ public class CompactionScanner implements InternalScanner {
                     version = 0;
                     last = cell;
                 }
-                if (cell.getTimestamp() >= maxLookbackWindowStart) {
+                if (maxLookbackInMillis != 0 && cell.getTimestamp() >= maxLookbackWindowStart) {
                     result.add(cell);
                 } else if (cell.getTimestamp() >= ttlWindowStart) {
                     if (keepDeletedCells == KeepDeletedCells.TTL) {
@@ -636,7 +638,8 @@ public class CompactionScanner implements InternalScanner {
                             version++;
                             result.add(cell);
                         }
-                    } else if (cell.getTimestamp() >= rowContext.maxTimestamp) {
+                    } else if (maxLookbackInMillis != 0 &&
+                            cell.getTimestamp() >= rowContext.maxTimestamp) {
                         result.add(cell);
                     }
                 }
