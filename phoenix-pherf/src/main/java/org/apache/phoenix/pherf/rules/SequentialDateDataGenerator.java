@@ -18,31 +18,38 @@
 
 package org.apache.phoenix.pherf.rules;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataSequence;
 import org.apache.phoenix.pherf.configuration.DataTypeMapping;
-
-import org.joda.time.LocalDateTime;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
-import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * A generator for sequentially increasing dates.
  * For now the increments are fixed at 1 second.
  */
 public class SequentialDateDataGenerator implements RuleBasedDataGenerator {
-    private static DateTimeFormatter FMT = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss.SSS");
+    private static DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
     private final Column columnRule;
     private final AtomicInteger counter;
-    private final LocalDateTime startDateTime = new LocalDateTime();
+    //Make sure we truncate to milliseconds
+    private final LocalDateTime startDateTime =
+            LocalDateTime.parse(LocalDateTime.now().format(FMT), FMT);
 
     public SequentialDateDataGenerator(Column columnRule) {
         Preconditions.checkArgument(columnRule.getDataSequence() == DataSequence.SEQUENTIAL);
         Preconditions.checkArgument(isDateType(columnRule.getType()));
         this.columnRule = columnRule;
         counter = new AtomicInteger(0);
+    }
+
+    @VisibleForTesting
+    public LocalDateTime getStartDateTime() {
+        return startDateTime;
     }
 
     /**
@@ -52,7 +59,7 @@ public class SequentialDateDataGenerator implements RuleBasedDataGenerator {
     @Override
     public DataValue getDataValue() {
         LocalDateTime newDateTime = startDateTime.plusSeconds(counter.getAndIncrement());
-        String formattedDateTime = newDateTime.toString(FMT);
+        String formattedDateTime = newDateTime.format(FMT);
         return new DataValue(columnRule.getType(), formattedDateTime);
     }
 
