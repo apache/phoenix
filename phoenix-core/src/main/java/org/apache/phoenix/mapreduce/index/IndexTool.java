@@ -28,6 +28,7 @@ import static org.apache.phoenix.mapreduce.index.IndexVerificationResultReposito
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.AbstractMap;
@@ -605,11 +606,17 @@ public class IndexTool extends Configured implements Tool {
             for (String index : disableIndexes) {
                 quotedIndexes.add("'" + index + "'");
             }
-            try (ResultSet rs = connection.createStatement()
-                    .executeQuery("SELECT MAX(" + ASYNC_REBUILD_TIMESTAMP + "),MAX("+INDEX_DISABLE_TIMESTAMP+") FROM " + SYSTEM_CATALOG_NAME + " ("
-                            + ASYNC_REBUILD_TIMESTAMP + " BIGINT) WHERE " + TABLE_SCHEM
-                            + (schemaName != null && schemaName.length() > 0 ? "='" + schemaName + "'" : " IS NULL")
-                            + " and " + TABLE_NAME + " IN (" + StringUtils.join(",", quotedIndexes) + ")")) {
+
+            String query = String.format("SELECT MAX(" + ASYNC_REBUILD_TIMESTAMP + "),MAX("+INDEX_DISABLE_TIMESTAMP+") FROM "
+                + SYSTEM_CATALOG_NAME + " (" + ASYNC_REBUILD_TIMESTAMP + " BIGINT) WHERE " + TABLE_SCHEM
+                    +  " %s  AND " + TABLE_NAME + " IN ( %s )",
+                        ((schemaName != null && schemaName.length() > 0) ? " = ? " : " IS NULL "),
+                StringUtils.join(",", quotedIndexes));
+            try (PreparedStatement stmt = connection.prepareStatement(query)) {
+                if ((schemaName != null && schemaName.length() > 0)) {
+                    stmt.setString(1,schemaName);
+                }
+                ResultSet rs = stmt.executeQuery();
                 if (rs.next()) {
                     maxRebuilAsyncDate = rs.getLong(1);
                     maxDisabledTimeStamp = rs.getLong(2);
@@ -619,7 +626,8 @@ public class IndexTool extends Configured implements Tool {
                     return maxRebuilAsyncDate;
                 } else {
                     throw new RuntimeException(
-                            "Inconsistent state we have one or more index tables which are disabled after the async is called!!");
+                        "Inconsistent state we have one or more index tables which are disabled after the async is called!!");
+
                 }
             }
         }

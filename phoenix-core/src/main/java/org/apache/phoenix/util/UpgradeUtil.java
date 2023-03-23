@@ -95,6 +95,7 @@ import javax.annotation.Nullable;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.CompareOperator;
+import org.apache.kerby.kerberos.kerb.client.preauth.PreauthContext;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -2163,45 +2164,52 @@ public class UpgradeUtil {
      * @return true if any upgrades were performed and false otherwise.
      */
     private static boolean upgradeSharedIndex(PhoenixConnection upgradeConn, PhoenixConnection globalConn, String physicalName, boolean bypassUpgrade) throws SQLException {
-        String query =
-                "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME\n" + 
-                "FROM SYSTEM.CATALOG cat1\n" + 
-                "WHERE COLUMN_NAME IS NULL\n" + 
-                "AND COLUMN_FAMILY = '" + physicalName + "'\n" + 
-                "AND LINK_TYPE = " + LinkType.PHYSICAL_TABLE.getSerializedValue() + "\n" +
-                "ORDER BY TENANT_ID";
-        ResultSet rs = globalConn.createStatement().executeQuery(query);
-        String lastTenantId = null;
-        Connection conn = globalConn;
-        String url = globalConn.getURL();
-        boolean wasUpgraded = false;
-        while (rs.next()) {
-            String fullTableName = SchemaUtil.getTableName(
+        String query = String.format(
+            "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME\n" +
+            "FROM SYSTEM.CATALOG cat1\n" +
+            "WHERE COLUMN_NAME IS NULL\n" +
+            "AND COLUMN_FAMILY = ? \n" +
+            "AND LINK_TYPE = ? \n" +
+            "ORDER BY TENANT_ID",physicalName,LinkType.PHYSICAL_TABLE.getSerializedValue());
+        try (PreparedStatement stmt = globalConn.prepareStatement(query)) {
+            stmt.setString(1, physicalName);
+            stmt.setByte(2, LinkType.PHYSICAL_TABLE.getSerializedValue());
+            ResultSet rs = stmt.executeQuery();
+            String lastTenantId = null;
+            Connection conn = globalConn;
+            String url = globalConn.getURL();
+            boolean wasUpgraded = false;
+            while (rs.next()) {
+                String fullTableName = SchemaUtil.getTableName(
                     rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
                     rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
-            String tenantId = rs.getString(1);
-            if (tenantId != null && !tenantId.equals(lastTenantId))  {
-                if (lastTenantId != null) {
-                    conn.close();
+                String tenantId = rs.getString(1);
+                if (tenantId != null && !tenantId.equals(lastTenantId)) {
+                    if (lastTenantId != null) {
+                        conn.close();
+                    }
+                    // Open tenant-specific connection when we find a new one
+                    Properties props = new Properties(globalConn.getClientInfo());
+                    props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                    conn = DriverManager.getConnection(url, props);
+                    lastTenantId = tenantId;
                 }
-                // Open tenant-specific connection when we find a new one
-                Properties props = new Properties(globalConn.getClientInfo());
-                props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-                conn = DriverManager.getConnection(url, props);
-                lastTenantId = tenantId;
+                PTable table = PhoenixRuntime.getTable(conn, fullTableName);
+                String tableTenantId =
+                    table.getTenantId() == null ? null : table.getTenantId().getString();
+                if (Objects.equal(lastTenantId, tableTenantId) && !table.rowKeyOrderOptimizable()) {
+                    upgradeDescVarLengthRowKeys(upgradeConn, globalConn,
+                        table.getSchemaName().getString(), table.getTableName().getString(), false,
+                        bypassUpgrade);
+                    wasUpgraded = true;
+                }
             }
-            PTable table = PhoenixRuntime.getTable(conn, fullTableName);
-            String tableTenantId = table.getTenantId() == null ? null : table.getTenantId().getString();
-            if (Objects.equal(lastTenantId, tableTenantId) && !table.rowKeyOrderOptimizable()) {
-                upgradeDescVarLengthRowKeys(upgradeConn, globalConn, table.getSchemaName().getString(), table.getTableName().getString(), false, bypassUpgrade);
-                wasUpgraded = true;
+            rs.close();
+            if (lastTenantId != null) {
+                conn.close();
             }
+            return wasUpgraded;
         }
-        rs.close();
-        if (lastTenantId != null) {
-            conn.close();
-        }
-        return wasUpgraded;
     }
 
     public static void addRowKeyOrderOptimizableCell(List<Mutation> tableMetadata, byte[] tableHeaderRowKey, long clientTimeStamp) {
@@ -2568,8 +2576,11 @@ public class UpgradeUtil {
                 + "\'," + START_WITH + "," + CURRENT_VALUE + "," + INCREMENT_BY + "," + CACHE_SIZE + "," + MIN_VALUE
                 + "," + MAX_VALUE + "," + CYCLE_FLAG + "," + LIMIT_REACHED_FLAG + " FROM "
                 + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE " + PhoenixDatabaseMetaData.TENANT_ID
-                + " IS NULL AND " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + oldSchemaName + "'";
-        connection.createStatement().executeUpdate(upsert);
+                + " IS NULL AND " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " =  ?";
+        try(PreparedStatement stmt = connection.prepareStatement(upsert)) {
+            stmt.setString(1,oldSchemaName);
+            stmt.executeUpdate();
+        }
     }
 
     private static void updateLink(PhoenixConnection conn, String srcTableName,

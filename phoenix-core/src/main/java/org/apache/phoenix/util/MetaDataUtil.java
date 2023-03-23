@@ -22,6 +22,7 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
 
@@ -914,11 +915,18 @@ public class MetaDataUtil {
             throws SQLException {
         String schemaName = getViewIndexSequenceSchemaName(name, isNamespaceMapped);
         String sequenceName = getViewIndexSequenceName(name, null, isNamespaceMapped);
-        connection.createStatement().executeUpdate("DELETE FROM "
-                + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
-                + " WHERE " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA
-                + (schemaName.length() > 0 ? "='" + schemaName + "'" : " IS NULL")
-                + " AND " + PhoenixDatabaseMetaData.SEQUENCE_NAME + " = '" + sequenceName + "'" );
+        String delQuery = String.format(" DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
+            + " WHERE " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA  + " %s AND " + PhoenixDatabaseMetaData.SEQUENCE_NAME + " = ? ",
+            (schemaName.length() > 0 ? "= ? " : " IS NULL"));
+        try (PreparedStatement stmt = connection.prepareStatement(delQuery)) {
+            if (schemaName.length() > 0) {
+                stmt.setString(1,schemaName);
+                stmt.setString(2, sequenceName);
+            } else {
+                stmt.setString(1, sequenceName);
+            }
+            stmt.executeUpdate();
+        }
     }
     
     /**
@@ -1199,9 +1207,8 @@ public class MetaDataUtil {
                 physicalTablesSet.add(s.getPhysicalNames().get(0).getString());
             }
             StringBuilder buf = new StringBuilder("DELETE FROM SYSTEM.STATS WHERE PHYSICAL_NAME IN (");
-            Iterator itr = physicalTablesSet.iterator();
-            while (itr.hasNext()) {
-                buf.append("'" + itr.next() + "',");
+            for(int i=0; i<physicalTablesSet.size();i++) {
+                buf.append(" ?,");
             }
             buf.setCharAt(buf.length() - 1, ')');
             if (table.getIndexType()==IndexType.LOCAL) {
@@ -1210,12 +1217,24 @@ public class MetaDataUtil {
                     buf.append("'" + QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY + "',");
                 } else {
                     for(PColumnFamily cf : table.getColumnFamilies()) {
-                        buf.append("'" + cf.getName().getString() + "',");
+                        buf.append(" ?,");
                     }
                 }
                 buf.setCharAt(buf.length() - 1, ')');
             }
-            connection.createStatement().execute(buf.toString());
+            try(PreparedStatement stmt = connection.prepareStatement(buf.toString())) {
+                int param = 0;
+                Iterator itr = physicalTablesSet.iterator();
+                while (itr.hasNext()) {
+                    stmt.setString(++param,itr.next().toString());
+                }
+                if (table.getIndexType()==IndexType.LOCAL && (!table.getColumnFamilies().isEmpty())) {
+                    for(PColumnFamily cf : table.getColumnFamilies()) {
+                        stmt.setString(++param,cf.getName().getString());
+                    }
+                }
+                stmt.execute();
+            }
         } finally {
             connection.setAutoCommit(isAutoCommit);
         }

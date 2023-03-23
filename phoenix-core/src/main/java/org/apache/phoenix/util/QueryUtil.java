@@ -826,5 +826,14 @@ public final class QueryUtil {
     private static void appendConjunction(StringBuilder buf) {
         buf.append(buf.length() == 0 ? "" : " and ");
     }
+
+    public static String getDynamicParams(int nParams) {
+        List<String> paramList = Lists.newArrayList();
+        for (int i = 0; i < nParams; i++) {
+            paramList.add("?");
+        }
+        //return String.format(Joiner.on(", ").join(paramList));
+        return Joiner.on(", ").join(paramList);
+    }
     
 }

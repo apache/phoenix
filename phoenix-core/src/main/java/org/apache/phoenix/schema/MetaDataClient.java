@@ -1171,12 +1171,14 @@ public class MetaDataClient {
         long msSinceLastUpdate = Long.MAX_VALUE;
         if (checkLastStatsUpdateTime) {
             String query = "SELECT CURRENT_DATE()," + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
-                    + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
+                    + " WHERE " + PHYSICAL_NAME + "= ?  AND " + COLUMN_FAMILY
                     + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
-            ResultSet rs = connection.createStatement().executeQuery(query);
-
-            if (rs.next()) {
-                msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
+            try(PreparedStatement stmt = connection.prepareStatement(query)) {
+                stmt.setString(1, physicalName.getString());
+                ResultSet rs = stmt.executeQuery(query);
+                if (rs.next()) {
+                    msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
+                }
             }
         }
         long rowCount = 0;
@@ -4482,8 +4484,9 @@ public class MetaDataClient {
         }
         buf.setCharAt(buf.length()-1, ')');
 
-        connection.createStatement().execute(buf.toString());
-
+        try(PreparedStatement stmt = connection.prepareStatement(buf.toString())) {
+            stmt.execute();
+        }
         Collections.sort(columnsToDrop,new Comparator<PColumn> () {
             @Override
             public int compare(PColumn left, PColumn right) {
