@@ -707,7 +707,7 @@ public final class QueryUtil {
             addTenantIdFilter(connection, buf, catalog, parameterValues);
             if (schemaPattern != null) {
                 buf.append(" and " + TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like ?" ));
-                if(schemaPattern.length() > 0) {
+                if (schemaPattern.length() > 0) {
                     parameterValues.add(schemaPattern);
                 }
             }
@@ -751,7 +751,7 @@ public final class QueryUtil {
             if (schemaPattern != null) {
                 appendConjunction(whereClause);
                 whereClause.append(SEQUENCE_SCHEMA + (schemaPattern.length() == 0 ? " is null" : " like ?\n" ));
-                if(schemaPattern.length() > 0) {
+                if (schemaPattern.length() > 0) {
                     parameterValues.add(schemaPattern);
                 }
             }
@@ -767,7 +767,7 @@ public final class QueryUtil {
         }
         buf.append(" order by 4, 1, 2, 3\n");
         PreparedStatement stmt = connection.prepareStatement(buf.toString());
-        for(int i = 0; i < parameterValues.size(); i++) {
+        for (int i = 0; i < parameterValues.size(); i++) {
             stmt.setString(i+1, parameterValues.get(i));
         }
         return stmt;
@@ -826,5 +826,19 @@ public final class QueryUtil {
     private static void appendConjunction(StringBuilder buf) {
         buf.append(buf.length() == 0 ? "" : " and ");
     }
-    
+
+    public static String generateInListParams(int nParams) {
+        List<String> paramList = Lists.newArrayList();
+        for (int i = 0; i < nParams; i++) {
+            paramList.add("?");
+        }
+        return Joiner.on(", ").join(paramList);
+    }
+
+    public static void setQuoteInListElements(PreparedStatement ps, List<String> unQuotedString,
+        int index) throws SQLException {
+        for (int i = 0; i < unQuotedString.size(); i++) {
+            ps.setString(++index, "'" + unQuotedString + "'");
+        }
+    }
 }
