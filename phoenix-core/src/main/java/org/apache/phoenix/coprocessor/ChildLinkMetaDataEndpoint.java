@@ -37,6 +37,9 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -44,6 +47,7 @@ import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos.CreateVi
 import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos.ChildLinkMetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
+import org.apache.phoenix.filter.PagedFilter;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryServices;
@@ -162,6 +166,8 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
         private long rowCount = 0;
         private long maxTimestamp;
         private long ageThreshold;
+        private Table sysCatHTable;
+        private boolean restartScanDueToPageFilterRemoval = false;
 
         public ChildLinkMetaDataScanner(RegionCoprocessorEnvironment env,
                                         Scan scan,
@@ -190,7 +196,7 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
                         hasMore = scanner.next(result);
                     }
                     if (result.isEmpty()) {
-                        break;
+                        return hasMore;
                     }
                     if (isDummy(result)) {
                         return true;
@@ -242,7 +248,7 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
                 try {
                     repairChildLinkRow(rowKey, ts, cellList);
                 } catch (IOException e) {
-                    LOGGER.warn("Index row repair failure on region {}.", env.getRegionInfo().getRegionNameAsString());
+                    LOGGER.warn("Child Link row repair failure on region {}.", env.getRegionInfo().getRegionNameAsString());
                     throw e;
                 }
 
@@ -288,11 +294,18 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
         Otherwise, delete if row is old enough.
          */
         private void repairChildLinkRow(byte[] rowKey, long ts, List<Cell> row) throws IOException {
-            Table sysCatHTable = ServerUtil.ConnectionFactory.
-                    getConnection(ServerUtil.ConnectionType.DEFAULT_SERVER_CONNECTION, env).
-                    getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
-            sysCatScan = new Scan();
-            childLinkScan = new Scan(scan);
+            if (sysCatScan == null) {
+                PageFilter pageFilter = removePageFilter(scan);
+                if (pageFilter != null) {
+                    pageSize = pageFilter.getPageSize();
+                    restartScanDueToPageFilterRemoval = true;
+                }
+                sysCatScan = new Scan();
+                childLinkScan = new Scan(scan);
+                sysCatHTable = ServerUtil.ConnectionFactory.
+                        getConnection(ServerUtil.ConnectionType.DEFAULT_SERVER_CONNECTION, env).
+                        getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
+            }
 
             // build syscat rowKey using given rowKey
             byte[] sysCatRowKey = getSysCatRowKey(rowKey);
@@ -318,6 +331,13 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
             // if not, delete if old enough, otherwise ignore
             else {
                 deleteIfAgedEnough(rowKey, ts, region);
+                if (restartScanDueToPageFilterRemoval) {
+                    scanner.close();
+                    childLinkScan.withStartRow(rowKey, true);
+                    scanner = region.getScanner(childLinkScan);
+                    hasMore = true;
+                    restartScanDueToPageFilterRemoval = false;
+                }
             }
             row.clear();
         }
@@ -366,6 +386,43 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
                     emptyCF, 0, emptyCF.length) == 0 &&
                     Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
                             emptyCQ, 0, emptyCQ.length) == 0;
+        }
+
+        private PageFilter removePageFilterFromFilterList(FilterList filterList) {
+            Iterator<Filter> filterIterator = filterList.getFilters().iterator();
+            while (filterIterator.hasNext()) {
+                Filter filter = filterIterator.next();
+                if (filter instanceof PageFilter) {
+                    filterIterator.remove();
+                    return (PageFilter) filter;
+                } else if (filter instanceof FilterList) {
+                    PageFilter pageFilter = removePageFilterFromFilterList((FilterList) filter);
+                    if (pageFilter != null) {
+                        return pageFilter;
+                    }
+                }
+            }
+            return null;
+        }
+
+        // This method assumes that there is at most one instance of PageFilter in a scan
+        private PageFilter removePageFilter(Scan scan) {
+            Filter filter = scan.getFilter();
+            if (filter != null) {
+                if (filter instanceof PagedFilter) {
+                    filter = ((PagedFilter) filter).getDelegateFilter();
+                    if (filter == null) {
+                        return null;
+                    }
+                }
+                if (filter instanceof PageFilter) {
+                    scan.setFilter(null);
+                    return (PageFilter) filter;
+                } else if (filter instanceof FilterList) {
+                    return removePageFilterFromFilterList((FilterList) filter);
+                }
+            }
+            return null;
         }
     }
 

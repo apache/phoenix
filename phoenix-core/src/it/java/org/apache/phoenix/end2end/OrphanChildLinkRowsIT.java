@@ -30,8 +30,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.apache.phoenix.end2end.IndexRebuildTaskIT.waitForTaskState;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 
 @Category(NeedsOwnMiniClusterTest.class)
@@ -136,16 +139,57 @@ public class OrphanChildLinkRowsIT extends BaseTest {
         }
     }
 
+    /**
+     * Do 10 times: Create 2 tables and view with same name on both tables.
+     * Check if LIMIT query on SYSTEM.CHILD_LINK returns the right number of rows
+     */
+    @Test
+    public void testChildLinkQueryWithLimit() throws Exception {
+
+        ConnectionQueryServicesImpl.setFailPhaseThreeChildLinkWriteForTesting(true);
+        ChildLinkScanTask.disableChildLinkScanTask(true);
+
+        String CREATE_TABLE_DDL = "CREATE TABLE %s (TENANT_ID VARCHAR NOT NULL, A INTEGER NOT NULL, B INTEGER CONSTRAINT PK PRIMARY KEY (TENANT_ID, A))";
+        String CREATE_VIEW_DDL = "CREATE VIEW %s (NEW_COL1 INTEGER, NEW_COL2 INTEGER) AS SELECT * FROM %s WHERE B > 10";
+
+        try (Connection connection = DriverManager.getConnection(getUrl())) {
+            for (int i=0; i<10; i++) {
+                String table1 = "T_" + generateUniqueName();
+                String table2 = "T_" + generateUniqueName();
+                String view = "V_" + generateUniqueName();
+                connection.createStatement().execute(String.format(CREATE_TABLE_DDL, table1));
+                connection.createStatement().execute(String.format(CREATE_TABLE_DDL, table2));
+                connection.createStatement().execute(String.format(CREATE_VIEW_DDL, view, table1));
+                expectedChildLinks.put(table1, view);
+                try {
+                    connection.createStatement().execute(String.format(CREATE_VIEW_DDL, view, table2));
+                }
+                catch (TableAlreadyExistsException e) {
+
+                }
+            }
+
+            String childLinkQuery = "SELECT * FROM SYSTEM.CHILD_LINK LIMIT 7";
+            ResultSet rs = connection.createStatement().executeQuery(childLinkQuery);
+            int count = 0;
+            while (rs.next()) {
+                count++;
+                System.out.println(rs.getString(3) + " " + rs.getString(5));
+            }
+            Assert.assertEquals("Incorrect number of child link rows returned", 7, count);
+        }
+    }
+
     private void verifyNoOrphanChildLinkRow() throws Exception {
         String childLinkQuery = "SELECT * FROM SYSTEM.CHILD_LINK";
         try (Connection connection = DriverManager.getConnection(getUrl())) {
             ResultSet rs = connection.createStatement().executeQuery(childLinkQuery);
             int count = 0;
             while (rs.next()) {
-                String parentFullName = SchemaUtil.getTableName(rs.getString(2), rs.getString(3));
-                Assert.assertTrue("Child Link not found for table: " + parentFullName, expectedChildLinks.containsKey(parentFullName));
-                Assert.assertEquals(String.format("Child was not correct in Child Link. Expected : %s, Actual: %s", expectedChildLinks.get(parentFullName), rs.getString(5)),
-                        expectedChildLinks.get(parentFullName), rs.getString(5));
+                String parentFullName = SchemaUtil.getTableName(rs.getString(TABLE_SCHEM), rs.getString(TABLE_NAME));
+                Assert.assertTrue("Found Orphan Child Link: " + parentFullName + "->" + rs.getString(COLUMN_FAMILY), expectedChildLinks.containsKey(parentFullName));
+                Assert.assertEquals(String.format("Child was not correct in Child Link. Expected : %s, Actual: %s", expectedChildLinks.get(parentFullName), rs.getString(COLUMN_FAMILY)),
+                        expectedChildLinks.get(parentFullName), rs.getString(COLUMN_FAMILY));
                 count++;
             }
             Assert.assertTrue("Found Orphan Linking Row", count <= expectedChildLinks.size());
