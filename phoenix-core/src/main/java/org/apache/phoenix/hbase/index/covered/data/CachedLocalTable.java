@@ -41,6 +41,7 @@ import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PVarbinary;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -124,11 +125,12 @@ public class CachedLocalTable implements LocalHBaseState {
             Collection<? extends Mutation> dataTableMutationsWithSameRowKeyAndTimestamp,
             PhoenixIndexMetaData indexMetaData,
             Region region) throws IOException {
-        Set<KeyRange> keys = new HashSet<KeyRange>(dataTableMutationsWithSameRowKeyAndTimestamp.size());
+        Set<KeyRange> keys =
+                new HashSet<KeyRange>(dataTableMutationsWithSameRowKeyAndTimestamp.size());
         for (Mutation mutation : dataTableMutationsWithSameRowKeyAndTimestamp) {
-          if (indexMetaData.requiresPriorRowState(mutation)) {
-            keys.add(PVarbinary.INSTANCE.getKeyRange(mutation.getRow()));
-          }
+            if (indexMetaData.requiresPriorRowState(mutation)) {
+                keys.add(PVarbinary.INSTANCE.getKeyRange(mutation.getRow(), SortOrder.ASC));
+            }
         }
         if (keys.isEmpty()) {
             return new CachedLocalTable(Collections.emptyMap(), region);

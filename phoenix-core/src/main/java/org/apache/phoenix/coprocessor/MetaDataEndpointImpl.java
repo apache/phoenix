@@ -756,7 +756,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         for (byte[] key : keys) {
             byte[] stopKey = ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
             ByteUtil.nextKey(stopKey, stopKey.length);
-            keyRanges.add(PVarbinary.INSTANCE.getKeyRange(key, true, stopKey, false));
+            keyRanges
+                    .add(PVarbinary.INSTANCE.getKeyRange(key, true, stopKey, false, SortOrder.ASC));
         }
         Scan scan = new Scan();
         scan.setTimeRange(MIN_TABLE_TIMESTAMP, clientTimeStamp);
@@ -792,7 +793,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         for (byte[] key : keys) {
             byte[] stopKey = ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
             ByteUtil.nextKey(stopKey, stopKey.length);
-            keyRanges.add(PVarbinary.INSTANCE.getKeyRange(key, true, stopKey, false));
+            keyRanges
+                    .add(PVarbinary.INSTANCE.getKeyRange(key, true, stopKey, false, SortOrder.ASC));
         }
         Scan scan = new Scan();
         if (clientTimeStamp != HConstants.LATEST_TIMESTAMP

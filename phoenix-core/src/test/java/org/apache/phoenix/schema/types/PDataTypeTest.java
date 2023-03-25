@@ -1895,7 +1895,7 @@ public class PDataTypeTest {
         final byte[] lowerRange = PTimestamp.INSTANCE.toBytes(ts1);
         Timestamp ts2 = new Timestamp(now + MILLIS_IN_DAY);
         final byte[] upperRange = PTimestamp.INSTANCE.toBytes(ts2);
-        KeyRange range = PTimestamp.INSTANCE.getKeyRange(lowerRange, false, upperRange, false);
+        KeyRange range = PTimestamp.INSTANCE.getKeyRange(lowerRange, false, upperRange, false, SortOrder.ASC);
         Timestamp ts3 = new Timestamp(now + 1);
         // Rolled up to next millis
         final byte[] expectedLowerRange = PTimestamp.INSTANCE.toBytes(ts3);
@@ -1911,7 +1911,7 @@ public class PDataTypeTest {
         final byte[] lowerRange = PTimestamp.INSTANCE.toBytes(ts1, SortOrder.DESC);
         Timestamp ts2 = new Timestamp(now);
         final byte[] upperRange = PTimestamp.INSTANCE.toBytes(ts2, SortOrder.DESC);
-        KeyRange range = PTimestamp.INSTANCE.getKeyRange(lowerRange, false, upperRange, false);
+        KeyRange range = PTimestamp.INSTANCE.getKeyRange(lowerRange, false, upperRange, false, SortOrder.DESC);
         Timestamp ts3 = DateUtil.getTimestamp(now + MILLIS_IN_DAY - 1,  999999);
         // Rolled up to next millis
         final byte[] expectedLowerRange = PTimestamp.INSTANCE.toBytes(ts3, SortOrder.DESC);

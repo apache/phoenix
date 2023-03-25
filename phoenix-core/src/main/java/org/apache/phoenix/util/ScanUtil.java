@@ -618,7 +618,7 @@ public class ScanUtil {
     public static ScanRanges newScanRanges(List<? extends Mutation> mutations) throws SQLException {
         List<KeyRange> keys = Lists.newArrayListWithExpectedSize(mutations.size());
         for (Mutation m : mutations) {
-            keys.add(PVarbinary.INSTANCE.getKeyRange(m.getRow()));
+            keys.add(PVarbinary.INSTANCE.getKeyRange(m.getRow(), SortOrder.ASC));
         }
         ScanRanges keyRanges = ScanRanges.createPointLookup(keys);
         return keyRanges;
