@@ -293,39 +293,47 @@ public class PTimestamp extends PDataType<Timestamp> {
     }
 
     /**
-     * With timestamp, because our last 4 bytes store a value from [0 - 1000000), we need
-     * to detect when the boundary is crossed if we increment to the nextKey.
+     * With timestamp, because our last 4 bytes store a value from [0 - 1000000), we need to detect
+     * when the boundary is crossed if we increment to the nextKey.
      */
     @Override
-    public KeyRange getKeyRange(byte[] lowerRange, boolean lowerInclusive, byte[] upperRange, boolean upperInclusive) {
+    public KeyRange getKeyRange(byte[] lowerRange, boolean lowerInclusive, byte[] upperRange,
+            boolean upperInclusive, SortOrder sortOrder) {
         /*
-         * Force lower bound to be inclusive for fixed width keys because it makes comparisons less expensive when you
-         * can count on one bound or the other being inclusive. Comparing two fixed width exclusive bounds against each
-         * other is inherently more expensive, because you need to take into account if the bigger key is equal to the
-         * next key after the smaller key. For example: (A-B] compared against [A-B) An exclusive lower bound A is
-         * bigger than an exclusive upper bound B. Forcing a fixed width exclusive lower bound key to be inclusive
-         * prevents us from having to do this extra logic in the compare function.
-         * 
+         * Force lower bound to be inclusive for fixed width keys because it makes comparisons less
+         * expensive when you can count on one bound or the other being inclusive. Comparing two
+         * fixed width exclusive bounds against each other is inherently more expensive, because you
+         * need to take into account if the bigger key is equal to the next key after the smaller
+         * key. For example: (A-B] compared against [A-B) An exclusive lower bound A is bigger than
+         * an exclusive upper bound B. Forcing a fixed width exclusive lower bound key to be
+         * inclusive prevents us from having to do this extra logic in the compare function.
          */
         if (lowerRange != KeyRange.UNBOUND && !lowerInclusive && isFixedWidth()) {
             if (lowerRange.length != MAX_TIMESTAMP_BYTES) {
-                throw new IllegalDataException("Unexpected size of " + lowerRange.length + " for " + this);
+                throw new IllegalDataException(
+                        "Unexpected size of " + lowerRange.length + " for " + this);
             }
-            // Infer sortOrder based on most significant byte
-            SortOrder sortOrder = lowerRange[Bytes.SIZEOF_LONG] < 0 ? SortOrder.DESC : SortOrder.ASC;
-            int nanos = PUnsignedInt.INSTANCE.getCodec().decodeInt(lowerRange, Bytes.SIZEOF_LONG, sortOrder);
-            if ((sortOrder == SortOrder.DESC && nanos == 0) || (sortOrder == SortOrder.ASC && nanos == MAX_NANOS_VALUE_EXCLUSIVE-1)) {
-                // With timestamp, because our last 4 bytes store a value from [0 - 1000000), we need
+
+            int nanos =
+                    PUnsignedInt.INSTANCE.getCodec().decodeInt(lowerRange, Bytes.SIZEOF_LONG,
+                        sortOrder);
+            if ((sortOrder == SortOrder.DESC && nanos == 0)
+                    || (sortOrder == SortOrder.ASC && nanos == MAX_NANOS_VALUE_EXCLUSIVE - 1)) {
+                // With timestamp, because our last 4 bytes store a value from [0 - 1000000), we
+                // need
                 // to detect when the boundary is crossed with our nextKey
                 byte[] newLowerRange = new byte[MAX_TIMESTAMP_BYTES];
                 if (sortOrder == SortOrder.DESC) {
                     // Set nanos part as inverted 999999 as it needs to be the max nano value
                     // The millisecond part is moving to the previous value below
                     System.arraycopy(lowerRange, 0, newLowerRange, 0, Bytes.SIZEOF_LONG);
-                    PUnsignedInt.INSTANCE.getCodec().encodeInt(MAX_NANOS_VALUE_EXCLUSIVE-1, newLowerRange, Bytes.SIZEOF_LONG);
-                    SortOrder.invert(newLowerRange, Bytes.SIZEOF_LONG, newLowerRange, Bytes.SIZEOF_LONG, Bytes.SIZEOF_INT);
+                    PUnsignedInt.INSTANCE.getCodec().encodeInt(MAX_NANOS_VALUE_EXCLUSIVE - 1,
+                        newLowerRange, Bytes.SIZEOF_LONG);
+                    SortOrder.invert(newLowerRange, Bytes.SIZEOF_LONG, newLowerRange,
+                        Bytes.SIZEOF_LONG, Bytes.SIZEOF_INT);
                 } else {
-                    // Leave nanos part as zero as the millisecond part is rolling over to the next value
+                    // Leave nanos part as zero as the millisecond part is rolling over to the next
+                    // value
                     System.arraycopy(lowerRange, 0, newLowerRange, 0, Bytes.SIZEOF_LONG);
                 }
                 // Increment millisecond part, but leave nanos alone
@@ -337,7 +345,7 @@ public class PTimestamp extends PDataType<Timestamp> {
                 return KeyRange.getKeyRange(lowerRange, true, upperRange, upperInclusive);
             }
         }
-        return super.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
+        return super.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive, sortOrder);
     }
 
 }

@@ -1566,8 +1566,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         List<List<KeyRange>> ranges = scanRanges.getRanges();
         assertEquals(1,ranges.size());
         List<List<KeyRange>> expectedRanges = Collections.singletonList(Arrays.asList(
-                PChar.INSTANCE.getKeyRange(PChar.INSTANCE.toBytes(tenantId1), true, PChar.INSTANCE.toBytes(tenantId1), true),
-                PChar.INSTANCE.getKeyRange(PChar.INSTANCE.toBytes(tenantId2), true, PChar.INSTANCE.toBytes(tenantId2), true)));
+                PChar.INSTANCE.getKeyRange(PChar.INSTANCE.toBytes(tenantId1), true, PChar.INSTANCE.toBytes(tenantId1), true, SortOrder.ASC),
+                PChar.INSTANCE.getKeyRange(PChar.INSTANCE.toBytes(tenantId2), true, PChar.INSTANCE.toBytes(tenantId2), true, SortOrder.ASC)));
         assertEquals(expectedRanges, ranges);
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId1);
         assertArrayEquals(startRow, scan.getStartRow());
@@ -1630,10 +1630,10 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         List<List<KeyRange>> expectedRanges = Collections.singletonList(Arrays.asList(
                 PChar.INSTANCE.getKeyRange(
                         StringUtil.padChar(PChar.INSTANCE.toBytes("00D"),15), true,
-                        StringUtil.padChar(ByteUtil.nextKey(PChar.INSTANCE.toBytes("00D")),15), false),
+                        StringUtil.padChar(ByteUtil.nextKey(PChar.INSTANCE.toBytes("00D")),15), false, SortOrder.ASC),
                 PChar.INSTANCE.getKeyRange(
                         StringUtil.padChar(PChar.INSTANCE.toBytes("foo"),15), true,
-                        StringUtil.padChar(ByteUtil.nextKey(PChar.INSTANCE.toBytes("foo")),15), false)));
+                        StringUtil.padChar(ByteUtil.nextKey(PChar.INSTANCE.toBytes("foo")),15), false, SortOrder.ASC)));
         assertEquals(expectedRanges, ranges);
     }
 

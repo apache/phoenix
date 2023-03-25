@@ -58,6 +58,7 @@ import org.apache.phoenix.hbase.index.parallel.TaskBatch;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
@@ -143,7 +144,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         Map<byte[], List<Mutation>> expectedIndexMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
         List<KeyRange> keys = new ArrayList<>(dataRowKeys.size());
         for (byte[] indexKey: dataRowKeys) {
-            keys.add(PVarbinary.INSTANCE.getKeyRange(indexKey));
+            keys.add(PVarbinary.INSTANCE.getKeyRange(indexKey, SortOrder.ASC));
         }
         ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
         Scan dataScan = new Scan();

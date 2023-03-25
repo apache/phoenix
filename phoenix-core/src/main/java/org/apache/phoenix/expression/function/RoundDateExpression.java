@@ -278,6 +278,7 @@ public class RoundDateExpression extends ScalarFunction {
                 long value = codec.decodeLong(key, 0, SortOrder.getDefault());
                 byte[] lowerKey = new byte[type.getByteSize()];
                 byte[] upperKey = new byte[type.getByteSize()];
+                SortOrder order = this.getColumn().getSortOrder();
                 KeyRange range;
                 switch (op) {
                 case EQUAL:
@@ -291,7 +292,7 @@ public class RoundDateExpression extends ScalarFunction {
                     }
                     codec.encodeLong(rangeLower(value), lowerKey, 0);
                     codec.encodeLong(rangeUpper(value), upperKey, 0);
-                    range = type.getKeyRange(lowerKey, true, upperKey, true);
+                    range = type.getKeyRange(lowerKey, true, upperKey, true, order);
                     break;
                     // a simple number example (with half up rounding):
                     // round(x) = 10 ==> [9.5, 10.5)
@@ -302,41 +303,41 @@ public class RoundDateExpression extends ScalarFunction {
                 case GREATER:
                     if (value == roundTime(value)) {
                         codec.encodeLong(rangeUpper(value), lowerKey, 0);
-                        range = type.getKeyRange(lowerKey, false, KeyRange.UNBOUND, false);
+                        range = type.getKeyRange(lowerKey, false, KeyRange.UNBOUND, false, order);
                         break;
                     }
                     //fallthrough intended
                 case GREATER_OR_EQUAL:
                     codec.encodeLong(rangeLower(value), lowerKey, 0);
-                    range = type.getKeyRange(lowerKey, true, KeyRange.UNBOUND, false);
+                    range = type.getKeyRange(lowerKey, true, KeyRange.UNBOUND, false, order);
                     if (value <= roundTime(value)) {
                         //always true for ceil
                         codec.encodeLong(rangeLower(value), lowerKey, 0);
-                        range = type.getKeyRange(lowerKey, true, KeyRange.UNBOUND, false);
+                        range = type.getKeyRange(lowerKey, true, KeyRange.UNBOUND, false, order);
                     } else {
                         //always true for floor, except when exact
                         codec.encodeLong(rangeUpper(value), lowerKey, 0);
-                        range = type.getKeyRange(lowerKey, false, KeyRange.UNBOUND, false);
+                        range = type.getKeyRange(lowerKey, false, KeyRange.UNBOUND, false, order);
                     }
                     break;
                 case LESS:
                     if (value == roundTime(value)) {
                         codec.encodeLong(rangeLower(value), upperKey, 0);
-                        range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, false);
+                        range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, false, order);
                         break;
                     }
                     //fallthrough intended
                 case LESS_OR_EQUAL:
                     codec.encodeLong(rangeUpper(value), upperKey, 0);
-                    range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, true);
+                    range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, true, order);
                     if (value >= roundTime(value)) {
                         //always true for floor
                         codec.encodeLong(rangeUpper(value), upperKey, 0);
-                        range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, true);
+                        range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, true, order);
                     } else {
                         //always true for ceil, except when exact
                         codec.encodeLong(rangeLower(value), upperKey, 0);
-                        range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, false);
+                        range = type.getKeyRange(KeyRange.UNBOUND, false, upperKey, false, order);
                     }
                     break;
                 default:

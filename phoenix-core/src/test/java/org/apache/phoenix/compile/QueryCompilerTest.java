@@ -6941,4 +6941,58 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.close();
         }
     }
+
+    @Test
+    public void testReverseIndexRangeBugPhoenix6916() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("create table " + tableName + " (id varchar primary key, ts timestamp)");
+            stmt.execute("create index " + indexName + " on " + tableName + "(ts desc)");
+
+            String query =
+                    "select id, ts from " + tableName
+                            + " where ts >= TIMESTAMP '2023-02-23 13:30:00'  and ts < TIMESTAMP '2023-02-23 13:40:00'";
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName
+                    + " [~1,677,159,600,000] - [~1,677,159,000,000]\n    SERVER FILTER BY FIRST KEY ONLY",
+                explainPlan);
+        }
+    }
+
+    @Test
+    public void testReverseVarLengthRange6916() throws Exception {
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+
+            stmt.execute("create table " + tableName + " (k varchar primary key desc)");
+
+            // Explain doesn't display open/closed ranges
+            String explainExpected =
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName
+                            + " [~'aaa'] - [~'a']\n    SERVER FILTER BY FIRST KEY ONLY";
+
+            String openQry = "select * from " + tableName + " where k > 'a' and k<'aaa'";
+            Scan openScan =
+                    getOptimizedQueryPlan(openQry, Collections.emptyList()).getContext().getScan();
+            assertEquals("\\x9E\\x9E\\x9F\\x00", Bytes.toStringBinary(openScan.getStartRow()));
+            assertEquals("\\x9E\\xFF", Bytes.toStringBinary(openScan.getStopRow()));
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + openQry);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals(explainExpected, explainPlan);
+
+            String closedQry = "select * from " + tableName + " where k >= 'a' and k <= 'aaa'";
+            Scan closedScan =
+                    getOptimizedQueryPlan(closedQry, Collections.emptyList()).getContext()
+                            .getScan();
+            assertEquals("\\x9E\\x9E\\x9E\\xFF", Bytes.toStringBinary(closedScan.getStartRow()));
+            assertEquals("\\x9F\\x00", Bytes.toStringBinary(closedScan.getStopRow()));
+            rs = stmt.executeQuery("EXPLAIN " + closedQry);
+            explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals(explainExpected, explainPlan);
+        }
+    }
 }

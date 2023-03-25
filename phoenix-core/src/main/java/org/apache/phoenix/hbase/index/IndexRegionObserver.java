@@ -91,6 +91,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
@@ -712,7 +713,7 @@ public class IndexRegionObserver extends CompatIndexRegionObserver implements Re
                 }
             }
             else {
-                keys.add(PVarbinary.INSTANCE.getKeyRange(rowKeyPtr.get()));
+                keys.add(PVarbinary.INSTANCE.getKeyRange(rowKeyPtr.get(), SortOrder.ASC));
             }
         }
         if (keys.isEmpty()) {

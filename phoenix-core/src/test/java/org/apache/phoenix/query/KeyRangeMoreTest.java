@@ -25,6 +25,7 @@ import java.util.List;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PInteger;
 import org.junit.Test;
 
@@ -54,7 +55,7 @@ public class KeyRangeMoreTest extends TestCase {
         List<KeyRange> rowKeyRanges2=new ArrayList<KeyRange>();
         for(int i=start1;i<=end1;i++) {
             rowKeyRanges1.add(
-                    PInteger.INSTANCE.getKeyRange(PInteger.INSTANCE.toBytes(i), true, PInteger.INSTANCE.toBytes(i+step1), true));
+                    PInteger.INSTANCE.getKeyRange(PInteger.INSTANCE.toBytes(i), true, PInteger.INSTANCE.toBytes(i+step1), true, SortOrder.ASC));
 
         }
         if(addEmptyRange) {
@@ -62,7 +63,7 @@ public class KeyRangeMoreTest extends TestCase {
         }
         for(int i=start2;i<=end2;i++) {
             rowKeyRanges2.add(
-                    PInteger.INSTANCE.getKeyRange(PInteger.INSTANCE.toBytes(i), true, PInteger.INSTANCE.toBytes(i+step2), true));
+                    PInteger.INSTANCE.getKeyRange(PInteger.INSTANCE.toBytes(i), true, PInteger.INSTANCE.toBytes(i+step2), true, SortOrder.ASC));
         }
         if(addEmptyRange) {
             rowKeyRanges2.add(KeyRange.EMPTY_RANGE);
@@ -100,7 +101,7 @@ public class KeyRangeMoreTest extends TestCase {
                             PInteger.INSTANCE.toBytes(start1+(i-1)*(step1+1)),
                             true,
                             PInteger.INSTANCE.toBytes(start1+i*(step1+1)-1),
-                            true));
+                            true, SortOrder.ASC));
 
         }
         if(addEmptyRange) {
@@ -112,7 +113,7 @@ public class KeyRangeMoreTest extends TestCase {
                             PInteger.INSTANCE.toBytes(start2+(i-1)*(step2+1)),
                             true,
                             PInteger.INSTANCE.toBytes(start2+i*(step2+1)-1),
-                            true));
+                            true, SortOrder.ASC));
         }
         if(addEmptyRange) {
             rowKeyRanges2.add(KeyRange.EMPTY_RANGE);
@@ -180,7 +181,7 @@ public class KeyRangeMoreTest extends TestCase {
                             PInteger.INSTANCE.toBytes(i),
                             true,
                             PInteger.INSTANCE.toBytes(i+2),
-                            true));
+                            true, SortOrder.ASC));
             i+=4;
         }
         List<KeyRange> expected=new ArrayList<KeyRange>(rowKeyRanges2);
@@ -258,7 +259,7 @@ public class KeyRangeMoreTest extends TestCase {
         for (int i = 0; i < size; i++) {
             byte[] startKey = keys.get(2*i).equals(Integer.MIN_VALUE) ? KeyRange.UNBOUND : PInteger.INSTANCE.toBytes(keys.get(2*i));
             byte[] endKey = keys.get(2*i + 1).equals(Integer.MAX_VALUE) ? KeyRange.UNBOUND : PInteger.INSTANCE.toBytes(keys.get(2*i + 1));
-            keyRangeList.add(PInteger.INSTANCE.getKeyRange(startKey, boundaryConditions.get(2*i), endKey, boundaryConditions.get(2*i+1)));
+            keyRangeList.add(PInteger.INSTANCE.getKeyRange(startKey, boundaryConditions.get(2*i), endKey, boundaryConditions.get(2*i+1), SortOrder.ASC));
         }
 
         return keyRangeList;

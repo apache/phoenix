@@ -50,7 +50,7 @@ public class SaltingUtil {
         for (int i=0; i<bucketNum; i++) {
             byte[] saltByte = new byte[] {(byte) i};
             allRanges.add(SALTING_COLUMN.getDataType().getKeyRange(
-                    saltByte, true, saltByte, true));
+                    saltByte, true, saltByte, true, SortOrder.ASC));
         }
         return allRanges;
     }

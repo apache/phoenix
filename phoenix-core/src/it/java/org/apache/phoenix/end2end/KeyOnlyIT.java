@@ -29,12 +29,15 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -137,7 +140,7 @@ public class KeyOnlyIT extends ParallelStatsEnabledIT {
     @Test
     public void testQueryWithLimitAndStats() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);        
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         initTableValues(conn, 100);
         analyzeTable(conn, tableName);
         
@@ -162,7 +165,99 @@ public class KeyOnlyIT extends ParallelStatsEnabledIT {
         assertEquals(1, explainPlanAttributes.getServerRowLimit().intValue());
         assertEquals(1, explainPlanAttributes.getClientRowLimit().intValue());
     }
-    
+
+    @Test
+    public void testDescKeys() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("create table " + tableName + " (k varchar primary key desc)");
+            stmt.execute("upsert into " + tableName + " values ('a')");
+            stmt.execute("upsert into " + tableName + " values ('aa')");
+            stmt.execute("upsert into " + tableName + " values ('aaa')");
+            stmt.execute("upsert into " + tableName + " values ('aaab')");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("select * from " + tableName + " where k > 'a'");
+            assertTrue(rs.next());
+            assertEquals("aaab", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("aaa", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("aa", rs.getString(1));
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k >= 'a'");
+            assertTrue(rs.next());
+            assertEquals("aaab", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("aaa", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("aa", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k >= 'aaa'");
+            assertTrue(rs.next());
+            assertEquals("aaab", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("aaa", rs.getString(1));
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k > 'aaa'");
+            assertTrue(rs.next());
+            assertEquals("aaab", rs.getString(1));
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k < 'a'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k <= 'a'");
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k < 'aaa'");
+            assertTrue(rs.next());
+            assertEquals("aa", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k <= 'aaa'");
+            assertTrue(rs.next());
+            assertEquals("aaa", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("aa", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k > 'a' and k < 'aaa'");
+            assertTrue(rs.next());
+            assertEquals("aa", rs.getString(1));
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k > 'a' and k <= 'aaa'");
+            assertTrue(rs.next());
+            assertEquals("aaa", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("aa", rs.getString(1));
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k >= 'a' and k <= 'aaa'");
+            assertTrue(rs.next());
+            assertEquals("aaa", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("aa", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertFalse(rs.next());
+        }
+    }
+
     private void initTableValues(Connection conn) throws Exception {
         PreparedStatement stmt = conn.prepareStatement(
             "upsert into " +

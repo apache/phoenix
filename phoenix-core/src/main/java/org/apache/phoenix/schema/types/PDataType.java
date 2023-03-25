@@ -1096,8 +1096,8 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         return this.sqlType;
     }
 
-    public KeyRange getKeyRange(byte[] point) {
-        return getKeyRange(point, true, point, true);
+    public KeyRange getKeyRange(byte[] point, SortOrder order) {
+        return getKeyRange(point, true, point, true, order);
     }
 
     public final String toStringLiteral(ImmutableBytesWritable ptr, Format formatter) {
@@ -1146,14 +1146,16 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         return actualType.getArrayFactory().newArray(actualType, elements);
     }
 
-    public KeyRange getKeyRange(byte[] lowerRange, boolean lowerInclusive, byte[] upperRange, boolean upperInclusive) {
+    public KeyRange getKeyRange(byte[] lowerRange, boolean lowerInclusive, byte[] upperRange,
+            boolean upperInclusive, SortOrder order) {
         /*
-         * Force lower bound to be inclusive for fixed width keys because it makes comparisons less expensive when you
-         * can count on one bound or the other being inclusive. Comparing two fixed width exclusive bounds against each
-         * other is inherently more expensive, because you need to take into account if the bigger key is equal to the
-         * next key after the smaller key. For example: (A-B] compared against [A-B) An exclusive lower bound A is
-         * bigger than an exclusive upper bound B. Forcing a fixed width exclusive lower bound key to be inclusive
-         * prevents us from having to do this extra logic in the compare function.
+         * Force lower bound to be inclusive for fixed width keys because it makes comparisons less
+         * expensive when you can count on one bound or the other being inclusive. Comparing two
+         * fixed width exclusive bounds against each other is inherently more expensive, because you
+         * need to take into account if the bigger key is equal to the next key after the smaller
+         * key. For example: (A-B] compared against [A-B) An exclusive lower bound A is bigger than
+         * an exclusive upper bound B. Forcing a fixed width exclusive lower bound key to be
+         * inclusive prevents us from having to do this extra logic in the compare function.
          */
         if (lowerRange != KeyRange.UNBOUND && !lowerInclusive && isFixedWidth()) {
             lowerRange = ByteUtil.nextKey(lowerRange);
@@ -1162,7 +1164,8 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
             }
             lowerInclusive = true;
         }
-        return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
+        return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive,
+            order == SortOrder.DESC);
     }
 
     //TODO this could be improved by some lookup tables instead of iterating over all types

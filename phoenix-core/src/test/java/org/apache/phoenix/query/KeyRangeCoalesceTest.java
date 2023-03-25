@@ -27,6 +27,7 @@ import java.util.*;
 
 import junit.framework.TestCase;
 
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PChar;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -52,64 +53,64 @@ public class KeyRangeCoalesceTest extends TestCase {
                 input(
                 )},
                 {expect(
-                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true, SortOrder.ASC)
                 ),
                 input(
-                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true, SortOrder.ASC)
                 )},
                 {expect(
-                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true, SortOrder.ASC)
                 ),
                 input(
-                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("D"), true),
-                        PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("E"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("D"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("E"), true, SortOrder.ASC)
                 )},
                 {expect(
-                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("Z"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("Z"), true, SortOrder.ASC)
                 ),
                 input(
-                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("D"), true),
-                        PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("E"), true),
-                        PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("Z"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("D"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("E"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("Z"), true, SortOrder.ASC)
                 )},
                 {expect(
-                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), true, SortOrder.ASC)
                 ),
                 input(
-                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("D"), true),
-                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("E"), true),
-                        PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("Z"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("D"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("E"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("Z"), true, SortOrder.ASC)
                 )},
                 {expect(
-                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), true, SortOrder.ASC)
                 ),
                 input(
-                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("D"), true),
-                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), false),
-                        PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("Z"), true)
+                        PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("D"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), false, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("Z"), true, SortOrder.ASC)
                 )},
                 {expect(
-                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("A"), true),
-                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), false)
+                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("A"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), false, SortOrder.ASC)
                 ),
                 input(
-                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("A"), true),
-                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), false)
+                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("A"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), false, SortOrder.ASC)
                 )},
                 {expect(
-                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("B"), false),
-                        PChar.INSTANCE.getKeyRange(toBytes("B"), false, toBytes("Z"), false)
+                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("B"), false, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), false, toBytes("Z"), false, SortOrder.ASC)
                 ),
                 input(
-                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("B"), false),
-                        PChar.INSTANCE.getKeyRange(toBytes("B"), false, toBytes("Z"), false)
+                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("B"), false, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), false, toBytes("Z"), false, SortOrder.ASC)
                 )},
                 {expect(
-                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("Z"), false)
+                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("Z"), false, SortOrder.ASC)
                 ),
                 input(
-                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("B"), false),
-                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), false)
+                        PChar.INSTANCE.getKeyRange(toBytes("A"), true, toBytes("B"), false, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(toBytes("B"), true, toBytes("Z"), false, SortOrder.ASC)
                 )},
                 {expect(
                     EVERYTHING_RANGE

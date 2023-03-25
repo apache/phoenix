@@ -83,383 +83,383 @@ public class ScanRangesTest {
         // must be added at end
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("b"), false, Bytes.toBytes("c"), true),
+                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("b"), false, Bytes.toBytes("c"), true, SortOrder.ASC),
                     }},
                     new int[] {0},
-                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("ba"), true, Bytes.toBytes("bb"), true),
+                    PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("ba"), true, Bytes.toBytes("bb"), true, SortOrder.ASC),
                     true));
         // KeyRange covers the first scan range.
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a9Z"), true, Bytes.toBytes("c0A"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a9Z"), true, Bytes.toBytes("c0A"), true, SortOrder.ASC),
                     true));
         // KeyRange that requires a fixed width exclusive lower bound to be bumped up
         // and made inclusive. Otherwise, the comparison thinks its bigger than it really is.
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), false, Bytes.toBytes("B"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), false, Bytes.toBytes("B"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b1A"), true, Bytes.toBytes("b1A"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b1A"), true, Bytes.toBytes("b1A"), true, SortOrder.ASC),
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b0A"), true, Bytes.toBytes("b1C"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b0A"), true, Bytes.toBytes("b1C"), true, SortOrder.ASC),
                     true));
         // KeyRange intersect with the first scan range on range's upper end.
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b0A"), true, Bytes.toBytes("b1B"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b0A"), true, Bytes.toBytes("b1B"), true, SortOrder.ASC),
                     true));
          // ScanRanges is everything.
         testCases.addAll(
                 foreach(ScanRanges.EVERYTHING, 
                     null,
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                     true));
         // ScanRanges is nothing.
         testCases.addAll(
                 foreach(ScanRanges.NOTHING,
                     null,
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                     false));
         // KeyRange below the first scan range.
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                     }},
                     new int[] {1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC),
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("2"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("2"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("C"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("C"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b0Y"), true, Bytes.toBytes("b0Z"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b0Y"), true, Bytes.toBytes("b0Z"), true, SortOrder.ASC),
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("2"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("2"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("C"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("C"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b0A"), true, Bytes.toBytes("b2A"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b0A"), true, Bytes.toBytes("b2A"), true, SortOrder.ASC),
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b1A"), true, Bytes.toBytes("b1B"), false),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b1A"), true, Bytes.toBytes("b1B"), false, SortOrder.ASC),
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("E"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("E"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a0Z"), false, Bytes.toBytes("a1A"), false),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a0Z"), false, Bytes.toBytes("a1A"), false, SortOrder.ASC),
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("c"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("c"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("C"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("C"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a1A"), true, Bytes.toBytes("b1B"), false),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a1A"), true, Bytes.toBytes("b1B"), false, SortOrder.ASC),
                     false));
         // KeyRange intersects with the first scan range on range's lower end.
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b1C"), true, Bytes.toBytes("b2E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b1C"), true, Bytes.toBytes("b2E"), true, SortOrder.ASC),
                     true));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b1D"), true, Bytes.toBytes("b2E"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b1D"), true, Bytes.toBytes("b2E"), true, SortOrder.ASC),
                     true));
         // KeyRange above the first scan range, no intersect.
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true),
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("G"), true, Bytes.toBytes("H"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("G"), true, Bytes.toBytes("H"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b1E"), true, Bytes.toBytes("b1F"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b1E"), true, Bytes.toBytes("b1F"), true, SortOrder.ASC),
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("2"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("2"), true, Bytes.toBytes("2"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("A"), true),
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true),
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("G"), true, Bytes.toBytes("G"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("A"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("C"), true, Bytes.toBytes("D"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("G"), true, Bytes.toBytes("G"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a1I"), true, Bytes.toBytes("a2A"), false),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a1I"), true, Bytes.toBytes("a2A"), false, SortOrder.ASC),
                     false));
         // KeyRange above the first scan range, with intersects.
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true),
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("G"), true, Bytes.toBytes("I"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("G"), true, Bytes.toBytes("I"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b1E"), true, Bytes.toBytes("b1H"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b1E"), true, Bytes.toBytes("b1H"), true, SortOrder.ASC),
                     true));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("c"), true),
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("d"), true, Bytes.toBytes("d"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("c"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("d"), true, Bytes.toBytes("d"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true),
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("G"), true, Bytes.toBytes("I"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("G"), true, Bytes.toBytes("I"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b00"), true, Bytes.toBytes("d00"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b00"), true, Bytes.toBytes("d00"), true, SortOrder.ASC),
                     true));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("c"), true),
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("d"), true, Bytes.toBytes("d"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("c"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("d"), true, Bytes.toBytes("d"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("3"), true, Bytes.toBytes("4"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("3"), true, Bytes.toBytes("4"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true),
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("G"), true, Bytes.toBytes("I"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("D"), true, SortOrder.ASC),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("G"), true, Bytes.toBytes("I"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b20"), true, Bytes.toBytes("b50"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b20"), true, Bytes.toBytes("b50"), true, SortOrder.ASC),
                     true));
         // KeyRange above the last scan range.
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b1B"), false, Bytes.toBytes("b2A"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b1B"), false, Bytes.toBytes("b2A"), true, SortOrder.ASC),
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), false),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), false, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), false),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), false, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), false),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), false, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b2A"), true, Bytes.toBytes("b2A"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("b2A"), true, Bytes.toBytes("b2A"), true, SortOrder.ASC),
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("B"), true, Bytes.toBytes("B"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1},
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c1A"), false, Bytes.toBytes("c9Z"), true),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("c1A"), false, Bytes.toBytes("c9Z"), true, SortOrder.ASC),
                     false));
         // KeyRange contains unbound lower bound.
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("b"), true, Bytes.toBytes("b"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1}, 
-                    PChar.INSTANCE.getKeyRange(KeyRange.UNBOUND, false, Bytes.toBytes("a0Z"), true),
+                    PChar.INSTANCE.getKeyRange(KeyRange.UNBOUND, false, Bytes.toBytes("a0Z"), true, SortOrder.ASC),
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1}, 
-                    PChar.INSTANCE.getKeyRange(KeyRange.UNBOUND, false, Bytes.toBytes("a0Z"), true),
+                    PChar.INSTANCE.getKeyRange(KeyRange.UNBOUND, false, Bytes.toBytes("a0Z"), true, SortOrder.ASC),
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("D"), true, Bytes.toBytes("E"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("D"), true, Bytes.toBytes("E"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1}, 
-                    PChar.INSTANCE.getKeyRange(KeyRange.UNBOUND, false, Bytes.toBytes("a1C"), true),
+                    PChar.INSTANCE.getKeyRange(KeyRange.UNBOUND, false, Bytes.toBytes("a1C"), true, SortOrder.ASC),
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("D"), true, Bytes.toBytes("E"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("D"), true, Bytes.toBytes("E"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1}, 
-                    PChar.INSTANCE.getKeyRange(KeyRange.UNBOUND, false, Bytes.toBytes("a1D"), true),
+                    PChar.INSTANCE.getKeyRange(KeyRange.UNBOUND, false, Bytes.toBytes("a1D"), true, SortOrder.ASC),
                     true));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("D"), true, Bytes.toBytes("E"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("D"), true, Bytes.toBytes("E"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1}, 
-                    PChar.INSTANCE.getKeyRange(KeyRange.UNBOUND, false, Bytes.toBytes("a2D"), true),
+                    PChar.INSTANCE.getKeyRange(KeyRange.UNBOUND, false, Bytes.toBytes("a2D"), true, SortOrder.ASC),
                     true));
         // KeyRange contains unbound upper bound
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1}, 
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a0A"), true, KeyRange.UNBOUND, false),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a0A"), true, KeyRange.UNBOUND, false, SortOrder.ASC),
                     true));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1}, 
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a1B"), true, KeyRange.UNBOUND, false),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a1B"), true, KeyRange.UNBOUND, false, SortOrder.ASC),
                     true));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1}, 
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a1C"), true, KeyRange.UNBOUND, false),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a1C"), true, KeyRange.UNBOUND, false, SortOrder.ASC),
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1}, 
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a3A"), true, KeyRange.UNBOUND, false),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("a3A"), true, KeyRange.UNBOUND, false, SortOrder.ASC),
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1}, 
-                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("d0A"), true, KeyRange.UNBOUND, false),
+                    PChar.INSTANCE.getKeyRange(Bytes.toBytes("d0A"), true, KeyRange.UNBOUND, false, SortOrder.ASC),
                     false));
         // KeyRange is unbound to unbound.
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC),
                         },{
-                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true),
+                        PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"), true, SortOrder.ASC),
                     }},
                     new int[] {1,1,1}, 
-                    PChar.INSTANCE.getKeyRange(KeyRange.UNBOUND, false, KeyRange.UNBOUND, false),
+                    PChar.INSTANCE.getKeyRange(KeyRange.UNBOUND, false, KeyRange.UNBOUND, false, SortOrder.ASC),
                     true));
         return testCases;
     }

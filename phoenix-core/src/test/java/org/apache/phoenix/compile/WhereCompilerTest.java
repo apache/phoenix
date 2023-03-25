@@ -764,7 +764,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                         Bytes.toBytes(entityId1),
                         true,
                         Bytes.toBytes(entityId2),
-                        true))),
+                        true, SortOrder.ASC))),
                 plan.getTableRef().getTable().getRowKeySchema()),
             filter);
     }
