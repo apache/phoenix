@@ -589,18 +589,19 @@ public class ByteUtil {
         return ptr.copyBytes();
     }
     
-    public static KeyRange getKeyRange(byte[] key, CompareOperator op, PDataType type) {
+    public static KeyRange getKeyRange(byte[] key, SortOrder order, CompareOperator op, PDataType type) {
+        op = order.transform(op);
         switch (op) {
         case EQUAL:
-            return type.getKeyRange(key, true, key, true);
+            return type.getKeyRange(key, true, key, true, order);
         case GREATER:
-            return type.getKeyRange(key, false, KeyRange.UNBOUND, false);
+            return type.getKeyRange(key, false, KeyRange.UNBOUND, false, order);
         case GREATER_OR_EQUAL:
-            return type.getKeyRange(key, true, KeyRange.UNBOUND, false);
+            return type.getKeyRange(key, true, KeyRange.UNBOUND, false, order);
         case LESS:
-            return type.getKeyRange(KeyRange.UNBOUND, false, key, false);
+            return type.getKeyRange(KeyRange.UNBOUND, false, key, false, order);
         case LESS_OR_EQUAL:
-            return type.getKeyRange(KeyRange.UNBOUND, false, key, true);
+            return type.getKeyRange(KeyRange.UNBOUND, false, key, true, order);
         default:
             throw new IllegalArgumentException("Unknown operator " + op);
         }

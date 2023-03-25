@@ -37,6 +37,8 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil.BytesComparator;
 
+import com.ibm.icu.text.BidiTransform.Order;
+
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
@@ -59,28 +61,28 @@ public class KeyRange implements Writable {
      * is what we use for upper/lower bound), we create this range using the private constructor rather than
      * going through the static creation method (where this would not be possible).
      */
-    public static final KeyRange IS_NULL_RANGE = new KeyRange(NULL_BOUND, true, NULL_BOUND, true);
+    public static final KeyRange IS_NULL_RANGE = new KeyRange(NULL_BOUND, true, NULL_BOUND, true, false);
     /**
      * KeyRange for non null variable length values. Since we need to represent this using an empty byte array (which
      * is what we use for upper/lower bound), we create this range using the private constructor rather than going
      * through the static creation method (where this would not be possible).
      */
-    public static final KeyRange IS_NOT_NULL_RANGE = new KeyRange(ByteUtil.nextKey(QueryConstants.SEPARATOR_BYTE_ARRAY), true, UNBOUND, false);
+    public static final KeyRange IS_NOT_NULL_RANGE = new KeyRange(ByteUtil.nextKey(QueryConstants.SEPARATOR_BYTE_ARRAY), true, UNBOUND, false, false);
     
     /**
      * KeyRange for an empty key range
      */
-    public static final KeyRange EMPTY_RANGE = new KeyRange(DEGENERATE_KEY, false, DEGENERATE_KEY, false);
+    public static final KeyRange EMPTY_RANGE = new KeyRange(DEGENERATE_KEY, false, DEGENERATE_KEY, false, false);
     
     /**
      * KeyRange that contains all values
      */
-    public static final KeyRange EVERYTHING_RANGE = new KeyRange(UNBOUND, false, UNBOUND, false);
+    public static final KeyRange EVERYTHING_RANGE = new KeyRange(UNBOUND, false, UNBOUND, false, false);
     
     public static final Function<byte[], KeyRange> POINT = new Function<byte[], KeyRange>() {
         @Override 
         public KeyRange apply(byte[] input) {
-            return new KeyRange(input, true, input, true);
+            return new KeyRange(input, true, input, true, false);
         }
     };
     public static final Comparator<KeyRange> COMPARATOR = new Comparator<KeyRange>() {
@@ -137,11 +139,12 @@ public class KeyRange implements Writable {
         }
     };
 
-    private byte[] lowerRange;
-    private boolean lowerInclusive;
-    private byte[] upperRange;
-    private boolean upperInclusive;
-    private boolean isSingleKey;
+    protected byte[] lowerRange;
+    protected boolean lowerInclusive;
+    protected byte[] upperRange;
+    protected boolean upperInclusive;
+    protected boolean isSingleKey;
+    protected boolean inverted = false;
 
     public static KeyRange getKeyRange(byte[] point) {
         return getKeyRange(point, true, point, true);
@@ -153,6 +156,12 @@ public class KeyRange implements Writable {
 
     private static KeyRange getSingleton(byte[] lowerRange, boolean lowerInclusive,
             byte[] upperRange, boolean upperInclusive) {
+        return getSingleton(lowerRange, lowerInclusive,
+            upperRange, upperInclusive, false);
+    }
+    
+    private static KeyRange getSingleton(byte[] lowerRange, boolean lowerInclusive,
+            byte[] upperRange, boolean upperInclusive, boolean inverted) {
         if (lowerRange == null || upperRange == null) {
             return EMPTY_RANGE;
         }
@@ -162,7 +171,13 @@ public class KeyRange implements Writable {
             return lowerInclusive && upperInclusive ? IS_NULL_RANGE : EVERYTHING_RANGE;
         }
         if ( ( lowerRange.length != 0 || lowerRange == NULL_BOUND ) && ( upperRange.length != 0 || upperRange == NULL_BOUND ) ) {
-            int cmp = Bytes.compareTo(lowerRange, upperRange);
+            // This is the ONLY change compared to KeyRange
+            int cmp;
+            if (inverted) {
+                cmp = Bytes.compareTo(SortOrder.invert(upperRange, 0, upperRange.length), SortOrder.invert(lowerRange, 0, lowerRange.length));
+            } else {
+                cmp = Bytes.compareTo(lowerRange, upperRange);
+            }
             if (cmp > 0 || (cmp == 0 && !(lowerInclusive && upperInclusive))) {
                 return EMPTY_RANGE;
             }
@@ -172,7 +187,12 @@ public class KeyRange implements Writable {
     
     public static KeyRange getKeyRange(byte[] lowerRange, boolean lowerInclusive,
             byte[] upperRange, boolean upperInclusive) {
-        KeyRange range = getSingleton(lowerRange, lowerInclusive, upperRange, upperInclusive);
+        return getKeyRange(lowerRange, lowerInclusive,
+            upperRange, upperInclusive, false);
+    }
+    public static KeyRange getKeyRange(byte[] lowerRange, boolean lowerInclusive,
+            byte[] upperRange, boolean upperInclusive, boolean inverted) {
+        KeyRange range = getSingleton(lowerRange, lowerInclusive, upperRange, upperInclusive, inverted);
         if (range != null) {
             return range;
         }
@@ -190,7 +210,7 @@ public class KeyRange implements Writable {
         }
 
         return new KeyRange(lowerRange, unboundLower ? false : lowerInclusive,
-                upperRange, unboundUpper ? false : upperInclusive);
+                upperRange, unboundUpper ? false : upperInclusive, inverted);
     }
 
     public static KeyRange read(DataInput input) throws IOException {
@@ -205,7 +225,7 @@ public class KeyRange implements Writable {
         return range;
     }
     
-    private KeyRange() {
+    protected KeyRange() {
         this.lowerRange = DEGENERATE_KEY;
         this.lowerInclusive = false;
         this.upperRange = DEGENERATE_KEY;
@@ -213,11 +233,12 @@ public class KeyRange implements Writable {
         this.isSingleKey = false;
     }
     
-    private KeyRange(byte[] lowerRange, boolean lowerInclusive, byte[] upperRange, boolean upperInclusive) {
+    protected KeyRange(byte[] lowerRange, boolean lowerInclusive, byte[] upperRange, boolean upperInclusive, boolean inverted) {
         this.lowerRange = lowerRange;
         this.lowerInclusive = lowerInclusive;
         this.upperRange = upperRange;
         this.upperInclusive = upperInclusive;
+        this.inverted = inverted;
         init();
     }
     
@@ -439,7 +460,8 @@ public class KeyRange implements Writable {
                 && newUpperRange == upperRange && newUpperInclusive == upperInclusive) {
             return this;
         }
-        return getKeyRange(newLowerRange, newLowerInclusive, newUpperRange, newUpperInclusive);
+        return getKeyRange(newLowerRange, newLowerInclusive, newUpperRange, newUpperInclusive,
+            this.inverted && range.inverted);
     }
 
     public static boolean isDegenerate(byte[] lowerRange, byte[] upperRange) {
@@ -616,6 +638,7 @@ public class KeyRange implements Writable {
         return result;
     }
 
+    // The range generated here is possibly invalid
     public KeyRange invert() {
         // these special ranges do not get inverted because we
         // represent NULL in the same way for ASC and DESC.
@@ -635,7 +658,7 @@ public class KeyRange implements Writable {
                 upperBound = SortOrder.invert(upperBound, 0, upperBound.length);
             }
         }
-        return KeyRange.getKeyRange(upperBound, this.isUpperInclusive(), lowerBound, this.isLowerInclusive());
+        return KeyRange.getKeyRange(upperBound, this.isUpperInclusive(), lowerBound, this.isLowerInclusive(), !this.inverted);
     }
 
     @Override

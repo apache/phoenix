@@ -149,127 +149,127 @@ public class ScanUtilTest {
             List<Object> testCases = Lists.newArrayList();
             // 1, Lower bound, all single keys, all inclusive.
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true), },
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC), },
                             { PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("A"),
-                                    true), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("a1A"),
+                                    true, SortOrder.ASC), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("a1A"),
                     Bound.LOWER));
             // 2, Lower bound, all range keys, all inclusive.
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("b"), true), },
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("b"), true, SortOrder.ASC), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true, SortOrder.ASC), },
                             { PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"),
-                                    true), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("a1A"),
+                                    true, SortOrder.ASC), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("a1A"),
                     Bound.LOWER));
             // 3, Lower bound, mixed single and range keys, all inclusive.
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true), },
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true, SortOrder.ASC), },
                             { PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("A"),
-                                    true), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("a1A"),
+                                    true, SortOrder.ASC), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("a1A"),
                     Bound.LOWER));
             // 4, Lower bound, all range key, all exclusive on lower bound.
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), false, Bytes.toBytes("b"), true), },
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), false, Bytes.toBytes("2"), true), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), false, Bytes.toBytes("b"), true, SortOrder.ASC), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), false, Bytes.toBytes("2"), true, SortOrder.ASC), },
                             { PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), false, Bytes.toBytes("B"),
-                                    true), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("b2B"),
+                                    true, SortOrder.ASC), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("b2B"),
                     Bound.LOWER));
             // 5, Lower bound, all range key, some exclusive.
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), false, Bytes.toBytes("b"), true), },
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), false, Bytes.toBytes("b"), true, SortOrder.ASC), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true, SortOrder.ASC), },
                             { PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), false, Bytes.toBytes("B"),
-                                    true), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("b1B"),
+                                    true, SortOrder.ASC), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("b1B"),
                     Bound.LOWER));
             // 6, Lower bound, mixed single and range key, mixed inclusive and exclusive.
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true), },
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true, SortOrder.ASC), },
                             { PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), false, Bytes.toBytes("B"),
-                                    true), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("a1B"),
+                                    true, SortOrder.ASC), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("a1B"),
                     Bound.LOWER));
             // 7, Lower bound, unbound key in the middle, fixed length.
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC), },
                             { KeyRange.EVERYTHING_RANGE, },
                             { PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), false, Bytes.toBytes("B"),
-                                    true), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("a"),
+                                    true, SortOrder.ASC), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("a"),
                     Bound.LOWER));
             // 8, Lower bound, unbound key in the middle, variable length.
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC), },
                             { KeyRange.EVERYTHING_RANGE, } }, new int[] { 1, 1 }, PChar.INSTANCE.toBytes("a"),
                     Bound.LOWER));
             // 9, Lower bound, unbound key at end, variable length.
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC), },
                             { KeyRange.EVERYTHING_RANGE, },
                             { PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"),
-                                    true), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("a"),
+                                    true, SortOrder.ASC), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("a"),
                     Bound.LOWER));
             // 10, Upper bound, all single keys, all inclusive, increment at end.
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true), },
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"), true, SortOrder.ASC), },
                             { PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("A"),
-                                    true), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("a1B"),
+                                    true, SortOrder.ASC), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("a1B"),
                     Bound.UPPER));
             // 11, Upper bound, all range keys, all inclusive, increment at end.
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("b"), true), },
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("b"), true, SortOrder.ASC), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), true, SortOrder.ASC), },
                             { PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"),
-                                    true), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("b2C"),
+                                    true, SortOrder.ASC), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("b2C"),
                     Bound.UPPER));
             // 12, Upper bound, all range keys, all exclusive, no increment at end.
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("b"), false), },
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), false), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("b"), false, SortOrder.ASC), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"), false, SortOrder.ASC), },
                             { PChar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"),
-                                    false), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("b"),
+                                    false, SortOrder.ASC), } }, new int[] { 1, 1, 1 }, PChar.INSTANCE.toBytes("b"),
                     Bound.UPPER));
             // 13, Upper bound, single inclusive, range inclusive, increment at end.
             testCases.addAll(foreach(new KeyRange[][] {
-                    { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true), },
+                    { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC), },
                     { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"),
-                            true), } }, new int[] { 1, 1 }, PChar.INSTANCE.toBytes("a3"), Bound.UPPER));
+                            true, SortOrder.ASC), } }, new int[] { 1, 1 }, PChar.INSTANCE.toBytes("a3"), Bound.UPPER));
             // 14, Upper bound, range exclusive, single inclusive, increment at end.
             testCases.addAll(foreach(new KeyRange[][] {
-                    { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("b"), false), },
+                    { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("b"), false, SortOrder.ASC), },
                     { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"),
-                            true), } }, new int[] { 1, 1 }, PChar.INSTANCE.toBytes("b"), Bound.UPPER));
+                            true, SortOrder.ASC), } }, new int[] { 1, 1 }, PChar.INSTANCE.toBytes("b"), Bound.UPPER));
             // 15, Upper bound, range inclusive, single inclusive, increment at end.
             testCases.addAll(foreach(new KeyRange[][] {
-                    { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("b"), true), },
+                    { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("b"), true, SortOrder.ASC), },
                     { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("1"),
-                            true), } }, new int[] { 1, 1 }, PChar.INSTANCE.toBytes("b2"), Bound.UPPER));
+                            true, SortOrder.ASC), } }, new int[] { 1, 1 }, PChar.INSTANCE.toBytes("b2"), Bound.UPPER));
             // 16, Upper bound, single inclusive, range exclusive, no increment at end.
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC), },
                             { PChar.INSTANCE.getKeyRange(Bytes.toBytes("1"), true, Bytes.toBytes("2"),
-                                    false), } }, new int[] { 1, 1 }, PChar.INSTANCE.toBytes("a2"),
+                                    false, SortOrder.ASC), } }, new int[] { 1, 1 }, PChar.INSTANCE.toBytes("a2"),
                     Bound.UPPER));
             // 17, Upper bound, unbound key, fixed length;
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC), },
                             { KeyRange.EVERYTHING_RANGE, } }, new int[] { 1, 1 }, PChar.INSTANCE.toBytes("b"),
                     Bound.UPPER));
             // 18, Upper bound, unbound key, variable length;
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC), },
                             { KeyRange.EVERYTHING_RANGE, } }, new int[] { 1, 1 }, PChar.INSTANCE.toBytes("b"),
                     Bound.UPPER));
             // 19, Upper bound, keys wrapped around when incrementing.
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(new byte[] { -1 }, true, new byte[] { -1 }, true) },
-                            { PChar.INSTANCE.getKeyRange(new byte[] { -1 }, true, new byte[] { -1 }, true) } },
+                            { PChar.INSTANCE.getKeyRange(new byte[] { -1 }, true, new byte[] { -1 }, true, SortOrder.ASC) },
+                            { PChar.INSTANCE.getKeyRange(new byte[] { -1 }, true, new byte[] { -1 }, true, SortOrder.ASC) } },
                     new int[] { 1, 1 }, ByteUtil.EMPTY_BYTE_ARRAY, Bound.UPPER));
             // 20, Variable length
             testCases.addAll(foreach(new KeyRange[][] {
-                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true), },
+                            { PChar.INSTANCE.getKeyRange(Bytes.toBytes("a"), true, Bytes.toBytes("a"), true, SortOrder.ASC), },
                             { PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("A"), true, Bytes.toBytes("B"),
-                                    true), } }, new int[] { 1, 0 },
+                                    true, SortOrder.ASC), } }, new int[] { 1, 0 },
                     ByteUtil.nextKey(ByteUtil.concat(PVarchar.INSTANCE.toBytes("aB"), QueryConstants.SEPARATOR_BYTE_ARRAY)),
                     Bound.UPPER));
             return testCases;

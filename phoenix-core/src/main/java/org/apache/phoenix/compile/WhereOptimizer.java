@@ -98,7 +98,7 @@ import edu.umd.cs.findbugs.annotations.NonNull;
  */
 public class WhereOptimizer {
     private static final List<KeyRange> EVERYTHING_RANGES = Collections.<KeyRange>singletonList(KeyRange.EVERYTHING_RANGE);
-    private static final List<KeyRange> SALT_PLACEHOLDER = Collections.singletonList(PChar.INSTANCE.getKeyRange(QueryConstants.SEPARATOR_BYTE_ARRAY));
+    private static final List<KeyRange> SALT_PLACEHOLDER = Collections.singletonList(PChar.INSTANCE.getKeyRange(QueryConstants.SEPARATOR_BYTE_ARRAY, SortOrder.ASC));
 
     private WhereOptimizer() {
     }
@@ -1714,7 +1714,7 @@ public class WhereOptimizer {
                 lowerRange = Arrays.copyOf(lowerRange, lowerRange.length+1);
                 lowerRange[lowerRange.length-1] = QueryConstants.SEPARATOR_BYTE;
             }
-            KeyRange range = type.getKeyRange(lowerRange, true, upperRange, false);
+            KeyRange range = type.getKeyRange(lowerRange, true, upperRange, false, SortOrder.ASC);
             if (column.getSortOrder() == SortOrder.DESC) {
                 range = range.invert();
             }
@@ -1769,8 +1769,9 @@ public class WhereOptimizer {
             // we represent NULL the same way for ASC and DESC
             if (isFixedWidth) { // if column can't be null
                 return node.isNegate() ? null :
-                    newKeyParts(childSlot, node, type.getKeyRange(new byte[SchemaUtil.getFixedByteSize(column)], true,
-                                                                  KeyRange.UNBOUND, true));
+                        newKeyParts(childSlot, node,
+                            type.getKeyRange(new byte[SchemaUtil.getFixedByteSize(column)], true,
+                                KeyRange.UNBOUND, true, SortOrder.ASC));
             } else {
                 KeyRange keyRange = node.isNegate() ? KeyRange.IS_NOT_NULL_RANGE : KeyRange.IS_NULL_RANGE;
                 return newKeyParts(childSlot, node, keyRange);
@@ -1942,7 +1943,7 @@ public class WhereOptimizer {
                     }
                 }
                 byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                KeyRange range = ByteUtil.getKeyRange(key, rhs.getSortOrder().transform(op)/*op*/, type);
+                KeyRange range = ByteUtil.getKeyRange(key, rhs.getSortOrder(), op, type);
                 // Constants will have been inverted, so we invert them back here so that
                 // RVC comparisons work correctly (see PHOENIX-3383).
                 if (rhs.getSortOrder() == SortOrder.DESC) {
@@ -2148,7 +2149,7 @@ public class WhereOptimizer {
                     return null;
                 }
                 byte[] key = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                KeyRange range = ByteUtil.getKeyRange(key, /*rvc.getChildren().get(rhs.getChildren().size()-1).getSortOrder().transform(op)*/op, PVarbinary.INSTANCE);
+                KeyRange range = ByteUtil.getKeyRange(key, SortOrder.ASC, /*rvc.getChildren().get(rhs.getChildren().size()-1).getSortOrder().transform(op)*/op, PVarbinary.INSTANCE);
                 return range;
             }
 

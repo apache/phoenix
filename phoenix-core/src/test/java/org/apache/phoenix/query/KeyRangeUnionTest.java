@@ -27,6 +27,7 @@ import java.util.Collection;
 
 import junit.framework.TestCase;
 
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PChar;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -47,33 +48,33 @@ public class KeyRangeUnionTest extends TestCase {
     public static synchronized Collection<?> data() {
         return Arrays.asList(new Object[][] {
                 {
-                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true),
-                    PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("F"), true),
-                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("F"), true)
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("F"), true, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("F"), true, SortOrder.ASC)
                 },
                 {
-                    PChar.INSTANCE.getKeyRange(toBytes("C"), false, toBytes("E"), false),
-                    PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("F"), true),
-                    PChar.INSTANCE.getKeyRange(toBytes("C"), false, toBytes("F"), true)
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), false, toBytes("E"), false, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("F"), true, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), false, toBytes("F"), true, SortOrder.ASC)
                 },
                 {
-                    PChar.INSTANCE.getKeyRange(toBytes("C"), false, toBytes("E"), false),
-                    PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("E"), true),
-                    PChar.INSTANCE.getKeyRange(toBytes("C"), false, toBytes("E"), true)
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), false, toBytes("E"), false, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("E"), true, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), false, toBytes("E"), true, SortOrder.ASC)
                 },
                 {
-                    PChar.INSTANCE.getKeyRange(toBytes("C"), false, toBytes("E"), false),
-                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true),
-                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true)
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), false, toBytes("E"), false, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true, SortOrder.ASC)
                 },
                 {
-                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), false),
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), false, SortOrder.ASC),
                     EMPTY_RANGE,
-                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), false),
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), false, SortOrder.ASC)
                 },
                 {
                     EVERYTHING_RANGE,
-                    PChar.INSTANCE.getKeyRange(toBytes("E"), false, toBytes("F"), true),
+                    PChar.INSTANCE.getKeyRange(toBytes("E"), false, toBytes("F"), true, SortOrder.ASC),
                     EVERYTHING_RANGE,
                 },
                 {

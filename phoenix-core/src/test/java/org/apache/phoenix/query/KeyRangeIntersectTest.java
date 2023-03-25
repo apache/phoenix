@@ -27,6 +27,7 @@ import java.util.Collection;
 
 import junit.framework.TestCase;
 
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.util.DateUtil;
@@ -49,29 +50,29 @@ public class KeyRangeIntersectTest extends TestCase {
     public static synchronized Collection<?> data() {
         return Arrays.asList(new Object[][] {
                 {
-                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true),
-                    PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("F"), true),
-                    PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("E"), true)
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("F"), true, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("D"), true, toBytes("E"), true, SortOrder.ASC)
                 },
                 {
-                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true),
-                    PChar.INSTANCE.getKeyRange(toBytes("D"), false, toBytes("F"), true),
-                    PChar.INSTANCE.getKeyRange(toBytes("D"), false, toBytes("E"), true)
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), true, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("D"), false, toBytes("F"), true, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("D"), false, toBytes("E"), true, SortOrder.ASC)
                 },
                 {
-                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), false),
-                    PChar.INSTANCE.getKeyRange(toBytes("D"), false, toBytes("F"), true),
-                    PChar.INSTANCE.getKeyRange(toBytes("D"), false, toBytes("E"), false)
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), false, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("D"), false, toBytes("F"), true, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("D"), false, toBytes("E"), false, SortOrder.ASC)
                 },
                 {
-                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), false),
-                    PChar.INSTANCE.getKeyRange(toBytes("E"), false, toBytes("F"), true),
+                    PChar.INSTANCE.getKeyRange(toBytes("C"), true, toBytes("E"), false, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("E"), false, toBytes("F"), true, SortOrder.ASC),
                     EMPTY_RANGE
                 },
                 {
                     EVERYTHING_RANGE,
-                    PChar.INSTANCE.getKeyRange(toBytes("E"), false, toBytes("F"), true),
-                    PChar.INSTANCE.getKeyRange(toBytes("E"), false, toBytes("F"), true),
+                    PChar.INSTANCE.getKeyRange(toBytes("E"), false, toBytes("F"), true, SortOrder.ASC),
+                    PChar.INSTANCE.getKeyRange(toBytes("E"), false, toBytes("F"), true, SortOrder.ASC),
                 },
                 {
                     EVERYTHING_RANGE,
@@ -85,13 +86,13 @@ public class KeyRangeIntersectTest extends TestCase {
                 },
                 {
                     EMPTY_RANGE,
-                    PChar.INSTANCE.getKeyRange(toBytes("E"), false, toBytes("F"), true),
+                    PChar.INSTANCE.getKeyRange(toBytes("E"), false, toBytes("F"), true, SortOrder.ASC),
                     EMPTY_RANGE
                 },
                 {
-                    PDate.INSTANCE.getKeyRange(PDate.INSTANCE.toBytes(DateUtil.parseDate("2011-01-01")), true, PDate.INSTANCE.toBytes(DateUtil.parseDate("2016-01-01")), true),
-                    PDate.INSTANCE.getKeyRange(PDate.INSTANCE.toBytes(DateUtil.parseDate("2012-10-21")), false, PDate.INSTANCE.toBytes(DateUtil.parseDate("2016-10-31")), false),
-                    PDate.INSTANCE.getKeyRange(PDate.INSTANCE.toBytes(DateUtil.parseDate("2012-10-21")), false, PDate.INSTANCE.toBytes(DateUtil.parseDate("2016-01-01")), true)
+                    PDate.INSTANCE.getKeyRange(PDate.INSTANCE.toBytes(DateUtil.parseDate("2011-01-01")), true, PDate.INSTANCE.toBytes(DateUtil.parseDate("2016-01-01")), true, SortOrder.ASC),
+                    PDate.INSTANCE.getKeyRange(PDate.INSTANCE.toBytes(DateUtil.parseDate("2012-10-21")), false, PDate.INSTANCE.toBytes(DateUtil.parseDate("2016-10-31")), false, SortOrder.ASC),
+                    PDate.INSTANCE.getKeyRange(PDate.INSTANCE.toBytes(DateUtil.parseDate("2012-10-21")), false, PDate.INSTANCE.toBytes(DateUtil.parseDate("2016-01-01")), true, SortOrder.ASC)
                 }
         });
     }

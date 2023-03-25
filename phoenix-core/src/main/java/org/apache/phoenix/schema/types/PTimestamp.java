@@ -297,7 +297,7 @@ public class PTimestamp extends PDataType<Timestamp> {
      * to detect when the boundary is crossed if we increment to the nextKey.
      */
     @Override
-    public KeyRange getKeyRange(byte[] lowerRange, boolean lowerInclusive, byte[] upperRange, boolean upperInclusive) {
+    public KeyRange getKeyRange(byte[] lowerRange, boolean lowerInclusive, byte[] upperRange, boolean upperInclusive, SortOrder sortOrder) {
         /*
          * Force lower bound to be inclusive for fixed width keys because it makes comparisons less expensive when you
          * can count on one bound or the other being inclusive. Comparing two fixed width exclusive bounds against each
@@ -311,8 +311,7 @@ public class PTimestamp extends PDataType<Timestamp> {
             if (lowerRange.length != MAX_TIMESTAMP_BYTES) {
                 throw new IllegalDataException("Unexpected size of " + lowerRange.length + " for " + this);
             }
-            // Infer sortOrder based on most significant byte
-            SortOrder sortOrder = lowerRange[Bytes.SIZEOF_LONG] < 0 ? SortOrder.DESC : SortOrder.ASC;
+
             int nanos = PUnsignedInt.INSTANCE.getCodec().decodeInt(lowerRange, Bytes.SIZEOF_LONG, sortOrder);
             if ((sortOrder == SortOrder.DESC && nanos == 0) || (sortOrder == SortOrder.ASC && nanos == MAX_NANOS_VALUE_EXCLUSIVE-1)) {
                 // With timestamp, because our last 4 bytes store a value from [0 - 1000000), we need
@@ -337,7 +336,7 @@ public class PTimestamp extends PDataType<Timestamp> {
                 return KeyRange.getKeyRange(lowerRange, true, upperRange, upperInclusive);
             }
         }
-        return super.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
+        return super.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive, sortOrder);
     }
 
 }

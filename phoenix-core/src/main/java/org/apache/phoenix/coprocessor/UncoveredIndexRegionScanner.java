@@ -40,6 +40,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -171,7 +172,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     protected Scan prepareDataTableScan(Collection<byte[]> dataRowKeys) throws IOException {
         List<KeyRange> keys = new ArrayList<>(dataRowKeys.size());
         for (byte[] dataRowKey : dataRowKeys) {
-            keys.add(PVarbinary.INSTANCE.getKeyRange(dataRowKey));
+            keys.add(PVarbinary.INSTANCE.getKeyRange(dataRowKey, SortOrder.ASC));
         }
         ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
         Scan dataScan = new Scan(dataTableScan);

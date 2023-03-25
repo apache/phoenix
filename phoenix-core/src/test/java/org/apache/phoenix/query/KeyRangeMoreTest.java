@@ -25,6 +25,7 @@ import java.util.List;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PInteger;
 import org.junit.Test;
 
@@ -54,7 +55,7 @@ public class KeyRangeMoreTest extends TestCase {
         List<KeyRange> rowKeyRanges2=new ArrayList<KeyRange>();
         for(int i=start1;i<=end1;i++) {
             rowKeyRanges1.add(
-                    PInteger.INSTANCE.getKeyRange(PInteger.INSTANCE.toBytes(i), true, PInteger.INSTANCE.toBytes(i+step1), true));
+                    PInteger.INSTANCE.getKeyRange(PInteger.INSTANCE.toBytes(i), true, PInteger.INSTANCE.toBytes(i+step1), true, SortOrder.ASC));
 
         }
         if(addEmptyRange) {
@@ -62,7 +63,7 @@ public class KeyRangeMoreTest extends TestCase {
         }
         for(int i=start2;i<=end2;i++) {
             rowKeyRanges2.add(
-                    PInteger.INSTANCE.getKeyRange(PInteger.INSTANCE.toBytes(i), true, PInteger.INSTANCE.toBytes(i+step2), true));
+                    PInteger.INSTANCE.getKeyRange(PInteger.INSTANCE.toBytes(i), true, PInteger.INSTANCE.toBytes(i+step2), true, SortOrder.ASC));
         }
         if(addEmptyRange) {
             rowKeyRanges2.add(KeyRange.EMPTY_RANGE);
@@ -100,7 +101,7 @@ public class KeyRangeMoreTest extends TestCase {
                             PInteger.INSTANCE.toBytes(start1+(i-1)*(step1+1)),
                             true,
                             PInteger.INSTANCE.toBytes(start1+i*(step1+1)-1),
-                            true));
+                            true, SortOrder.ASC));
 
         }
         if(addEmptyRange) {
@@ -112,7 +113,7 @@ public class KeyRangeMoreTest extends TestCase {
                             PInteger.INSTANCE.toBytes(start2+(i-1)*(step2+1)),
                             true,
                             PInteger.INSTANCE.toBytes(start2+i*(step2+1)-1),
-                            true));
+                            true, SortOrder.ASC));
         }
         if(addEmptyRange) {
             rowKeyRanges2.add(KeyRange.EMPTY_RANGE);
@@ -180,7 +181,7 @@ public class KeyRangeMoreTest extends TestCase {
                             PInteger.INSTANCE.toBytes(i),
                             true,
                             PInteger.INSTANCE.toBytes(i+2),
-                            true));
+                            true, SortOrder.ASC));
             i+=4;
         }
         List<KeyRange> expected=new ArrayList<KeyRange>(rowKeyRanges2);
@@ -233,6 +234,57 @@ public class KeyRangeMoreTest extends TestCase {
         }
     }
 
+//    @Test
+//    public void testInvert() throws Exception {
+//        List<KeyRange> everythingInv = KeyRange.EVERYTHING_RANGE.invert();
+//        assertEquals(1, everythingInv.size());
+//        assertEquals(KeyRange.EVERYTHING_RANGE, everythingInv.get(0));
+//        
+//        List<KeyRange> emptyInv = KeyRange.EMPTY_RANGE.invert();
+//        assertEquals(1, emptyInv.size());
+//        assertEquals(KeyRange.EMPTY_RANGE, emptyInv.get(0));
+//
+//        byte[] one = new byte[] {0x01};
+//        List<KeyRange> pointInv = KeyRange.getKeyRange(one).invert();
+//        assertEquals(1, emptyInv.size());
+//        assertEquals(KeyRange.getKeyRange(new byte[] {(byte)0xFE}), pointInv.get(0));
+//        
+//        List<KeyRange> equalRangeInv = KeyRange.getKeyRange(new byte[] {0x01, 0x02}, true, new byte[] {0x03, 0x04}, true).invert();
+//        assertEquals(1, equalRangeInv.size());
+//        assertEquals(KeyRange.getKeyRange(new byte[] {(byte)0xFC, (byte)0xFB}, true, new byte[] {(byte)0xFE, (byte)0xFD}, true), equalRangeInv.get(0));
+//
+//        List<KeyRange> equalRangeInvLowerOpen = KeyRange.getKeyRange(new byte[] {0x01, 0x02}, false, new byte[] {0x03, 0x04}, true).invert();
+//        assertEquals(1, equalRangeInvLowerOpen.size());
+//        assertEquals(KeyRange.getKeyRange(new byte[] {(byte)0xFC, (byte)0xFB}, true, new byte[] {(byte)0xFE, (byte)0xFD}, false), equalRangeInvLowerOpen.get(0));
+//        
+//        List<KeyRange> equalRangeInvUpperOpen = KeyRange.getKeyRange(new byte[] {0x01, 0x02}, true, new byte[] {0x03, 0x04}, false).invert();
+//        assertEquals(1, equalRangeInvUpperOpen.size());
+//        assertEquals(KeyRange.getKeyRange(new byte[] {(byte)0xFC, (byte)0xFB}, false, new byte[] {(byte)0xFE, (byte)0xFD}, true), equalRangeInvUpperOpen.get(0));
+//        
+//        List<KeyRange> unequalRangeInv = KeyRange.getKeyRange(new byte[] {0x01, 0x02}, true, new byte[] {0x01, 0x02, 0x03, 0x04}, true).invert();
+//        assertEquals(3, unequalRangeInv.size());
+//        assertEquals(KeyRange.getKeyRange(new byte[] {(byte)0xFE, (byte)0xFD}), unequalRangeInv.get(0));
+//        assertEquals(KeyRange.getKeyRange(new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFC}, true, new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFF}, true), unequalRangeInv.get(1));
+//        assertEquals(KeyRange.getKeyRange(new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFC, (byte)0xFB}, true, new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFC, (byte)0xFF}, true), unequalRangeInv.get(2));
+//
+//        List<KeyRange> unequalRangeInvLowerOpen = KeyRange.getKeyRange(new byte[] {0x01, 0x02}, false, new byte[] {0x01, 0x02, 0x03, 0x04}, true).invert();
+//        assertEquals(2, unequalRangeInvLowerOpen.size());
+//        assertEquals(KeyRange.getKeyRange(new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFC}, true, new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFF}, true), unequalRangeInvLowerOpen.get(0));
+//        assertEquals(KeyRange.getKeyRange(new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFC, (byte)0xFB}, true, new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFC, (byte)0xFF}, true), unequalRangeInvLowerOpen.get(1));
+//
+//        List<KeyRange> unequalRangeInvUpperOpen = KeyRange.getKeyRange(new byte[] {0x01, 0x02}, true, new byte[] {0x01, 0x02, 0x03, 0x04}, false).invert();
+//        assertEquals(3, unequalRangeInvUpperOpen.size());
+//        assertEquals(KeyRange.getKeyRange(new byte[] {(byte)0xFE, (byte)0xFD}), unequalRangeInvUpperOpen.get(0));
+//        assertEquals(KeyRange.getKeyRange(new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFC}, true, new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFF}, true), unequalRangeInvUpperOpen.get(1));
+//        assertEquals(KeyRange.getKeyRange(new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFC, (byte)0xFB}, false, new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFC, (byte)0xFF}, true), unequalRangeInvUpperOpen.get(2));
+//
+//        List<KeyRange> unequalRangeInvBothOpen = KeyRange.getKeyRange(new byte[] {0x01, 0x02}, false, new byte[] {0x01, 0x02, 0x03, 0x04}, false).invert();
+//        assertEquals(2, unequalRangeInvBothOpen.size());
+//        assertEquals(KeyRange.getKeyRange(new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFC}, true, new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFF}, true), unequalRangeInvBothOpen.get(0));
+//        assertEquals(KeyRange.getKeyRange(new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFC, (byte)0xFB}, false, new byte[] {(byte)0xFE, (byte)0xFD, (byte)0xFC, (byte)0xFF}, true), unequalRangeInvBothOpen.get(1));
+//
+//    }
+//    
     private static List<KeyRange> createKeyRangeListWithFixedLowerRange(List<Integer> keys, List<Boolean> boundaryConditions) {
         assertEquals(keys.size(), boundaryConditions.size());
         List<Integer> newKeys = Lists.newArrayListWithCapacity(keys.size() * 2);
@@ -258,7 +310,7 @@ public class KeyRangeMoreTest extends TestCase {
         for (int i = 0; i < size; i++) {
             byte[] startKey = keys.get(2*i).equals(Integer.MIN_VALUE) ? KeyRange.UNBOUND : PInteger.INSTANCE.toBytes(keys.get(2*i));
             byte[] endKey = keys.get(2*i + 1).equals(Integer.MAX_VALUE) ? KeyRange.UNBOUND : PInteger.INSTANCE.toBytes(keys.get(2*i + 1));
-            keyRangeList.add(PInteger.INSTANCE.getKeyRange(startKey, boundaryConditions.get(2*i), endKey, boundaryConditions.get(2*i+1)));
+            keyRangeList.add(PInteger.INSTANCE.getKeyRange(startKey, boundaryConditions.get(2*i), endKey, boundaryConditions.get(2*i+1), SortOrder.ASC));
         }
 
         return keyRangeList;
