@@ -21,7 +21,12 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.*;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeepDeletedCells;
+import org.apache.hadoop.hbase.MemoryCompactionPolicy;
+import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -388,7 +393,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 // An old client may not set these attributes which are required by TTLRegionScanner
                 if (emptyCF != null && emptyCQ != null) {
                     return new RegionScannerHolder(c, scan,
-                            new PhoenixTTLRegionScanner(c.getEnvironment(), scan,
+                            new TTLRegionScanner(c.getEnvironment(), scan,
                                     new PagingRegionScanner(c.getEnvironment().getRegion(), s,
                                             scan)));
                 }
@@ -437,11 +442,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
 
     public void setScanOptionsForFlushesAndCompactions(ScanOptions options) {
         // We want the store to give us all the deleted cells to StoreCompactionScanner
-        KeepDeletedCells keepDeletedCells = options.getKeepDeletedCells();
-        if (keepDeletedCells == KeepDeletedCells.FALSE) {
-            keepDeletedCells = KeepDeletedCells.TRUE;
-        }
-        options.setKeepDeletedCells(keepDeletedCells);
+        options.setKeepDeletedCells(KeepDeletedCells.TTL);
         options.setTTL(HConstants.FOREVER);
         options.setMaxVersions(Integer.MAX_VALUE);
         options.setMinVersions(Integer.MAX_VALUE);

@@ -118,21 +118,31 @@ public class MaxLookbackExtendedIT extends BaseTest {
             createTable(dataTableName);
             injectEdge.setValue(System.currentTimeMillis());
             EnvironmentEdgeManager.injectEdge(injectEdge);
-            conn.createStatement().execute("upsert into " + dataTableName + " values ('a', 'ab', 'abc', 'abcd')");
+            conn.createStatement().execute("upsert into " + dataTableName
+                    + " values ('a', 'ab1', 'abc1', 'abcd1')");
             conn.commit();
-            conn.createStatement().execute("upsert into " + dataTableName + " values ('b', 'bc', 'bcd', 'bcde')");
+            conn.createStatement().execute("upsert into " + dataTableName
+                    + " values ('b', 'bc1', 'bcd1', 'bcde1')");
             conn.commit();
             injectEdge.incrementValue(1);
-            conn.createStatement().execute("upsert into " + dataTableName + " values ('b', 'bc', 'bcd1', 'bcde1')");
+            conn.createStatement().execute("upsert into " + dataTableName
+                    + " values ('a', 'ab2', 'abc2', 'abcd2')");
             conn.commit();
             injectEdge.incrementValue(1);
-            conn.createStatement().execute("upsert into " + dataTableName + " values ('b', 'bc', 'bcd2', 'bcde2')");
+            conn.createStatement().execute("upsert into " + dataTableName
+                    + " values ('a', 'ab3', 'abc3', 'abcd3')");
             conn.commit();
             injectEdge.incrementValue(1);
             String dml = "DELETE from " + dataTableName + " WHERE id  = 'a'";
             Assert.assertEquals(1, conn.createStatement().executeUpdate(dml));
             conn.commit();
+            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
+            dml = "DELETE from " + dataTableName + " WHERE id  = 'b'";
+            Assert.assertEquals(1, conn.createStatement().executeUpdate(dml));
+            conn.commit();
             injectEdge.incrementValue(1);
+            conn.createStatement().execute("upsert into " + dataTableName + " values ('b', 'bc2', 'bcd2', 'bcde2')");
+            conn.commit();
             dml = "DELETE from " + dataTableName + " WHERE id  = 'b'";
             Assert.assertEquals(1, conn.createStatement().executeUpdate(dml));
             conn.commit();
@@ -142,13 +152,9 @@ public class MaxLookbackExtendedIT extends BaseTest {
             injectEdge.incrementValue(1);
             conn.createStatement().execute("upsert into " + dataTableName + " values ('b', 'bc', 'bcd4', 'bcde4')");
             conn.commit();
-            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
-            dml = "DELETE from " + dataTableName + " WHERE id  = 'b'";
-            Assert.assertEquals(1, conn.createStatement().executeUpdate(dml));
-            conn.commit();
-            injectEdge.incrementValue(1);
-            conn.createStatement().execute("upsert into " + dataTableName + " values ('b', 'bc', 'bcd5', 'bcde5')");
-            conn.commit();
+            // Now, inside the max lookback window, there are two live and one deleted versions
+            // of row b and two sets of CF delete markers for row b. Also, one deleted version
+            // for row b that is outside the max lookback window but still visible through it.
             TableName dataTable = TableName.valueOf(dataTableName);
             TestUtil.doMajorCompaction(conn, dataTableName);
             // Only row b should be live
@@ -160,22 +166,26 @@ public class MaxLookbackExtendedIT extends BaseTest {
                     dataTableName + " where id = 'b'");
             Assert.assertTrue(rs.next());
             Assert.assertEquals(1, rs.getInt(1));
-            // Both raw rows a and b should exist on disk
             assertRawRowCount(conn, dataTable, 2);
-            //empty column + 1 version of val 1, val2, and val3 + 1 delete marker for each CF
+            // Each row version has empty column + val 1, val2, and val3 = 4 cells
+            // There are three version of row "a" and they are deleted by one set of CF delete
+            // markers. Even though they are ouside the max lookback window, the compaction will
+            // retain two versions of them and delete markers since KEEP_DELETED_CELLS=TRUE and
+            // VERSIONS=2
             if (multiCF) {
-                assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), 7);
+                assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), 11);
             } else {
-                assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), 5);
+                assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), 9);
             }
-            // 6 upserts for row b but max version is 2 plus one deleted version outside the
-            // max lookback window. So there should be three versions of row b
+            // Three row b versions inside plus one deleted version outside the
+            // max lookback window but visible and plus 2 sets of delete markers
             if (multiCF) {
-                // 4 cells for each version plus 2 delete markers (3CFs) = 16
-                assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), 16);
+                // 4 cells for each version (4 versions) plus 2 delete markers for each CF (3CFs)
+                // = 19
+                assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), 22);
             } else {
-                // 4 cells for each version plus 2 delete markers = 14
-                assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), 14);
+                // 4 cells for each version (4 versions) plus 2 delete markers = 16
+                assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), 18);
             }
         }
     }
@@ -258,10 +268,9 @@ public class MaxLookbackExtendedIT extends BaseTest {
             injectEdge.incrementValue(1L);
             majorCompact(dataTable);
             majorCompact(indexTable);
-            // Deleted row versions except the last versions should be removed. The deleted row
-            // version should be still preserved
-            assertRawRowCount(conn, dataTable, ROWS_POPULATED + 1);
-            assertRawRowCount(conn, indexTable, ROWS_POPULATED + 1);
+            // Deleted row versions should be removed.
+            assertRawRowCount(conn, dataTable, ROWS_POPULATED);
+            assertRawRowCount(conn, indexTable, ROWS_POPULATED);
 
             //deleted row should be gone, but not deleted row should still be there.
             assertRowExistsAtSCN(getUrl(), sql, beforeSecondCompactSCN, false);
@@ -340,11 +349,11 @@ public class MaxLookbackExtendedIT extends BaseTest {
             rs = conn.createStatement().executeQuery("SELECT COUNT(*) from " + indexName);
             Assert.assertTrue(rs.next());
             Assert.assertEquals(0, rs.getInt(1));
-            //make sure that we can compact away the now-expired rows
+            // Increment the time by max lookback age and make sure that we can compact away
+            // the now-expired rows
+            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
             majorCompact(dataTable);
             majorCompact(indexTable);
-            //note that before HBase 1.4, we don't have HBASE-17956
-            // and this will always return 0 whether it's still on-disk or not
             assertRawRowCount(conn, dataTable, 0);
             assertRawRowCount(conn, indexTable, 0);
         } finally{
@@ -460,11 +469,12 @@ public class MaxLookbackExtendedIT extends BaseTest {
             conn.createStatement().executeUpdate("DELETE FROM " + tableNameOne);
             conn.createStatement().executeUpdate("DELETE FROM " + tableNameTwo);
             conn.commit();
-            // Move the time so that delete will be outside the maxlookback window of tableNameOne
-            injectEdge.incrementValue((maxLookbackOne + 2)  * 1000);
-            // Compact both tables. Deleted row version except the last versions should be removed
-            // from tableNameOne as they are now outside the max lookback window, but not from
-            // tableNameTwo
+            injectEdge.incrementValue(1);
+            // Move the time so that deleted row versions will be outside the maxlookback window
+            // of tableNameOne but the delete markers will be inside
+            injectEdge.incrementValue(maxLookbackOne * 1000);
+            // Compact both tables. Deleted row versions will be removed from tableNameOne as they
+            // are now outside its max lookback window.
             flush(TableName.valueOf(tableNameOne));
             flush(TableName.valueOf(tableNameTwo));
             majorCompact(TableName.valueOf(tableNameOne));

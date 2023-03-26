@@ -1417,7 +1417,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             }
             List<KeyRange> keys = new ArrayList<>();
 
-            try (RegionScanner scanner = new PhoenixTTLRegionScanner(env, incrScan,
+            try (RegionScanner scanner = new TTLRegionScanner(env, incrScan,
                     new PagingRegionScanner(region, region.getScanner(incrScan), incrScan))) {
                 List<Cell> row = new ArrayList<>();
                 int rowCount = 0;

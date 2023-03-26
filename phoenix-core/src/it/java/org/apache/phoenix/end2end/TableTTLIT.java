@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -53,12 +54,11 @@ import java.util.Random;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
-public class PhoenixTableTTLIT extends BaseTest {
+public class TableTTLIT extends BaseTest {
     private static final Logger LOG =
-            LoggerFactory.getLogger(PhoenixTableTTLIT.class);
+            LoggerFactory.getLogger(TableTTLIT.class);
     private static final Random RAND = new Random(11);
-    private static final int MAX_COLUMN_INDEX = 6;
-    private static final int LAST_COLUMN_INDEX = 7;
+    private static final int MAX_COLUMN_INDEX = 7;
     private static final int MAX_LOOKBACK_AGE = 10;
     private static final int TTL = 30;
     private String tableDDLOptions;
@@ -69,10 +69,12 @@ public class PhoenixTableTTLIT extends BaseTest {
     private final boolean columnEncoded;
     private final KeepDeletedCells keepDeletedCells;
 
-    public PhoenixTableTTLIT(boolean multiCF, boolean columnEncoded, KeepDeletedCells keepDeletedCells) {
+    public TableTTLIT(boolean multiCF, boolean columnEncoded,
+            KeepDeletedCells keepDeletedCells, int versions) {
         this.multiCF = multiCF;
         this.columnEncoded = columnEncoded;
         this.keepDeletedCells = keepDeletedCells;
+        this.versions = versions;
     }
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -86,7 +88,6 @@ public class PhoenixTableTTLIT extends BaseTest {
     public void beforeTest(){
         EnvironmentEdgeManager.reset();
         optionBuilder = new StringBuilder();
-        versions = 5;
         optionBuilder.append(" TTL=" + TTL);
         optionBuilder.append(", VERSIONS=" + versions);
         if (keepDeletedCells == KeepDeletedCells.FALSE) {
@@ -114,15 +115,16 @@ public class PhoenixTableTTLIT extends BaseTest {
         Assert.assertFalse("refCount leaked", refCountLeaked);
     }
 
-    @Parameterized.Parameters(name = "TableTTLIT_multiCF={0}, columnEncoded={1}, keepDeletedCells={2}")
+    @Parameterized.Parameters(name = "TableTTLIT_multiCF={0}, columnEncoded={1}, "
+            + "keepDeletedCells={2}, versions={3}")
     public static synchronized Collection<Object[]> data() {
-            return Arrays.asList(new Object[][] { { false, false, KeepDeletedCells.FALSE },
-                    { false, false, KeepDeletedCells.TRUE }, { false, false, KeepDeletedCells.TTL },
-                    { false, true, KeepDeletedCells.FALSE }, { false, true, KeepDeletedCells.TRUE },
-                    { false, true, KeepDeletedCells.TTL }, { true, false, KeepDeletedCells.FALSE },
-                    { true, false, KeepDeletedCells.TRUE }, { true, false, KeepDeletedCells.TTL },
-                    { true, true, KeepDeletedCells.FALSE }, { true, true, KeepDeletedCells.TRUE },
-                    { true, true, KeepDeletedCells.TTL} });
+            return Arrays.asList(new Object[][] {
+                    { false, false, KeepDeletedCells.FALSE, 1},
+                    { false, true, KeepDeletedCells.TRUE, 5},
+                    { false, false, KeepDeletedCells.TTL, 1},
+                    { true, true, KeepDeletedCells.FALSE, 5},
+                    { true, false, KeepDeletedCells.TRUE, 1},
+                    { true, true, KeepDeletedCells.TTL, 5 } });
     }
 
     /**
@@ -140,6 +142,11 @@ public class PhoenixTableTTLIT extends BaseTest {
      */
     @Test
     public void testMaskingAndCompaction() throws Exception {
+        final int maxDeleteCounter = 10;
+        final int maxCompactionCounter = 100;
+        final int maxMaskingCounter = 50;
+        final int maxFlushCounter = 50;
+        final byte[] rowKey = Bytes.toBytes("a");
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
@@ -149,13 +156,45 @@ public class PhoenixTableTTLIT extends BaseTest {
             startTime = (startTime / 1000) * 1000;
             EnvironmentEdgeManager.injectEdge(injectEdge);
             injectEdge.setValue(startTime);
+            int deleteCounter = RAND.nextInt(maxDeleteCounter) + 1;
+            int compactionCounter = RAND.nextInt(maxCompactionCounter) + 1;
+            int maskingCounter = RAND.nextInt(maxMaskingCounter) + 1;
+            int flushCounter = RAND.nextInt(maxFlushCounter) + 1;
             for (int i = 0; i < 500; i++) {
+                if (compactionCounter-- == 0) {
+                    injectEdge.incrementValue(1000);
+                    LOG.debug("Compaction " + i + " current time: " + injectEdge.currentTime());
+                    flush(TableName.valueOf(tableName));
+                    majorCompact(TableName.valueOf(tableName));
+                    compactionCounter = RAND.nextInt(maxCompactionCounter) + 1;
+                }
+                if (maskingCounter-- == 0) {
+                    injectEdge.incrementValue((TTL + MAX_LOOKBACK_AGE + 1) * 1000);
+                    LOG.debug("Masking " + i + " current time: " + injectEdge.currentTime());
+                    flush(TableName.valueOf(tableName));
+                    majorCompact(TableName.valueOf(tableName));
+                    TestUtil.assertRawCellCount(conn, TableName.valueOf(tableName), rowKey, 0);
+                    maskingCounter = RAND.nextInt(maxMaskingCounter) + 1;
+                }
+                if (deleteCounter-- == 0) {
+                    LOG.debug("Delete " + i + " current time: " + injectEdge.currentTime());
+                    deleteRow(conn, tableName, "a");
+                    deleteRow(conn, noCompactTableName, "a");
+                    deleteCounter = RAND.nextInt(maxDeleteCounter) + 1;
+                    injectEdge.incrementValue(1000);
+                }
+                if (flushCounter-- == 0) {
+                    LOG.debug("Flush  " + i + " current time: " + injectEdge.currentTime());
+                    flush(TableName.valueOf(tableName));
+                    flushCounter = RAND.nextInt(maxFlushCounter) + 1;
+                    injectEdge.incrementValue(1000);
+                }
                 updateRow(conn, tableName, noCompactTableName, "a");
                 compareRow(conn, tableName, noCompactTableName, "a", MAX_COLUMN_INDEX);
                 long scn = injectEdge.currentTime() - MAX_LOOKBACK_AGE * 1000;
-                long scnEnd = injectEdge.currentTime() - 1000;
+                long scnEnd = injectEdge.currentTime();
                 long scnStart = Math.max(scn, startTime);
-                for (scn = scnEnd; scn > scnStart; scn -= 1000) {
+                for (scn = scnEnd; scn >= scnStart; scn -= 1000) {
                     // Compare all row versions using scn queries
                     Properties props = new Properties();
                     props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn));
@@ -164,38 +203,35 @@ public class PhoenixTableTTLIT extends BaseTest {
                                 MAX_COLUMN_INDEX);
                     }
                 }
-                if (RAND.nextInt(10) == 0) {
-                    injectEdge.incrementValue(1000);
-                    deleteRow(conn, tableName, "a");
-                    deleteRow(conn, noCompactTableName, "a");
-                }
-                if (RAND.nextInt(50) == 0) {
-                    injectEdge.incrementValue(1000);
-                    flush(TableName.valueOf(tableName));
-                    majorCompact(TableName.valueOf(tableName));
-                }
-                if (i % (2 * TTL + 1) == 0) {
-                    // Once in a while we update the last column that is not updated or checked
-                    // regularly. Then we read this column from both tables after the TTL period.
-                    // On the table that is compacted the column value would be masked and also
-                    // removed by compaction. On the no compact table, the column value would be
-                    // masked. So, both tables would return null value.
-                    compareRow(conn, tableName, noCompactTableName, "a", LAST_COLUMN_INDEX);
-                    ResultSet rs = conn.createStatement().executeQuery(
-                            "Select val" + LAST_COLUMN_INDEX + " from "
-                                    + noCompactTableName + " where id = 'a'");
-                    if (rs.next()) {
-                        Assert.assertTrue(rs.getString(1) == null);
-                    }
-                    updateColumn(conn, tableName, "a", LAST_COLUMN_INDEX, "invisible");
-                    updateColumn(conn, noCompactTableName, "a", LAST_COLUMN_INDEX, "invisible");
-                    conn.commit();
-                }
                 injectEdge.incrementValue(1000);
             }
         }
     }
 
+    @Test
+    public void testRowSpansMultipleTTLWindows() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            String noCompactTableName = generateUniqueName();
+            createTable(noCompactTableName);
+            long startTime = System.currentTimeMillis() + 1000;
+            startTime = (startTime / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(startTime);
+            for (int columnIndex = 1; columnIndex <= MAX_COLUMN_INDEX; columnIndex++) {
+                String value = Integer.toString(RAND.nextInt(1000));
+                updateColumn(conn, tableName, "a", columnIndex, value);
+                updateColumn(conn, noCompactTableName, "a", columnIndex, value);
+                conn.commit();
+                injectEdge.incrementValue(TTL*1000 - 1000);
+            }
+            flush(TableName.valueOf(tableName));
+            majorCompact(TableName.valueOf(tableName));
+            compareRow(conn, tableName, noCompactTableName, "a", MAX_COLUMN_INDEX);
+            injectEdge.incrementValue(1000);
+        }
+    }
     private void flush(TableName table) throws IOException {
         Admin admin = getUtility().getAdmin();
         admin.flush(table);
@@ -258,15 +294,16 @@ public class PhoenixTableTTLIT extends BaseTest {
         boolean hasRow2 = rs2.next();
         Assert.assertEquals(hasRow1, hasRow2);
         if (hasRow1) {
-            for (int i = 1; i <= maxColumnIndex; i++) {
+            int i;
+            for (i = 1; i <= maxColumnIndex; i++) {
                 if (rs1.getString(i) != null) {
                     if (!rs1.getString(i).equals(rs2.getString(i))) {
-                        LOG.debug("VAL" + i + " " + rs1.getString(i) + " : " + rs2.getString(i));
+                        LOG.debug("VAL" + i + " " + rs2.getString(i) + " : " + rs1.getString(i));
                     }
                 } else if (rs2.getString(i) != null) {
-                    LOG.debug("VAL" + i + " " + rs1.getString(i) + " : " + rs2.getString(i));
+                    LOG.debug("VAL" + i + " " + rs2.getString(i) + " : " + rs1.getString(i));
                 }
-                Assert.assertEquals(rs1.getString(i), rs2.getString(i));
+                Assert.assertEquals("VAL" + i,  rs2.getString(i), rs1.getString(i));
             }
         }
     }
@@ -278,7 +315,7 @@ public class PhoenixTableTTLIT extends BaseTest {
                 createSql = "create table " + tableName +
                         " (id varchar not null primary key, val1 varchar, " +
                         "a.val2 varchar, a.val3 varchar, a.val4 varchar, " +
-                        "b.val5 varchar, a.val6 varchar, a.val7 varchar) " +
+                        "b.val5 varchar, a.val6 varchar, b.val7 varchar) " +
                         tableDDLOptions;
             }
             else {

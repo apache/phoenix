@@ -923,11 +923,14 @@ public class TestUtil {
     public static void dumpTable(Table table) throws IOException {
         System.out.println("************ dumping " + table + " **************");
         Scan s = new Scan();
-        s.setRaw(true);;
+        s.setRaw(true);
         s.readAllVersions();
+        int cellCount = 0;
+        int rowCount = 0;
         try (ResultScanner scanner = table.getScanner(s)) {
             Result result = null;
             while ((result = scanner.next()) != null) {
+                rowCount++;
                 CellScanner cellScanner = result.cellScanner();
                 Cell current = null;
                 while (cellScanner.advance()) {
@@ -935,10 +938,11 @@ public class TestUtil {
                     System.out.println(current + " column= " +
                         Bytes.toStringBinary(CellUtil.cloneQualifier(current)) +
                         " val=" + Bytes.toStringBinary(CellUtil.cloneValue(current)));
+                    cellCount++;
                 }
             }
         }
-        System.out.println("-----------------------------------------------");
+        System.out.println("----- Row count: " + rowCount + " Cell count: " + cellCount + " -----");
     }
 
     public static int getRawRowCount(Table table) throws IOException {

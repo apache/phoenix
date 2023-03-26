@@ -609,6 +609,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                                 + fullTableName, e);
                             }
                         }
+                        // The previous indexing design needs to retain delete markers and deleted
+                        // cells to rebuild disabled indexes. Thus, we skip major compaction for
+                        // them. GlobalIndexChecker is the coprocessor introduced by the current
+                        // indexing design.
                         if (table != null &&
                                 !PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.equals(fullTableName) &&
                                 !ScanUtil.hasCoprocessor(c.getEnvironment(),
@@ -633,7 +637,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             internalScanner =
                                     new CompactionScanner(c.getEnvironment(), store, scanner,
                                             getMaxLookbackInMillis(c.getEnvironment().getConfiguration()),
-                                            SchemaUtil.getEmptyColumnFamily(table));
+                                            SchemaUtil.getEmptyColumnFamily(table),
+                                            table.getEncodingScheme()
+                                                    == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
+                                                    QueryConstants.EMPTY_COLUMN_BYTES :
+                                                    table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME)
+                                            );
                         }
                     }
                     try {

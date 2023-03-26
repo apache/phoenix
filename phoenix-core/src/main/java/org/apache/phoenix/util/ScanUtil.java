@@ -1046,23 +1046,10 @@ public class ScanUtil {
     }
 
     public static boolean isEmptyColumn(Cell cell, byte[] emptyCF, byte[] emptyCQ) {
-        return Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(),
-                cell.getFamilyLength(), emptyCF, 0, emptyCF.length) == 0 &&
-                Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
-                        cell.getQualifierLength(), emptyCQ, 0, emptyCQ.length) == 0;
+        return CellUtil.matchingFamily(cell, emptyCF, 0, emptyCF.length) &&
+               CellUtil.matchingQualifier(cell, emptyCQ, 0, emptyCQ.length);
     }
 
-
-    public static boolean isEmptyColumn(Cell cell, byte[] emptyCF) {
-        return Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(),
-                cell.getFamilyLength(), emptyCF, 0, emptyCF.length) == 0 &&
-                (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
-                        cell.getQualifierLength(), QueryConstants.EMPTY_COLUMN_BYTES, 0,
-                        QueryConstants.EMPTY_COLUMN_BYTES.length) == 0 ||
-                        Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
-                                cell.getQualifierLength(), QueryConstants.ENCODED_EMPTY_COLUMN_BYTES, 0,
-                                QueryConstants.ENCODED_EMPTY_COLUMN_BYTES.length) == 0);
-    }
     public static long getMaxTimestamp(List<Cell> cellList) {
         long maxTs = 0;
         long ts = 0;

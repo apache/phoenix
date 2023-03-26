@@ -19,7 +19,7 @@ package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
@@ -41,11 +41,11 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COL
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME;
 
 /**
- *  PhoenixTTLRegionScanner masks expired rows using the empty column cell timestamp
+ *  TTLRegionScanner masks expired rows using the empty column cell timestamp
  */
-public class PhoenixTTLRegionScanner extends BaseRegionScanner {
+public class TTLRegionScanner extends BaseRegionScanner {
     private static final Logger LOG =
-            LoggerFactory.getLogger(PhoenixTTLRegionScanner.class);
+            LoggerFactory.getLogger(TTLRegionScanner.class);
     private final boolean isPhoenixTableTTLEnabled;
     private final RegionCoprocessorEnvironment env;
     private Scan scan;
@@ -57,7 +57,7 @@ public class PhoenixTTLRegionScanner extends BaseRegionScanner {
     byte[] emptyCF;
     private boolean initialized = false;
 
-    public PhoenixTTLRegionScanner(final RegionCoprocessorEnvironment env, final Scan scan,
+    public TTLRegionScanner(final RegionCoprocessorEnvironment env, final Scan scan,
             final RegionScanner s) {
         super(s);
         this.env = env;
@@ -97,7 +97,6 @@ public class PhoenixTTLRegionScanner extends BaseRegionScanner {
                 }
                 found = true;
             }
-            ts = c.getTimestamp();
             if (maxTimestamp < ts) {
                 maxTimestamp = ts;
             }
@@ -108,15 +107,15 @@ public class PhoenixTTLRegionScanner extends BaseRegionScanner {
         if (!found) {
             LOG.warn("No empty column cell " + env.getRegion().getRegionInfo().getTable());
         }
-        if (maxTimestamp == HConstants.LATEST_TIMESTAMP) {
-            return false;
-        }
         if (maxTimestamp - minTimestamp <= ttl) {
             return false;
         }
         // We need check if the gap between two consecutive cell timestamps is more than ttl
         // and if so trim the cells beyond the gap
         Scan singleRowScan = new Scan();
+        singleRowScan.setRaw(true);
+        singleRowScan.readAllVersions();
+        singleRowScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
         byte[] rowKey = CellUtil.cloneRow(result.get(0));
         singleRowScan.withStartRow(rowKey, true);
         singleRowScan.withStopRow(rowKey, true);
@@ -127,18 +126,18 @@ public class PhoenixTTLRegionScanner extends BaseRegionScanner {
         if (row.isEmpty()) {
             return true;
         }
-
-        List<Long> tsList = new ArrayList<>(row.size());
-        for (Cell c : row) {
-            tsList.add(c.getTimestamp());
+        int size = row.size();
+        long tsArray[] = new long[size];
+        int i = 0;
+        for (Cell cell : row) {
+            tsArray[i++] = cell.getTimestamp();
         }
-        Collections.sort(tsList);
-        long previous = minTimestamp;
-        for (Long timestamp : tsList) {
-            if (timestamp - previous > ttl) {
-                minTimestamp = timestamp;
+        Arrays.sort(tsArray);
+        for (i = size - 1; i > 0; i--) {
+            if (tsArray[i] - tsArray[i - 1] > ttl) {
+                minTimestamp = tsArray[i];
+                break;
             }
-            previous = timestamp;
         }
         Iterator<Cell> iterator = result.iterator();
         while(iterator.hasNext()) {
@@ -212,7 +211,7 @@ public class PhoenixTTLRegionScanner extends BaseRegionScanner {
 
     @Override
     public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
-        return new PhoenixTTLRegionScanner(env, scan,
+        return new TTLRegionScanner(env, scan,
                 ((DelegateRegionScanner)delegate).getNewRegionScanner(scan));
     }
 }
