@@ -1946,4 +1946,20 @@ public class MutationState implements SQLCloseable {
         return mutationMetricQueue;
     }
 
+    public void addExecuteMutationTime(long time, String tableName) {
+        Long timeSpent = timeInExecuteMutationMap.get(tableName);
+        if (timeSpent == null) {
+            timeSpent = 0l;
+        }
+        timeSpent += time;
+        timeInExecuteMutationMap.put(tableName, timeSpent);
+    }
+
+    public void resetExecuteMutationTimeMap() {
+        timeInExecuteMutationMap.clear();
+    }
+
+    public boolean isEmpty() {
+        return mutationsMap != null ? mutationsMap.isEmpty() : true;
+    }
 }

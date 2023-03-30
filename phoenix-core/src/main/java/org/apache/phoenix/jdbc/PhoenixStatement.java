@@ -24,6 +24,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQ
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
+import java.sql.BatchUpdateException;
 import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -78,7 +79,6 @@ import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.compile.TraceQueryPlan;
 import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.exception.BatchUpdateExecution;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.UpgradeRequiredException;
@@ -1829,26 +1829,41 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
     /**
      * Execute the current batch of statements. If any exception occurs
-     * during execution, a org.apache.phoenix.exception.BatchUpdateException
-     * is thrown which includes the index of the statement within the
-     * batch when the exception occurred.
+     * during execution, a {@link java.sql.BatchUpdateException}
+     * is thrown which compposes the update counts for statements executed so
+     * far.
      */
     @Override
     public int[] executeBatch() throws SQLException {
         int i = 0;
+        int[] returnCodes = new int [batch.size()];
+        Arrays.fill(returnCodes, -1);
+        boolean autoCommit = connection.getAutoCommit();
+        connection.setAutoCommit(false);
         try {
-            int[] returnCodes = new int [batch.size()];
             for (i = 0; i < returnCodes.length; i++) {
                 PhoenixPreparedStatement statement = batch.get(i);
-                returnCodes[i] = statement.execute(true) ? Statement.SUCCESS_NO_INFO : statement.getUpdateCount();
+                statement.executeForBatch();
+                returnCodes[i] = statement.getUpdateCount();
             }
             // Flush all changes in batch if auto flush is true
             flushIfNecessary();
             // If we make it all the way through, clear the batch
             clearBatch();
+            if (autoCommit) {
+                connection.commit();
+            }
             return returnCodes;
-        } catch (Throwable t) {
-            throw new BatchUpdateExecution(t,i);
+        } catch (SQLException t) {
+            if (i == returnCodes.length) {
+                // Exception after for loop, perhaps in commit(), discard returnCodes.
+                throw new BatchUpdateException(t);
+            } else {
+                returnCodes[i] = Statement.EXECUTE_FAILED;
+                throw new BatchUpdateException(returnCodes, t);
+            }
+        } finally {
+            connection.setAutoCommit(autoCommit);
         }
     }
 
