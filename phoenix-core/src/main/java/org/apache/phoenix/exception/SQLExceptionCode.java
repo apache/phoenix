@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.exception;
 
+import java.sql.BatchUpdateException;
 import java.sql.SQLException;
 import java.sql.SQLTimeoutException;
 import java.util.Map;
@@ -454,6 +455,8 @@ public enum SQLExceptionCode {
             "Duplicate ENCODED_QUALIFIER."),
     MISSING_CQ(1150, "XCL49",
             "Missing ENCODED_QUALIFIER."),
+    EXECUTE_BATCH_FOR_STMT_WITH_RESULT_SET(1151, "XCL51", "A batch operation can't include a "
+            + "statement that produces result sets.", Factory.BATCH_UPDATE_ERROR),
 
 
     /**
@@ -649,6 +652,14 @@ public enum SQLExceptionCode {
                 return new PhoenixParserException(info.getMessage(), info.getRootCause());
             }
             
+        };
+        public static final Factory BATCH_UPDATE_ERROR = new Factory() {
+
+            @Override
+            public SQLException newException(SQLExceptionInfo info) {
+                return new BatchUpdateException(info.toString(), info.getCode().getSQLState(), info.getCode().getErrorCode(), (int[]) null, info.getRootCause());
+            }
+
         };
         public SQLException newException(SQLExceptionInfo info);
     }

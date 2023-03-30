@@ -159,11 +159,23 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
         return compileMutation(statement, query);
     }
 
-    boolean execute(boolean batched) throws SQLException {
+    void executeForBatch() throws SQLException {
         throwIfUnboundParameters();
-        if (!batched && statement.getOperation().isMutation() && !batch.isEmpty()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
-            .build().buildException();
+        if (!statement.getOperation().isMutation()) {
+            throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.EXECUTE_BATCH_FOR_STMT_WITH_RESULT_SET)
+                    .build().buildException();
+        }
+        executeMutation(statement, createAuditQueryLogger(statement,query));
+    }
+
+    @Override
+    public boolean execute() throws SQLException {
+        throwIfUnboundParameters();
+        if (statement.getOperation().isMutation() && !batch.isEmpty()) {
+            throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
+                    .build().buildException();
         }
         if (statement.getOperation().isMutation()) {
             executeMutation(statement, createAuditQueryLogger(statement,query));
@@ -171,12 +183,6 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
         }
         executeQuery(statement, createQueryLogger(statement,query));
         return true;
-        
-    }
-
-    @Override
-    public boolean execute() throws SQLException {
-        return execute(false);
     }
 
     @Override

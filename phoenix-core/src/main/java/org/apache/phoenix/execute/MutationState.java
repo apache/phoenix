@@ -2243,4 +2243,7 @@ public class MutationState implements SQLCloseable {
         timeInExecuteMutationMap.clear();
     }
 
+    public boolean isEmpty() {
+        return mutationsMap != null ? mutationsMap.isEmpty() : true;
+    }
 }
