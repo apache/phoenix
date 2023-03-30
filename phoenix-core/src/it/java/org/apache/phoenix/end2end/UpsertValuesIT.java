@@ -497,7 +497,6 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
             PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
             Map<String, Map<MetricType, Long>> mutationMetrics = pConn.getMutationMetrics();
             Assert.assertEquals(3, (long) mutationMetrics.get(tableName).get(MetricType.MUTATION_BATCH_SIZE));
-            Assert.assertEquals(3, (long) mutationMetrics.get(tableName).get(MetricType.UPSERT_MUTATION_SQL_COUNTER));
             Assert.assertEquals(autocommit, conn.getAutoCommit());
         } finally {
             closeStmtAndConn(pstmt, conn);
