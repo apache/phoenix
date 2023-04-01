@@ -76,8 +76,6 @@ import org.slf4j.LoggerFactory;
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class GlobalIndexCheckerIT extends BaseTest {
-    private static final Logger LOG =
-            LoggerFactory.getLogger(GlobalIndexCheckerIT.class);
 
     private final boolean async;
     private String indexDDLOptions;

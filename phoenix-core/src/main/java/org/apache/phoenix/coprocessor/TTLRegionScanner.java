@@ -46,7 +46,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COL
 public class TTLRegionScanner extends BaseRegionScanner {
     private static final Logger LOG =
             LoggerFactory.getLogger(TTLRegionScanner.class);
-    private final boolean isPhoenixTableTTLEnabled;
+    private final boolean isMaskingEnabled;
     private final RegionCoprocessorEnvironment env;
     private Scan scan;
     private long rowCount = 0;
@@ -68,7 +68,10 @@ public class TTLRegionScanner extends BaseRegionScanner {
         ttl = env.getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
         ttlWindowStart = ttl == HConstants.FOREVER ? 1 : currentTime - ttl * 1000;
         ttl *= 1000;
-        isPhoenixTableTTLEnabled = emptyCF != null && emptyCQ != null &&
+        // Regardless if the Phoenix Table TTL feature is disabled cluster wide or the client is
+        // an older client and does not supply the empty column parameters, the masking should not
+        // be done here.
+        isMaskingEnabled = emptyCF != null && emptyCQ != null &&
                 env.getConfiguration().getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                         QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
     }
@@ -177,7 +180,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
     }
 
     private boolean next(List<Cell> result, boolean raw) throws IOException {
-        if (!isPhoenixTableTTLEnabled) {
+        if (!isMaskingEnabled) {
             return raw ? delegate.nextRaw(result) : delegate.next(result);
         }
         if (!initialized) {

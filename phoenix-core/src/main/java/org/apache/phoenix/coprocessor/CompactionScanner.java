@@ -152,7 +152,7 @@ public class CompactionScanner implements InternalScanner {
      * The context for a given row during compaction. A row may have multiple compaction row
      * versions. CompactionScanner uses the same row context for these versions.
      */
-    class RowContext {
+    static class RowContext {
         Cell familyDeleteMarker = null;
         Cell familyVersionDeleteMarker = null;
         List<Cell> columnDeleteMarkers = null;
@@ -206,7 +206,7 @@ public class CompactionScanner implements InternalScanner {
                         nextDeleteFamilyTimestamp = 0;
                     }
                 }
-            } if (firstCell.getType() == Cell.Type.Put) {
+            } else if (firstCell.getType() == Cell.Type.Put) {
                 // Row versions are constructed from put cells. So, we use only
                 // put cell timestamps to find the time range for a compaction row version
                 if (rowContext.maxTimestamp < ts) {
