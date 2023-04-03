@@ -614,15 +614,16 @@ public enum SQLExceptionCode {
     }
 
     public static interface Factory {
-        static final Factory DEFAULT = new Factory() {
+        Factory DEFAULT = new Factory() {
 
             @Override
             public SQLException newException(SQLExceptionInfo info) {
-                return new SQLException(info.toString(), info.getCode().getSQLState(), info.getCode().getErrorCode(), info.getRootCause());
+                return new SQLException(info.toString(), info.getCode().getSQLState(),
+                        info.getCode().getErrorCode(), info.getRootCause());
             }
             
         };
-        static final Factory SYNTAX_ERROR = new Factory() {
+        Factory SYNTAX_ERROR = new Factory() {
 
             @Override
             public SQLException newException(SQLExceptionInfo info) {
@@ -630,12 +631,12 @@ public enum SQLExceptionCode {
             }
             
         };
-        static final Factory BATCH_UPDATE_ERROR = new Factory() {
+        Factory BATCH_UPDATE_ERROR = new Factory() {
 
             @Override
             public SQLException newException(SQLExceptionInfo info) {
                 return new BatchUpdateException(info.toString(), info.getCode().getSQLState(),
-                info.getCode().getErrorCode(), (int[]) null, info.getRootCause());
+                        info.getCode().getErrorCode(), (int[]) null, info.getRootCause());
             }
 
         };
