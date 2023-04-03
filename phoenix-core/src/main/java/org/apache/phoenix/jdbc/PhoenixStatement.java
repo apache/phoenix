@@ -649,7 +649,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                     }, PhoenixContextExecutor.inContext(),
                         Tracing.withTracing(connection, this.toString()));
         } catch (Exception e) {
-            if(queryLogger.isAuditLoggingEnabled()) {
+            if (queryLogger.isAuditLoggingEnabled()) {
                 queryLogger.log(QueryLogInfo.TABLE_NAME_I, getTargetForAudit(stmt));
                 queryLogger.log(QueryLogInfo.EXCEPTION_TRACE_I, Throwables.getStackTraceAsString(e));
                 queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.FAILED.toString());
@@ -2106,7 +2106,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         TableName tableName = null;
         if (stmt instanceof ExecutableSelectStatement) {
             TableNode from = ((ExecutableSelectStatement)stmt).getFrom();
-            if(from instanceof NamedTableNode) {
+            if (from instanceof NamedTableNode) {
                 tableName = ((NamedTableNode)from).getName();
             }
         } else if (stmt instanceof ExecutableUpsertStatement) {
