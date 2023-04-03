@@ -637,7 +637,7 @@ public enum SQLExceptionCode {
     }
 
     public static interface Factory {
-        public static final Factory DEFAULT = new Factory() {
+        static final Factory DEFAULT = new Factory() {
 
             @Override
             public SQLException newException(SQLExceptionInfo info) {
@@ -645,7 +645,7 @@ public enum SQLExceptionCode {
             }
             
         };
-        public static final Factory SYNTAX_ERROR = new Factory() {
+        static final Factory SYNTAX_ERROR = new Factory() {
 
             @Override
             public SQLException newException(SQLExceptionInfo info) {
@@ -653,15 +653,16 @@ public enum SQLExceptionCode {
             }
             
         };
-        public static final Factory BATCH_UPDATE_ERROR = new Factory() {
+        static final Factory BATCH_UPDATE_ERROR = new Factory() {
 
             @Override
             public SQLException newException(SQLExceptionInfo info) {
-                return new BatchUpdateException(info.toString(), info.getCode().getSQLState(), info.getCode().getErrorCode(), (int[]) null, info.getRootCause());
+                return new BatchUpdateException(info.toString(), info.getCode().getSQLState(),
+                info.getCode().getErrorCode(), (int[]) null, info.getRootCause());
             }
 
         };
-        public SQLException newException(SQLExceptionInfo info);
+        SQLException newException(SQLExceptionInfo info);
     }
     
     private static final Map<Integer,SQLExceptionCode> errorCodeMap = Maps.newHashMapWithExpectedSize(SQLExceptionCode.values().length);
