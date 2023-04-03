@@ -167,7 +167,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
                     SQLExceptionCode.EXECUTE_BATCH_FOR_STMT_WITH_RESULT_SET)
                     .build().buildException();
         }
-        executeMutation(statement, createAuditQueryLogger(statement,query));
+        executeMutation(statement, createAuditQueryLogger(statement, query));
     }
 
     @Override

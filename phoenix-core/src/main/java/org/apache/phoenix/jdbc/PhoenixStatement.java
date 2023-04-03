@@ -456,7 +456,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                 setLastUpdateCount(lastUpdateCount);
                                 setLastUpdateOperation(stmt.getOperation());
                                 connection.incrementStatementExecutionCounter();
-                                if(queryLogger.isAuditLoggingEnabled()) {
+                                if (queryLogger.isAuditLoggingEnabled()) {
                                     queryLogger.log(QueryLogInfo.TABLE_NAME_I, getTargetForAudit(stmt));
                                     queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.COMPLETED.toString());
                                     queryLogger.log(QueryLogInfo.NO_OF_RESULTS_ITERATED_I, lastUpdateCount);
@@ -861,7 +861,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         @SuppressWarnings("unchecked")
         @Override
         public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
-            if(!getUdfParseNodes().isEmpty()) {
+            if (!getUdfParseNodes().isEmpty()) {
                 stmt.throwIfUnallowedUserDefinedFunctions(getUdfParseNodes());
             }
 		    DeleteCompiler compiler = new DeleteCompiler(stmt, this.getOperation());
