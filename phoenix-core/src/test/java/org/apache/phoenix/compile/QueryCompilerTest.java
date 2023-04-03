@@ -6975,7 +6975,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                             .getScan();
             assertEquals("\\x9E\\x9E\\x9E\\xFF", Bytes.toStringBinary(closedScan.getStartRow()));
             assertEquals("\\x9F\\x00", Bytes.toStringBinary(closedScan.getStopRow()));
-            rs = stmt.executeQuery("EXPLAIN " + closedScan);
+            rs = stmt.executeQuery("EXPLAIN " + closedQry);
             explainPlan = QueryUtil.getExplainPlan(rs);
             assertEquals(explainExpected, explainPlan);
         }
