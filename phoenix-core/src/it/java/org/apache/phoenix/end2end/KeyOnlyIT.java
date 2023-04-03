@@ -172,17 +172,14 @@ public class KeyOnlyIT extends ParallelStatsEnabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         try (Statement stmt = conn.createStatement()) {
-            stmt.execute("create table "+tableName+" (k varchar primary key desc)");
-            stmt.execute("upsert into "+tableName+" values ('a')");
-            stmt.execute("upsert into "+tableName+" values ('aa')");
-            stmt.execute("upsert into "+tableName+" values ('aaa')");
-            stmt.execute("upsert into "+tableName+" values ('aaab')");
+            stmt.execute("create table " + tableName + " (k varchar primary key desc)");
+            stmt.execute("upsert into " + tableName + " values ('a')");
+            stmt.execute("upsert into " + tableName + " values ('aa')");
+            stmt.execute("upsert into " + tableName + " values ('aaa')");
+            stmt.execute("upsert into " + tableName + " values ('aaab')");
             conn.commit();
-            
-            QueryPlan plan = ((PhoenixStatement)stmt).optimizeQuery("select * from "+tableName+" where k > 'a'");
 
-            
-            ResultSet rs = stmt.executeQuery("select * from "+tableName+" where k > 'a'");
+            ResultSet rs = stmt.executeQuery("select * from " + tableName + " where k > 'a'");
             assertTrue(rs.next());
             assertEquals("aaab", rs.getString(1));
             assertTrue(rs.next());
@@ -191,7 +188,7 @@ public class KeyOnlyIT extends ParallelStatsEnabledIT {
             assertEquals("aa", rs.getString(1));
             assertFalse(rs.next());
 
-            rs = stmt.executeQuery("select * from "+tableName+" where k >= 'a'");
+            rs = stmt.executeQuery("select * from " + tableName + " where k >= 'a'");
             assertTrue(rs.next());
             assertEquals("aaab", rs.getString(1));
             assertTrue(rs.next());
@@ -202,34 +199,34 @@ public class KeyOnlyIT extends ParallelStatsEnabledIT {
             assertEquals("a", rs.getString(1));
             assertFalse(rs.next());
 
-            rs = stmt.executeQuery("select * from "+tableName+" where k >= 'aaa'");
+            rs = stmt.executeQuery("select * from " + tableName + " where k >= 'aaa'");
             assertTrue(rs.next());
             assertEquals("aaab", rs.getString(1));
             assertTrue(rs.next());
             assertEquals("aaa", rs.getString(1));
             assertFalse(rs.next());
-            
-            rs = stmt.executeQuery("select * from "+tableName+" where k > 'aaa'");
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k > 'aaa'");
             assertTrue(rs.next());
             assertEquals("aaab", rs.getString(1));
             assertFalse(rs.next());
-            
-            rs = stmt.executeQuery("select * from "+tableName+" where k < 'a'");
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k < 'a'");
             assertFalse(rs.next());
 
-            rs = stmt.executeQuery("select * from "+tableName+" where k <= 'a'");
+            rs = stmt.executeQuery("select * from " + tableName + " where k <= 'a'");
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
             assertFalse(rs.next());
-            
-            rs = stmt.executeQuery("select * from "+tableName+" where k < 'aaa'");
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k < 'aaa'");
             assertTrue(rs.next());
             assertEquals("aa", rs.getString(1));
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
             assertFalse(rs.next());
-            
-            rs = stmt.executeQuery("select * from "+tableName+" where k <= 'aaa'");
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k <= 'aaa'");
             assertTrue(rs.next());
             assertEquals("aaa", rs.getString(1));
             assertTrue(rs.next());
@@ -237,57 +234,30 @@ public class KeyOnlyIT extends ParallelStatsEnabledIT {
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
             assertFalse(rs.next());
-            
-            plan = ((PhoenixStatement)stmt).optimizeQuery("select * from "+tableName+" where k > 'a' and k<'aaa'");
 
-            rs = stmt.executeQuery("select * from "+tableName+" where k > 'a' and k<'aaa'");
-
+            rs = stmt.executeQuery("select * from " + tableName + " where k > 'a' and k < 'aaa'");
             assertTrue(rs.next());
             assertEquals("aa", rs.getString(1));
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k > 'a' and k <= 'aaa'");
+            assertTrue(rs.next());
+            assertEquals("aaa", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("aa", rs.getString(1));
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("select * from " + tableName + " where k >= 'a' and k <= 'aaa'");
+            assertTrue(rs.next());
+            assertEquals("aaa", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("aa", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
             assertFalse(rs.next());
         }
     }
-    
-    @Test
-    public void testKeySeparation() throws SQLException {
-        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateUniqueName();
-        byte[] oneZero = new byte[] {0x01, 0x00};
-        byte[] twoZero = new byte[] {0x02, 0x00};
-        try (Statement stmt = conn.createStatement();
-                PreparedStatement upsertStmt = conn.prepareStatement("upsert into "+tableName+" values (?,?)");) {
-            stmt.execute("create table "+tableName+" (k1 varbinary, k2 varbinary, constraint pk primary key (k1, k2))");
-            upsertStmt.setBytes(1, oneZero);
-            upsertStmt.setBytes(2, twoZero);
-            upsertStmt.executeUpdate();
-            conn.commit();
-            
-            ResultSet rs = stmt.executeQuery("select * from " + tableName);
-            rs.next();
-        }
-            
-    }
 
-    @Test
-    public void testKeySeparation2() throws SQLException {
-        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateUniqueName();
-        byte[] oneZero = new byte[] {0x01, 0x00};
-        byte[] twoZero = new byte[] {0x02, 0x00};
-        try (Statement stmt = conn.createStatement();
-                PreparedStatement upsertStmt = conn.prepareStatement("upsert into "+tableName+" values (?,?)")) {
-            stmt.execute("create table "+tableName+" (k1 varchar, k2 varchar, constraint pk primary key (k1, k2))");
-            stmt.execute("upsert into " + tableName + " values ('a','b')");
-            conn.commit();
-
-            ResultSet rs = stmt.executeQuery("select * from " + tableName + " where k1 > 'a'");
-            rs.next();
-        }
-            
-    }
-    
     private void initTableValues(Connection conn) throws Exception {
         PreparedStatement stmt = conn.prepareStatement(
             "upsert into " +
