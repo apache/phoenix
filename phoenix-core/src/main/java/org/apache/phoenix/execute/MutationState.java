@@ -1946,4 +1946,7 @@ public class MutationState implements SQLCloseable {
         return mutationMetricQueue;
     }
 
+    public boolean isEmpty() {
+        return mutationsMap != null ? mutationsMap.isEmpty() : true;
+    }
 }
