@@ -588,8 +588,9 @@ public class ByteUtil {
         }
         return ptr.copyBytes();
     }
-    
-    public static KeyRange getKeyRange(byte[] key, SortOrder order, CompareOperator op, PDataType type) {
+
+    public static KeyRange getKeyRange(byte[] key, SortOrder order, CompareOperator op,
+            PDataType type) {
         op = order.transform(op);
         switch (op) {
         case EQUAL:
@@ -606,7 +607,7 @@ public class ByteUtil {
             throw new IllegalArgumentException("Unknown operator " + op);
         }
     }
-    
+
     public static boolean contains(Collection<byte[]> keys, byte[] key) {
         for (byte[] k : keys) {
             if (Arrays.equals(k, key)) { return true; }

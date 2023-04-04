@@ -34,13 +34,10 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.ScanUtil.BytesComparator;
-
-import com.ibm.icu.text.BidiTransform.Order;
-
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ScanUtil.BytesComparator;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
@@ -159,7 +156,7 @@ public class KeyRange implements Writable {
         return getSingleton(lowerRange, lowerInclusive,
             upperRange, upperInclusive, false);
     }
-    
+
     private static KeyRange getSingleton(byte[] lowerRange, boolean lowerInclusive,
             byte[] upperRange, boolean upperInclusive, boolean inverted) {
         if (lowerRange == null || upperRange == null) {
@@ -170,11 +167,14 @@ public class KeyRange implements Writable {
             // than an unbound RANGE.
             return lowerInclusive && upperInclusive ? IS_NULL_RANGE : EVERYTHING_RANGE;
         }
-        if ( ( lowerRange.length != 0 || lowerRange == NULL_BOUND ) && ( upperRange.length != 0 || upperRange == NULL_BOUND ) ) {
-            // This is the ONLY change compared to KeyRange
+        if ((lowerRange.length != 0 || lowerRange == NULL_BOUND)
+                && (upperRange.length != 0 || upperRange == NULL_BOUND)) {
             int cmp;
             if (inverted) {
-                cmp = Bytes.compareTo(SortOrder.invert(upperRange, 0, upperRange.length), SortOrder.invert(lowerRange, 0, lowerRange.length));
+                // Allow illegal ranges to be defined. These will be fixed during processing.
+                cmp =
+                        Bytes.compareTo(SortOrder.invert(upperRange, 0, upperRange.length),
+                            SortOrder.invert(lowerRange, 0, lowerRange.length));
             } else {
                 cmp = Bytes.compareTo(lowerRange, upperRange);
             }
@@ -184,7 +184,7 @@ public class KeyRange implements Writable {
         }
         return null;
     }
-    
+
     public static KeyRange getKeyRange(byte[] lowerRange, boolean lowerInclusive,
             byte[] upperRange, boolean upperInclusive) {
         return getKeyRange(lowerRange, lowerInclusive,

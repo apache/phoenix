@@ -1425,7 +1425,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                             row.clear();
                             continue;
                         }
-                        keys.add(PVarbinary.INSTANCE.getKeyRange(CellUtil.cloneRow(row.get(0)), SortOrder.ASC));
+                        keys.add(PVarbinary.INSTANCE.getKeyRange(CellUtil.cloneRow(row.get(0)),
+                            SortOrder.ASC));
                         rowCount++;
                     }
                     row.clear();

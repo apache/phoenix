@@ -97,8 +97,11 @@ import edu.umd.cs.findbugs.annotations.NonNull;
  * @since 0.1
  */
 public class WhereOptimizer {
-    private static final List<KeyRange> EVERYTHING_RANGES = Collections.<KeyRange>singletonList(KeyRange.EVERYTHING_RANGE);
-    private static final List<KeyRange> SALT_PLACEHOLDER = Collections.singletonList(PChar.INSTANCE.getKeyRange(QueryConstants.SEPARATOR_BYTE_ARRAY, SortOrder.ASC));
+    private static final List<KeyRange> EVERYTHING_RANGES =
+            Collections.<KeyRange> singletonList(KeyRange.EVERYTHING_RANGE);
+    private static final List<KeyRange> SALT_PLACEHOLDER =
+            Collections.singletonList(
+                PChar.INSTANCE.getKeyRange(QueryConstants.SEPARATOR_BYTE_ARRAY, SortOrder.ASC));
 
     private WhereOptimizer() {
     }

@@ -125,11 +125,12 @@ public class CachedLocalTable implements LocalHBaseState {
             Collection<? extends Mutation> dataTableMutationsWithSameRowKeyAndTimestamp,
             PhoenixIndexMetaData indexMetaData,
             Region region) throws IOException {
-        Set<KeyRange> keys = new HashSet<KeyRange>(dataTableMutationsWithSameRowKeyAndTimestamp.size());
+        Set<KeyRange> keys =
+                new HashSet<KeyRange>(dataTableMutationsWithSameRowKeyAndTimestamp.size());
         for (Mutation mutation : dataTableMutationsWithSameRowKeyAndTimestamp) {
-          if (indexMetaData.requiresPriorRowState(mutation)) {
-            keys.add(PVarbinary.INSTANCE.getKeyRange(mutation.getRow(), SortOrder.ASC));
-          }
+            if (indexMetaData.requiresPriorRowState(mutation)) {
+                keys.add(PVarbinary.INSTANCE.getKeyRange(mutation.getRow(), SortOrder.ASC));
+            }
         }
         if (keys.isEmpty()) {
             return new CachedLocalTable(Collections.emptyMap(), region);

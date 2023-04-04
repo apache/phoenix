@@ -174,7 +174,8 @@ public class PhoenixTxIndexMutationGenerator {
         if (!findPriorValueMutations.isEmpty()) {
             List<KeyRange> keys = Lists.newArrayListWithExpectedSize(mutations.size());
             for (ImmutableBytesPtr ptr : findPriorValueMutations.keySet()) {
-                keys.add(PVarbinary.INSTANCE.getKeyRange(ptr.copyBytesIfNecessary(), SortOrder.ASC));
+                keys.add(
+                    PVarbinary.INSTANCE.getKeyRange(ptr.copyBytesIfNecessary(), SortOrder.ASC));
             }
             Scan scan = new Scan();
             // Project all mutable columns
