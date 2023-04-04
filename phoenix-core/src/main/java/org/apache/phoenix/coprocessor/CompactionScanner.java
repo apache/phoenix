@@ -278,7 +278,7 @@ public class CompactionScanner implements InternalScanner {
          * KeepDeletedCells is TRUE
          *
          */
-        private boolean retainInsideTTLWindow(List<Cell> result,
+        private void retainInsideTTLWindow(List<Cell> result,
                 CompactionRowVersion rowVersion, RowContext rowContext) {
             if (rowContext.familyDeleteMarker == null && rowContext.familyVersionDeleteMarker == null) {
                 // The compaction row version is alive
@@ -298,7 +298,6 @@ public class CompactionScanner implements InternalScanner {
                 // Set it to null so it will be used once
                 rowContext.familyVersionDeleteMarker = null;
             }
-            return true;
         }
 
         /**
@@ -309,7 +308,7 @@ public class CompactionScanner implements InternalScanner {
          * 2. Delete row versions whose delete markers are inside the TTL window and
          *    KeepDeletedCells is TTL are retained
          */
-        private boolean retainOutsideTTLWindow(List<Cell> result,
+        private void retainOutsideTTLWindow(List<Cell> result,
                 CompactionRowVersion rowVersion, RowContext rowContext) {
             if (rowContext.familyDeleteMarker == null
                     && rowContext.familyVersionDeleteMarker == null) {
@@ -334,15 +333,14 @@ public class CompactionScanner implements InternalScanner {
                 // Set it to null so it will be used once
                 rowContext.familyVersionDeleteMarker = null;
             }
-            return true;
         }
 
-        private boolean prepareResults(List<Cell> result, CompactionRowVersion rowVersion,
+        private void prepareResults(List<Cell> result, CompactionRowVersion rowVersion,
                 RowContext rowContext) {
             if (rowVersion.ts >= ttlWindowStart) {
-                return retainInsideTTLWindow(result, rowVersion, rowContext);
+                retainInsideTTLWindow(result, rowVersion, rowContext);
             } else {
-                return retainOutsideTTLWindow(result, rowVersion, rowContext);
+                retainOutsideTTLWindow(result, rowVersion, rowContext);
             }
         }
 
@@ -459,6 +457,11 @@ public class CompactionScanner implements InternalScanner {
             }
         }
 
+        /**
+         * Group the cells that are ordered lexicographically into columns based on
+         * the pair of family name and column qualifier. While doing that also add the delete
+         * markers to a separate list.
+         */
         private void formColumns(List<Cell> result, LinkedList<LinkedList<Cell>> columns,
                 List<Cell> deleteMarkers) {
             Cell currentColumnCell = null;
@@ -572,10 +575,16 @@ public class CompactionScanner implements InternalScanner {
             }
         }
 
-        private void closeGap(long max, long min, List<Cell> from, List<Cell> to) {
+        /**
+         * Close the gap between the two timestamps, max and min, with the minimum number of cells
+         * from the input list such that the timestamp difference between two cells should
+         * not more than ttl. The cells that are used to close the gap are added to the output
+         * list.
+         */
+        private void closeGap(long max, long min, List<Cell> input, List<Cell> output) {
             int  previous = -1;
             long ts;
-            for (Cell cell : from) {
+            for (Cell cell : input) {
                 ts = cell.getTimestamp();
                 if (ts >= max) {
                     previous++;
@@ -585,10 +594,10 @@ public class CompactionScanner implements InternalScanner {
                     break;
                 }
                 if (max - ts > ttl) {
-                    max = from.get(previous).getTimestamp();
-                    to.add(from.remove(previous));
+                    max = input.get(previous).getTimestamp();
+                    output.add(input.remove(previous));
                     if (max - min > ttl) {
-                        closeGap(max, min, from, to);
+                        closeGap(max, min, input, output);
                     }
                     return;
                 }
@@ -772,12 +781,6 @@ public class CompactionScanner implements InternalScanner {
             }
         }
 
-        private int compareQualifiers(Cell a, Cell b) {
-            return Bytes.compareTo(a.getQualifierArray(), a.getQualifierOffset(),
-                    a.getQualifierLength(),
-                    b.getQualifierArray(), b.getQualifierOffset(), a.getQualifierLength());
-        }
-
         private int compareTypes(Cell a, Cell b) {
             Cell.Type aType = a.getType();
             Cell.Type bType = b.getType();
@@ -803,85 +806,53 @@ public class CompactionScanner implements InternalScanner {
             return 1;
         }
 
+        private int compare(Cell a, Cell b) {
+            int result;
+            result = Bytes.compareTo(a.getFamilyArray(), a.getFamilyOffset(),
+                    a.getFamilyLength(),
+                    b.getFamilyArray(), b.getFamilyOffset(), b.getFamilyLength());
+            if (result != 0) {
+                return result;
+            }
+            result = compareTypes(a, b);
+            if (result != 0) {
+                return result;
+            }
+            return Bytes.compareTo(a.getQualifierArray(), a.getQualifierOffset(),
+                    a.getQualifierLength(),
+                    b.getQualifierArray(), b.getQualifierOffset(), b.getQualifierLength());
+        }
+
         /**
          * The generates the intersection of regionResult and input. The result is the resulting
          * intersection.
          */
-        private void trimRegionResult(List<Cell> regionResult, List<Cell> input, List<Cell> result) {
+        private void trimRegionResult(List<Cell> regionResult, List<Cell> input,
+                List<Cell> result) {
+            if (regionResult.isEmpty()) {
+                return;
+            }
             int index = 0;
             int size = regionResult.size();
-            int compare = 0;
-
+            int compare;
             for (Cell originalCell : input) {
-                if (index == size) {
-                    break;
-                }
                 Cell regionCell = regionResult.get(index);
-                while (!CellUtil.matchingFamily(originalCell, regionCell)) {
+                compare = compare(originalCell, regionCell);
+                while (compare > 0) {
                     index++;
                     if (index == size) {
                         break;
                     }
                     regionCell = regionResult.get(index);
+                    compare = compare(originalCell, regionCell);
                 }
-                if (index == size) {
-                    break;
-                }
-                compare = compareTypes(originalCell, regionCell);
-                while  (compare > 0) {
+                if (compare == 0) {
+                    result.add(originalCell);
                     index++;
                     if (index == size) {
                         break;
                     }
-                    regionCell = regionResult.get(index);
-                    if (!CellUtil.matchingFamily(originalCell, regionCell)) {
-                        break;
-                    }
-                    compare = compareTypes(originalCell, regionCell);
                 }
-                if (index == size || !CellUtil.matchingFamily(originalCell, regionCell)) {
-                    break;
-                }
-                if (compare != 0) {
-                    continue;
-                }
-                compare = compareQualifiers(originalCell, regionCell);
-                while  (compare > 0) {
-                    index++;
-                    if (index == size) {
-                        break;
-                    }
-                    regionCell = regionResult.get(index);
-                    if (!CellUtil.matchingFamily(originalCell, regionCell)) {
-                        break;
-                    }
-                    compare = compareQualifiers(originalCell, regionCell);
-                }
-                if (index == size || !CellUtil.matchingFamily(originalCell, regionCell)) {
-                    break;
-                }
-                if (compare != 0 || originalCell.getTimestamp() > regionCell.getTimestamp()) {
-                    continue;
-                }
-                while (originalCell.getTimestamp() < regionCell.getTimestamp()) {
-                    index++;
-                    if (index == size) {
-                        break;
-                    }
-                    regionCell = regionResult.get(index);
-                    if (!CellUtil.matchingColumn(originalCell, regionCell)) {
-                        break;
-                    }
-                }
-                if (index == size) {
-                    break;
-                }
-                if (!CellUtil.matchingColumn(originalCell, regionCell) ||
-                        originalCell.getTimestamp() != regionCell.getTimestamp()) {
-                    continue;
-                }
-                result.add(originalCell);
-                index++;
             }
         }
 
