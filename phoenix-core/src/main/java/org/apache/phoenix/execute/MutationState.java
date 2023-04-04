@@ -956,7 +956,7 @@ public class MutationState implements SQLCloseable {
                 }
             }
         } catch(Throwable e) {
-            if(table != null) {
+            if (table != null) {
                 TableMetricsManager.updateMetricsForSystemCatalogTableMethod(table.getTableName().toString(),
                         NUM_METADATA_LOOKUP_FAILURES, 1);
             }
@@ -1507,13 +1507,13 @@ public class MutationState implements SQLCloseable {
 
                     if (allUpsertsMutations ^ allDeletesMutations) {
                         //success cases are updated for both cases autoCommit=true and conn.commit explicit
-                        if(areAllBatchesSuccessful){
+                        if (areAllBatchesSuccessful){
                             TableMetricsManager
                                     .updateMetricsMethod(htableNameStr, allUpsertsMutations ? UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER :
                                             DELETE_AGGREGATE_SUCCESS_SQL_COUNTER, 1);
                         }
                         //Failures cases are updated only for conn.commit explicit case.
-                        if(!areAllBatchesSuccessful && !connection.getAutoCommit()){
+                        if (!areAllBatchesSuccessful && !connection.getAutoCommit()){
                             TableMetricsManager.updateMetricsMethod(htableNameStr, allUpsertsMutations ? UPSERT_AGGREGATE_FAILURE_SQL_COUNTER :
                                     DELETE_AGGREGATE_FAILURE_SQL_COUNTER, 1);
                         }
@@ -2243,4 +2243,7 @@ public class MutationState implements SQLCloseable {
         timeInExecuteMutationMap.clear();
     }
 
+    public boolean isEmpty() {
+        return mutationsMap != null ? mutationsMap.isEmpty() : true;
+    }
 }
