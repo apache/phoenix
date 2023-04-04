@@ -474,14 +474,15 @@ public class Transform {
         getMetadataDifference(connection, systemTransformRecord, columnNames, columnValues);
         // TODO In the future, we need to handle rowkey changes and column type changes as well
 
-        String
-            changeViewStmt = "UPSERT INTO SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME %s) VALUES (?, ?, ? %s)";
+        String changeViewStmt = "UPSERT INTO SYSTEM.CATALOG "
+            + "(TENANT_ID, TABLE_SCHEM, TABLE_NAME %s) VALUES (?, ?, ? %s)";
 
         String
                 changeTable = String.format("UPSERT INTO SYSTEM.CATALOG "
                 + "(TENANT_ID, TABLE_SCHEM, TABLE_NAME, PHYSICAL_TABLE_NAME %s ) "
-                + "VALUES(?, ?, ?, ? %s)", (columnNames.size() > 0? "," + String.join(",", columnNames):""),
-            (columnNames.size() > 0? "," + QueryUtil.getDynamicParams(columnValues.size()):""));
+                + "VALUES(?, ?, ?, ? %s)", columnNames.size() > 0 ? ","
+                + String.join(",", columnNames) : "",
+            columnNames.size() > 0 ? "," + QueryUtil.getDynamicParams(columnValues.size()) : "");
 
         LOGGER.info("About to do cutover via " + changeTable);
         TableViewFinderResult childViewsResult = ViewUtil.findChildViews(connection, tenantId, schema, tableName);
@@ -491,8 +492,8 @@ public class Transform {
         try {
             try (PreparedStatement stmt = connection.prepareStatement(changeTable)) {
                 int param = 0;
-                stmt.setString(++param, (tenantId==null? null: ("'" + tenantId + "'")));
-                stmt.setString(++param, (schema==null ? null : ("'" + schema + "'")));
+                stmt.setString(++param, tenantId == null ? null : ("'" + tenantId + "'"));
+                stmt.setString(++param,     schema == null ? null : ("'" + schema + "'"));
                 stmt.setString(++param, tableName);
                 stmt.setString(++param, newTableName);
                 for (int i = 0; i < columnValues.size(); i++) {
@@ -529,15 +530,18 @@ public class Transform {
             int batchSize = 0;
             for (TableInfo view : childViewsResult.getLinks()) {
                 String changeView = String.format(changeViewStmt,
-                    (columnNames.size() > 0? "," + String.join(",", columnNames):""),
-                    (columnNames.size() > 0? "," + QueryUtil.getDynamicParams(columnValues.size()):""));
+                    columnNames.size() > 0 ? "," + String.join(",", columnNames) : "",
+                    columnNames.size() > 0 ? ","
+                        + QueryUtil.getDynamicParams(columnValues.size()) : "");
                 LOGGER.info("Cutover changing view via " + changeView);
                 try (PreparedStatement stmt = connection.prepareStatement(changeView)) {
                     int param = 0;
-                    stmt.setString(++param, (view.getTenantId()==null || view.getTenantId().length == 0?
-                        null: ("'" + Bytes.toString(view.getTenantId()) + "'")));
-                    stmt.setString(++param, (view.getSchemaName()==null || view.getSchemaName().length == 0?
-                        null : ("'" + Bytes.toString(view.getSchemaName()) + "'")));
+                    stmt.setString(++param, view.getTenantId() == null
+                        || view.getTenantId().length == 0 ? null
+                        : ("'" + Bytes.toString(view.getTenantId()) + "'"));
+                    stmt.setString(++param, view.getSchemaName() == null
+                        || view.getSchemaName().length == 0 ? null
+                        : ("'" + Bytes.toString(view.getSchemaName()) + "'"));
                     stmt.setString(++param, Bytes.toString(view.getTableName()));
                     for (int i = 0; i < columnValues.size(); i++) {
                         stmt.setInt(++param, Integer.parseInt(columnValues.get(i)));

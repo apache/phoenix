@@ -916,11 +916,12 @@ public class MetaDataUtil {
         String schemaName = getViewIndexSequenceSchemaName(name, isNamespaceMapped);
         String sequenceName = getViewIndexSequenceName(name, null, isNamespaceMapped);
         String delQuery = String.format(" DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
-            + " WHERE " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA  + " %s AND " + PhoenixDatabaseMetaData.SEQUENCE_NAME + " = ? ",
-            (schemaName.length() > 0 ? "= ? " : " IS NULL"));
+                + " WHERE " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA  + " %s AND "
+                + PhoenixDatabaseMetaData.SEQUENCE_NAME + " = ? ",
+            schemaName.length() > 0 ? "= ? " : " IS NULL");
         try (PreparedStatement stmt = connection.prepareStatement(delQuery)) {
             if (schemaName.length() > 0) {
-                stmt.setString(1,schemaName);
+                stmt.setString(1, schemaName);
                 stmt.setString(2, sequenceName);
             } else {
                 stmt.setString(1, sequenceName);
@@ -1222,15 +1223,16 @@ public class MetaDataUtil {
                 }
                 buf.setCharAt(buf.length() - 1, ')');
             }
-            try(PreparedStatement stmt = connection.prepareStatement(buf.toString())) {
+            try (PreparedStatement stmt = connection.prepareStatement(buf.toString())) {
                 int param = 0;
                 Iterator itr = physicalTablesSet.iterator();
                 while (itr.hasNext()) {
-                    stmt.setString(++param,itr.next().toString());
+                    stmt.setString(++param, itr.next().toString());
                 }
-                if (table.getIndexType()==IndexType.LOCAL && (!table.getColumnFamilies().isEmpty())) {
-                    for(PColumnFamily cf : table.getColumnFamilies()) {
-                        stmt.setString(++param,cf.getName().getString());
+                if (table.getIndexType() == IndexType.LOCAL
+                    && !table.getColumnFamilies().isEmpty()) {
+                    for (PColumnFamily cf : table.getColumnFamilies()) {
+                        stmt.setString(++param, cf.getName().getString());
                     }
                 }
                 stmt.execute();

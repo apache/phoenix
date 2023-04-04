@@ -1164,16 +1164,18 @@ public class MetaDataClient {
     private long updateStatisticsInternal(PName physicalName, PTable logicalTable, Map<String, Object> statsProps, List<byte[]> cfs, boolean checkLastStatsUpdateTime) throws SQLException {
         ReadOnlyProps props = connection.getQueryServices().getProps();
         final long msMinBetweenUpdates = props
-                .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_MIN_STATS_UPDATE_FREQ_MS);
+            .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB,
+                QueryServicesOptions.DEFAULT_MIN_STATS_UPDATE_FREQ_MS);
         Long scn = connection.getSCN();
         // Always invalidate the cache
         long clientTimeStamp = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
         long msSinceLastUpdate = Long.MAX_VALUE;
         if (checkLastStatsUpdateTime) {
-            String query = "SELECT CURRENT_DATE()," + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
-                    + " WHERE " + PHYSICAL_NAME + "= ?  AND " + COLUMN_FAMILY
-                    + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
-            try(PreparedStatement stmt = connection.prepareStatement(query)) {
+            String query = "SELECT CURRENT_DATE()," + LAST_STATS_UPDATE_TIME + " FROM "
+                + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
+                + " WHERE " + PHYSICAL_NAME + "= ?  AND " + COLUMN_FAMILY
+                + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
+            try (PreparedStatement stmt = connection.prepareStatement(query)) {
                 stmt.setString(1, physicalName.getString());
                 ResultSet rs = stmt.executeQuery(query);
                 if (rs.next()) {
@@ -5035,7 +5037,7 @@ public class MetaDataClient {
                     } else {
                         Long scn = connection.getSCN();
                         long ts = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
-                        MutationPlan plan = new PostDDLCompiler(connection).compile(Collections.singletonList(indexRef), null, null, Collections.<PColumn>emptyList(), ts);
+                             MutationPlan plan = new PostDDLCompiler(connection).compile(Collections.singletonList(indexRef), null, null, Collections.<PColumn>emptyList(), ts);
                         connection.getQueryServices().updateData(plan);
                     }
                     NamedTableNode dataTableNode = NamedTableNode.create(null,

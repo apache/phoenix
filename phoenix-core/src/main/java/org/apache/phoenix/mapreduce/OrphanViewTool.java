@@ -438,32 +438,33 @@ public class OrphanViewTool extends Configured implements Tool {
     }
 
     private void removeLink(PhoenixConnection phoenixConnection, Key src, Key dst, PTable.LinkType linkType) throws Exception {
-        String delTable = ((linkType == PTable.LinkType.PHYSICAL_TABLE || linkType == PTable.LinkType.PARENT_TABLE) ?
-            SYSTEM_CATALOG_NAME : SYSTEM_CHILD_LINK_NAME);
+        String delTable = (linkType == PTable.LinkType.PHYSICAL_TABLE
+            || linkType == PTable.LinkType.PARENT_TABLE) ? SYSTEM_CATALOG_NAME
+            : SYSTEM_CHILD_LINK_NAME;
 
         String deleteQuery = String.format(" DELETE FROM %s WHERE " +  TENANT_ID + " %s  AND "
-            + TABLE_SCHEM + " %s AND " + TABLE_NAME + " = ? " + COLUMN_NAME + " %s AND "
+            + TABLE_SCHEM + " %s AND " + TABLE_NAME + " = ? AND " + COLUMN_NAME + " %s AND "
             + COLUMN_FAMILY + " = ? ", delTable,
-            (src.getTenantId() == null ? " IS NULL" : " = ? "),
-            (src.getSchemaName() == null ? " IS NULL " : " = ? "),
-            (dst.getTenantId() == null ? " IS NULL" : " = ?"));
+            src.getTenantId() == null ? " IS NULL" : " = ? ",
+            src.getSchemaName() == null ? " IS NULL " : " = ? ",
+            dst.getTenantId() == null ? " IS NULL" : " = ?");
 
-        try(PreparedStatement stmt = phoenixConnection.prepareStatement(deleteQuery)) {
+        try (PreparedStatement stmt = phoenixConnection.prepareStatement(deleteQuery)) {
             int param = 0;
             if (src.getTenantId() != null) {
-                stmt.setString(++param,src.getTenantId());
+                stmt.setString(++param, src.getTenantId());
             }
             if (src.getSchemaName() != null) {
-                stmt.setString(++param,src.getSchemaName());
+                stmt.setString(++param, src.getSchemaName());
             }
-            stmt.setString(++param,src.getTableName());
+            stmt.setString(++param, src.getTableName());
             if (dst.getTenantId() != null) {
-                stmt.setString(++param,dst.getTenantId());
+                stmt.setString(++param, dst.getTenantId());
             }
             if (dst.getSchemaName() == null) {
-                stmt.setString(++param,dst.getTableName());
+                stmt.setString(++param, dst.getTableName());
             } else {
-                stmt.setString(++param,dst.getSchemaName() + "." +dst.getTableName());
+                stmt.setString(++param, dst.getSchemaName() + "." + dst.getTableName());
             }
             stmt.execute();
             phoenixConnection.commit();
@@ -521,36 +522,41 @@ public class OrphanViewTool extends Configured implements Tool {
             }
         }
     }
+
+
     private void forcefullyDropView(PhoenixConnection phoenixConnection,
                                     Key key) throws Exception {
-        String deleteRowsFromCatalog = String.format("DELETE FROM " + SYSTEM_CATALOG_NAME + " WHERE " + TENANT_ID
-            + " %s  AND " + TABLE_SCHEM + " %s  AND " + TABLE_NAME + " =  ? ",
-            (key.getTenantId() == null ? " IS NULL" : " = ? "),
-            (key.getSchemaName() == null ? " IS NULL " : " = ? "));
-        String deleteRowsFromChildLink = String.format("DELETE FROM " + SYSTEM_CHILD_LINK_NAME +
-            " WHERE " + COLUMN_NAME + " %s  AND " +  COLUMN_FAMILY + " = ? ",
-            (key.getTenantId() == null ? " IS NULL" : " = ? "));
+        String deleteRowsFromCatalog = String.format("DELETE FROM " + SYSTEM_CATALOG_NAME
+                + " WHERE " + TENANT_ID + " %s  AND " + TABLE_SCHEM + " %s  AND "
+                + TABLE_NAME + " =  ? ",
+            key.getTenantId() == null ? " IS NULL" : " = ? ",
+            key.getSchemaName() == null ? " IS NULL " : " = ? ");
+        String deleteRowsFromChildLink = String.format("DELETE FROM " + SYSTEM_CHILD_LINK_NAME
+                + " WHERE " + COLUMN_NAME + " %s  AND " +  COLUMN_FAMILY + " = ? ",
+            key.getTenantId() == null ? " IS NULL" : " = ? ");
         try {
-            try (PreparedStatement delSysCat = phoenixConnection.prepareStatement(deleteRowsFromCatalog)) {
+            try (PreparedStatement delSysCat =
+                phoenixConnection.prepareStatement(deleteRowsFromCatalog)) {
                 int param = 0;
                 if (key.getTenantId() != null) {
                     delSysCat.setString(++param, key.getTenantId());
                 }
-                if(key.getSchemaName() != null) {
+                if (key.getSchemaName() != null) {
                     delSysCat.setString(++param, key.getSchemaName());
                 }
-                delSysCat.setString(++param,key.getTableName());
+                delSysCat.setString(++param, key.getTableName());
                 delSysCat.execute();
             }
-            try(PreparedStatement delChLink = phoenixConnection.prepareStatement(deleteRowsFromChildLink)) {
+            try (PreparedStatement delChLink =
+                phoenixConnection.prepareStatement(deleteRowsFromChildLink)) {
                 int param = 0;
-                if(key.getTenantId() != null) {
+                if (key.getTenantId() != null) {
                     delChLink.setString(++param,key.getTenantId());
                 }
                 if (key.getSchemaName() == null) {
-                    delChLink.setString(++param,key.getTableName());
+                    delChLink.setString(++param, key.getTableName());
                 } else {
-                    delChLink.setString(++param,(key.getSchemaName() + "." + key.getTableName()));
+                    delChLink.setString(++param,  key.getSchemaName() + "." + key.getTableName());
                 }
                 delChLink.execute();
             }

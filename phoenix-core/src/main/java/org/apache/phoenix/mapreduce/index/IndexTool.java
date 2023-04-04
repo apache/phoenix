@@ -599,22 +599,25 @@ public class IndexTool extends Configured implements Tool {
         }
         
         private long getMaxRebuildAsyncDate(String schemaName, List<String> disableIndexes) throws SQLException {
-            Long maxRebuilAsyncDate=HConstants.LATEST_TIMESTAMP;
-            Long maxDisabledTimeStamp=0L;
-            if (disableIndexes == null || disableIndexes.isEmpty()) { return 0; }
+            Long maxRebuilAsyncDate = HConstants.LATEST_TIMESTAMP;
+            Long maxDisabledTimeStamp = 0L;
+            if (disableIndexes == null || disableIndexes.isEmpty()) {
+                return 0;
+            }
             List<String> quotedIndexes = new ArrayList<String>(disableIndexes.size());
             for (String index : disableIndexes) {
                 quotedIndexes.add("'" + index + "'");
             }
 
-            String query = String.format("SELECT MAX(" + ASYNC_REBUILD_TIMESTAMP + "),MAX("+INDEX_DISABLE_TIMESTAMP+") FROM "
-                + SYSTEM_CATALOG_NAME + " (" + ASYNC_REBUILD_TIMESTAMP + " BIGINT) WHERE " + TABLE_SCHEM
-                    +  " %s  AND " + TABLE_NAME + " IN ( %s )",
-                        ((schemaName != null && schemaName.length() > 0) ? " = ? " : " IS NULL "),
+            String query = String.format("SELECT MAX(" + ASYNC_REBUILD_TIMESTAMP + "), "
+                    + "MAX(" + INDEX_DISABLE_TIMESTAMP + ") FROM "
+                    + SYSTEM_CATALOG_NAME + " (" + ASYNC_REBUILD_TIMESTAMP
+                    + " BIGINT) WHERE " + TABLE_SCHEM +  " %s  AND " + TABLE_NAME + " IN ( %s )",
+                        (schemaName != null && schemaName.length() > 0) ? " = ? " : " IS NULL ",
                 StringUtils.join(",", quotedIndexes));
             try (PreparedStatement stmt = connection.prepareStatement(query)) {
-                if ((schemaName != null && schemaName.length() > 0)) {
-                    stmt.setString(1,schemaName);
+                if (schemaName != null && schemaName.length() > 0) {
+                    stmt.setString(1, schemaName);
                 }
                 ResultSet rs = stmt.executeQuery();
                 if (rs.next()) {
