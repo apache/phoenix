@@ -91,7 +91,7 @@ public class PhoenixStatementTest extends BaseConnectionlessQueryTest {
     @Test
     /**
      * Validates if a user sets the timeout to zero that we store the timeout
-     * in millis as the Integer.MAX_VALUE. 
+     * in millis as the Integer.MAX_VALUE.
      */
     public void testSettingZeroQueryTimeoutViaJdbc() throws Exception {
         // Arrange
@@ -117,7 +117,7 @@ public class PhoenixStatementTest extends BaseConnectionlessQueryTest {
         Statement stmt = connection.createStatement();
         PhoenixStatement phoenixStmt = stmt.unwrap(PhoenixStatement.class);
         PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);
-        int defaultQueryTimeout = phoenixConnection.getQueryServices().getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, 
+        int defaultQueryTimeout = phoenixConnection.getQueryServices().getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
             QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
 
         // Act

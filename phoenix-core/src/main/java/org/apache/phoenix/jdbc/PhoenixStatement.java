@@ -543,7 +543,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 isDelete = stmt instanceof ExecutableDeleteStatement;
                                 isAtomicUpsert = isUpsert && ((ExecutableUpsertStatement)stmt).getOnDupKeyPairs() != null;
                                 if (plan.getTargetRef() != null && plan.getTargetRef().getTable() != null) {
-                                    if(!Strings.isNullOrEmpty(plan.getTargetRef().getTable().getPhysicalName().toString())) {
+                                    if (!Strings.isNullOrEmpty(plan.getTargetRef().getTable().getPhysicalName().toString())) {
                                         tableName = plan.getTargetRef().getTable().getPhysicalName().toString();
                                     }
                                     if (plan.getTargetRef().getTable().isTransactional()) {
