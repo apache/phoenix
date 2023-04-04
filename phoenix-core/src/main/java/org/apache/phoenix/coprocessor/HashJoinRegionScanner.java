@@ -296,17 +296,29 @@ public class HashJoinRegionScanner implements RegionScanner {
 
     @Override
     public boolean nextRaw(List<Cell> result) throws IOException {
+        return nextRaw(result, null);
+    }
+
+    @Override
+    public boolean nextRaw(List<Cell> result, ScannerContext scannerContext)
+            throws IOException {
         try {
             long startTime = EnvironmentEdgeManager.currentTimeMillis();
             while (shouldAdvance()) {
-                hasMore = scanner.nextRaw(result);
-                if (isDummy(result)) {
-                    return true;
-                }
-                if (result.isEmpty()) {
-                    return hasMore;
+                if (scannerContext == null) {
+                    hasMore = scanner.nextRaw(result);
+
+                    if (isDummy(result)) {
+                        return true;
+                    }
+                    if (result.isEmpty()) {
+                        return hasMore;
+                    }
+                } else {
+                    hasMore = scanner.nextRaw(result, scannerContext);
                 }
                 Cell cell = result.get(0);
+
                 processResults(result, false);
                 if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
                     byte[] rowKey = CellUtil.cloneRow(cell);
@@ -322,12 +334,6 @@ public class HashJoinRegionScanner implements RegionScanner {
             ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
             return false; // impossible
         }
-    }
-
-    @Override
-    public boolean nextRaw(List<Cell> result, ScannerContext scannerContext)
-            throws IOException {
-        throw new IOException("Next with scannerContext should not be called in Phoenix environment");
     }
 
     @Override
@@ -347,7 +353,8 @@ public class HashJoinRegionScanner implements RegionScanner {
 
     @Override
     public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        throw new IOException("Next with scannerContext should not be called in Phoenix environment");
+        throw new DelegateRegionScanner.ScannerContextNextNotImplementedException
+                ("Next with scannerContext should not be called in Phoenix environment");
     }
 
     @Override

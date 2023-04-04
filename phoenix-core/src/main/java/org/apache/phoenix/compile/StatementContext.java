@@ -19,12 +19,7 @@ package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
 import java.text.Format;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TimeZone;
+import java.util.*;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -49,7 +44,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.NumberUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
-
 
 /**
  *
@@ -84,6 +78,7 @@ public class StatementContext {
     private QueryLogger queryLogger;
     private boolean isClientSideUpsertSelect;
     private boolean isUncoveredIndex;
+    private Set<StatementContext> subStatementContexts;
     
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
@@ -132,6 +127,7 @@ public class StatementContext {
         this.readMetricsQueue = new ReadMetricQueue(isRequestMetricsEnabled,connection.getLogLevel());
         this.overAllQueryMetrics = new OverAllQueryMetrics(isRequestMetricsEnabled,connection.getLogLevel());
         this.retryingPersistentCache = Maps.<Long, Boolean> newHashMap();
+        this.subStatementContexts = new HashSet<StatementContext>();
     }
 
     /**
@@ -354,5 +350,13 @@ public class StatementContext {
         } else {
             return retrying;
         }
+    }
+
+    public void addSubStatementContext(StatementContext sub) {
+        subStatementContexts.add(sub);
+    }
+
+    public Set<StatementContext> getSubStatementContexts() {
+        return subStatementContexts;
     }
 }

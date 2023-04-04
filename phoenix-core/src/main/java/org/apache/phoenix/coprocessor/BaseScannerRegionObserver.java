@@ -330,7 +330,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             @Override
             public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
                 overrideDelegate();
-                boolean res = super.next(result);
+                boolean res = super.next(result, scannerContext);
                 ScannerContextUtil.incrementSizeProgress(scannerContext, result);
                 return res;
             }
@@ -344,7 +344,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             @Override
             public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
                 overrideDelegate();
-                boolean res = super.nextRaw(result);
+                boolean res = super.nextRaw(result, scannerContext);
                 ScannerContextUtil.incrementSizeProgress(scannerContext, result);
                 return res;
             }
