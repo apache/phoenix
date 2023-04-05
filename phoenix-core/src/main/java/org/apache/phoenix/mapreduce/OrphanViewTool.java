@@ -551,7 +551,7 @@ public class OrphanViewTool extends Configured implements Tool {
                 phoenixConnection.prepareStatement(deleteRowsFromChildLink)) {
                 int param = 0;
                 if (key.getTenantId() != null) {
-                    delChLink.setString(++param,key.getTenantId());
+                    delChLink.setString(++param, key.getTenantId());
                 }
                 if (key.getSchemaName() == null) {
                     delChLink.setString(++param, key.getTableName());

@@ -52,7 +52,6 @@ import org.apache.phoenix.util.TableViewFinderResult;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.util.QueryUtil;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -492,8 +491,16 @@ public class Transform {
         try {
             try (PreparedStatement stmt = connection.prepareStatement(changeTable)) {
                 int param = 0;
-                stmt.setString(++param, tenantId == null ? null : ("'" + tenantId + "'"));
-                stmt.setString(++param,     schema == null ? null : ("'" + schema + "'"));
+                if (tenantId == null) {
+                    stmt.setNull(++param, Types.VARCHAR);
+                } else {
+                    stmt.setString(++param, tenantId);
+                }
+                if (schema == null) {
+                    stmt.setNull(++param, Types.VARCHAR);
+                } else {
+                    stmt.setString(++param, schema);
+                }
                 stmt.setString(++param, tableName);
                 stmt.setString(++param, newTableName);
                 for (int i = 0; i < columnValues.size(); i++) {
@@ -536,12 +543,16 @@ public class Transform {
                 LOGGER.info("Cutover changing view via " + changeView);
                 try (PreparedStatement stmt = connection.prepareStatement(changeView)) {
                     int param = 0;
-                    stmt.setString(++param, view.getTenantId() == null
-                        || view.getTenantId().length == 0 ? null
-                        : ("'" + Bytes.toString(view.getTenantId()) + "'"));
-                    stmt.setString(++param, view.getSchemaName() == null
-                        || view.getSchemaName().length == 0 ? null
-                        : ("'" + Bytes.toString(view.getSchemaName()) + "'"));
+                    if (view.getTenantId() == null || view.getTenantId().length == 0) {
+                        stmt.setNull(++param, Types.VARCHAR);
+                    } else {
+                        stmt.setString(++param, Bytes.toString(view.getTenantId()));
+                    }
+                    if (view.getSchemaName() == null || view.getSchemaName().length == 0) {
+                        stmt.setNull(++param, Types.VARCHAR);
+                    } else {
+                        stmt.setString(++param, Bytes.toString(view.getSchemaName()));
+                    }
                     stmt.setString(++param, Bytes.toString(view.getTableName()));
                     for (int i = 0; i < columnValues.size(); i++) {
                         stmt.setInt(++param, Integer.parseInt(columnValues.get(i)));

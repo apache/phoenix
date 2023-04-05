@@ -1208,7 +1208,7 @@ public class MetaDataUtil {
                 physicalTablesSet.add(s.getPhysicalNames().get(0).getString());
             }
             StringBuilder buf = new StringBuilder("DELETE FROM SYSTEM.STATS WHERE PHYSICAL_NAME IN (");
-            for(int i=0; i<physicalTablesSet.size();i++) {
+            for (int i = 0; i < physicalTablesSet.size(); i++) {
                 buf.append(" ?,");
             }
             buf.setCharAt(buf.length() - 1, ')');

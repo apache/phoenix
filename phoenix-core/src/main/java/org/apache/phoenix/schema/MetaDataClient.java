@@ -4486,7 +4486,7 @@ public class MetaDataClient {
         }
         buf.setCharAt(buf.length()-1, ')');
 
-        try(PreparedStatement stmt = connection.prepareStatement(buf.toString())) {
+        try (PreparedStatement stmt = connection.prepareStatement(buf.toString())) {
             stmt.execute();
         }
         Collections.sort(columnsToDrop,new Comparator<PColumn> () {
