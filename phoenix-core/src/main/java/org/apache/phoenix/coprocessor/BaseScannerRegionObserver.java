@@ -363,8 +363,12 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             }
             @Override
             public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
-                return new RegionScannerHolder(c, scan,
-                        ((DelegateRegionScanner) delegate).getNewRegionScanner(scan));
+                try {
+                    return new RegionScannerHolder(c, scan,
+                            ((DelegateRegionScanner) delegate).getNewRegionScanner(scan));
+                } catch (ClassCastException e) {
+                    throw new DoNotRetryIOException(e);
+                }
             }
         }
 

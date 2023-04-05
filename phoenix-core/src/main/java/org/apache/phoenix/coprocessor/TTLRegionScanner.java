@@ -25,6 +25,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -217,7 +218,11 @@ public class TTLRegionScanner extends BaseRegionScanner {
 
     @Override
     public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
-        return new TTLRegionScanner(env, scan,
-                ((DelegateRegionScanner)delegate).getNewRegionScanner(scan));
+        try {
+            return new TTLRegionScanner(env, scan,
+                    ((DelegateRegionScanner)delegate).getNewRegionScanner(scan));
+        } catch (ClassCastException e) {
+            throw new DoNotRetryIOException(e);
+        }
     }
 }

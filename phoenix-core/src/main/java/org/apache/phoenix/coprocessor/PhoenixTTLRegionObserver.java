@@ -20,6 +20,7 @@ package org.apache.phoenix.coprocessor;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -328,7 +329,12 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
 
         @Override
         public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
-            return new PhoenixTTLRegionScanner(env, scan, ((DelegateRegionScanner)delegate).getNewRegionScanner(scan));
+            try {
+                return new PhoenixTTLRegionScanner(env, scan,
+                        ((DelegateRegionScanner)delegate).getNewRegionScanner(scan));
+            } catch (ClassCastException e) {
+                throw new DoNotRetryIOException(e);
+            }
         }
     }
 }
