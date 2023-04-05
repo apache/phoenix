@@ -50,7 +50,8 @@ public class TTLRegionScanner extends BaseRegionScanner {
     private final RegionCoprocessorEnvironment env;
     private Scan scan;
     private long rowCount = 0;
-    private long pageSize = Long.MAX_VALUE;
+    private long maxRowCount = Long.MAX_VALUE;
+    private long pageSizeMs;
     long ttl;
     long ttlWindowStart;
     byte[] emptyCQ;
@@ -62,9 +63,11 @@ public class TTLRegionScanner extends BaseRegionScanner {
         super(s);
         this.env = env;
         this.scan = scan;
+        this.pageSizeMs = ScanUtil.getPageSizeMsForRegionScanner(scan);
         emptyCQ = scan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
         emptyCF = scan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
-        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
+        long currentTime = scan.getTimeRange().getMax() == HConstants.LATEST_TIMESTAMP ?
+                EnvironmentEdgeManager.currentTimeMillis() : scan.getTimeRange().getMax();
         ttl = env.getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
         ttlWindowStart = ttl == HConstants.FOREVER ? 1 : currentTime - ttl * 1000;
         ttl *= 1000;
@@ -81,7 +84,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
         // Instead of using PageFilter for counting, we will count returned row here.
         PageFilter pageFilter = ScanUtil.removePageFilter(scan);
         if (pageFilter != null) {
-            pageSize = pageFilter.getPageSize();
+            maxRowCount = pageFilter.getPageSize();
             delegate.close();
             delegate = ((DelegateRegionScanner)delegate).getNewRegionScanner(scan);
         }
@@ -171,7 +174,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
             }
             Cell cell = result.get(0);
             result.clear();
-            if (EnvironmentEdgeManager.currentTimeMillis() - startTime > pageSize) {
+            if (EnvironmentEdgeManager.currentTimeMillis() - startTime > pageSizeMs) {
                 ScanUtil.getDummyResult(CellUtil.cloneRow(cell), result);
                 return hasMore;
             }
@@ -196,7 +199,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
             return hasMore;
         }
         rowCount++;
-        if (rowCount >= pageSize) {
+        if (rowCount >= maxRowCount) {
             return false;
         }
         return hasMore;
