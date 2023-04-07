@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -29,8 +30,10 @@ import java.util.Properties;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -49,14 +52,13 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
         tableName = generateUniqueName();
         int numRows = 1000;
         String ddl =
-            "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
+            "CREATE TABLE " + tableName + " (K INTEGER NOT NULL PRIMARY KEY, V VARCHAR)";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(ddl);
             String dml = "UPSERT INTO " + tableName + " VALUES (?, ?)";
             PreparedStatement stmt = conn.prepareStatement(dml);
             for (int i = 1; i <= numRows; i++) {
-                String key = "key" + i;
-                stmt.setString(1, key);
+                stmt.setInt(1, i);
                 stmt.setString(2, "value" + i);
                 stmt.executeUpdate();
             }
@@ -99,10 +101,49 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
             }
             assertEquals("Unexpected number of records returned", 1000, count);
         } catch (Exception e) {
-            fail("Expected query to suceed");
+            fail("Expected query to succeed");
         }
     }
 
+    @Test
+    public void testScanningResultIteratorQueryTimeoutForPagingWithVeryLowTimeout() throws Exception {
+        //Arrange
+        PreparedStatement ps = loadDataAndPreparePagedQuery(1,1);
+
+        //Act + Assert
+        try {
+            //Do not let BaseResultIterators throw Timeout Exception Let ScanningResultIterator handle it.
+            BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(true);
+            ResultSet rs = ps.executeQuery();
+            while(rs.next()) {}
+            fail("Expected query to timeout with a 1 ms timeout");
+        } catch (SQLException e) {
+            //OPERATION_TIMED_OUT Exception expected
+            assertEquals(OPERATION_TIMED_OUT.getErrorCode(), e.getErrorCode());
+            BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(false);
+        }
+    }
+
+    @Test
+    public void testScanningResultIteratorQueryTimeoutForPagingWithNormalLowTimeout() throws Exception {
+        //Arrange
+        PreparedStatement ps = loadDataAndPreparePagedQuery(30000,30);
+
+        //Act + Assert
+        try {
+            //Do not let BaseResultIterators throw Timeout Exception Let ScanningResultIterator handle it.
+            BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(true);
+            ResultSet rs = ps.executeQuery();
+            int count = 0;
+            while(rs.next()) {
+                count++;
+            }
+            assertEquals("Unexpected number of records returned", 500, count);
+            BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(false);
+        } catch (SQLException e) {
+            fail("Expected query to succeed");
+        }
+    }
     
     //-----------------------------------------------------------------
     // Private Helper Methods
@@ -116,6 +157,19 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
         PhoenixStatement phoenixStmt = ps.unwrap(PhoenixStatement.class);
         assertEquals(timeoutMs, phoenixStmt.getQueryTimeoutInMillis());
         assertEquals(timeoutSecs, phoenixStmt.getQueryTimeout());
+        return ps;
+    }
+
+    private PreparedStatement loadDataAndPreparePagedQuery(int timeoutMs, int timeoutSecs) throws Exception {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, String.valueOf(timeoutMs));
+        props.setProperty(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Integer.toString(0));
+        PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
+        PreparedStatement ps = conn.prepareStatement("SELECT * FROM " + tableName + " WHERE K % 2 = 0");
+        PhoenixStatement phoenixStmt = ps.unwrap(PhoenixStatement.class);
+        assertEquals(timeoutMs, phoenixStmt.getQueryTimeoutInMillis());
+        assertEquals(timeoutSecs, phoenixStmt.getQueryTimeout());
+        assertEquals(0, conn.getQueryServices().getProps().getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1));
         return ps;
     }
 }

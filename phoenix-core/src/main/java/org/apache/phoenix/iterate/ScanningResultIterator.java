@@ -28,6 +28,7 @@ import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.RPC_CALLS_METRI
 import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.RPC_RETRIES_METRIC_NAME;
 import static org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics.COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME;
 import static org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics.COUNT_OF_ROWS_SCANNED_KEY_METRIC_NAME;
+import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BYTES_IN_REMOTE_RESULTS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS;
@@ -62,6 +63,7 @@ import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,14 +79,16 @@ public class ScanningResultIterator implements ResultIterator {
     private static boolean throwExceptionIfScannerClosedForceFully = false;
 
     private final boolean isMapReduceContext;
+    private final long maxQueryEndTime;
 
-    public ScanningResultIterator(ResultScanner scanner, Scan scan, ScanMetricsHolder scanMetricsHolder, StatementContext context, boolean isMapReduceContext) {
+    public ScanningResultIterator(ResultScanner scanner, Scan scan, ScanMetricsHolder scanMetricsHolder, StatementContext context, boolean isMapReduceContext, long maxQueryEndTime) {
         this.scanner = scanner;
         this.scanMetricsHolder = scanMetricsHolder;
         this.context = context;
         scanMetricsUpdated = false;
         scanMetricsEnabled = scan.isScanMetricsEnabled();
         this.isMapReduceContext = isMapReduceContext;
+        this.maxQueryEndTime = maxQueryEndTime;
     }
 
     @Override
@@ -173,6 +177,12 @@ public class ScanningResultIterator implements ResultIterator {
         try {
             Result result = scanner.next();
             while (result != null && (result.isEmpty() || isDummy(result))) {
+                long timeOutForScan = maxQueryEndTime - EnvironmentEdgeManager.currentTimeMillis();
+                if (timeOutForScan < 0) {
+                    throw new SQLExceptionInfo.Builder(OPERATION_TIMED_OUT).setMessage(
+                            ". Query couldn't be completed in the allotted time: "
+                                    + context.getStatement().getQueryTimeoutInMillis() + " ms").build().buildException();
+                }
                 if (!isMapReduceContext && (context.getConnection().isClosing() || context.getConnection().isClosed())) {
                     LOG.warn("Closing ResultScanner as Connection is already closed or in middle of closing");
                     if (throwExceptionIfScannerClosedForceFully) {

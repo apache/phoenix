@@ -81,7 +81,7 @@ public class SerialIterators extends BaseResultIterators {
 
     @Override
     protected void submitWork(final List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
-            final Queue<PeekingResultIterator> allIterators, int estFlattenedSize, boolean isReverse, final ParallelScanGrouper scanGrouper) {
+            final Queue<PeekingResultIterator> allIterators, int estFlattenedSize, boolean isReverse, final ParallelScanGrouper scanGrouper, long maxQueryEndTime) {
         ExecutorService executor = context.getConnection().getQueryServices().getExecutor();
         final String tableName = tableRef.getTable().getPhysicalName().getString();
         final TaskExecutionMetricsHolder taskMetrics = new TaskExecutionMetricsHolder(context.getReadMetricsQueue(), tableName);
@@ -100,7 +100,7 @@ public class SerialIterators extends BaseResultIterators {
             Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
                 @Override
                 public PeekingResultIterator call() throws Exception {
-                    PeekingResultIterator itr = new SerialIterator(finalScans, tableName, renewLeaseThreshold, offset, caches);
+                    PeekingResultIterator itr = new SerialIterator(finalScans, tableName, renewLeaseThreshold, offset, caches, maxQueryEndTime);
                     return itr;
                 }
 
@@ -143,14 +143,16 @@ public class SerialIterators extends BaseResultIterators {
         private PeekingResultIterator currentIterator;
         private Integer remainingOffset;
         private Map<ImmutableBytesPtr,ServerCache> caches;
+        private final long maxQueryEndTime;
         
-        private SerialIterator(List<Scan> flattenedScans, String tableName, long renewLeaseThreshold, Integer offset, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
+        private SerialIterator(List<Scan> flattenedScans, String tableName, long renewLeaseThreshold, Integer offset, Map<ImmutableBytesPtr,ServerCache> caches, long maxQueryEndTime) throws SQLException {
             this.scans = Lists.newArrayListWithExpectedSize(flattenedScans.size());
             this.tableName = tableName;
             this.renewLeaseThreshold = renewLeaseThreshold;
             this.scans.addAll(flattenedScans);
             this.remainingOffset = offset;
             this.caches = caches;
+            this.maxQueryEndTime = maxQueryEndTime;
             if (this.remainingOffset != null) {
                 // mark the last scan for offset purposes
                 this.scans.get(this.scans.size() - 1).setAttribute(QueryConstants.LAST_SCAN, Bytes.toBytes(Boolean.TRUE));
@@ -183,7 +185,7 @@ public class SerialIterators extends BaseResultIterators {
                             context.getConnection().getLogLevel());
                 TableResultIterator itr =
                         new TableResultIterator(mutationState, currentScan, scanMetricsHolder,
-                                renewLeaseThreshold, plan, scanGrouper, caches);
+                                renewLeaseThreshold, plan, scanGrouper, caches, maxQueryEndTime);
                 PeekingResultIterator peekingItr = iteratorFactory.newIterator(context, itr, currentScan, tableName, plan);
                 Tuple tuple;
                 if ((tuple = peekingItr.peek()) == null) {

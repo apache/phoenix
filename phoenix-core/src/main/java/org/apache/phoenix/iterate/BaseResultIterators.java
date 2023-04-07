@@ -119,6 +119,7 @@ import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -170,6 +171,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private final boolean useStatsForParallelization;
     protected Map<ImmutableBytesPtr,ServerCache> caches;
     private final QueryPlan dataPlan;
+    private static boolean forTestingSetTimeoutToMaxToLetQueryPassHere = false;
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
         @Override
@@ -1349,7 +1351,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         final HashCacheClient hashCacheClient = new HashCacheClient(context.getConnection());
         int queryTimeOut = context.getStatement().getQueryTimeoutInMillis();
         try {
-            submitWork(scan, futures, allIterators, splitSize, isReverse, scanGrouper);
+            submitWork(scan, futures, allIterators, splitSize, isReverse, scanGrouper, maxQueryEndTime);
             boolean clearedCache = false;
             for (List<Pair<Scan,Future<PeekingResultIterator>>> future : reverseIfNecessary(futures,isReverse)) {
                 List<PeekingResultIterator> concatIterators = Lists.newArrayListWithExpectedSize(future.size());
@@ -1358,6 +1360,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     Pair<Scan,Future<PeekingResultIterator>> scanPair = scanPairItr.next();
                     try {
                         long timeOutForScan = maxQueryEndTime - EnvironmentEdgeManager.currentTimeMillis();
+                        if (forTestingSetTimeoutToMaxToLetQueryPassHere) {
+                            timeOutForScan = Long.MAX_VALUE;
+                        }
                         if (timeOutForScan < 0) {
                             throw new SQLExceptionInfo.Builder(OPERATION_TIMED_OUT).setMessage(
                                     ". Query couldn't be completed in the allotted time: "
@@ -1617,7 +1622,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     abstract protected String getName();    
     abstract protected void submitWork(List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
-            Queue<PeekingResultIterator> allIterators, int estFlattenedSize, boolean isReverse, ParallelScanGrouper scanGrouper) throws SQLException;
+            Queue<PeekingResultIterator> allIterators, int estFlattenedSize, boolean isReverse, ParallelScanGrouper scanGrouper,
+            long maxQueryEndTime) throws SQLException;
     
     @Override
     public int size() {
@@ -1727,6 +1733,15 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     public Long getEstimateInfoTimestamp() {
         return this.estimateInfoTimestamp;
+    }
+
+    /**
+     * Used for specific test case to check if timeouts are working in ScanningResultIterator.
+     * @param throwException
+     */
+    @VisibleForTesting
+    public static void setForTestingSetTimeoutToMaxToLetQueryPassHere(boolean throwException) {
+        forTestingSetTimeoutToMaxToLetQueryPassHere = throwException;
     }
 
 }
