@@ -69,10 +69,12 @@ public class CompactionScanner implements InternalScanner {
     private int minVersion;
     private int maxVersion;
     private final boolean emptyCFStore;
+    private final int familyCount;
     private KeepDeletedCells keepDeletedCells;
     private long compactionTime;
     private final byte[] emptyCF;
     private final byte[] emptyCQ;
+    private final byte[] storeColumnFamily;
     private static Map<String, Long> maxLookbackMap = new ConcurrentHashMap<>();
     private PhoenixLevelRowCompactor phoenixLevelRowCompactor;
     private HBaseLevelRowCompactor hBaseLevelRowCompactor;
@@ -93,6 +95,7 @@ public class CompactionScanner implements InternalScanner {
         compactionTime = EnvironmentEdgeManager.currentTimeMillis();
         this.maxLookbackInMillis = maxLookbackInMillis;
         String columnFamilyName = store.getColumnFamilyName();
+        storeColumnFamily = columnFamilyName.getBytes();
         String tableName = region.getRegionInfo().getTable().getNameAsString();
         Long overriddenMaxLookback =
                 maxLookbackMap.remove(tableName + SEPARATOR + columnFamilyName);
@@ -106,9 +109,9 @@ public class CompactionScanner implements InternalScanner {
         this.minVersion = cfd.getMinVersions();
         this.maxVersion = cfd.getMaxVersions();
         this.keepDeletedCells = cfd.getKeepDeletedCells();
-        emptyCFStore = region.getTableDescriptor().getColumnFamilies().length == 1 ||
-                columnFamilyName.equals(Bytes.toString(emptyCF)) ||
-                columnFamilyName.startsWith(LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
+        familyCount = region.getTableDescriptor().getColumnFamilies().length;
+        emptyCFStore = familyCount == 1 || columnFamilyName.equals(Bytes.toString(emptyCF))
+                        || columnFamilyName.startsWith(LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
         phoenixLevelRowCompactor = new PhoenixLevelRowCompactor();
         hBaseLevelRowCompactor = new HBaseLevelRowCompactor();
     }
@@ -162,65 +165,105 @@ public class CompactionScanner implements InternalScanner {
         private void addColumnDeleteMarker(Cell deleteMarker) {
             if (columnDeleteMarkers == null) {
                 columnDeleteMarkers = new ArrayList<>();
+                columnDeleteMarkers.add(deleteMarker);
+                return;
+            }
+            int i = 0;
+            // Replace the existing delete marker for the same column
+            for (Cell cell : columnDeleteMarkers) {
+                if (cell.getType() == deleteMarker.getType() &&
+                        CellUtil.matchingColumn(cell, deleteMarker)) {
+                    columnDeleteMarkers.remove(i);
+                    break;
+                }
+                i++;
             }
             columnDeleteMarkers.add(deleteMarker);
         }
-    }
 
-    /**
-     * This method finds out the maximum and minimum timestamp of the cells of the next row
-     * version.
-     *
-     * @param columns
-     * @param rowContext
-     */
-    private void getNextRowVersionTimestamp(LinkedList<LinkedList<Cell>> columns,
-            RowContext rowContext) {
-        rowContext.maxTimestamp = 0;
-        rowContext.minTimestamp = Long.MAX_VALUE;
-        long ts;
-        long currentDeleteFamilyTimestamp = 0;
-        long nextDeleteFamilyTimestamp = 0;
-        boolean firstColumn = true;
-        for (LinkedList<Cell> column : columns) {
-            Cell firstCell = column.getFirst();
-            ts = firstCell.getTimestamp();
-            if (ts <= nextDeleteFamilyTimestamp) {
-                continue;
+        private void retainFamilyDeleteMarker(List<Cell> retainedCells) {
+            if (familyVersionDeleteMarker != null) {
+                retainedCells.add(familyVersionDeleteMarker);
+                // Set it to null so it will be used once
+                familyVersionDeleteMarker = null;
+            } else {
+                retainedCells.add(familyDeleteMarker);
             }
-            if (firstCell.getType() == Cell.Type.DeleteFamily ||
-                    firstCell.getType() == Cell.Type.DeleteFamilyVersion) {
-                if (firstColumn) {
-                    // Family delete markers are always found in the first column of a column family
-                    // When Phoenix deletes a row, it places a family delete marker in each column
-                    // family with the same timestamp. We just need to process the delete column
-                    // family markers of the first column family, which would be in the column
-                    // with columnIndex=0.
-                    currentDeleteFamilyTimestamp = firstCell.getTimestamp();
-                    // We need to check if the next delete family marker exits. If so, we need
-                    // to record its timestamp as by definition a compaction row version cannot
-                    // cross a family delete marker
-                    if (column.size() > 1) {
-                        nextDeleteFamilyTimestamp = column.get(1).getTimestamp();
-                    } else {
-                        nextDeleteFamilyTimestamp = 0;
+        }
+        /**
+         * Based on the column delete markers decide if the cells should be retained. If a
+         * deleted cell is retained, the delete marker is also retained.
+         */
+        private void retainCell(Cell cell, List<Cell> retainedCells,
+                KeepDeletedCells keepDeletedCells, long ttlWindowStart) {
+            int i = 0;
+            for (Cell dm : columnDeleteMarkers) {
+                if (cell.getTimestamp() > dm.getTimestamp()) {
+                    continue;
+                }
+                if ((CellUtil.matchingFamily(cell, dm)) &&
+                        CellUtil.matchingQualifier(cell, dm)) {
+                    if (dm.getType() == Cell.Type.Delete) {
+                        // Delete is for deleting a specific cell version. Thus, it can be used
+                        // to delete only one cell.
+                        columnDeleteMarkers.remove(i);
+                    }
+                    if (maxTimestamp >= ttlWindowStart) {
+                        // Inside the TTL window
+                        if (keepDeletedCells != KeepDeletedCells.FALSE ) {
+                            retainedCells.add(cell);
+                            retainedCells.add(dm);
+                        }
+                    } else if (keepDeletedCells == KeepDeletedCells.TTL &&
+                            dm.getTimestamp() >= ttlWindowStart) {
+                        retainedCells.add(cell);
+                        retainedCells.add(dm);
+                    }
+                    return;
+                }
+                i++;
+            }
+        }
+        /**
+         * This method finds out the maximum and minimum timestamp of the cells of the next row
+         * version. Cells are organized into columns based on the pair of family name and column
+         * qualifier. This means that the delete family markers for a column family will have their
+         * own column. However, the delete column markers will be packed with the put cells. The cells
+         * within a column are ordered in descending timestamps.
+         */
+        private void getNextRowVersionTimestamps(LinkedList<LinkedList<Cell>> columns,
+                byte[] columnFamily) {
+            maxTimestamp = 0;
+            minTimestamp = Long.MAX_VALUE;
+            Cell firstCell;
+            LinkedList<Cell> deleteColumn = null;
+            long ts;
+            for (LinkedList<Cell> column : columns) {
+                firstCell = column.getFirst();
+                ts = firstCell.getTimestamp();
+                if ((firstCell.getType() == Cell.Type.DeleteFamily ||
+                        firstCell.getType() == Cell.Type.DeleteFamilyVersion) &&
+                        CellUtil.matchingFamily(firstCell, columnFamily)) {
+                    deleteColumn = column;
+                }
+                if (maxTimestamp < ts) {
+                    maxTimestamp = ts;
+                }
+                if (minTimestamp > ts) {
+                    minTimestamp = ts;
+                }
+            }
+            if (deleteColumn != null) {
+                // A row version do not cross a family delete marker. This means
+                // min timestamp cannot be lower than the delete markers timestamp
+                for (Cell cell : deleteColumn) {
+                    ts = cell.getTimestamp();
+                    if (ts < maxTimestamp) {
+                        minTimestamp = ts + 1;
+                        break;
                     }
                 }
-            } else if (firstCell.getType() == Cell.Type.Put) {
-                // Row versions are constructed from put cells. So, we use only
-                // put cell timestamps to find the time range for a compaction row version
-                if (rowContext.maxTimestamp < ts) {
-                    rowContext.maxTimestamp = ts;
-                }
-                if (currentDeleteFamilyTimestamp != 0 && currentDeleteFamilyTimestamp < rowContext.maxTimestamp) {
-                    // A compaction row version do not cross a family delete marker. This means
-                    // min timestamp cannot be lower than currentDeleteFamilyTimestamp
-                    rowContext.minTimestamp = currentDeleteFamilyTimestamp + 1;
-                } else if (rowContext.minTimestamp > ts) {
-                    rowContext.minTimestamp = ts;
-                }
             }
-            firstColumn = false;
         }
     }
 
@@ -278,25 +321,22 @@ public class CompactionScanner implements InternalScanner {
          * KeepDeletedCells is TRUE
          *
          */
-        private void retainInsideTTLWindow(List<Cell> result,
-                CompactionRowVersion rowVersion, RowContext rowContext) {
+        private void retainInsideTTLWindow(CompactionRowVersion rowVersion, RowContext rowContext,
+                List<Cell> retainedCells) {
             if (rowContext.familyDeleteMarker == null && rowContext.familyVersionDeleteMarker == null) {
                 // The compaction row version is alive
                 if (rowVersion.version < maxVersion) {
                     // Rule 1
-                    result.addAll(rowVersion.cells);
+                    retainCells(rowVersion, rowContext, retainedCells);
                 }
             } else {
                 // Deleted
                 if ((rowVersion.version < maxVersion && keepDeletedCells == KeepDeletedCells.TRUE) ||
                         keepDeletedCells == KeepDeletedCells.TTL) {
                     // Retain based on rule 2 or 3
-                    result.addAll(rowVersion.cells);
+                    retainCells(rowVersion, rowContext, retainedCells);
+                    rowContext.retainFamilyDeleteMarker(retainedCells);
                 }
-            }
-            if (rowContext.familyVersionDeleteMarker != null) {
-                // Set it to null so it will be used once
-                rowContext.familyVersionDeleteMarker = null;
             }
         }
 
@@ -308,14 +348,14 @@ public class CompactionScanner implements InternalScanner {
          * 2. Delete row versions whose delete markers are inside the TTL window and
          *    KeepDeletedCells is TTL are retained
          */
-        private void retainOutsideTTLWindow(List<Cell> result,
-                CompactionRowVersion rowVersion, RowContext rowContext) {
+        private void retainOutsideTTLWindow(CompactionRowVersion rowVersion, RowContext rowContext,
+                List<Cell> retainedCells) {
             if (rowContext.familyDeleteMarker == null
                     && rowContext.familyVersionDeleteMarker == null) {
                 // Live compaction row version
                 if (rowVersion.version < minVersion) {
                     // Rule 1
-                    result.addAll(rowVersion.cells);
+                    retainCells(rowVersion, rowContext, retainedCells);
                 }
             } else {
                 // Deleted compaction row version
@@ -326,84 +366,40 @@ public class CompactionScanner implements InternalScanner {
                                         rowContext.familyDeleteMarker.getTimestamp() > ttlWindowStart)
                 )) {
                     // Rule 2
-                    result.addAll(rowVersion.cells);
+                    retainCells(rowVersion, rowContext, retainedCells);
+                    rowContext.retainFamilyDeleteMarker(retainedCells);
                 }
             }
-            if (rowContext.familyVersionDeleteMarker != null) {
-                // Set it to null so it will be used once
-                rowContext.familyVersionDeleteMarker = null;
-            }
         }
 
-        private void prepareResults(List<Cell> result, CompactionRowVersion rowVersion,
-                RowContext rowContext) {
-            if (rowVersion.ts >= ttlWindowStart) {
-                retainInsideTTLWindow(result, rowVersion, rowContext);
-            } else {
-                retainOutsideTTLWindow(result, rowVersion, rowContext);
-            }
-        }
-
-        private boolean shouldRetainCell(RowContext rowContext, Cell cell) {
+        private void retainCells(CompactionRowVersion rowVersion, RowContext rowContext,
+                List<Cell> retainedCells) {
             if (rowContext.columnDeleteMarkers == null) {
-                return true;
+                retainedCells.addAll(rowVersion.cells);
+                return;
             }
-            int i = 0;
-            for (Cell dm : rowContext.columnDeleteMarkers) {
-                if (cell.getTimestamp() > dm.getTimestamp()) {
-                    continue;
-                }
-                if ((CellUtil.matchingFamily(cell, dm)) &&
-                        CellUtil.matchingQualifier(cell, dm)){
-                    if (dm.getType() == Cell.Type.Delete) {
-                        // Delete is for deleting a specific cell version. Thus, it can be used
-                        // to delete only one cell.
-                        rowContext.columnDeleteMarkers.remove(i);
-                    }
-                    if (maxLookbackInMillis != 0 && rowContext.maxTimestamp >= maxLookbackWindowStart) {
-                        // Inside the max lookback window
-                        return true;
-                    }
-                    if (rowContext.maxTimestamp >= ttlWindowStart) {
-                        // Outside the max lookback window but inside the TTL window
-                        if (keepDeletedCells == KeepDeletedCells.FALSE &&
-                                dm.getTimestamp() < maxLookbackWindowStart ) {
-                            return false;
-                        }
-                        return true;
-                    }
-                    if (keepDeletedCells == KeepDeletedCells.TTL &&
-                            dm.getTimestamp() >= ttlWindowStart) {
-                        return true;
-                    }
-                    if (maxLookbackInMillis != 0 &&
-                            dm.getTimestamp() > maxLookbackWindowStart && rowContext.version == 0) {
-                        // The delete marker is inside the max lookback window and this is the first
-                        // cell version outside the max lookback window. This cell should be
-                        // visible through the scn connection with the timestamp >= the delete
-                        // marker's timestamp
-                        return true;
-                    }
-                    return false;
-                }
-                i++;
+            for (Cell cell : rowVersion.cells) {
+                rowContext.retainCell(cell, retainedCells, keepDeletedCells, ttlWindowStart);
             }
-            return true;
         }
 
         /**
-         * Form the next compaction row version by picking the first cell from each column if the cell
-         * is not a delete marker (Type.Delete or Type.DeleteColumn) until the first delete family or
-         * delete family version column marker is visited
-         * @param columns
-         * @param rowContext
-         * @return
+         * Form the next compaction row version by picking (removing) the first cell from each
+         * column. Put cells are used to form the next compaction row version. Delete markers
+         * are added to the row context which are processed to decide which row versions
+         * or cell version to delete.
          */
         private void formNextCompactionRowVersion(LinkedList<LinkedList<Cell>> columns,
-                RowContext rowContext, CompactionRowVersion rowVersion) {
-            getNextRowVersionTimestamp(columns, rowContext);
+                RowContext rowContext, List<Cell> retainedCells) {
+            CompactionRowVersion rowVersion = new CompactionRowVersion();
+            rowContext.getNextRowVersionTimestamps(columns, storeColumnFamily);
+            rowVersion.ts = rowContext.maxTimestamp;
+            rowVersion.version = rowContext.version++;
             for (LinkedList<Cell> column : columns) {
                 Cell cell = column.getFirst();
+                if (column.getFirst().getTimestamp() < rowContext.minTimestamp) {
+                    continue;
+                }
                 if (cell.getType() == Cell.Type.DeleteFamily) {
                     if (cell.getTimestamp() >= rowContext.maxTimestamp) {
                         rowContext.familyDeleteMarker = cell;
@@ -418,34 +414,29 @@ public class CompactionScanner implements InternalScanner {
                     }
                     continue;
                 }
-                if (rowContext.maxTimestamp != 0 &&
-                        column.getFirst().getTimestamp() < rowContext.minTimestamp) {
-                    continue;
-                }
                 column.removeFirst();
                 if (cell.getType() == Cell.Type.DeleteColumn ||
                         cell.getType() == Cell.Type.Delete) {
                     rowContext.addColumnDeleteMarker(cell);
                     continue;
                 }
-                if (!shouldRetainCell(rowContext, cell)) {
-                    continue;
-                }
                 rowVersion.cells.add(cell);
             }
-            rowVersion.ts = rowContext.maxTimestamp;
-            rowVersion.version = rowContext.version++;
+            if (rowVersion.cells.isEmpty()) {
+                return;
+            }
+            if (rowVersion.ts >= ttlWindowStart) {
+                retainInsideTTLWindow(rowVersion, rowContext, retainedCells);
+            } else {
+                retainOutsideTTLWindow(rowVersion, rowContext, retainedCells);
+            }
         }
 
-        private void formCompactionRowVersions(RowContext rowContext,
-                LinkedList<LinkedList<Cell>> columns,
+        private void formCompactionRowVersions(LinkedList<LinkedList<Cell>> columns,
                 List<Cell> result) {
+            RowContext rowContext = new RowContext();
             while (!columns.isEmpty()) {
-                CompactionRowVersion compactionRowVersion = new CompactionRowVersion();
-                formNextCompactionRowVersion(columns, rowContext, compactionRowVersion);
-                if (!compactionRowVersion.cells.isEmpty()) {
-                    prepareResults(result, compactionRowVersion, rowContext);
-                }
+                formNextCompactionRowVersion(columns, rowContext, result);
                 // Remove the columns that are empty
                 Iterator<LinkedList<Cell>> iterator = columns.iterator();
                 while (iterator.hasNext()) {
@@ -474,7 +465,7 @@ public class CompactionScanner implements InternalScanner {
                     currentColumn = new LinkedList<>();
                     currentColumnCell = cell;
                     currentColumn.add(cell);
-                } else if (!CellUtil.matchingQualifier(cell, currentColumnCell)) {
+                } else if (!CellUtil.matchingColumn(cell, currentColumnCell)) {
                     columns.add(currentColumn);
                     currentColumn = new LinkedList<>();
                     currentColumnCell = cell;
@@ -500,41 +491,16 @@ public class CompactionScanner implements InternalScanner {
             List<Cell> deleteMarkers = new ArrayList<>();
             formColumns(result, columns, deleteMarkers);
             result.clear();
-            RowContext rowContext = new RowContext();
-            formCompactionRowVersions(rowContext, columns, result);
-            // Filter delete markers
-            if (!deleteMarkers.isEmpty()) {
-                int version = 0;
-                Cell last = deleteMarkers.get(0);
-                for (Cell cell : deleteMarkers) {
-                    if (cell.getType() != last.getType() || !CellUtil.matchingColumn(cell, last)) {
-                        version = 0;
-                        last = cell;
-                    }
-                    if (cell.getTimestamp() >= ttlWindowStart) {
-                        if (keepDeletedCells == KeepDeletedCells.TTL) {
-                            result.add(cell);
-                            continue;
-                        }
-                        if (keepDeletedCells == KeepDeletedCells.TRUE) {
-                            if (version < maxVersion) {
-                                version++;
-                                result.add(cell);
-                                continue;
-                            }
-                        }
-                    }
-                }
-            }
+            formCompactionRowVersions(columns, result);
         }
     }
 
     /**
      * PhoenixLevelRowCompactor ensures that the cells of the latest row version and the
      * row versions that are visible through the max lookback window are retained including delete
-     * cell markers placed after these cells. This is the complete set of cells that Phoenix
+     * markers placed after these cells. This is the complete set of cells that Phoenix
      * needs for its queries. Beyond these cells, HBase retention rules may require more
-     * cells to be retained. These cells are identified by the HBase level compactions implemented
+     * cells to be retained. These cells are identified by the HBase level compaction implemented
      * by HBaseLevelRowCompactor.
      *
      */
@@ -544,7 +510,9 @@ public class CompactionScanner implements InternalScanner {
          * The cells of the row (i.e., result) read from HBase store are lexicographically ordered
          * for tables using the key part of the cells which includes row, family, qualifier,
          * timestamp and type. The cells belong of a column are ordered from the latest to
-         * the oldest. The method leverages this ordering and groups the cells into their columns.
+         * the oldest. The method leverages this ordering and groups the cells into their columns
+         * based on the pair of family name and column qualifier.
+         *
          * The cells within the max lookback window except the once at the lower edge of the
          * max lookback window are retained immediately and not included in the constructed columns.
          */
@@ -561,7 +529,7 @@ public class CompactionScanner implements InternalScanner {
                     currentColumn = new LinkedList<>();
                     currentColumnCell = cell;
                     currentColumn.add(cell);
-                } else if (!CellUtil.matchingQualifier(cell, currentColumnCell)) {
+                } else if (!CellUtil.matchingColumn(cell, currentColumnCell)) {
                     columns.add(currentColumn);
                     currentColumn = new LinkedList<>();
                     currentColumnCell = cell;
@@ -614,26 +582,7 @@ public class CompactionScanner implements InternalScanner {
                 return;
             }
             RowContext rowContext = new RowContext();
-            getNextRowVersionTimestamp(columns, rowContext);
-            Cell firstColumnFirstCell = columns.getFirst().getFirst();
-            if (rowContext.maxTimestamp == 0 ||
-                    (rowContext.maxTimestamp <= firstColumnFirstCell.getTimestamp() &&
-                    (firstColumnFirstCell.getType() == Cell.Type.DeleteFamily ||
-                            firstColumnFirstCell.getType() == Cell.Type.DeleteFamilyVersion))) {
-                // The last row version does not exist. We will include
-                // delete markers if they are at maxLookbackWindowStart
-                for (LinkedList<Cell> column : columns) {
-                    Cell cell = column.getFirst();
-                    if (cell.getType() != Cell.Type.Put && cell.getTimestamp() == maxLookbackWindowStart) {
-                        retainedCells.add(cell);
-                    }
-                }
-                return;
-            }
-            if (compactionTime - rowContext.maxTimestamp > maxLookbackInMillis + ttl) {
-                // The row version should not be visible via the max lookback window. Nothing to do
-                return;
-            }
+            rowContext.getNextRowVersionTimestamps(columns, storeColumnFamily);
             List<Cell> retainedPutCells = new ArrayList<>();
             for (LinkedList<Cell> column : columns) {
                 Cell cell = column.getFirst();
@@ -641,10 +590,28 @@ public class CompactionScanner implements InternalScanner {
                     continue;
                 }
                 if (cell.getType() == Cell.Type.Put) {
-                    retainedCells.add(cell);
                     retainedPutCells.add(cell);
+                } else if (cell.getType() == Cell.Type.DeleteFamily ||
+                        cell.getType() == Cell.Type.DeleteFamilyVersion) {
+                    if (cell.getTimestamp() >= rowContext.maxTimestamp) {
+                        // This means that the row version outside the max lookback window is
+                        // deleted and thus should not be visible to the scn queries
+                        if (cell.getTimestamp() == maxLookbackWindowStart) {
+                            // Include delete markers at maxLookbackWindowStart
+                            retainedCells.add(cell);
+                        }
+                        return;
+                    }
+                } else if (cell.getTimestamp() == maxLookbackWindowStart) {
+                    // Include delete markers at maxLookbackWindowStart
+                    retainedCells.add(cell);
                 }
             }
+            if (compactionTime - rowContext.maxTimestamp > maxLookbackInMillis + ttl) {
+                // The row version should not be visible via the max lookback window. Nothing to do
+                return;
+            }
+            retainedCells.addAll(retainedPutCells);
             // If the gap between two back to back mutations is more than ttl then the older
             // mutation will be considered expired and masked. If the length of the time range of
             // a row version is not more than ttl, then we know the cells covered by the row
@@ -702,14 +669,17 @@ public class CompactionScanner implements InternalScanner {
                     // store is not the empty column family store.
                     return false;
                 }
+                return true;
             }
-            // The gap between two back to back mutations if more than ttl then we know that the row
-            // is expired before the newer mutation.
+            // If the time gap between two back to back mutations is more than ttl then we know
+            // that the row is expired within the time gap.
             if (maxTimestamp - minTimestamp > ttl) {
-                if (!emptyCFStore && !regionLevel) {
-                    // We need empty column cells to decide which cells to retain
+                if ((familyCount > 1 && !regionLevel)) {
+                    // We need region level compaction to decided which cells to retain
                     return false;
                 }
+                // We either have one column family or are doing region level compaction. In both
+                // case, we can safely trim the cells beyond the first time gap larger ttl
                 int size = result.size();
                 long tsArray[] = new long[size];
                 int i = 0;
@@ -717,21 +687,26 @@ public class CompactionScanner implements InternalScanner {
                     tsArray[i++] = cell.getTimestamp();
                 }
                 Arrays.sort(tsArray);
+                boolean gapFound = false;
+                // Since timestamps are sorted in ascending order, traverse them in reverse order
                 for (i = size - 1; i > 0; i--) {
                     if (tsArray[i] - tsArray[i - 1] > ttl) {
                         minTimestamp = tsArray[i];
+                        gapFound = true;
                         break;
                     }
                 }
-                List<Cell> trimmedResult = new ArrayList<>(size - i);
-                for (Cell cell : result) {
-                    if (cell.getTimestamp() >= minTimestamp) {
-                        trimmedResult.add(cell);
+                if (gapFound) {
+                    List<Cell> trimmedResult = new ArrayList<>(size - i);
+                    for (Cell cell : result) {
+                        if (cell.getTimestamp() >= minTimestamp) {
+                            trimmedResult.add(cell);
+                        }
                     }
+                    columns.clear();
+                    retainedCells.clear();
+                    getColumns(trimmedResult, columns, retainedCells);
                 }
-                columns.clear();
-                retainedCells.clear();
-                getColumns(trimmedResult, columns, retainedCells);
             }
             retainCellsOfLastRowVersion(columns, retainedCells);
             return true;
@@ -746,7 +721,7 @@ public class CompactionScanner implements InternalScanner {
             }
             List<Cell> phoenixResult = new ArrayList<>(result.size());
             if (!retainCellsForMaxLookback(result, regionLevel, phoenixResult)) {
-                if (emptyCFStore || regionLevel) {
+                if (familyCount == 1 || regionLevel) {
                     throw new RuntimeException("UNEXPECTED");
                 }
                 phoenixResult.clear();
@@ -768,13 +743,17 @@ public class CompactionScanner implements InternalScanner {
             Collections.sort(phoenixResult, CellComparator.getInstance());
             result.clear();
             Cell previousCell = null;
+            // Eliminate duplicates
             for (Cell cell : phoenixResult) {
                 if (previousCell == null ||
-                        CellComparator.getInstance().compare(cell, previousCell) != 0) {
+                        cell.getTimestamp() != previousCell.getTimestamp() ||
+                        cell.getType() != previousCell.getType() ||
+                        !CellUtil.matchingColumn(cell, previousCell)) {
                     result.add(cell);
                 }
                 previousCell = cell;
             }
+
             if (result.size() > phoenixResultSize) {
                 LOGGER.debug("HBase level compaction retained " +
                         (result.size() - phoenixResultSize) + " more cells");
@@ -814,13 +793,19 @@ public class CompactionScanner implements InternalScanner {
             if (result != 0) {
                 return result;
             }
-            result = compareTypes(a, b);
+            result = Bytes.compareTo(a.getQualifierArray(), a.getQualifierOffset(),
+                    a.getQualifierLength(),
+                    b.getQualifierArray(), b.getQualifierOffset(), b.getQualifierLength());
             if (result != 0) {
                 return result;
             }
-            return Bytes.compareTo(a.getQualifierArray(), a.getQualifierOffset(),
-                    a.getQualifierLength(),
-                    b.getQualifierArray(), b.getQualifierOffset(), b.getQualifierLength());
+            if (a.getTimestamp() > b.getTimestamp()) {
+                return -1;
+            }
+            if (a.getTimestamp() < b.getTimestamp()) {
+                return 1;
+            }
+            return compareTypes(a, b);
         }
 
         /**
@@ -849,9 +834,9 @@ public class CompactionScanner implements InternalScanner {
                 if (compare == 0) {
                     result.add(originalCell);
                     index++;
-                    if (index == size) {
-                        break;
-                    }
+                }
+                if (index == size) {
+                    break;
                 }
             }
         }
@@ -871,6 +856,7 @@ public class CompactionScanner implements InternalScanner {
             List<Cell> regionResult = new ArrayList<>(result.size());
             scanner.next(regionResult);
             scanner.close();
+            Collections.sort(regionResult, CellComparator.getInstance());
             compact(regionResult, true);
             result.clear();
             trimRegionResult(regionResult, input, result);

@@ -60,7 +60,7 @@ public class TableTTLIT extends BaseTest {
     private static final Random RAND = new Random(11);
     private static final int MAX_COLUMN_INDEX = 7;
     private static final int MAX_LOOKBACK_AGE = 10;
-    private static final int TTL = 30;
+    private final int ttl;
     private String tableDDLOptions;
     private StringBuilder optionBuilder;
     ManualEnvironmentEdge injectEdge;
@@ -70,11 +70,12 @@ public class TableTTLIT extends BaseTest {
     private final KeepDeletedCells keepDeletedCells;
 
     public TableTTLIT(boolean multiCF, boolean columnEncoded,
-            KeepDeletedCells keepDeletedCells, int versions) {
+            KeepDeletedCells keepDeletedCells, int versions, int ttl) {
         this.multiCF = multiCF;
         this.columnEncoded = columnEncoded;
         this.keepDeletedCells = keepDeletedCells;
         this.versions = versions;
+        this.ttl = ttl;
     }
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -88,7 +89,7 @@ public class TableTTLIT extends BaseTest {
     public void beforeTest(){
         EnvironmentEdgeManager.reset();
         optionBuilder = new StringBuilder();
-        optionBuilder.append(" TTL=" + TTL);
+        optionBuilder.append(" TTL=" + ttl);
         optionBuilder.append(", VERSIONS=" + versions);
         if (keepDeletedCells == KeepDeletedCells.FALSE) {
             optionBuilder.append(", KEEP_DELETED_CELLS=FALSE");
@@ -116,15 +117,15 @@ public class TableTTLIT extends BaseTest {
     }
 
     @Parameterized.Parameters(name = "TableTTLIT_multiCF={0}, columnEncoded={1}, "
-            + "keepDeletedCells={2}, versions={3}")
+            + "keepDeletedCells={2}, versions={3}, ttl={4}")
     public static synchronized Collection<Object[]> data() {
             return Arrays.asList(new Object[][] {
-                    { false, false, KeepDeletedCells.FALSE, 1},
-                    { false, true, KeepDeletedCells.TRUE, 5},
-                    { false, false, KeepDeletedCells.TTL, 1},
-                    { true, true, KeepDeletedCells.FALSE, 5},
-                    { true, false, KeepDeletedCells.TRUE, 1},
-                    { true, true, KeepDeletedCells.TTL, 5 } });
+                    { false, false, KeepDeletedCells.FALSE, 1, 100},
+                    { false, false, KeepDeletedCells.TRUE, 5, 50},
+                    { false, false, KeepDeletedCells.TTL, 1, 25},
+                    { true, false, KeepDeletedCells.FALSE, 5, 50},
+                    { true, false, KeepDeletedCells.TRUE, 1, 25},
+                    { true, false, KeepDeletedCells.TTL, 5, 100} });
     }
 
     /**
@@ -136,16 +137,18 @@ public class TableTTLIT extends BaseTest {
      * The test also occasionally deletes the row from both tables and but compacts only the
      * first table during this test.
      *
+     * Both tables are subject to masking during queries.
+     *
      * This test expects that both tables return the same row content for the same row version.
      *
      * @throws Exception
      */
+
     @Test
     public void testMaskingAndCompaction() throws Exception {
-        final int maxDeleteCounter = 10;
-        final int maxCompactionCounter = 100;
-        final int maxMaskingCounter = 50;
-        final int maxFlushCounter = 50;
+        final int maxDeleteCounter = MAX_LOOKBACK_AGE;
+        final int maxCompactionCounter = ttl / 2;
+        final int maxMaskingCounter = 2 * ttl;
         final byte[] rowKey = Bytes.toBytes("a");
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
@@ -159,7 +162,7 @@ public class TableTTLIT extends BaseTest {
             int deleteCounter = RAND.nextInt(maxDeleteCounter) + 1;
             int compactionCounter = RAND.nextInt(maxCompactionCounter) + 1;
             int maskingCounter = RAND.nextInt(maxMaskingCounter) + 1;
-            int flushCounter = RAND.nextInt(maxFlushCounter) + 1;
+            boolean afterCompaction = false;
             for (int i = 0; i < 500; i++) {
                 if (compactionCounter-- == 0) {
                     injectEdge.incrementValue(1000);
@@ -167,10 +170,20 @@ public class TableTTLIT extends BaseTest {
                     flush(TableName.valueOf(tableName));
                     majorCompact(TableName.valueOf(tableName));
                     compactionCounter = RAND.nextInt(maxCompactionCounter) + 1;
+                    afterCompaction = true;
                 }
                 if (maskingCounter-- == 0) {
-                    injectEdge.incrementValue((TTL + MAX_LOOKBACK_AGE + 1) * 1000);
+                    updateRow(conn, tableName, noCompactTableName, "a");
+                    injectEdge.incrementValue((ttl + MAX_LOOKBACK_AGE + 1) * 1000);
                     LOG.debug("Masking " + i + " current time: " + injectEdge.currentTime());
+                    ResultSet rs = conn.createStatement().executeQuery(
+                            "SELECT count(*) FROM " + tableName);
+                    Assert.assertTrue(rs.next());
+                    Assert.assertEquals(rs.getLong(1), 0);
+                    rs = conn.createStatement().executeQuery(
+                            "SELECT count(*) FROM " + noCompactTableName);
+                    Assert.assertTrue(rs.next());
+                    Assert.assertEquals(rs.getLong(1), 0);
                     flush(TableName.valueOf(tableName));
                     majorCompact(TableName.valueOf(tableName));
                     TestUtil.assertRawCellCount(conn, TableName.valueOf(tableName), rowKey, 0);
@@ -183,13 +196,14 @@ public class TableTTLIT extends BaseTest {
                     deleteCounter = RAND.nextInt(maxDeleteCounter) + 1;
                     injectEdge.incrementValue(1000);
                 }
-                if (flushCounter-- == 0) {
-                    LOG.debug("Flush  " + i + " current time: " + injectEdge.currentTime());
-                    flush(TableName.valueOf(tableName));
-                    flushCounter = RAND.nextInt(maxFlushCounter) + 1;
-                    injectEdge.incrementValue(1000);
-                }
                 updateRow(conn, tableName, noCompactTableName, "a");
+                if (!afterCompaction) {
+                    injectEdge.incrementValue(1000);
+                    // We are interested in the correctness of compaction and masking. Thus, we
+                    // only need to do the latest version and scn queries to after compaction.
+                    continue;
+                }
+                afterCompaction = false;
                 compareRow(conn, tableName, noCompactTableName, "a", MAX_COLUMN_INDEX);
                 long scn = injectEdge.currentTime() - MAX_LOOKBACK_AGE * 1000;
                 long scnEnd = injectEdge.currentTime();
@@ -224,7 +238,7 @@ public class TableTTLIT extends BaseTest {
                 updateColumn(conn, tableName, "a", columnIndex, value);
                 updateColumn(conn, noCompactTableName, "a", columnIndex, value);
                 conn.commit();
-                injectEdge.incrementValue(TTL*1000 - 1000);
+                injectEdge.incrementValue(ttl * 1000 - 1000);
             }
             flush(TableName.valueOf(tableName));
             majorCompact(TableName.valueOf(tableName));
