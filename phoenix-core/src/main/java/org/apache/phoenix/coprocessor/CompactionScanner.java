@@ -99,8 +99,10 @@ public class CompactionScanner implements InternalScanner {
         String tableName = region.getRegionInfo().getTable().getNameAsString();
         Long overriddenMaxLookback =
                 maxLookbackMap.remove(tableName + SEPARATOR + columnFamilyName);
-        this.maxLookbackWindowStart = compactionTime - (overriddenMaxLookback == null ?
-                maxLookbackInMillis : Math.max(maxLookbackInMillis, overriddenMaxLookback)) - 1;
+        maxLookbackInMillis = overriddenMaxLookback == null ?
+                maxLookbackInMillis : Math.max(maxLookbackInMillis, overriddenMaxLookback);
+        this.maxLookbackWindowStart = maxLookbackInMillis == 0 ?
+                compactionTime : compactionTime - maxLookbackInMillis - 1;
         ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
         ttl = cfd.getTimeToLive();
         this.ttlWindowStart = ttl == HConstants.FOREVER ? 1 : compactionTime - ttl * 1000;
@@ -223,6 +225,8 @@ public class CompactionScanner implements InternalScanner {
                 }
                 i++;
             }
+            // No delete marker for this cell
+            retainedCells.add(cell);
         }
         /**
          * This method finds out the maximum and minimum timestamp of the cells of the next row
