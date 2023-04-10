@@ -3866,7 +3866,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                       + Joiner.on(' ').join(unsupportedTables));
                 }
             } catch (Exception ex) {
-                    LOGGER.error(
+                LOGGER.error(
                   "Unable to determine tables requiring upgrade due to PHOENIX-2067",
                   ex);
             } finally {

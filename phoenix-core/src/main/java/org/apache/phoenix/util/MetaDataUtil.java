@@ -1217,7 +1217,7 @@ public class MetaDataUtil {
                 if (table.getColumnFamilies().isEmpty()) {
                     buf.append("'" + QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY + "',");
                 } else {
-                    for(PColumnFamily cf : table.getColumnFamilies()) {
+                    for (PColumnFamily cf : table.getColumnFamilies()) {
                         buf.append(" ?,");
                     }
                 }

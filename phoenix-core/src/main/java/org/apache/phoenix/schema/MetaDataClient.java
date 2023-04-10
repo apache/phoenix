@@ -4513,9 +4513,9 @@ public class MetaDataClient {
                 colUpdate.setString(5, column.getFamilyName() == null
                     ? null : column.getFamilyName().getString());
                 // Adjust position to not include the salt column
-            colUpdate.setInt(6,
+                colUpdate.setInt(6,
                 column.getPosition() - columnsToDropIndex - (isSalted ? 1 : 0));
-            colUpdate.execute();
+                colUpdate.execute();
             }
         }
         return familyName;

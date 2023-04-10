@@ -2073,7 +2073,7 @@ public class UpgradeUtil {
                     + PhoenixDatabaseMetaData.TABLE_SCHEM + ","
                     + PhoenixDatabaseMetaData.TABLE_NAME + ","
                     + MetaDataEndpointImpl.ROW_KEY_ORDER_OPTIMIZABLE + " BOOLEAN"
-                   + ") VALUES ( ?, ?," + "'" + theTableName + "'," + "TRUE)");
+                    + ") VALUES ( ?, ?," + "'" + theTableName + "'," + "TRUE)");
                 try (PreparedStatement upsSyscatStmt = globalConn.prepareStatement(upsSyscat)) {
                     int param = 0;
                     if (theTenantId == null) {
