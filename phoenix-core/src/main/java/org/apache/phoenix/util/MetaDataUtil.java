@@ -919,14 +919,14 @@ public class MetaDataUtil {
                 + " WHERE " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA  + " %s AND "
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME + " = ? ",
             schemaName.length() > 0 ? "= ? " : " IS NULL");
-        try (PreparedStatement stmt = connection.prepareStatement(delQuery)) {
+        try (PreparedStatement delSeqStmt = connection.prepareStatement(delQuery)) {
             if (schemaName.length() > 0) {
-                stmt.setString(1, schemaName);
-                stmt.setString(2, sequenceName);
+                delSeqStmt.setString(1, schemaName);
+                delSeqStmt.setString(2, sequenceName);
             } else {
-                stmt.setString(1, sequenceName);
+                delSeqStmt.setString(1, sequenceName);
             }
-            stmt.executeUpdate();
+            delSeqStmt.executeUpdate();
         }
     }
     
@@ -1223,19 +1223,19 @@ public class MetaDataUtil {
                 }
                 buf.setCharAt(buf.length() - 1, ')');
             }
-            try (PreparedStatement stmt = connection.prepareStatement(buf.toString())) {
+            try (PreparedStatement delStatsStmt = connection.prepareStatement(buf.toString())) {
                 int param = 0;
                 Iterator itr = physicalTablesSet.iterator();
                 while (itr.hasNext()) {
-                    stmt.setString(++param, itr.next().toString());
+                    delStatsStmt.setString(++param, itr.next().toString());
                 }
                 if (table.getIndexType() == IndexType.LOCAL
                     && !table.getColumnFamilies().isEmpty()) {
                     for (PColumnFamily cf : table.getColumnFamilies()) {
-                        stmt.setString(++param, cf.getName().getString());
+                        delStatsStmt.setString(++param, cf.getName().getString());
                     }
                 }
-                stmt.execute();
+                delStatsStmt.execute();
             }
         } finally {
             connection.setAutoCommit(isAutoCommit);

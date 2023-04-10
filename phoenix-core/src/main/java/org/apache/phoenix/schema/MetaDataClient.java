@@ -4486,8 +4486,8 @@ public class MetaDataClient {
         }
         buf.setCharAt(buf.length()-1, ')');
 
-        try (PreparedStatement stmt = connection.prepareStatement(buf.toString())) {
-            stmt.execute();
+        try (PreparedStatement delCol = connection.prepareStatement(buf.toString())) {
+            delCol.execute();
         }
         Collections.sort(columnsToDrop,new Comparator<PColumn> () {
             @Override
@@ -4498,21 +4498,25 @@ public class MetaDataClient {
 
         boolean isSalted = table.getBucketNum() != null;
         int columnsToDropIndex = 0;
-        PreparedStatement colUpdate = connection.prepareStatement(UPDATE_COLUMN_POSITION);
-        colUpdate.setString(1, tenantId);
-        colUpdate.setString(2, schemaName);
-        colUpdate.setString(3, tableName);
-        for (int i = columnsToDrop.get(columnsToDropIndex).getPosition() + 1; i < table.getColumns().size(); i++) {
-            PColumn column = table.getColumns().get(i);
-            if (columnsToDrop.contains(column)) {
-                columnsToDropIndex++;
-                continue;
-            }
-            colUpdate.setString(4, column.getName().getString());
-            colUpdate.setString(5, column.getFamilyName() == null ? null : column.getFamilyName().getString());
-            // Adjust position to not include the salt column
-            colUpdate.setInt(6, column.getPosition() - columnsToDropIndex - (isSalted ? 1 : 0));
+        try (PreparedStatement colUpdate = connection.prepareStatement(UPDATE_COLUMN_POSITION)) {
+            colUpdate.setString(1, tenantId);
+            colUpdate.setString(2, schemaName);
+            colUpdate.setString(3, tableName);
+            for (int i = columnsToDrop.get(columnsToDropIndex).getPosition() + 1;
+                i < table.getColumns().size(); i++) {
+                PColumn column = table.getColumns().get(i);
+                if (columnsToDrop.contains(column)) {
+                    columnsToDropIndex++;
+                    continue;
+                }
+                colUpdate.setString(4, column.getName().getString());
+                colUpdate.setString(5, column.getFamilyName() == null
+                    ? null : column.getFamilyName().getString());
+                // Adjust position to not include the salt column
+            colUpdate.setInt(6,
+                column.getPosition() - columnsToDropIndex - (isSalted ? 1 : 0));
             colUpdate.execute();
+            }
         }
         return familyName;
     }
@@ -5037,7 +5041,9 @@ public class MetaDataClient {
                     } else {
                         Long scn = connection.getSCN();
                         long ts = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
-                             MutationPlan plan = new PostDDLCompiler(connection).compile(Collections.singletonList(indexRef), null, null, Collections.<PColumn>emptyList(), ts);
+                        MutationPlan plan = new PostDDLCompiler(connection)
+                            .compile(Collections.singletonList(indexRef), null,
+                                null, Collections.<PColumn>emptyList(), ts);
                         connection.getQueryServices().updateData(plan);
                     }
                     NamedTableNode dataTableNode = NamedTableNode.create(null,

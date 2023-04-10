@@ -3866,7 +3866,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                       + Joiner.on(' ').join(unsupportedTables));
                 }
             } catch (Exception ex) {
-                LOGGER.error(
+                    LOGGER.error(
                   "Unable to determine tables requiring upgrade due to PHOENIX-2067",
                   ex);
             } finally {
@@ -4001,8 +4001,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "="
                 + props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB,
                 QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS);
-            try (PreparedStatement stmt = metaConnection.prepareStatement(altCatQry)) {
-                stmt.executeUpdate();
+            try (PreparedStatement altCatQryStmt = metaConnection.prepareStatement(altCatQry)) {
+                altCatQryStmt.executeUpdate();
             }
             String altSysFuncQry = "ALTER TABLE "
                 + PhoenixDatabaseMetaData.SYSTEM_FUNCTION + " SET "
@@ -4013,15 +4013,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "="
                 + props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB,
                 QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS);
-            try (PreparedStatement stmt = metaConnection.prepareStatement(altSysFuncQry)) {
-                stmt.executeUpdate();
+            try (PreparedStatement altSysFuncStmt = metaConnection
+                .prepareStatement(altSysFuncQry)) {
+                altSysFuncStmt.executeUpdate();
             }
             String altStatsQuery = "ALTER TABLE "
                 + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " SET "
                 + TableDescriptorBuilder.SPLIT_POLICY + "='"
                 + SystemStatsSplitPolicy.class.getName() + "'";
-            try (PreparedStatement stmt = metaConnection.prepareStatement(altStatsQuery)) {
-                stmt.executeUpdate();
+            try (PreparedStatement altStatsStmt = metaConnection.prepareStatement(altStatsQuery)) {
+                altStatsStmt.executeUpdate();
             }
         }
         if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0) {
@@ -4490,18 +4491,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             if (UpgradeUtil.tableHasKeepDeleted(
                 metaConnection, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
-                try (PreparedStatement stmt = metaConnection.prepareStatement("ALTER TABLE "
+                try (PreparedStatement altStmt = metaConnection.prepareStatement("ALTER TABLE "
                     + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " SET "
                     + KEEP_DELETED_CELLS + "='" + KeepDeletedCells.FALSE + "'")) {
-                    stmt.executeUpdate();
+                    altStmt.executeUpdate();
                 }
             }
             if (UpgradeUtil.tableHasMaxVersions(
                 metaConnection, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
-                try (PreparedStatement stmt = metaConnection.prepareStatement("ALTER TABLE "
+                try (PreparedStatement altStats = metaConnection.prepareStatement("ALTER TABLE "
                     + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " SET "
                     + HConstants.VERSIONS + " = '1' ")) {
-                    stmt.executeUpdate();
+                    altStats.executeUpdate();
                 }
             }
         }
@@ -4538,8 +4539,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, columnsToAdd);
                 String altQuery = String.format(ALTER_TABLE_SET_PROPS,
                     taskTableFullName, TTL, TASK_TABLE_TTL);
-                try (PreparedStatement stmt = metaConnection.prepareStatement(altQuery)) {
-                    stmt.executeUpdate();
+                try (PreparedStatement altQueryStmt = metaConnection.prepareStatement(altQuery)) {
+                    altQueryStmt.executeUpdate();
                 }
                 clearCache();
             }
@@ -4621,16 +4622,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             takeSnapshotOfSysTable(systemTableToSnapshotMap, e);
             if (UpgradeUtil.tableHasKeepDeleted(
                 metaConnection, PhoenixDatabaseMetaData.SYSTEM_LOG_NAME) ) {
-                try (Statement stmt = metaConnection.createStatement()) {
-                    stmt.executeUpdate("ALTER TABLE "
+                try (Statement altLogStmt = metaConnection.createStatement()) {
+                    altLogStmt.executeUpdate("ALTER TABLE "
                         + PhoenixDatabaseMetaData.SYSTEM_LOG_NAME + " SET "
                         + KEEP_DELETED_CELLS + "='" + KeepDeletedCells.FALSE + "'");
                 }
             }
             if (UpgradeUtil.tableHasMaxVersions(
                 metaConnection, PhoenixDatabaseMetaData.SYSTEM_LOG_NAME)) {
-                try (Statement stmt = metaConnection.createStatement()) {
-                    stmt.executeUpdate("ALTER TABLE "
+                try (Statement altLogVer = metaConnection.createStatement()) {
+                    altLogVer.executeUpdate("ALTER TABLE "
                         + PhoenixDatabaseMetaData.SYSTEM_LOG_NAME + " SET "
                         + HConstants.VERSIONS + "='1'");
                 }

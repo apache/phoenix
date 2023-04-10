@@ -615,11 +615,11 @@ public class IndexTool extends Configured implements Tool {
                     + " BIGINT) WHERE " + TABLE_SCHEM +  " %s  AND " + TABLE_NAME + " IN ( %s )",
                         (schemaName != null && schemaName.length() > 0) ? " = ? " : " IS NULL ",
                 StringUtils.join(",", quotedIndexes));
-            try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            try (PreparedStatement selSyscat = connection.prepareStatement(query)) {
                 if (schemaName != null && schemaName.length() > 0) {
-                    stmt.setString(1, schemaName);
+                    selSyscat.setString(1, schemaName);
                 }
-                ResultSet rs = stmt.executeQuery();
+                ResultSet rs = selSyscat.executeQuery();
                 if (rs.next()) {
                     maxRebuilAsyncDate = rs.getLong(1);
                     maxDisabledTimeStamp = rs.getLong(2);

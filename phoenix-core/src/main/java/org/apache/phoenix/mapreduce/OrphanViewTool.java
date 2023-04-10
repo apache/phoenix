@@ -449,24 +449,24 @@ public class OrphanViewTool extends Configured implements Tool {
             src.getSchemaName() == null ? " IS NULL " : " = ? ",
             dst.getTenantId() == null ? " IS NULL" : " = ?");
 
-        try (PreparedStatement stmt = phoenixConnection.prepareStatement(deleteQuery)) {
+        try (PreparedStatement delStmt = phoenixConnection.prepareStatement(deleteQuery)) {
             int param = 0;
             if (src.getTenantId() != null) {
-                stmt.setString(++param, src.getTenantId());
+                delStmt.setString(++param, src.getTenantId());
             }
             if (src.getSchemaName() != null) {
-                stmt.setString(++param, src.getSchemaName());
+                delStmt.setString(++param, src.getSchemaName());
             }
-            stmt.setString(++param, src.getTableName());
+            delStmt.setString(++param, src.getTableName());
             if (dst.getTenantId() != null) {
-                stmt.setString(++param, dst.getTenantId());
+                delStmt.setString(++param, dst.getTenantId());
             }
             if (dst.getSchemaName() == null) {
-                stmt.setString(++param, dst.getTableName());
+                delStmt.setString(++param, dst.getTableName());
             } else {
-                stmt.setString(++param, dst.getSchemaName() + "." + dst.getTableName());
+                delStmt.setString(++param, dst.getSchemaName() + "." + dst.getTableName());
             }
-            stmt.execute();
+            delStmt.execute();
             phoenixConnection.commit();
         }
     }
