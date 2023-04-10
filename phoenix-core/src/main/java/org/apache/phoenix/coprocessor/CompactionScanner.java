@@ -853,7 +853,8 @@ public class CompactionScanner implements InternalScanner {
             Scan scan = new Scan();
             scan.setRaw(true);
             scan.readAllVersions();
-            scan.setTimeRange(0, compactionTime);
+            // compaction + 1 because the upper limit of the time range is not inclusive
+            scan.setTimeRange(0, compactionTime + 1);
             scan.withStartRow(rowKey, true);
             scan.withStopRow(rowKey, true);
             RegionScanner scanner = region.getScanner(scan);
