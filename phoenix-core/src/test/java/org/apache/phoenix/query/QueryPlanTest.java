@@ -87,12 +87,12 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
 
                 "SELECT count(*) FROM atable",
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER ATABLE\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    SERVER AGGREGATE INTO SINGLE ROW",
 
                 "SELECT count(*) FROM atable WHERE organization_id='000000000000001' AND SUBSTR(entity_id,1,3) > '002' AND SUBSTR(entity_id,1,3) <= '003'",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','003            '] - ['000000000000001','004            ']\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    SERVER AGGREGATE INTO SINGLE ROW",
 
                 "SELECT a_string FROM atable WHERE organization_id='000000000000001' AND SUBSTR(entity_id,1,3) > '002' AND SUBSTR(entity_id,1,3) <= '003'",
@@ -249,7 +249,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
             String queryPlan = QueryUtil.getExplainPlan(rs);
             assertEquals(
                     "CLIENT PARALLEL 20-WAY RANGE SCAN OVER FOO [X'00','a',~'2016-01-28 23:59:59.999'] - [X'13','a',~'2016-01-28 00:00:00.000']\n" +
-                    "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
                     "CLIENT MERGE SORT", queryPlan);
         } finally {
             conn.close();

@@ -27,6 +27,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIM
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.schema.PTable.IndexType.LOCAL;
+import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 import static org.apache.phoenix.util.EncodedColumnsUtil.isPossibleToUseEncodedCQFilter;
@@ -37,20 +38,8 @@ import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.BitSet;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.NavigableSet;
-import java.util.Queue;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.TreeSet;
-import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
@@ -89,6 +78,7 @@ import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
+import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
@@ -276,9 +266,34 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     }
                 }
             }
-            // Add FirstKeyOnlyFilter if there are no references to key value columns
+            // Add FirstKeyOnlyFilter or EmptyColumnOnlyFilter if there are no references
+            // to key value columns. We use FirstKeyOnlyFilter when possible
             if (keyOnlyFilter) {
-                ScanUtil.andFilterAtBeginning(scan, new FirstKeyOnlyFilter());
+                byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
+                byte[] ecq = table.getEncodingScheme() == NON_ENCODED_QUALIFIERS ?
+                        QueryConstants.EMPTY_COLUMN_BYTES :
+                        table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+                if (table.getEncodingScheme() == NON_ENCODED_QUALIFIERS) {
+                    ScanUtil.andFilterAtBeginning(scan, new EmptyColumnOnlyFilter(ecf, ecq));
+                } else  if (table.getColumnFamilies().size() == 0) {
+                    ScanUtil.andFilterAtBeginning(scan, new FirstKeyOnlyFilter());
+                } else {
+                    // There are more than column families. If the empty column family is the
+                    // first column family lexicographically then FirstKeyOnlyFilter would return
+                    // the empty column
+                    List<byte[]> families = new ArrayList<>(table.getColumnFamilies().size());
+                    for (PColumnFamily family : table.getColumnFamilies()) {
+                        families.add(family.getName().getBytes());
+                    }
+                    Collections.sort(families, Bytes.BYTES_COMPARATOR);
+                    byte[] firstFamily = families.get(0);
+                    if (Bytes.compareTo(ecf, 0, ecf.length,
+                            firstFamily, 0, firstFamily.length) == 0) {
+                        ScanUtil.andFilterAtBeginning(scan, new FirstKeyOnlyFilter());
+                    } else {
+                        ScanUtil.andFilterAtBeginning(scan, new EmptyColumnOnlyFilter(ecf, ecq));
+                    }
+                }
             }
 
             if (perScanLimit != null) {

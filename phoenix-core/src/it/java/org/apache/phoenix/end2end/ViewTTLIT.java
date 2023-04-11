@@ -25,7 +25,6 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.filter.BinaryComparator;
-import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.QualifierFilter;
 import org.apache.hadoop.hbase.filter.RowFilter;
@@ -2338,7 +2337,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     }
 
     private void validateExpiredRowsAreNotReturnedUsingCounts(long phoenixTTL, DataReader dataReader,
-            SchemaBuilder schemaBuilder) throws SQLException {
+            SchemaBuilder schemaBuilder) throws IOException, SQLException {
 
         String tenantConnectUrl =
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();

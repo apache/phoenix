@@ -60,7 +60,7 @@ public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
                 }, {
                 "SORT-MERGE-JOIN (LEFT) TABLES\n" +
                 "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +JOIN_SUPPLIER_TABLE_FULL_NAME + " [1]\n" +
-                "        SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER SORTED BY [\"S.:supplier_id\"]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND\n" +

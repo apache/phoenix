@@ -37,9 +37,11 @@ import org.apache.hadoop.io.Writable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 
 /**
- * This filter overrides the behavior of delegate so that we do not scan more rows than pageSizeInRows .
+ * This is a top level Phoenix filter which is injected to a scan at the server side. If the scan has
+ * already a filter then PagingFilter wraps it. This filter for server paging. It makes sure that
+ * the scan does not take more than pageSizeInMs.
  */
-public class PagedFilter extends FilterBase implements Writable {
+public class PagingFilter extends FilterBase implements Writable {
     private enum State {
         INITIAL, STARTED, TIME_TO_STOP, STOPPED
     }
@@ -49,11 +51,11 @@ public class PagedFilter extends FilterBase implements Writable {
     private byte[] rowKeyAtStop;
     private Filter delegate = null;
 
-    public PagedFilter() {
+    public PagingFilter() {
         init();
     }
 
-    public PagedFilter(Filter delegate, long pageSizeMs) {
+    public PagingFilter(Filter delegate, long pageSizeMs) {
         init();
         this.delegate = delegate;
         this.pageSizeMs = pageSizeMs;
@@ -91,10 +93,11 @@ public class PagedFilter extends FilterBase implements Writable {
 
     @Override
     public void reset() throws IOException {
+        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         if (state == State.INITIAL) {
-            startTime = EnvironmentEdgeManager.currentTimeMillis();
+            startTime = currentTime;
             state = State.STARTED;
-        } else if (state == State.STARTED && EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
+        } else if (state == State.STARTED && currentTime - startTime >= pageSizeMs) {
             state = State.TIME_TO_STOP;
         }
         if (delegate != null) {
@@ -211,6 +214,7 @@ public class PagedFilter extends FilterBase implements Writable {
 
     @Override
     public ReturnCode filterKeyValue(Cell v) throws IOException {
+
         if (delegate != null) {
             return delegate.filterKeyValue(v);
         }
@@ -225,9 +229,9 @@ public class PagedFilter extends FilterBase implements Writable {
         return super.filterCell(c);
     }
 
-    public static PagedFilter parseFrom(final byte [] pbBytes) throws DeserializationException {
+    public static PagingFilter parseFrom(final byte [] pbBytes) throws DeserializationException {
         try {
-            return (PagedFilter) Writables.getWritable(pbBytes, new PagedFilter());
+            return (PagingFilter) Writables.getWritable(pbBytes, new PagingFilter());
         } catch (IOException e) {
             throw new DeserializationException(e);
         }

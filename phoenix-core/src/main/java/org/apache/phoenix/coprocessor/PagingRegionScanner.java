@@ -24,65 +24,66 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.phoenix.filter.PagedFilter;
-
-import static org.apache.phoenix.util.ScanUtil.getDummyResult;
-import static org.apache.phoenix.util.ScanUtil.getPhoenixPagedFilter;
+import org.apache.phoenix.filter.PagingFilter;
+import org.apache.phoenix.util.ScanUtil;
 
 /**
- *  PagedRegionScanner works with PagedFilter to make sure that the time between two rows returned by the HBase region
- *  scanner should not exceed the configured page size in ms (on PagedFilter). When the page size is reached (because
- *  there are too many cells/rows to be filtered out), PagedFilter stops the HBase region scanner and sets its state
- *  to STOPPED. In this case, the HBase region scanner next() returns false and PagedFilter#isStopped() returns true.
- *  PagedRegionScanner is responsible for detecting PagedFilter has stopped the scanner, and then closing the current
- *  HBase region scanner, starting a new one to resume the scan operation and returning a dummy result to signal to
- *  Phoenix client to resume the scan operation by skipping this dummy result and calling ResultScanner#next().
+ *  PagingRegionScanner works with PagingFilter to make sure that the time between two rows
+ *  returned by the HBase region scanner should not exceed the configured page size in ms
+ *  (on PagingFilter). When the page size is reached (because there are too many cells/rows
+ *  to be filtered out), PagingFilter stops the HBase region scanner and sets its state
+ *  to STOPPED. In this case, the HBase region scanner next() returns false and
+ *  PagingFilter#isStopped() returns true. PagingRegionScanner is responsible for detecting
+ *  PagingFilter has stopped the scanner, and then closing the current HBase region scanner,
+ *  starting a new one to resume the scan operation and returning a dummy result to signal to
+ *  Phoenix client to resume the scan operation by skipping this dummy result and calling
+ *  ResultScanner#next().
  */
-public class PagedRegionScanner extends BaseRegionScanner {
-    protected Region region;
-    protected Scan scan;
-    protected PagedFilter pageFilter;
-	public PagedRegionScanner(Region region, RegionScanner scanner, Scan scan) {
+public class PagingRegionScanner extends BaseRegionScanner {
+    private Region region;
+    private Scan scan;
+    private PagingFilter pagingFilter;
+	public PagingRegionScanner(Region region, RegionScanner scanner, Scan scan) {
 	    super(scanner);
 	    this.region = region;
 	    this.scan = scan;
-	    pageFilter = getPhoenixPagedFilter(scan);
-	    if (pageFilter != null) {
-	        pageFilter.init();
+        pagingFilter = ScanUtil.getPhoenixPagingFilter(scan);
+        if (pagingFilter != null) {
+            pagingFilter.init();
         }
-	}
+    }
 
     private boolean next(List<Cell> results, boolean raw) throws IOException {
-	    try {
+        try {
             boolean hasMore = raw ? delegate.nextRaw(results) : delegate.next(results);
-            if (pageFilter == null) {
+            if (pagingFilter == null) {
                 return hasMore;
             }
             if (!hasMore) {
                 // There is no more row from the HBase region scanner. We need to check if PageFilter
                 // has stopped the region scanner
-                if (pageFilter.isStopped()) {
+                if (pagingFilter.isStopped()) {
                     // Close the current region scanner, start a new one and return a dummy result
                     delegate.close();
-                    byte[] rowKey = pageFilter.getRowKeyAtStop();
+                    byte[] rowKey = pagingFilter.getRowKeyAtStop();
                     scan.withStartRow(rowKey, true);
                     delegate = region.getScanner(scan);
                     if (results.isEmpty()) {
-                        getDummyResult(rowKey, results);
+                        ScanUtil.getDummyResult(rowKey, results);
                     }
-                    pageFilter.init();
+                    pagingFilter.init();
                     return true;
                 }
                 return false;
             } else {
                 // We got a row from the HBase scanner within the configured time (i.e., the page size). We need to
                 // start a new page on the next next() call.
-                pageFilter.resetStartTime();
+                pagingFilter.resetStartTime();
                 return true;
             }
         } catch (Exception e) {
-            if (pageFilter != null) {
-                pageFilter.init();
+            if (pagingFilter != null) {
+                pagingFilter.init();
             }
             throw e;
         }
@@ -90,7 +91,7 @@ public class PagedRegionScanner extends BaseRegionScanner {
 
     @Override
     public boolean next(List<Cell> results) throws IOException {
-	   return next(results, false);
+        return next(results, false);
     }
 
     @Override
@@ -100,6 +101,6 @@ public class PagedRegionScanner extends BaseRegionScanner {
 
     @Override
     public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
-        return new PagedRegionScanner(region, region.getScanner(scan), scan);
+        return new PagingRegionScanner(region, region.getScanner(scan), scan);
     }
 }

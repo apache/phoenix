@@ -82,7 +82,6 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
@@ -924,22 +923,26 @@ public class TestUtil {
     public static void dumpTable(Table table) throws IOException {
         System.out.println("************ dumping " + table + " **************");
         Scan s = new Scan();
-        s.setRaw(true);;
+        s.setRaw(true);
         s.readAllVersions();
+        int cellCount = 0;
+        int rowCount = 0;
         try (ResultScanner scanner = table.getScanner(s)) {
             Result result = null;
             while ((result = scanner.next()) != null) {
+                rowCount++;
                 CellScanner cellScanner = result.cellScanner();
                 Cell current = null;
                 while (cellScanner.advance()) {
                     current = cellScanner.current();
                     System.out.println(current + " column= " +
-                        Bytes.toString(CellUtil.cloneQualifier(current)) +
+                        Bytes.toStringBinary(CellUtil.cloneQualifier(current)) +
                         " val=" + Bytes.toStringBinary(CellUtil.cloneValue(current)));
+                    cellCount++;
                 }
             }
         }
-        System.out.println("-----------------------------------------------");
+        System.out.println("----- Row count: " + rowCount + " Cell count: " + cellCount + " -----");
     }
 
     public static int getRawRowCount(Table table) throws IOException {
@@ -1347,7 +1350,7 @@ public class TestUtil {
         throws SQLException, IOException {
         Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
         TableDescriptor td = admin.getDescriptor(tableName);
-        return td.getColumnFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
+        return td.getColumnFamilies()[0];
     }
 
     public static void assertRawRowCount(Connection conn, TableName table, int expectedRowCount)

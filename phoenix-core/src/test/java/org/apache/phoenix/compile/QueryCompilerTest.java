@@ -78,6 +78,7 @@ import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.TimeUnit;
+import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
@@ -2507,19 +2508,19 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             rs = conn.createStatement().executeQuery("EXPLAIN "+query);
             explainPlan = QueryUtil.getExplainPlan(rs);
             assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER T3\n" + 
-                    "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    PARALLEL INNER-JOIN TABLE 0\n" + 
                     "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
-                    "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "            SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    DYNAMIC SERVER FILTER BY B.J IN (\"A.:K\")",explainPlan);
             query = "SELECT a.k,b.k from t2 b join t1 a ON a.k = b.k where a.col1 || a.col2 = 'foobar'";
             rs = conn.createStatement().executeQuery("EXPLAIN "+query);
             explainPlan = QueryUtil.getExplainPlan(rs);
             assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER T2\n" + 
-                    "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    PARALLEL INNER-JOIN TABLE 0\n" + 
                     "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
-                    "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "            SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    DYNAMIC SERVER FILTER BY B.K IN (\"A.:K\")",explainPlan);
         } finally {
             conn.close();
