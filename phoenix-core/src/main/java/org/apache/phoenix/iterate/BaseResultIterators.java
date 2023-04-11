@@ -1737,11 +1737,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     /**
      * Used for specific test case to check if timeouts are working in ScanningResultIterator.
-     * @param throwException
+     * @param setTimeoutToMax
      */
     @VisibleForTesting
-    public static void setForTestingSetTimeoutToMaxToLetQueryPassHere(boolean throwException) {
-        forTestingSetTimeoutToMaxToLetQueryPassHere = throwException;
+    public static void setForTestingSetTimeoutToMaxToLetQueryPassHere(boolean setTimeoutToMax) {
+        forTestingSetTimeoutToMaxToLetQueryPassHere = setTimeoutToMax;
     }
 
 }

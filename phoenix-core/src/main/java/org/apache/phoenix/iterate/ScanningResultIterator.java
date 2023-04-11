@@ -180,7 +180,7 @@ public class ScanningResultIterator implements ResultIterator {
                 long timeOutForScan = maxQueryEndTime - EnvironmentEdgeManager.currentTimeMillis();
                 if (timeOutForScan < 0) {
                     throw new SQLExceptionInfo.Builder(OPERATION_TIMED_OUT).setMessage(
-                            ". Query couldn't be completed in the allotted time: "
+                            ". Query couldn't be completed in the allotted time at ScanningResultIterator: "
                                     + context.getStatement().getQueryTimeoutInMillis() + " ms").build().buildException();
                 }
                 if (!isMapReduceContext && (context.getConnection().isClosing() || context.getConnection().isClosed())) {

@@ -120,6 +120,7 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
         } catch (SQLException e) {
             //OPERATION_TIMED_OUT Exception expected
             assertEquals(OPERATION_TIMED_OUT.getErrorCode(), e.getErrorCode());
+        } finally {
             BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(false);
         }
     }
@@ -139,9 +140,10 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
                 count++;
             }
             assertEquals("Unexpected number of records returned", 500, count);
-            BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(false);
         } catch (SQLException e) {
             fail("Expected query to succeed");
+        } finally {
+            BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(false);
         }
     }
     
@@ -162,6 +164,7 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
 
     private PreparedStatement loadDataAndPreparePagedQuery(int timeoutMs, int timeoutSecs) throws Exception {
         Properties props = new Properties();
+        //Setting Paging Size to 0 and Query Timeout to 1ms so that query get paged quickly and times out immediately
         props.setProperty(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, String.valueOf(timeoutMs));
         props.setProperty(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Integer.toString(0));
         PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
