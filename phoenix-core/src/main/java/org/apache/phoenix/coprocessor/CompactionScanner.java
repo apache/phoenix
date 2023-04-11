@@ -69,6 +69,7 @@ public class CompactionScanner implements InternalScanner {
     private int minVersion;
     private int maxVersion;
     private final boolean emptyCFStore;
+    private final boolean localIndex;
     private final int familyCount;
     private KeepDeletedCells keepDeletedCells;
     private long compactionTime;
@@ -101,8 +102,11 @@ public class CompactionScanner implements InternalScanner {
                 maxLookbackMap.remove(tableName + SEPARATOR + columnFamilyName);
         maxLookbackInMillis = overriddenMaxLookback == null ?
                 maxLookbackInMillis : Math.max(maxLookbackInMillis, overriddenMaxLookback);
+        // The oldest scn is current time - maxLookbackInMillis. Phoenix sets the scan time range
+        // for scn queries [0, scn). This means that the maxlookback size should be
+        // maxLookbackInMillis + 1 so that the oldest scn does not return empty row
         this.maxLookbackWindowStart = maxLookbackInMillis == 0 ?
-                compactionTime : compactionTime - maxLookbackInMillis - 1;
+                compactionTime : compactionTime - (maxLookbackInMillis + 1);
         ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
         ttl = cfd.getTimeToLive();
         this.ttlWindowStart = ttl == HConstants.FOREVER ? 1 : compactionTime - ttl * 1000;
@@ -112,8 +116,9 @@ public class CompactionScanner implements InternalScanner {
         this.maxVersion = cfd.getMaxVersions();
         this.keepDeletedCells = cfd.getKeepDeletedCells();
         familyCount = region.getTableDescriptor().getColumnFamilies().length;
+        localIndex = columnFamilyName.startsWith(LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
         emptyCFStore = familyCount == 1 || columnFamilyName.equals(Bytes.toString(emptyCF))
-                        || columnFamilyName.startsWith(LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
+                        || localIndex;
         phoenixLevelRowCompactor = new PhoenixLevelRowCompactor();
         hBaseLevelRowCompactor = new HBaseLevelRowCompactor();
     }
@@ -678,8 +683,13 @@ public class CompactionScanner implements InternalScanner {
             // If the time gap between two back to back mutations is more than ttl then we know
             // that the row is expired within the time gap.
             if (maxTimestamp - minTimestamp > ttl) {
-                if ((familyCount > 1 && !regionLevel)) {
-                    // We need region level compaction to decided which cells to retain
+                if ((familyCount > 1 && !regionLevel && !localIndex)) {
+                    // When there are more than one column family for a given table and a row
+                    // version constructed at the store level covers a time span larger than ttl,
+                    // we need region level compaction to see if the other stores have more cells
+                    // for any of these large time gaps. A store level compaction may incorrectly
+                    // remove some cells due to a large time gap which may not there at the region
+                    // level.
                     return false;
                 }
                 // We either have one column family or are doing region level compaction. In both
