@@ -614,10 +614,14 @@ public class IndexTool extends Configured implements Tool {
                     + SYSTEM_CATALOG_NAME + " (" + ASYNC_REBUILD_TIMESTAMP
                     + " BIGINT) WHERE " + TABLE_SCHEM +  " %s  AND " + TABLE_NAME + " IN ( %s )",
                         (schemaName != null && schemaName.length() > 0) ? " = ? " : " IS NULL ",
-                StringUtils.join(",", quotedIndexes));
+                QueryUtil.getDynamicParams(quotedIndexes.size()));
             try (PreparedStatement selSyscat = connection.prepareStatement(query)) {
+                int param = 0;
                 if (schemaName != null && schemaName.length() > 0) {
-                    selSyscat.setString(1, schemaName);
+                    selSyscat.setString(++param, schemaName);
+                }
+                for (int i = 0; i < quotedIndexes.size(); i++ ) {
+                    selSyscat.setString(++param, quotedIndexes.get(i));
                 }
                 ResultSet rs = selSyscat.executeQuery();
                 if (rs.next()) {

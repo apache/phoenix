@@ -1175,9 +1175,9 @@ public class MetaDataClient {
                 + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
                 + " WHERE " + PHYSICAL_NAME + "= ?  AND " + COLUMN_FAMILY
                 + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
-            try (PreparedStatement stmt = connection.prepareStatement(query)) {
-                stmt.setString(1, physicalName.getString());
-                ResultSet rs = stmt.executeQuery(query);
+            try (PreparedStatement selectStatsStmt = connection.prepareStatement(query)) {
+                selectStatsStmt.setString(1, physicalName.getString());
+                ResultSet rs = selectStatsStmt.executeQuery(query);
                 if (rs.next()) {
                     msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
                 }
@@ -4514,7 +4514,7 @@ public class MetaDataClient {
                     ? null : column.getFamilyName().getString());
                 // Adjust position to not include the salt column
                 colUpdate.setInt(6,
-                   column.getPosition() - columnsToDropIndex - (isSalted ? 1 : 0));
+                    column.getPosition() - columnsToDropIndex - (isSalted ? 1 : 0));
                 colUpdate.execute();
             }
         }

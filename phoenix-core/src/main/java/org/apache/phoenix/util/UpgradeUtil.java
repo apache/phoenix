@@ -1834,7 +1834,7 @@ public class UpgradeUtil {
             query.append(',');
             query.append(schemaName == null ? "null" : " ? ");
             query.append(',');
-            query.append("'" + tableName + "'");
+            query.append(" ? ");
             query.append("),");
         }
         // Replace trailing , with ) to end IN expression
@@ -1891,12 +1891,14 @@ public class UpgradeUtil {
             for (int i = 0; i < tableNames.size(); i += 3) {
                 String tenantId = tableNames.get(i);
                 String schemaName = tableNames.get(i + 1);
+                String tableName = tableNames.get(i+2);
                 if (tenantId != null) {
                     selSysCat.setString(++param, tenantId);
                 }
                 if (schemaName != null) {
                     selSysCat.setString(++param, schemaName);
                 }
+                selSysCat.setString(++param, tableName);
             }
             rs = selSysCat.executeQuery();
             while (rs.next()) {
@@ -2073,7 +2075,7 @@ public class UpgradeUtil {
                     + PhoenixDatabaseMetaData.TABLE_SCHEM + ","
                     + PhoenixDatabaseMetaData.TABLE_NAME + ","
                     + MetaDataEndpointImpl.ROW_KEY_ORDER_OPTIMIZABLE + " BOOLEAN"
-                    + ") VALUES ( ?, ?," + "'" + theTableName + "'," + "TRUE)");
+                    + ") VALUES ( ?, ?, ?, TRUE)");
                 try (PreparedStatement upsSyscatStmt = globalConn.prepareStatement(upsSyscat)) {
                     int param = 0;
                     if (theTenantId == null) {
@@ -2086,6 +2088,7 @@ public class UpgradeUtil {
                     } else {
                         upsSyscatStmt.setString(++param, theSchemaName);
                     }
+                    upsSyscatStmt.setString(++param, theTableName);
                     upsSyscatStmt.execute();
                 }
             }
@@ -2216,8 +2219,7 @@ public class UpgradeUtil {
                 + "WHERE COLUMN_NAME IS NULL"
                 + "AND COLUMN_FAMILY = ? "
                 + "AND LINK_TYPE = ? "
-                + "ORDER BY TENANT_ID", physicalName,
-            LinkType.PHYSICAL_TABLE.getSerializedValue());
+                + "ORDER BY TENANT_ID");
         try (PreparedStatement selSysCatstmt = globalConn.prepareStatement(query)) {
             selSysCatstmt.setString(1, physicalName);
             selSysCatstmt.setByte(2, LinkType.PHYSICAL_TABLE.getSerializedValue());

@@ -553,11 +553,8 @@ public class OrphanViewTool extends Configured implements Tool {
                 if (key.getTenantId() != null) {
                     delChLink.setString(++param, key.getTenantId());
                 }
-                if (key.getSchemaName() == null) {
-                    delChLink.setString(++param, key.getTableName());
-                } else {
-                    delChLink.setString(++param,  key.getSchemaName() + "." + key.getTableName());
-                }
+                delChLink.setString(++param, key.getSchemaName() == null ?
+                    key.getTableName() : (key.getSchemaName() + "." + key.getTableName()));
                 delChLink.execute();
             }
             phoenixConnection.commit();
