@@ -620,7 +620,7 @@ public class IndexTool extends Configured implements Tool {
                 if (schemaName != null && schemaName.length() > 0) {
                     selSyscat.setString(++param, schemaName);
                 }
-                for (int i = 0; i < quotedIndexes.size(); i++ ) {
+                for (int i = 0; i < quotedIndexes.size(); i++) {
                     selSyscat.setString(++param, quotedIndexes.get(i));
                 }
                 ResultSet rs = selSyscat.executeQuery();

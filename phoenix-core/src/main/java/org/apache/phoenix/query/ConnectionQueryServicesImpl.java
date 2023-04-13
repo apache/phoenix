@@ -3995,10 +3995,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
               PhoenixDatabaseMetaData.TRANSACTION_PROVIDER + " "
                 + PTinyint.INSTANCE.getSqlTypeName());
             try (Statement altCatQry = metaConnection.createStatement()) {
-                altCatQry.executeUpdate( "ALTER TABLE "
+                altCatQry.executeUpdate("ALTER TABLE "
                     + PhoenixDatabaseMetaData.SYSTEM_CATALOG + " SET "
-                    + HConstants.VERSIONS + "= " + props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB
-                    , QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS) + ",\n"
+                    + HConstants.VERSIONS + "= "
+                    + props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions
+                    .DEFAULT_SYSTEM_MAX_VERSIONS) + ",\n"
                     + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "="
                     + props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB,
                     QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS));
@@ -4008,8 +4009,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     + PhoenixDatabaseMetaData.SYSTEM_FUNCTION + " SET "
                     + TableDescriptorBuilder.SPLIT_POLICY + "='"
                     + SystemFunctionSplitPolicy.class.getName() + "',\n"
-                    + HConstants.VERSIONS + "= " + props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB
-                    , QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS) + ",\n"
+                    + HConstants.VERSIONS + "= "
+                    + props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions
+                    .DEFAULT_SYSTEM_MAX_VERSIONS) + ",\n"
                     + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "="
                     + props.getBoolean(DEFAULT_SYSTEM_KEEP_DELETED_CELLS_ATTRIB,
                     QueryServicesOptions.DEFAULT_SYSTEM_KEEP_DELETED_CELLS));

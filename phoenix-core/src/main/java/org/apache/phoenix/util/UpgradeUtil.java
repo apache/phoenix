@@ -1891,7 +1891,7 @@ public class UpgradeUtil {
             for (int i = 0; i < tableNames.size(); i += 3) {
                 String tenantId = tableNames.get(i);
                 String schemaName = tableNames.get(i + 1);
-                String tableName = tableNames.get(i+2);
+                String tableName = tableNames.get(i + 2);
                 if (tenantId != null) {
                     selSysCat.setString(++param, tenantId);
                 }
@@ -2621,14 +2621,15 @@ public class UpgradeUtil {
         String newSequenceName = MetaDataUtil.getViewIndexSequenceName(physicalName, tenantId, true);
         // create new entry with new schema format
         String upsert = "UPSERT INTO " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
-            + " SELECT NULL,\'" + newSchemaName + "\',\'" + newSequenceName
-                + "\'," + START_WITH + "," + CURRENT_VALUE + "," + INCREMENT_BY + "," + CACHE_SIZE
-            + "," + MIN_VALUE + "," + MAX_VALUE + "," + CYCLE_FLAG + "," + LIMIT_REACHED_FLAG
-            + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE "
+            + " SELECT NULL, ?, ? " + "\'," + START_WITH + "," + CURRENT_VALUE + "," + INCREMENT_BY
+            + "," + CACHE_SIZE + "," + MIN_VALUE + "," + MAX_VALUE + "," + CYCLE_FLAG + ","
+            + LIMIT_REACHED_FLAG + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE "
             + PhoenixDatabaseMetaData.TENANT_ID + " IS NULL AND "
             + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " =  ?";
         try (PreparedStatement upsertSeqStmt = connection.prepareStatement(upsert)) {
-            upsertSeqStmt.setString(1, oldSchemaName);
+            upsertSeqStmt.setString(1, newSchemaName);
+            upsertSeqStmt.setString(2, newSequenceName);
+            upsertSeqStmt.setString(3, oldSchemaName);
             upsertSeqStmt.executeUpdate();
         }
     }
