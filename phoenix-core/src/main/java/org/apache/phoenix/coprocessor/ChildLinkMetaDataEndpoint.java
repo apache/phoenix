@@ -150,119 +150,28 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
      * An instance of this class is created for each scanner on the table
      * and used to verify individual rows.
      */
-    public class ChildLinkMetaDataScanner extends BaseRegionScanner {
+    public class ChildLinkMetaDataScanner extends ReadRepairScanner {
 
-        private RegionScanner scanner;
-        private Scan scan;
-        private RegionCoprocessorEnvironment env;
-        private Scan sysCatScan = null;
-        private Scan childLinkScan;
-        private byte[] emptyCF;
-        private byte[] emptyCQ;
-        private Region region;
-        private boolean hasMore;
-        private long pageSizeMs;
-        private long pageSize = Long.MAX_VALUE;
-        private long rowCount = 0;
-        private long maxTimestamp;
-        private long ageThreshold;
         private Table sysCatHTable;
-        private boolean restartScanDueToPageFilterRemoval = false;
+        private Scan childLinkScan;
 
         public ChildLinkMetaDataScanner(RegionCoprocessorEnvironment env,
                                         Scan scan,
-                                        RegionScanner scanner) {
-            super(scanner);
-            this.env = env;
-            this.scan = scan;
-            this.scanner = scanner;
-            region = env.getRegion();
-            emptyCF = scan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
-            emptyCQ = scan.getAttribute(EMPTY_COLUMN_QUALIFIER_NAME);
-            pageSizeMs = getPageSizeMsForRegionScanner(scan);
-            maxTimestamp = scan.getTimeRange().getMax();
+                                        RegionScanner scanner) throws IOException {
+            super(env, scan, scanner);
             ageThreshold = env.getConfiguration().getLong(
                     QueryServices.CHILD_LINK_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB,
                     QueryServicesOptions.DEFAULT_CHILD_LINK_ROW_AGE_THRESHOLD_TO_DELETE_MS);
-        }
-
-        public boolean next(List<Cell> result, boolean raw) throws IOException {
-            try {
-                long startTime = EnvironmentEdgeManager.currentTimeMillis();
-                do {
-                    if (raw) {
-                        hasMore = scanner.nextRaw(result);
-                    } else {
-                        hasMore = scanner.next(result);
-                    }
-                    if (result.isEmpty()) {
-                        return hasMore;
-                    }
-                    if (isDummy(result)) {
-                        return true;
-                    }
-                    Cell cell = result.get(0);
-                    if (verifyRowAndRepairIfNecessary(result)) {
-                        break;
-                    }
-                    if (hasMore && (EnvironmentEdgeManager.currentTimeMillis() - startTime) >= pageSizeMs) {
-                        byte[] rowKey = CellUtil.cloneRow(cell);
-                        result.clear();
-                        getDummyResult(rowKey, result);
-                        return true;
-                    }
-                    // skip this row as it is invalid
-                    // if there is no more row, then result will be an empty list
-                } while (hasMore);
-                rowCount++;
-                if (rowCount == pageSize) {
-                    return false;
-                }
-                return hasMore;
-            } catch (Throwable t) {
-                ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
-                return false; // impossible
-            }
-        }
-
-        @Override
-        public boolean next(List<Cell> result) throws IOException {
-            return next(result, false);
-        }
-
-        @Override
-        public boolean nextRaw(List<Cell> result) throws IOException {
-            return next(result, true);
-        }
-
-        private boolean verifyRowAndRepairIfNecessary(List<Cell> cellList) throws IOException {
-            // check if empty column has VERIFIED status
-            if (verifyRowAndRemoveEmptyColumn(cellList)) {
-                return true;
-            }
-            else {
-                Cell cell = cellList.get(0);
-                byte[] rowKey = CellUtil.cloneRow(cell);
-                long ts = cellList.get(0).getTimestamp();
-
-                try {
-                    repairChildLinkRow(rowKey, ts, cellList);
-                } catch (IOException e) {
-                    LOGGER.warn("Child Link row repair failure on region {}.", env.getRegionInfo().getRegionNameAsString());
-                    throw e;
-                }
-
-                if (cellList.isEmpty()) {
-                    return false;
-                }
-                return true;
-            }
+            sysCatHTable = ServerUtil.ConnectionFactory.
+                    getConnection(ServerUtil.ConnectionType.DEFAULT_SERVER_CONNECTION, env).
+                    getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
         }
 
         /*
         If the row is VERIFIED, remove the empty column from the row
          */
-        private boolean verifyRowAndRemoveEmptyColumn(List<Cell> cellList) {
+        @Override
+        public boolean verifyRow(List<Cell> cellList) {
             long cellListSize = cellList.size();
             Cell cell = null;
             if (cellListSize == 0) {
@@ -293,19 +202,15 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
         If found, mark child link row VERIFIED and start a new scan from it.
         Otherwise, delete if row is old enough.
          */
-        private void repairChildLinkRow(byte[] rowKey, long ts, List<Cell> row) throws IOException {
-            if (sysCatScan == null) {
-                PageFilter pageFilter = removePageFilter(scan);
-                if (pageFilter != null) {
-                    pageSize = pageFilter.getPageSize();
-                    restartScanDueToPageFilterRemoval = true;
-                }
-                sysCatScan = new Scan();
-                childLinkScan = new Scan(scan);
-                sysCatHTable = ServerUtil.ConnectionFactory.
-                        getConnection(ServerUtil.ConnectionType.DEFAULT_SERVER_CONNECTION, env).
-                        getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
-            }
+        @Override
+        public void repairRow(List<Cell> row) throws IOException {
+            Cell cell = row.get(0);
+            byte[] rowKey = CellUtil.cloneRow(cell);
+            long ts = row.get(0).getTimestamp();
+
+            Scan sysCatScan = getExternalScanner();
+            childLinkScan = new Scan(scan);
+
 
             // build syscat rowKey using given rowKey
             byte[] sysCatRowKey = getSysCatRowKey(rowKey);
@@ -365,6 +270,7 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
             return String.join(NULL_DELIMITER, sysCatRowKeyCols).getBytes(StandardCharsets.UTF_8);
         }
 
+
         private void deleteIfAgedEnough(byte[] rowKey, long ts, Region region) throws IOException {
             if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold) {
                 Delete del = new Delete(rowKey);
@@ -381,49 +287,7 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
             region.batchMutate(mutations);
         }
 
-        private boolean isEmptyColumn(Cell cell) {
-            return Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
-                    emptyCF, 0, emptyCF.length) == 0 &&
-                    Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                            emptyCQ, 0, emptyCQ.length) == 0;
-        }
 
-        private PageFilter removePageFilterFromFilterList(FilterList filterList) {
-            Iterator<Filter> filterIterator = filterList.getFilters().iterator();
-            while (filterIterator.hasNext()) {
-                Filter filter = filterIterator.next();
-                if (filter instanceof PageFilter) {
-                    filterIterator.remove();
-                    return (PageFilter) filter;
-                } else if (filter instanceof FilterList) {
-                    PageFilter pageFilter = removePageFilterFromFilterList((FilterList) filter);
-                    if (pageFilter != null) {
-                        return pageFilter;
-                    }
-                }
-            }
-            return null;
-        }
-
-        // This method assumes that there is at most one instance of PageFilter in a scan
-        private PageFilter removePageFilter(Scan scan) {
-            Filter filter = scan.getFilter();
-            if (filter != null) {
-                if (filter instanceof PagedFilter) {
-                    filter = ((PagedFilter) filter).getDelegateFilter();
-                    if (filter == null) {
-                        return null;
-                    }
-                }
-                if (filter instanceof PageFilter) {
-                    scan.setFilter(null);
-                    return (PageFilter) filter;
-                } else if (filter instanceof FilterList) {
-                    return removePageFilterFromFilterList((FilterList) filter);
-                }
-            }
-            return null;
-        }
     }
 
     @Override
