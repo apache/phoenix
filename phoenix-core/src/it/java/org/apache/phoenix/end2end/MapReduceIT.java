@@ -145,7 +145,7 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
 
     }
 
-    private void createAndTestJob(Connection conn, String s, double v, String tenantId) throws
+    private void createAndTestJob(Connection conn, String whereCondition, double maxExpected, String tenantId) throws
             SQLException, IOException, InterruptedException, ClassNotFoundException {
         String stockTableName = generateUniqueName();
         String stockStatsTableName = generateUniqueName();
@@ -155,16 +155,16 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
         final Configuration conf = getUtility().getConfiguration();
         Job job = Job.getInstance(conf);
         if (tenantId != null) {
-            setInputForTenant(job, tenantId, stockTableName, s);
+            setInputForTenant(job, tenantId, stockTableName, whereCondition);
         } else {
             PhoenixMapReduceUtil.setInput(job, StockWritable.class, PhoenixTestingInputFormat.class,
-                    stockTableName, s, STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
+                    stockTableName, whereCondition, STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
         }
-        testJob(conn, job, stockTableName, stockStatsTableName, v);
+        testJob(conn, job, stockTableName, stockStatsTableName, maxExpected);
 
     }
 
-    private void createPagedJobAndTestFailedJobDueToTimeOut(Connection conn, String s, double v, String tenantId,
+    private void createPagedJobAndTestFailedJobDueToTimeOut(Connection conn, String whereCondition, double maxExpected, String tenantId,
             boolean testVerySmallTimeOut) throws SQLException, IOException, InterruptedException, ClassNotFoundException {
         String stockTableName = generateUniqueName();
         String stockStatsTableName = generateUniqueName();
@@ -185,10 +185,10 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
 
         Job job = Job.getInstance(conf);
         if (tenantId != null) {
-            setInputForTenant(job, tenantId, stockTableName, s);
+            setInputForTenant(job, tenantId, stockTableName, whereCondition);
         } else {
             PhoenixMapReduceUtil.setInput(job, StockWritable.class, PhoenixTestingInputFormat.class,
-                    stockTableName, s, STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
+                    stockTableName, whereCondition, STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
         }
 
         assertEquals("Failed to reset getRegionBoundaries counter for scanGrouper", 0,
@@ -222,7 +222,7 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
             String name = stats.getString(1);
             double max = stats.getDouble(2);
             assertEquals("Got the wrong stock name!", "AAPL", name);
-            assertEquals("Max value didn't match the expected!", v, max, 0);
+            assertEquals("Max value didn't match the expected!", maxExpected, max, 0);
             assertFalse("Should only have stored one row in stats table!", stats.next());
             assertEquals("There should have been only be 1 call to getRegionBoundaries "
                         + "(corresponding to the driver code)", 1,
