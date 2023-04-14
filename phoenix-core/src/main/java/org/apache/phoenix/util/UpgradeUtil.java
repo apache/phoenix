@@ -2621,7 +2621,7 @@ public class UpgradeUtil {
         String newSequenceName = MetaDataUtil.getViewIndexSequenceName(physicalName, tenantId, true);
         // create new entry with new schema format
         String upsert = "UPSERT INTO " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
-            + " SELECT NULL, ?, ? " + "\'," + START_WITH + "," + CURRENT_VALUE + "," + INCREMENT_BY
+            + " SELECT NULL, ?, ?, " + START_WITH + "," + CURRENT_VALUE + "," + INCREMENT_BY
             + "," + CACHE_SIZE + "," + MIN_VALUE + "," + MAX_VALUE + "," + CYCLE_FLAG + ","
             + LIMIT_REACHED_FLAG + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE "
             + PhoenixDatabaseMetaData.TENANT_ID + " IS NULL AND "
