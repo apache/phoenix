@@ -2218,11 +2218,10 @@ public class UpgradeUtil {
                 + "FROM SYSTEM.CATALOG cat1"
                 + "WHERE COLUMN_NAME IS NULL"
                 + "AND COLUMN_FAMILY = ? "
-                + "AND LINK_TYPE = ? "
-                + "ORDER BY TENANT_ID");
+                + "AND LINK_TYPE = %s "
+                + "ORDER BY TENANT_ID", LinkType.PHYSICAL_TABLE.getSerializedValue());
         try (PreparedStatement selSysCatstmt = globalConn.prepareStatement(query)) {
             selSysCatstmt.setString(1, physicalName);
-            selSysCatstmt.setByte(2, LinkType.PHYSICAL_TABLE.getSerializedValue());
             ResultSet rs = selSysCatstmt.executeQuery();
             String lastTenantId = null;
             Connection conn = globalConn;

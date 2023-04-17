@@ -827,7 +827,7 @@ public final class QueryUtil {
         buf.append(buf.length() == 0 ? "" : " and ");
     }
 
-    public static String getDynamicParams(int nParams) {
+    public static String generateInListParams(int nParams) {
         List<String> paramList = Lists.newArrayList();
         for (int i = 0; i < nParams; i++) {
             paramList.add("?");

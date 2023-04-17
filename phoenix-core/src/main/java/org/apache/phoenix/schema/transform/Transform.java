@@ -481,7 +481,7 @@ public class Transform {
                 + "(TENANT_ID, TABLE_SCHEM, TABLE_NAME, PHYSICAL_TABLE_NAME %s ) "
                 + "VALUES(?, ?, ?, ? %s)", columnNames.size() > 0 ? ","
                 + String.join(",", columnNames) : "",
-            columnNames.size() > 0 ? "," + QueryUtil.getDynamicParams(columnValues.size()) : "");
+            columnNames.size() > 0 ? "," + QueryUtil.generateInListParams(columnValues.size()) : "");
 
         LOGGER.info("About to do cutover via " + changeTable);
         TableViewFinderResult childViewsResult = ViewUtil.findChildViews(connection, tenantId, schema, tableName);
@@ -539,7 +539,7 @@ public class Transform {
                 String changeView = String.format(changeViewStmt,
                     columnNames.size() > 0 ? "," + String.join(",", columnNames) : "",
                     columnNames.size() > 0 ? ","
-                        + QueryUtil.getDynamicParams(columnValues.size()) : "");
+                        + QueryUtil.generateInListParams(columnValues.size()) : "");
                 LOGGER.info("Cutover changing view via " + changeView);
                 try (PreparedStatement stmt = connection.prepareStatement(changeView)) {
                     int param = 0;
