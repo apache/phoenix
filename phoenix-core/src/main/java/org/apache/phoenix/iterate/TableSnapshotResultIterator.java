@@ -77,8 +77,9 @@ public class TableSnapshotResultIterator implements ResultIterator {
   private StatementContext context;
 
   private final boolean isMapReduceContext;
+  private final long maxQueryEndTime;
 
-  public TableSnapshotResultIterator(Configuration configuration, Scan scan, ScanMetricsHolder scanMetricsHolder, StatementContext context, boolean isMapReduceContext)
+  public TableSnapshotResultIterator(Configuration configuration, Scan scan, ScanMetricsHolder scanMetricsHolder, StatementContext context, boolean isMapReduceContext, long maxQueryEndTime)
       throws IOException {
     this.configuration = configuration;
     this.currentRegion = -1;
@@ -97,6 +98,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
     this.rootDir = CommonFSUtils.getRootDir(configuration);
     this.fs = rootDir.getFileSystem(configuration);
     this.isMapReduceContext = isMapReduceContext;
+    this.maxQueryEndTime = maxQueryEndTime;
     init();
   }
 
@@ -158,7 +160,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
         RegionInfo hri = regions.get(this.currentRegion);
         this.scanIterator =
             new ScanningResultIterator(new SnapshotScanner(configuration, fs, restoreDir, htd, hri, scan),
-                scan, scanMetricsHolder, context, isMapReduceContext);
+                scan, scanMetricsHolder, context, isMapReduceContext, maxQueryEndTime);
       } catch (Throwable e) {
         throw ServerUtil.parseServerException(e);
       }
