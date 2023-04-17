@@ -48,6 +48,7 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -131,6 +132,9 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
                 // For MR, skip the region boundary check exception if we encounter a split. ref: PHOENIX-2599
                 scan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes.toBytes(true));
 
+                //Get QueryTimeout From Statement
+                final long startTime = EnvironmentEdgeManager.currentTimeMillis();
+                final long maxQueryEndTime = startTime + queryPlan.getContext().getStatement().getQueryTimeoutInMillis();
                 PeekingResultIterator peekingResultIterator;
                 ScanMetricsHolder scanMetricsHolder =
                   ScanMetricsHolder.getInstance(readMetrics, tableName, scan,
@@ -138,7 +142,7 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
                 if (snapshotName != null) {
                   // result iterator to read snapshots
                   final TableSnapshotResultIterator tableSnapshotResultIterator = new TableSnapshotResultIterator(configuration, scan,
-                      scanMetricsHolder, queryPlan.getContext(), true);
+                      scanMetricsHolder, queryPlan.getContext(), true, maxQueryEndTime);
                     peekingResultIterator = LookAheadResultIterator.wrap(tableSnapshotResultIterator);
                     LOGGER.info("Adding TableSnapshotResultIterator for scan: " + scan);
                 } else {
@@ -146,7 +150,7 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
                       new TableResultIterator(
                           queryPlan.getContext().getConnection().getMutationState(), scan,
                           scanMetricsHolder, renewScannerLeaseThreshold, queryPlan,
-                          this.scanGrouper, true);
+                          this.scanGrouper, true, maxQueryEndTime);
                   peekingResultIterator = LookAheadResultIterator.wrap(tableResultIterator);
                   LOGGER.info("Adding TableResultIterator for scan: " + scan);
                 }
