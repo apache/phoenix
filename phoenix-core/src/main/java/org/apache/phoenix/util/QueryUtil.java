@@ -834,4 +834,9 @@ public final class QueryUtil {
         }
         return Joiner.on(", ").join(paramList);
     }
+
+    public static void setQuoteInListElements(PreparedStatement ps, String unQuotedString,
+        int index) throws SQLException {
+        ps.setString(++index, "'" + unQuotedString + "'");
+    }
 }

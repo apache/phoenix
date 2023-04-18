@@ -480,8 +480,8 @@ public class Transform {
                 changeTable = String.format("UPSERT INTO SYSTEM.CATALOG "
                 + "(TENANT_ID, TABLE_SCHEM, TABLE_NAME, PHYSICAL_TABLE_NAME %s ) "
                 + "VALUES(?, ?, ?, ? %s)", columnNames.size() > 0 ? ","
-                + String.join(",", columnNames) : "",
-            columnNames.size() > 0 ? "," + QueryUtil.generateInListParams(columnValues.size()) : "");
+                + String.join(",", columnNames) : "", columnNames.size() > 0
+            ? "," + QueryUtil.generateInListParams(columnValues.size()) : "");
 
         LOGGER.info("About to do cutover via " + changeTable);
         TableViewFinderResult childViewsResult = ViewUtil.findChildViews(connection, tenantId, schema, tableName);

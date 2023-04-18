@@ -604,24 +604,19 @@ public class IndexTool extends Configured implements Tool {
             if (disableIndexes == null || disableIndexes.isEmpty()) {
                 return 0;
             }
-            List<String> quotedIndexes = new ArrayList<String>(disableIndexes.size());
-            for (String index : disableIndexes) {
-                quotedIndexes.add("'" + index + "'");
-            }
-
             String query = String.format("SELECT MAX(" + ASYNC_REBUILD_TIMESTAMP + "), "
                     + "MAX(" + INDEX_DISABLE_TIMESTAMP + ") FROM "
                     + SYSTEM_CATALOG_NAME + " (" + ASYNC_REBUILD_TIMESTAMP
                     + " BIGINT) WHERE " + TABLE_SCHEM +  " %s  AND " + TABLE_NAME + " IN ( %s )",
                         (schemaName != null && schemaName.length() > 0) ? " = ? " : " IS NULL ",
-                QueryUtil.generateInListParams(quotedIndexes.size()));
+                QueryUtil.generateInListParams(disableIndexes.size()));
             try (PreparedStatement selSyscat = connection.prepareStatement(query)) {
                 int param = 0;
                 if (schemaName != null && schemaName.length() > 0) {
                     selSyscat.setString(++param, schemaName);
                 }
-                for (int i = 0; i < quotedIndexes.size(); i++) {
-                    selSyscat.setString(++param, quotedIndexes.get(i));
+                for (int i = 0; i < disableIndexes.size(); i++) {
+                    QueryUtil.setQuoteInListElements(selSyscat, disableIndexes.get(i), param);
                 }
                 ResultSet rs = selSyscat.executeQuery();
                 if (rs.next()) {
@@ -634,7 +629,6 @@ public class IndexTool extends Configured implements Tool {
                 } else {
                     throw new RuntimeException(
                         "Inconsistent state we have one or more index tables which are disabled after the async is called!!");
-
                 }
             }
         }
