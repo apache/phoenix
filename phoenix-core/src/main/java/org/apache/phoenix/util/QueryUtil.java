@@ -767,7 +767,7 @@ public final class QueryUtil {
         }
         buf.append(" order by 4, 1, 2, 3\n");
         PreparedStatement stmt = connection.prepareStatement(buf.toString());
-        for(int i = 0; i < parameterValues.size(); i++) {
+        for (int i = 0; i < parameterValues.size(); i++) {
             stmt.setString(i+1, parameterValues.get(i));
         }
         return stmt;
