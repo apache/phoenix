@@ -357,7 +357,6 @@ public class IndexUpgradeTool extends Configured implements Tool {
         long indexRebuildRPCTimeoutMs =
                 conf.getLong(QueryServices.INDEX_REBUILD_RPC_TIMEOUT_ATTRIB,
                         QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_TIMEOUT);
-
         long indexRebuildClientScannerTimeOutMs =
                 conf.getLong(QueryServices.INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT_ATTRIB,
                         QueryServicesOptions.DEFAULT_INDEX_REBUILD_CLIENT_SCANNER_TIMEOUT);
@@ -368,8 +367,6 @@ public class IndexUpgradeTool extends Configured implements Tool {
         // Set phoenix and hbase level timeouts and rpc retries
         conf.setLong(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, indexRebuildQueryTimeoutMs);
         conf.setLong(HConstants.HBASE_RPC_TIMEOUT_KEY, indexRebuildRPCTimeoutMs);
-        conf.setLong(HConstants.HBASE_RPC_READ_TIMEOUT_KEY, indexRebuildRPCTimeoutMs);
-        conf.setLong(HConstants.HBASE_RPC_WRITE_TIMEOUT_KEY, indexRebuildRPCTimeoutMs);
         conf.setLong(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD,
                 indexRebuildClientScannerTimeOutMs);
         conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, indexRebuildRpcRetriesCounter);
