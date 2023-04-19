@@ -636,10 +636,6 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
                 Long.toString(indexRebuildClientScannerTimeOutMs));
             props.setProperty(HConstants.HBASE_RPC_TIMEOUT_KEY,
                 Long.toString(indexRebuildRPCTimeoutMs));
-            props.setProperty(HConstants.HBASE_RPC_READ_TIMEOUT_KEY,
-                    Long.toString(indexRebuildRPCTimeoutMs));
-            props.setProperty(HConstants.HBASE_RPC_WRITE_TIMEOUT_KEY,
-                    Long.toString(indexRebuildRPCTimeoutMs));
             props.setProperty(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
                 Long.toString(indexRebuildRpcRetriesCounter));
             // don't run a second index populations upsert select
