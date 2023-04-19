@@ -169,6 +169,8 @@
     <!-- PHOENIX-6806 - Default protoc architecture to the detected one,
       but allow for profile overrides -->
     <protoc.arch>${os.detected.classifier}</protoc.arch>
+    <!-- Keeping the version in sync with hbase javax.el version -->
+    <glassfish.el.version>3.0.1-b08</glassfish.el.version>
   </properties>
 
   <build>
@@ -1512,6 +1514,11 @@
         <artifactId>sqlline</artifactId>
         <version>${sqlline.version}</version>
         <scope>runtime</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.glassfish</groupId>
+        <artifactId>javax.el</artifactId>
+        <version>${glassfish.el.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
