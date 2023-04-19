@@ -716,10 +716,6 @@ public class IndexTool extends Configured implements Tool {
                     Long.toString(indexRebuildClientScannerTimeOutMs));
             configuration.set(HConstants.HBASE_RPC_TIMEOUT_KEY,
                     Long.toString(indexRebuildRPCTimeoutMs));
-            configuration.set(HConstants.HBASE_RPC_READ_TIMEOUT_KEY,
-                    Long.toString(indexRebuildRPCTimeoutMs));
-            configuration.set(HConstants.HBASE_RPC_WRITE_TIMEOUT_KEY,
-                    Long.toString(indexRebuildRPCTimeoutMs));
             configuration.set(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
                     Long.toString(indexRebuildRpcRetriesCounter));
             configuration.set("mapreduce.task.timeout", Long.toString(indexRebuildQueryTimeoutMs));
