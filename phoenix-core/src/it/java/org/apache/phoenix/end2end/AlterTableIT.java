@@ -86,6 +86,8 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -108,7 +110,8 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     private String indexTableFullName;
     private String tableDDLOptions;
     private final boolean columnEncoded;
-    
+    private static final Logger LOGGER = LoggerFactory.getLogger(AlterTableIT.class);
+
     public AlterTableIT(boolean columnEncoded) {
         this.columnEncoded = columnEncoded;
         this.tableDDLOptions = columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0";
@@ -1852,4 +1855,27 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test that LAST_DDL_TIMESTAMP is updated when we alter properties of a table.
+     * @throws Exception
+     */
+    @Test
+    public void testChangePropertiesUpdatesLASTDDLTimestamp() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE  " + dataTableFullName +
+                    "  (a_string varchar not null, a_binary VARCHAR not null, col1 integer" +
+                    "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary)) " + tableDDLOptions;
+            conn.createStatement().execute(ddl);
+            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            PTable table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), dataTableFullName));
+            long oldLastDDLTimestamp = table.getLastDDLTimestamp();
+            LOGGER.info("Last DDL timestamp before changing property: " + oldLastDDLTimestamp);
+            conn.createStatement().execute("ALTER TABLE " + dataTableFullName + " SET DISABLE_WAL = true");
+            table = phxConn.getTable(new PTableKey(null, dataTableFullName));
+            long newLastDDLTimestamp = table.getLastDDLTimestamp();
+            LOGGER.info("Last DDL timestamp after changing property : " + newLastDDLTimestamp);
+            assertTrue("LastDDLTimestamp should have been updated",
+                    newLastDDLTimestamp > oldLastDDLTimestamp);
+        }
+    }
 }
