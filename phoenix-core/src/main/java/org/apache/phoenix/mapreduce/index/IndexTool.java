@@ -615,9 +615,7 @@ public class IndexTool extends Configured implements Tool {
                 if (schemaName != null && schemaName.length() > 0) {
                     selSyscat.setString(++param, schemaName);
                 }
-                for (int i = 0; i < disableIndexes.size(); i++) {
-                    QueryUtil.setQuoteInListElements(selSyscat, disableIndexes.get(i), param);
-                }
+                QueryUtil.setQuoteInListElements(selSyscat, disableIndexes, param);
                 ResultSet rs = selSyscat.executeQuery();
                 if (rs.next()) {
                     maxRebuilAsyncDate = rs.getLong(1);
