@@ -707,7 +707,7 @@ public final class QueryUtil {
             addTenantIdFilter(connection, buf, catalog, parameterValues);
             if (schemaPattern != null) {
                 buf.append(" and " + TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like ?" ));
-                if(schemaPattern.length() > 0) {
+                if (schemaPattern.length() > 0) {
                     parameterValues.add(schemaPattern);
                 }
             }
@@ -751,7 +751,7 @@ public final class QueryUtil {
             if (schemaPattern != null) {
                 appendConjunction(whereClause);
                 whereClause.append(SEQUENCE_SCHEMA + (schemaPattern.length() == 0 ? " is null" : " like ?\n" ));
-                if(schemaPattern.length() > 0) {
+                if (schemaPattern.length() > 0) {
                     parameterValues.add(schemaPattern);
                 }
             }
