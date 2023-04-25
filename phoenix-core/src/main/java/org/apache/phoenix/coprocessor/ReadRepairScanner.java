@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.phoenix.coprocessor;
 
 import org.apache.hadoop.hbase.Cell;
@@ -46,8 +63,8 @@ public abstract class ReadRepairScanner extends BaseRegionScanner {
     /*
     Scanner used for checking ground truth to help with read repair.
      */
-    private Scan externalScanner = null;
-    public Scan getExternalScanner() { return externalScanner; }
+    private Scan externalScan = null;
+    public Scan getExternalScan() { return externalScan; }
 
     public ReadRepairScanner(RegionCoprocessorEnvironment env, Scan scan, RegionScanner scanner) {
         super(scanner);
@@ -122,6 +139,12 @@ public abstract class ReadRepairScanner extends BaseRegionScanner {
         return next(result, true);
     }
 
+    /**
+     * Helper method to verifies and repairs the row if necessary.
+     * @param cellList
+     * @return true if the row is already VERIFIED, false if the row needed repair
+     * @throws IOException
+     */
     private boolean verifyRowAndRepairIfNecessary(List<Cell> cellList) throws IOException {
         // check if row is VERIFIED
         if (verifyRow(cellList)) {
@@ -129,13 +152,13 @@ public abstract class ReadRepairScanner extends BaseRegionScanner {
         }
         else {
             try {
-                if (externalScanner == null) {
+                if (externalScan == null) {
                     PageFilter pageFilter = removePageFilter(scan);
                     if (pageFilter != null) {
                         pageSize = pageFilter.getPageSize();
                         restartScanDueToPageFilterRemoval = true;
                     }
-                    externalScanner = new Scan();
+                    externalScan = new Scan();
                 }
                 repairRow(cellList);
             } catch (IOException e) {

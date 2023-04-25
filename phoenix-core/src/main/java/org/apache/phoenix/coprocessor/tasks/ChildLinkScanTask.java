@@ -16,7 +16,7 @@ Task to run a simple select * query on SYSTEM.CHILD_LINK table to trigger read r
 public class ChildLinkScanTask extends BaseTask {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ChildLinkScanTask.class);
-    private static final String CHILD_LINK_QUERY = "SELECT * FROM SYSTEM.CHILD_LINK";
+    private static final String CHILD_LINK_QUERY = "SELECT COUNT(*) FROM SYSTEM.CHILD_LINK";
     private static boolean isDisabled = false;
 
     @VisibleForTesting
@@ -35,9 +35,8 @@ public class ChildLinkScanTask extends BaseTask {
         try {
             PhoenixConnection pconn = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
             ResultSet rs = pconn.createStatement().executeQuery(CHILD_LINK_QUERY);
-            while (rs.next()) {
-                count++;
-            }
+            rs.next();
+            count = rs.getInt(1);
         }
         catch (Exception e) {
             LOGGER.error("Exception in Child Link Scan Task: " + e);

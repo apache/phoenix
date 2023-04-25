@@ -401,10 +401,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private ServerSideRPCControllerFactory serverSideRPCControllerFactory;
     private boolean localIndexUpgradeRequired;
 
-    private static boolean failPhaseThreeChildLinkWriteForTesting = false;
-    public static void setFailPhaseThreeChildLinkWriteForTesting(boolean fail) {
-        failPhaseThreeChildLinkWriteForTesting = fail;
-    }
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
@@ -2214,13 +2210,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     /*
     Helper method to send mutations to SYSTEM.CHILD_LINK using its endpoint coprocessor
      */
-    private void sendChildLinkMutations(List<Mutation> mutations, boolean isVerified, boolean isDelete,
+    public void sendChildLinkMutations(List<Mutation> mutations, boolean isVerified, boolean isDelete,
                                         byte[] physicalTableNameBytes, byte[] schemaBytes)
             throws SQLException {
 
-        if ((isDelete || isVerified) && failPhaseThreeChildLinkWriteForTesting) {
-            throw new SQLException("Simulating phase-3 write failure");
-        }
         // get empty column information
         PTable childLinkLogicalTable = getTable(null, PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME, HConstants.LATEST_TIMESTAMP);
         byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(childLinkLogicalTable);

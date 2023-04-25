@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.TableName;
@@ -73,7 +90,7 @@ public class OrphanChildLinkRowsIT extends BaseTest {
     @Test
     public void testNoOrphanChildLinkRow() throws Exception {
 
-        ConnectionQueryServicesImpl.setFailPhaseThreeChildLinkWriteForTesting(false);
+        ConnectionQueryServicesTestImpl.setFailPhaseThreeChildLinkWriteForTesting(false);
         ChildLinkScanTask.disableChildLinkScanTask(true);
 
         String v2 = "CREATE VIEW VS1.V1 (NEW_COL1 INTEGER, NEW_COL2 INTEGER) AS SELECT * FROM S2.T2 WHERE B > 10";
@@ -82,13 +99,14 @@ public class OrphanChildLinkRowsIT extends BaseTest {
             connection.createStatement().execute(v2);
         }
         catch (TableAlreadyExistsException e) {
+            //expected since we are creating a view with the same name as an existing view
         }
 
         verifyNoOrphanChildLinkRow();
 
         // configure CQSI to fail the last write phase of CREATE VIEW
         // where child link mutations are set to VERIFIED or are deleted
-        ConnectionQueryServicesImpl.setFailPhaseThreeChildLinkWriteForTesting(true);
+        ConnectionQueryServicesTestImpl.setFailPhaseThreeChildLinkWriteForTesting(true);
         String v3 = "CREATE VIEW IF NOT EXISTS VS2.V2 (NEW_COL1 INTEGER, NEW_COL2 INTEGER) AS SELECT * FROM S2.T2 WHERE B > 10";
 
         try (Connection connection = DriverManager.getConnection(getUrl())) {
@@ -96,6 +114,7 @@ public class OrphanChildLinkRowsIT extends BaseTest {
             connection.createStatement().execute(v2);
         }
         catch (TableAlreadyExistsException e) {
+            //expected since we are creating a view with the same name as an existing view
         }
         expectedChildLinks.put("S2.T2", "VS2.V2");
         verifyNoOrphanChildLinkRow();
@@ -109,7 +128,7 @@ public class OrphanChildLinkRowsIT extends BaseTest {
     @Test
     public void testChildLinkScanTaskRepair() throws Exception {
 
-        ConnectionQueryServicesImpl.setFailPhaseThreeChildLinkWriteForTesting(true);
+        ConnectionQueryServicesTestImpl.setFailPhaseThreeChildLinkWriteForTesting(true);
         ChildLinkScanTask.disableChildLinkScanTask(false);
 
         String v2 = "CREATE VIEW VS1.V1 (NEW_COL1 INTEGER, NEW_COL2 INTEGER) AS SELECT * FROM S2.T2 WHERE B > 10";
@@ -146,7 +165,7 @@ public class OrphanChildLinkRowsIT extends BaseTest {
     @Test
     public void testChildLinkQueryWithLimit() throws Exception {
 
-        ConnectionQueryServicesImpl.setFailPhaseThreeChildLinkWriteForTesting(true);
+        ConnectionQueryServicesTestImpl.setFailPhaseThreeChildLinkWriteForTesting(true);
         ChildLinkScanTask.disableChildLinkScanTask(true);
 
         String CREATE_TABLE_DDL = "CREATE TABLE %s (TENANT_ID VARCHAR NOT NULL, A INTEGER NOT NULL, B INTEGER CONSTRAINT PK PRIMARY KEY (TENANT_ID, A))";
@@ -174,7 +193,6 @@ public class OrphanChildLinkRowsIT extends BaseTest {
             int count = 0;
             while (rs.next()) {
                 count++;
-                System.out.println(rs.getString(3) + " " + rs.getString(5));
             }
             Assert.assertEquals("Incorrect number of child link rows returned", 7, count);
         }
