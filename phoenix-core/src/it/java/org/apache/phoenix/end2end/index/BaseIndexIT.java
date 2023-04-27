@@ -66,7 +66,9 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
@@ -83,9 +85,12 @@ import org.apache.phoenix.util.TransactionUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RunWith(Parameterized.class)
 public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
+    private static final Logger LOGGER = LoggerFactory.getLogger(BaseIndexIT.class);
     private static final Random RAND = new Random();
 
     private final boolean localIndex;
@@ -1432,6 +1437,55 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
 
         } finally {
             conn.close();
+        }
+    }
+
+    /**
+     * Tests that we add LAST_DDL_TIMESTAMP when we create an index and we update LAST_DDL_TIMESTAMP when we update
+     * an index.
+     * @throws Exception
+     */
+    @Test
+    public void testLastDDLTimestampOnIndexes() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+
+        String ddl ="CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions;
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            Statement stmt = conn.createStatement();
+            stmt.execute(ddl);
+            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " ON " + fullTableName
+                    + " (long_col1, long_col2)"
+                    + (uncovered ? "" : " INCLUDE (decimal_col1, decimal_col2)");
+            stmt.execute(ddl);
+            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
+            PTable indexTable = PhoenixRuntime.getTableNoCache(conn,fullIndexName);
+            assertNotNull(indexTable.getIndexState());
+            assertEquals(PIndexState.ACTIVE, indexTable.getIndexState());
+            Long activeIndexLastDDLTimestamp = indexTable.getLastDDLTimestamp();
+            assertNotNull("Index table should have LAST_DDL_TIMESTAMP value", activeIndexLastDDLTimestamp);
+            LOGGER.info("LAST_DDL_TIMESTAMP of index table: {}  when the state is active: {} ",
+                    fullIndexName, activeIndexLastDDLTimestamp);
+
+            // Disable an index. This should change the LAST_DDL_TIMESTAMP.
+            String disableIndexDDL = "ALTER INDEX " + indexName + " ON " +  TestUtil.DEFAULT_SCHEMA_NAME +
+                    QueryConstants.NAME_SEPARATOR + tableName + " DISABLE";
+            stmt.execute(disableIndexDDL);
+            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.DISABLE);
+
+            indexTable = PhoenixRuntime.getTableNoCache(conn, fullIndexName);
+            assertNotNull(indexTable.getIndexState());
+            assertEquals(PIndexState.DISABLE, indexTable.getIndexState());
+            Long disableIndexLastDDLTimestamp = indexTable.getLastDDLTimestamp();
+            LOGGER.info("LAST_DDL_TIMESTAMP of index table: {}  when the state is disabled: {} ",
+                    fullIndexName, disableIndexLastDDLTimestamp);
+            assertTrue("LAST_DDL_TIMESTAMP should have been updated when we disabled the index",
+                    disableIndexLastDDLTimestamp > activeIndexLastDDLTimestamp);
         }
     }
 
