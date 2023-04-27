@@ -2424,7 +2424,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     }
                 }
 
-
                 // When we drop a view we first drop the view metadata and then drop the parent->child linking row
                 List<Mutation> localMutations =
                         Lists.newArrayListWithExpectedSize(tableMetadata.size());
@@ -4101,11 +4100,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     if (setRowKeyOrderOptimizableCell) {
                         UpgradeUtil.addRowKeyOrderOptimizableCell(tableMetadata, key, timeStamp);
                     }
-
                     // We are updating the state of an index, so update the DDL timestamp.
                     long serverTimestamp = EnvironmentEdgeManager.currentTimeMillis();
-                    tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(key, clientTimeStamp, serverTimestamp));
-
+                    tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(
+                            key, clientTimeStamp, serverTimestamp));
                     mutateRowsWithLocks(this.accessCheckEnabled, region, tableMetadata, Collections.<byte[]>emptySet(),
                         HConstants.NO_NONCE, HConstants.NO_NONCE);
                     // Invalidate from cache

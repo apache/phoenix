@@ -1488,5 +1488,4 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                     disableIndexLastDDLTimestamp > activeIndexLastDDLTimestamp);
         }
     }
-
 }
