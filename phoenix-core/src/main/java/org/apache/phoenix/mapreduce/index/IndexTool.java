@@ -723,6 +723,10 @@ public class IndexTool extends Configured implements Tool {
                     Long.toString(indexRebuildRpcRetriesCounter));
             configuration.set("mapreduce.task.timeout", Long.toString(indexRebuildQueryTimeoutMs));
 
+            // Randomize execution order, unless explicitly set
+            configuration.setBooleanIfUnset(
+                PhoenixConfigurationUtil.MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER, true);
+
             PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, dataTableWithSchema);
             PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
             PhoenixConfigurationUtil.setIndexToolSourceTable(configuration, sourceTable);

@@ -264,6 +264,10 @@ public class IndexScrutinyTool extends Configured implements Tool {
             final PTable pdataTable = PhoenixRuntime.getTable(connection, qDataTable);
             final PTable pindexTable = PhoenixRuntime.getTable(connection, qIndexTable);
 
+            // Randomize execution order, unless explicitly set
+            configuration.setBooleanIfUnset(
+                PhoenixConfigurationUtil.MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER, true);
+
             // set CURRENT_SCN for our scan so that incoming writes don't throw off scrutiny
             configuration.set(PhoenixConfigurationUtil.CURRENT_SCN_VALUE, Long.toString(ts));
 
