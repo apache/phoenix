@@ -226,10 +226,11 @@ public final class PhoenixConfigurationUtil {
     public static final String IS_PARTIAL_TRANSFORM = "phoenix.mr.transform.ispartial";
 
     // Randomize mapper execution order
-    public static final String MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER = "phoenix.mapreduce.randomize.mapper.execution.order";
+    public static final String MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER =
+            "phoenix.mapreduce.randomize.mapper.execution.order";
 
-    // Randomize by default
-    public static final boolean DEFAULT_MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER = true;
+    // non-index jobs benefit less from this
+    public static final boolean DEFAULT_MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER = false;
 
     /**
      * Determines type of Phoenix Map Reduce job.

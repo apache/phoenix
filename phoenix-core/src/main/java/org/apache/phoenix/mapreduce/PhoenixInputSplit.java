@@ -111,15 +111,14 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
 
     @Override
     public long getLength() throws IOException, InterruptedException {
-         return splitSize;
+        return splitSize;
     }
 
     @Override
     public String[] getLocations() throws IOException, InterruptedException {
-        if(regionLocation == null) {
+        if (regionLocation == null) {
             return new String[]{};
-        }
-        else {
+        } else {
             return new String[]{regionLocation};
         }
     }
