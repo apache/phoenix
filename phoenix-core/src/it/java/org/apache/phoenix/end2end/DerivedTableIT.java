@@ -58,6 +58,8 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 @Category(ParallelStatsDisabledTest.class)
@@ -70,6 +72,8 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
     private String[] indexDDL;
     private String[] plans;
     private String tableName;
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DerivedTableIT.class);
 
 
     public DerivedTableIT(String[] indexDDL, String[] plans) {
@@ -114,7 +118,7 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
                 {
                         "CREATE INDEX "+dynamicTableName+"_DERIVED_IDX ON "+dynamicTableName+" (a_byte) INCLUDE (A_STRING, B_STRING)"
                 }, {
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER "+dynamicTableName+"_DERIVED_IDX\n" +
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER "+dynamicTableName+"_DERIVED_IDX \n" +
                         "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"A_STRING\", \"B_STRING\"]\n" +
                         "CLIENT MERGE SORT\n" +
                         "CLIENT SORTED BY [\"B_STRING\"]\n" +
@@ -122,7 +126,7 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
                         "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
                         "CLIENT SORTED BY [A DESC]",
 
-                "CLIENT PARALLEL 1-WAY FULL SCAN OVER "+dynamicTableName+"_DERIVED_IDX\n" +
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER "+dynamicTableName+"_DERIVED_IDX \n" +
                         "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"A_STRING\", \"B_STRING\"]\n" +
                         "CLIENT MERGE SORT\n" +
                         "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
@@ -130,7 +134,7 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
                         "CLIENT SORTED BY [A DESC]"}});
         testCases.add(new String[][] {
                 {}, {
-                "CLIENT PARALLEL 4-WAY FULL SCAN OVER "+dynamicTableName+"\n" +
+                "CLIENT PARALLEL 4-WAY FULL SCAN OVER "+dynamicTableName+" \n" +
                         "    SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]\n" +
                         "CLIENT MERGE SORT\n" +
                         "CLIENT SORTED BY [B_STRING]\n" +
@@ -138,7 +142,7 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
                         "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
                         "CLIENT SORTED BY [A DESC]",
 
-                "CLIENT PARALLEL 4-WAY FULL SCAN OVER "+dynamicTableName+"\n" +
+                "CLIENT PARALLEL 4-WAY FULL SCAN OVER "+dynamicTableName+" \n" +
                         "    SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]\n" +
                         "CLIENT MERGE SORT\n" +
                         "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" +
@@ -379,7 +383,11 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
 
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals(plans[0], QueryUtil.getExplainPlan(rs));
+            String explainPlanOutput = QueryUtil.getExplainPlan(rs);
+            LOGGER.info("Explain plan output: {}", explainPlanOutput);
+            String[] splitExplainPlan = explainPlanOutput.split("\\n \\(region locations = \\[region=");
+            String[] secondSplitExplainPlan = splitExplainPlan[1].split("]\\)");
+            assertEquals(plans[0], splitExplainPlan[0] + secondSplitExplainPlan[1]);
 
             // distinct b (groupby a, b) groupby a orderby a
             query = "SELECT DISTINCT COLLECTDISTINCT(t.b) FROM (SELECT b_string b, a_string a FROM "+tableName+" GROUP BY a_string, b_string) AS t GROUP BY t.a ORDER BY t.a DESC";
@@ -401,7 +409,11 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
 
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals(plans[1], QueryUtil.getExplainPlan(rs));
+            explainPlanOutput = QueryUtil.getExplainPlan(rs);
+            LOGGER.info("Explain plan output: {}", explainPlanOutput);
+            splitExplainPlan = explainPlanOutput.split("\\n \\(region locations = \\[region=");
+            secondSplitExplainPlan = splitExplainPlan[1].split("]\\)");
+            assertEquals(plans[1], splitExplainPlan[0] + secondSplitExplainPlan[1]);
 
             // (orderby) groupby
             query = "SELECT t.a_string, count(*) FROM (SELECT * FROM "+tableName+" order by a_integer) AS t where a_byte != 8 group by t.a_string";
