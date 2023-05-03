@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -1785,6 +1786,9 @@ public class PDataTypeTest {
              + "UNSIGNED_TIMESTAMP ARRAY=[BINARY ARRAY, DATE ARRAY, TIME ARRAY, TIMESTAMP ARRAY, UNSIGNED_DATE ARRAY, UNSIGNED_TIME ARRAY, UNSIGNED_TIMESTAMP ARRAY, VARBINARY ARRAY], "
              + "UNSIGNED_TINYINT=[BIGINT, BINARY, DECIMAL, DOUBLE, FLOAT, INTEGER, SMALLINT, TINYINT, UNSIGNED_DOUBLE, UNSIGNED_FLOAT, UNSIGNED_INT, UNSIGNED_LONG, UNSIGNED_SMALLINT, UNSIGNED_TINYINT, VARBINARY], "
              + "UNSIGNED_TINYINT ARRAY=[BIGINT ARRAY, BINARY ARRAY, DECIMAL ARRAY, DOUBLE ARRAY, FLOAT ARRAY, INTEGER ARRAY, SMALLINT ARRAY, TINYINT ARRAY, UNSIGNED_DOUBLE ARRAY, UNSIGNED_FLOAT ARRAY, UNSIGNED_INT ARRAY, UNSIGNED_LONG ARRAY, UNSIGNED_SMALLINT ARRAY, UNSIGNED_TINYINT ARRAY, VARBINARY ARRAY], "
+             + "UUID=[UUID, UUID_INDEXABLE], "
+             + "UUID ARRAY=[UUID ARRAY], "
+             + "UUID_INDEXABLE=[UUID_INDEXABLE, VARBINARY], "
              + "VARBINARY=[BINARY, VARBINARY], "
              + "VARBINARY ARRAY=[BINARY ARRAY, VARBINARY ARRAY], "
              + "VARCHAR=[BINARY, CHAR, VARBINARY, VARCHAR], "
@@ -1953,6 +1957,39 @@ public class PDataTypeTest {
     @Test
     public void testFromSqlTypeName() {
         assertEquals(PVarchar.INSTANCE, PDataType.fromSqlTypeName("varchar"));
+    }
+
+    @Test
+    public void testUUID() {
+        UUID na = UUID.randomUUID(); // or  UUID.fromString("<any-value>")
+        byte[] b = PUUID.INSTANCE.toBytes(na);
+        UUID nb = (UUID) PUUID.INSTANCE.toObject(b);
+        assertTrue(na.equals(nb));
+
+        na = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        nb =  UUID.fromString("00000000-0000-0000-0000-000000000000");
+        byte[] byteArray1 = PUUID.INSTANCE.toBytes(na);
+        byte[] byteArray2 = PUUID.INSTANCE.toBytes(nb);
+        assertTrue(Bytes.compareTo(byteArray1, byteArray2) > 0);
+
+
+        UUID value = UUID.randomUUID();  // or  UUID.fromString("<any-value>")
+        Object obj = PUUID.INSTANCE.toObject(value, PUUID.INSTANCE);
+        assertTrue(obj instanceof UUID);
+        assertTrue(value.equals((UUID)obj));
+    }
+
+    @Test
+    public void testUUIDIndexable() {
+        UUID na = UUID.randomUUID(); // or  UUID.fromString("<any-value>")
+        byte[] b = PUUIDIndexable.INSTANCE.toBytes(na);
+        UUID nb = (UUID) PUUIDIndexable.INSTANCE.toObject(b);
+        assertTrue(na.equals(nb));
+
+        UUID value = UUID.randomUUID();  // or  UUID.fromString("<any-value>")
+        Object obj = PUUIDIndexable.INSTANCE.toObject(value, PUUIDIndexable.INSTANCE);
+        assertTrue(obj instanceof UUID);
+        assertTrue(value.equals((UUID)obj));
     }
 
 }

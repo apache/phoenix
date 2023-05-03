@@ -44,7 +44,7 @@ public class PTimestamp extends PDataType<Timestamp> {
 
     private PTimestamp() {
         super("TIMESTAMP", Types.TIMESTAMP, java.sql.Timestamp.class,
-                null, 9);
+                null, ORDINAL_TIMESTAMP);
     }
 
     @Override

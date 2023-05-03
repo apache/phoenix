@@ -25,7 +25,7 @@ public class PUnsignedLongArray extends PArrayDataType<long[]> {
 
     private PUnsignedLongArray() {
         super("UNSIGNED_LONG ARRAY", PDataType.ARRAY_TYPE_BASE + PUnsignedLong.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 42);
+                PhoenixArray.class, null, ORDINAL_UNSIGNED_LONG_ARRAY);
     }
 
     @Override

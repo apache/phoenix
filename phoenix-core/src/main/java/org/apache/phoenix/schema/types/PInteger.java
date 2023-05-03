@@ -27,11 +27,11 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 public class PInteger extends PWholeNumber<Integer> {
 
-  public static final PInteger INSTANCE = new PInteger();
+    public static final PInteger INSTANCE = new PInteger();
 
-  private PInteger() {
-    super("INTEGER", Types.INTEGER, Integer.class, new IntCodec(), 3);
-  }
+    private PInteger() {
+        super("INTEGER", Types.INTEGER, Integer.class, new IntCodec(), ORDINAL_INTEGER);
+    }
 
   @Override
   public Integer getScale(Object o) {

@@ -24,6 +24,7 @@ import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.HashMap;
+import java.util.UUID;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.types.PBinary;
@@ -62,6 +63,7 @@ public class CoerceExpressionTest {
 		map.put(Date.class, new Date(0));
 		map.put(Boolean.class, Boolean.TRUE);
 		map.put(byte[].class, new byte[]{-128, 0, 0, 1});
+		map.put(UUID.class, UUID.fromString("00000000-0000-0000-0000-000000000000"));
 	}
 	
 	@Test

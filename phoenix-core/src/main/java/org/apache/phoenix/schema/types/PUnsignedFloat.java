@@ -27,7 +27,8 @@ public class PUnsignedFloat extends PRealNumber<PFloat> {
   public static final PUnsignedFloat INSTANCE = new PUnsignedFloat();
 
   private PUnsignedFloat() {
-    super("UNSIGNED_FLOAT", 14, Float.class, new UnsignedFloatCodec(), 19);
+      super("UNSIGNED_FLOAT", SQLTYPE_UNSIGNED_FLOAT /* no constant available in Types */,
+              Float.class, new UnsignedFloatCodec(), ORDINAL_UNSIGNED_FLOAT);
   }
 
   @Override

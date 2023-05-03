@@ -30,7 +30,7 @@ public class PFloat extends PRealNumber<Float> {
   public static final PFloat INSTANCE = new PFloat();
 
   private PFloat() {
-    super("FLOAT", Types.FLOAT, Float.class, new FloatCodec(), 6);
+      super("FLOAT", Types.FLOAT, Float.class, new FloatCodec(), ORDINAL_FLOAT);
   }
 
   @Override

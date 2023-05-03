@@ -36,7 +36,7 @@ public class PDate extends PDataType<Date> {
 
     private PDate() {
         super("DATE", Types.DATE, Date.class,
-                new DateCodec(), 11); // After TIMESTAMP and DATE to ensure toLiteral finds those first
+                new DateCodec(), ORDINAL_DATE); // After TIMESTAMP and DATE to ensure toLiteral finds those first
     }
 
     @Override

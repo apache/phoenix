@@ -27,7 +27,7 @@ public class PTimeArray extends PArrayDataType<Time[]> {
 
     private PTimeArray() {
         super("TIME ARRAY", PDataType.ARRAY_TYPE_BASE + PTime.INSTANCE.getSqlType(), PhoenixArray.class,
-                null, 38);
+                null, ORDINAL_TIME_ARRAY);
     }
 
     @Override

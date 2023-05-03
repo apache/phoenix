@@ -30,7 +30,7 @@ public class PUnsignedTime extends PDataType<Time> {
   public static final PUnsignedTime INSTANCE = new PUnsignedTime();
 
   private PUnsignedTime() {
-    super("UNSIGNED_TIME", 18, java.sql.Time.class, new PUnsignedDate.UnsignedDateCodec(), 13);
+    super("UNSIGNED_TIME", SQLTYPE_UNSIGNED_TIME /* no constant available in Types */, java.sql.Time.class, new PUnsignedDate.UnsignedDateCodec(), ORDINAL_UNSIGNED_TIME);
   }
 
   @Override

@@ -30,7 +30,7 @@ public class PVarbinary extends PBinaryBase {
     public static final PVarbinary INSTANCE = new PVarbinary();
 
     private PVarbinary() {
-        super("VARBINARY", Types.VARBINARY, byte[].class, null, 22);
+        super("VARBINARY", Types.VARBINARY, byte[].class, null, ORDINAL_VARBINARY);
     }
 
     @Override

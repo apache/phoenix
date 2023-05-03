@@ -30,7 +30,8 @@ public class PUnsignedDouble extends PRealNumber<PDouble> {
     public static final PUnsignedDouble INSTANCE = new PUnsignedDouble();
 
     private PUnsignedDouble() {
-        super("UNSIGNED_DOUBLE", 15, Double.class, new UnsignedDoubleCodec(), 20);
+        super("UNSIGNED_DOUBLE", SQLTYPE_UNSIGNED_DOUBLE /* no constant available in Types */,
+                Double.class, new UnsignedDoubleCodec(), ORDINAL_UNSIGNED_DOUBLE);
     }
 
     @Override

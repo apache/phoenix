@@ -36,8 +36,8 @@ public class PUnsignedInt extends PWholeNumber<Integer> {
   public static final PUnsignedInt INSTANCE = new PUnsignedInt();
 
   private PUnsignedInt() {
-    super("UNSIGNED_INT", 9 /* no constant available in Types */, Integer.class,
-        new UnsignedIntCodec(), 16);
+      super("UNSIGNED_INT", SQLTYPE_UNSIGNED_INT /* no constant available in Types */,
+              Integer.class, new UnsignedIntCodec(), ORDINAL_UNSIGNED_INT);
   }
 
   @Override

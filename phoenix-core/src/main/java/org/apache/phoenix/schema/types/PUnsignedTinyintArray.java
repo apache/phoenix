@@ -26,7 +26,7 @@ public class PUnsignedTinyintArray extends PArrayDataType<byte[]> {
     private PUnsignedTinyintArray() {
         super("UNSIGNED_TINYINT ARRAY",
                 PDataType.ARRAY_TYPE_BASE + PUnsignedTinyint.INSTANCE.getSqlType(), PhoenixArray.class,
-                null, 45);
+                null, ORDINAL_UNSIGNED_TINYINT_ARRAY);
     }
 
     @Override

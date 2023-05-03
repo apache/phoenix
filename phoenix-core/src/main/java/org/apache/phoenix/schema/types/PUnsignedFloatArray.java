@@ -25,7 +25,7 @@ public class PUnsignedFloatArray extends PArrayDataType<float[]> {
 
     private PUnsignedFloatArray() {
         super("UNSIGNED_FLOAT ARRAY", PDataType.ARRAY_TYPE_BASE + PUnsignedFloat.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 46);
+                PhoenixArray.class, null, ORDINAL_UNSIGNED_FLOAT_ARRAY);
     }
 
     @Override

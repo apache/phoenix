@@ -25,7 +25,7 @@ public class PFloatArray extends PArrayDataType<float[]> {
 
     private PFloatArray() {
         super("FLOAT ARRAY", PDataType.ARRAY_TYPE_BASE + PFloat.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 33);
+                PhoenixArray.class, null, ORDINAL_FLOAT_ARRAY);
     }
 
     @Override

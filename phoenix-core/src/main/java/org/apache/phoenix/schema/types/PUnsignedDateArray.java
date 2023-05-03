@@ -27,7 +27,7 @@ public class PUnsignedDateArray extends PArrayDataType<Date> {
 
     private PUnsignedDateArray() {
         super("UNSIGNED_DATE ARRAY", PDataType.ARRAY_TYPE_BASE + PUnsignedDate.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 41);
+                PhoenixArray.class, null, ORDINAL_UNSIGNED_DATE_ARRAY);
     }
 
     @Override

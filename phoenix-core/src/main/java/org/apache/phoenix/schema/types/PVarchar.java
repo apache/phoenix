@@ -34,7 +34,7 @@ public class PVarchar extends PDataType<String> {
     public static final PVarchar INSTANCE = new PVarchar();
 
     private PVarchar() {
-        super("VARCHAR", Types.VARCHAR, String.class, null, 0);
+        super("VARCHAR", Types.VARCHAR, String.class, null, ORDINAL_VARCHAR);
     }
 
     @Override

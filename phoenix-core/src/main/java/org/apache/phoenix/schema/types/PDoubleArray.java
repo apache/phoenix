@@ -25,7 +25,7 @@ public class PDoubleArray extends PArrayDataType<double[]> {
 
     private PDoubleArray() {
         super("DOUBLE ARRAY", PDataType.ARRAY_TYPE_BASE + PDouble.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 34);
+                PhoenixArray.class, null, ORDINAL_DOUBLE_ARRAY);
     }
 
     @Override

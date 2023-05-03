@@ -26,7 +26,8 @@ public class PDecimalArray extends PArrayDataType<BigDecimal[]> {
     public static final PDecimalArray INSTANCE = new PDecimalArray();
 
     private PDecimalArray() {
-        super("DECIMAL ARRAY", PDataType.ARRAY_TYPE_BASE + PDecimal.INSTANCE.getSqlType(), PhoenixArray.class, null, 35);
+        super("DECIMAL ARRAY", PDataType.ARRAY_TYPE_BASE + PDecimal.INSTANCE.getSqlType(),
+                PhoenixArray.class, null, ORDINAL_DECIMAL_ARRAY);
     }
 
     @Override

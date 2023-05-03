@@ -31,8 +31,8 @@ public class PUnsignedDate extends PDataType<Date> {
     public static final PUnsignedDate INSTANCE = new PUnsignedDate();
 
     private PUnsignedDate() {
-        super("UNSIGNED_DATE", 19, Date.class,
-                new UnsignedDateCodec(), 14); // After TIMESTAMP and DATE to ensure toLiteral finds those first
+        super("UNSIGNED_DATE",  SQLTYPE_UNSIGNED_DATE /* no constant available in Types */, Date.class,
+                new UnsignedDateCodec(), ORDINAL_UNSIGNED_DATE); // After TIMESTAMP and DATE to ensure toLiteral finds those first
     }
 
     @Override

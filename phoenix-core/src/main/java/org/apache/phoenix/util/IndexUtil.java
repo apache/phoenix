@@ -137,6 +137,8 @@ import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PUUID;
+import org.apache.phoenix.schema.types.PUUIDIndexable;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
@@ -186,6 +188,10 @@ public class IndexUtil {
 
         if (PBinary.INSTANCE.equals(dataType)) {
             return PVarbinary.INSTANCE;
+        }
+
+        if (PUUID.INSTANCE.equals(dataType)) {
+            return PUUIDIndexable.INSTANCE;
         }
         throw new IllegalArgumentException("Unsupported non nullable type " + dataType);
     }

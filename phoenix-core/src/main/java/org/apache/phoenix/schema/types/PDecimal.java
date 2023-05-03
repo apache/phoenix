@@ -47,7 +47,7 @@ public class PDecimal extends PRealNumber<BigDecimal> {
             BigDecimal.valueOf(Float.MAX_VALUE);
 
     private PDecimal() {
-        super("DECIMAL", Types.DECIMAL, BigDecimal.class, null, 8);
+        super("DECIMAL", Types.DECIMAL, BigDecimal.class, null, ORDINAL_DECIMAL);
     }
 
     @Override

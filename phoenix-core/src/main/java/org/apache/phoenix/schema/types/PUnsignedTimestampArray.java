@@ -28,7 +28,7 @@ public class PUnsignedTimestampArray extends PArrayDataType<Timestamp[]> {
     private PUnsignedTimestampArray() {
         super("UNSIGNED_TIMESTAMP ARRAY",
                 PDataType.ARRAY_TYPE_BASE + PUnsignedTimestamp.INSTANCE.getSqlType(), PhoenixArray.class,
-                null, 37);
+                null, ORDINAL_UNSIGNED_TIMESTAMP_ARRAY);
     }
 
     @Override

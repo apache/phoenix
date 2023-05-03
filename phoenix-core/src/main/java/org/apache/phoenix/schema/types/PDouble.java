@@ -30,7 +30,7 @@ public class PDouble extends PRealNumber<Double> {
   public static final PDouble INSTANCE = new PDouble();
 
   private PDouble() {
-    super("DOUBLE", Types.DOUBLE, Double.class, new DoubleCodec(), 7);
+      super("DOUBLE", Types.DOUBLE, Double.class, new DoubleCodec(), ORDINAL_DOUBLE);
   }
 
   @Override
