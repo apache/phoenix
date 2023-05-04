@@ -1574,17 +1574,17 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 .getColumnQualifierBytes()));
     }
 
-    public static long verifyLastDDLTimestamp(String dataTableFullName, long startTS, Connection conn) throws SQLException {
+    public static long verifyLastDDLTimestamp(String tableFullName, long startTS, Connection conn) throws SQLException {
         long endTS = EnvironmentEdgeManager.currentTimeMillis();
         //Now try the PTable API
-        long ddlTimestamp = getLastDDLTimestamp(conn, dataTableFullName);
+        long ddlTimestamp = getLastDDLTimestamp(conn, tableFullName);
         assertTrue("PTable DDL Timestamp not in the right range!",
             ddlTimestamp >= startTS && ddlTimestamp <= endTS);
         return ddlTimestamp;
     }
 
-    public static long getLastDDLTimestamp(Connection conn, String dataTableFullName) throws SQLException {
-        PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+    public static long getLastDDLTimestamp(Connection conn, String tableFullName) throws SQLException {
+        PTable table = PhoenixRuntime.getTableNoCache(conn, tableFullName);
         assertNotNull("PTable is null!", table);
         assertNotNull("DDL timestamp is null!", table.getLastDDLTimestamp());
         return table.getLastDDLTimestamp();

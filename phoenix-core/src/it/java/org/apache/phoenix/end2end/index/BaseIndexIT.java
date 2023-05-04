@@ -57,6 +57,8 @@ import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.end2end.CreateTableIT;
+import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -85,12 +87,9 @@ import org.apache.phoenix.util.TransactionUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @RunWith(Parameterized.class)
 public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
-    private static final Logger LOGGER = LoggerFactory.getLogger(BaseIndexIT.class);
     private static final Random RAND = new Random();
 
     private final boolean localIndex;
@@ -1454,6 +1453,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
         String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
 
         String ddl ="CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions;
+        long startTs = EnvironmentEdgeManager.currentTimeMillis();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
             Statement stmt = conn.createStatement();
@@ -1464,28 +1464,54 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                     + (uncovered ? "" : " INCLUDE (decimal_col1, decimal_col2)");
             stmt.execute(ddl);
             TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
-            PTable indexTable = PhoenixRuntime.getTableNoCache(conn,fullIndexName);
-            assertNotNull(indexTable.getIndexState());
-            assertEquals(PIndexState.ACTIVE, indexTable.getIndexState());
-            Long activeIndexLastDDLTimestamp = indexTable.getLastDDLTimestamp();
-            assertNotNull("Index table should have LAST_DDL_TIMESTAMP value", activeIndexLastDDLTimestamp);
-            LOGGER.info("LAST_DDL_TIMESTAMP of index table: {}  when the state is active: {} ",
-                    fullIndexName, activeIndexLastDDLTimestamp);
 
+            long activeIndexLastDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(fullIndexName, startTs, conn);
+            Thread.sleep(1);
             // Disable an index. This should change the LAST_DDL_TIMESTAMP.
             String disableIndexDDL = "ALTER INDEX " + indexName + " ON " +  TestUtil.DEFAULT_SCHEMA_NAME +
                     QueryConstants.NAME_SEPARATOR + tableName + " DISABLE";
             stmt.execute(disableIndexDDL);
             TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.DISABLE);
+            CreateTableIT.verifyLastDDLTimestamp(fullIndexName, activeIndexLastDDLTimestamp  + 1, conn);
+        }
+    }
 
-            indexTable = PhoenixRuntime.getTableNoCache(conn, fullIndexName);
-            assertNotNull(indexTable.getIndexState());
-            assertEquals(PIndexState.DISABLE, indexTable.getIndexState());
-            Long disableIndexLastDDLTimestamp = indexTable.getLastDDLTimestamp();
-            LOGGER.info("LAST_DDL_TIMESTAMP of index table: {}  when the state is disabled: {} ",
-                    fullIndexName, disableIndexLastDDLTimestamp);
-            assertTrue("LAST_DDL_TIMESTAMP should have been updated when we disabled the index",
-                    disableIndexLastDDLTimestamp > activeIndexLastDDLTimestamp);
+    /**
+     * Tests that we add LAST_DDL_TIMESTAMP when we create an async index
+     * and we update LAST_DDL_TIMESTAMP when we update an index.
+     * @throws Exception
+     */
+    @Test
+    public void testLastDDLTimestampOnAsyncIndexes() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+
+        String ddl ="CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions;
+        long startTs = EnvironmentEdgeManager.currentTimeMillis();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            Statement stmt = conn.createStatement();
+            stmt.execute(ddl);
+            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " ON " + fullTableName
+                    + " (long_col1, long_col2)"
+                    + (uncovered ? "" : " INCLUDE (decimal_col1, decimal_col2) ASYNC");
+            stmt.execute(ddl);
+            // run the index MR job.
+            IndexToolIT.runIndexTool(false, TestUtil.DEFAULT_SCHEMA_NAME, tableName, indexName);
+
+            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
+            long activeIndexLastDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(fullIndexName, startTs, conn);
+            Thread.sleep(1);
+            // Disable an index. This should change the LAST_DDL_TIMESTAMP.
+            String disableIndexDDL = "ALTER INDEX " + indexName + " ON " +  TestUtil.DEFAULT_SCHEMA_NAME +
+                    QueryConstants.NAME_SEPARATOR + tableName + " DISABLE";
+            stmt.execute(disableIndexDDL);
+            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.DISABLE);
+            CreateTableIT.verifyLastDDLTimestamp(fullIndexName, activeIndexLastDDLTimestamp + 1, conn);
         }
     }
 }
