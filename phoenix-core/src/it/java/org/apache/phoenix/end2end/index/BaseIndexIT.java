@@ -1500,7 +1500,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             ddl = "CREATE " + (localIndex ? "LOCAL" : "") + (uncovered ? "UNCOVERED" : "")
                     + " INDEX " + indexName + " ON " + fullTableName
                     + " (long_col1, long_col2)"
-                    + (uncovered ? "" : " INCLUDE (decimal_col1, decimal_col2) ASYNC");
+                    + (uncovered ? " ASYNC" : " INCLUDE (decimal_col1, decimal_col2) ASYNC");
             stmt.execute(ddl);
             TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.BUILDING);
             long buildingIndexLastDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(fullIndexName, startTs, conn);
