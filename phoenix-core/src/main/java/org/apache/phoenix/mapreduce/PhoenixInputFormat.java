@@ -102,7 +102,7 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
         double defaultLength = 1000000d;
         double totalLength = splits.stream().mapToDouble(s -> {
             try {
-                return (double)s.getLength();
+                return (double) s.getLength();
             } catch (IOException | InterruptedException e1) {
                 return defaultLength;
             }
