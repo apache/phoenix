@@ -1479,6 +1479,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
     /**
      * Tests that we add LAST_DDL_TIMESTAMP when we create an async index
      * and we update LAST_DDL_TIMESTAMP when we update an index.
+     * For ASYNC indexes, the state goes from BUILDING --> ACTIVE --> DISABLE
+     * Verify that LAST_DDL_TIMESTAMP changes at every step.
      * @throws Exception
      */
     @Test
@@ -1500,12 +1502,17 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                     + " (long_col1, long_col2)"
                     + (uncovered ? "" : " INCLUDE (decimal_col1, decimal_col2) ASYNC");
             stmt.execute(ddl);
+            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.BUILDING);
+            long buildingIndexLastDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(fullIndexName, startTs, conn);
+            Thread.sleep(1);
+
             // run the index MR job.
             IndexToolIT.runIndexTool(false, TestUtil.DEFAULT_SCHEMA_NAME, tableName, indexName);
-
             TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
-            long activeIndexLastDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(fullIndexName, startTs, conn);
+            long activeIndexLastDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                    fullIndexName, buildingIndexLastDDLTimestamp + 1, conn);
             Thread.sleep(1);
+
             // Disable an index. This should change the LAST_DDL_TIMESTAMP.
             String disableIndexDDL = "ALTER INDEX " + indexName + " ON " +  TestUtil.DEFAULT_SCHEMA_NAME +
                     QueryConstants.NAME_SEPARATOR + tableName + " DISABLE";
