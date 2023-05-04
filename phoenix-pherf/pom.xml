@@ -306,6 +306,7 @@
         <configuration>
           <workingDirectory>${java.io.tmpdir}</workingDirectory>
           <forkCount>1</forkCount>
+          <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
         </configuration>
       </plugin>
       <plugin>
