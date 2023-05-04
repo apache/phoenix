@@ -237,8 +237,8 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
             }
             // Optimization since FirstKeyOnlyFilter and EmptyColumnOnlyFilter
             // always include the empty column in the scan result
-            if (wrappedFilter instanceof FirstKeyOnlyFilter ||
-                    wrappedFilter instanceof EmptyColumnOnlyFilter) {
+            if (wrappedFilter instanceof FirstKeyOnlyFilter
+                    || wrappedFilter instanceof EmptyColumnOnlyFilter) {
                 return false;
             }
             return true;

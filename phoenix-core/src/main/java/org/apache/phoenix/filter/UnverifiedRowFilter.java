@@ -1,15 +1,30 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.phoenix.filter;
+
+import java.io.IOException;
+import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hbase.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.ScanUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.util.List;
 
 import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 
@@ -24,15 +39,13 @@ import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
  * by the filter, so we have to wait to determine whether the row is verified
  * or not.
  */
-public class UnverifiedRowFilter extends DelegateFilter{
+public class UnverifiedRowFilter extends DelegateFilter {
 
     private final byte[] emptyCF;
     private final byte[] emptyCQ;
     private boolean verified = false;
     // save the code from delegate filter while waiting for the empty column
     private ReturnCode recordedRetCode = null;
-
-    private static final Logger LOG = LoggerFactory.getLogger(UnverifiedRowFilter.class);
 
     private void init() {
         verified = false;
@@ -50,7 +63,7 @@ public class UnverifiedRowFilter extends DelegateFilter{
     }
 
     @Override
-    public void reset() throws IOException{
+    public void reset() throws IOException {
         init();
         delegate.reset();
     }
@@ -68,7 +81,8 @@ public class UnverifiedRowFilter extends DelegateFilter{
         }
 
         if (ScanUtil.isEmptyColumn(cell, emptyCF, emptyCQ)) {
-            verified = Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
+            verified = Bytes.compareTo(
+                    cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
                     VERIFIED_BYTES, 0, VERIFIED_BYTES.length) == 0;
             if (verified) {
                 // if we saved the return code while waiting for the empty
@@ -79,8 +93,8 @@ public class UnverifiedRowFilter extends DelegateFilter{
                 ReturnCode ret = delegate.filterCell(cell);
                 // Optimization for Skip scan delegate filter to avoid
                 // unnecessary read repairs if the filter returns seek to next
-                return ret != ReturnCode.SEEK_NEXT_USING_HINT ?
-                        ReturnCode.INCLUDE_AND_SEEK_NEXT_ROW : ret;
+                return ret != ReturnCode.SEEK_NEXT_USING_HINT
+                        ? ReturnCode.INCLUDE_AND_SEEK_NEXT_ROW : ret;
             }
         }
         // we haven't seen the empty column yet so don't know whether
@@ -92,8 +106,8 @@ public class UnverifiedRowFilter extends DelegateFilter{
             return ReturnCode.NEXT_COL;
         }
         ReturnCode ret = delegate.filterCell(cell);
-        if (ret == ReturnCode.NEXT_ROW ||
-                ret == ReturnCode.INCLUDE_AND_SEEK_NEXT_ROW) {
+        if (ret == ReturnCode.NEXT_ROW
+                || ret == ReturnCode.INCLUDE_AND_SEEK_NEXT_ROW) {
             // Save the return code but don't move to the next row.
             // Continue processing the current row till we find the empty column
             recordedRetCode = ret;
