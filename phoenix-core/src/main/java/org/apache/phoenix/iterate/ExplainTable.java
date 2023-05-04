@@ -17,24 +17,15 @@
  */
 package org.apache.phoenix.iterate;
 
-import java.io.IOException;
 import java.text.Format;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
@@ -55,8 +46,6 @@ import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
@@ -122,59 +111,8 @@ public abstract class ExplainTable {
         return buf.toString();
     }
 
-    /**
-     * Get regions that represent the given range of start and end key for the given table, and all the regions
-     * to the regionLocations list.
-     *
-     * @param tableName the table name.
-     * @param startKey the start rowkey.
-     * @param endKey the end rowkey.
-     * @param includeEndKey true if end key needs to be included.
-     * @param reload true if reload from meta is necessary.
-     * @param regionBoundaries set of region boundaries to get the unique list of region locations.
-     * @param regionLocations the list of region locations as output.
-     * @throws IOException if something goes wrong while creating connection or querying region locations.
-     */
-    private void getRegionsInRange(final String tableName,
-                                   final byte[] startKey,
-                                   final byte[] endKey,
-                                   final boolean includeEndKey,
-                                   final boolean reload,
-                                   Set<RegionBoundary> regionBoundaries,
-                                   List<HRegionLocation> regionLocations)
-            throws IOException {
-        final boolean endKeyIsEndOfTable = Bytes.equals(endKey, HConstants.EMPTY_END_ROW);
-        if ((Bytes.compareTo(startKey, endKey) > 0) && !endKeyIsEndOfTable) {
-            throw new IllegalArgumentException(
-                    "Invalid range: " + Bytes.toStringBinary(startKey) + " > " + Bytes.toStringBinary(endKey));
-        }
-        byte[] currentKey = startKey;
-        try (Connection connection = ConnectionFactory.createConnection(
-                context.getConnection().getQueryServices().getConfiguration());
-             Table table = connection.getTable(TableName.valueOf(tableName))) {
-            do {
-                HRegionLocation regionLocation = table.getRegionLocator().getRegionLocation(currentKey, reload);
-                RegionBoundary regionBoundary = new RegionBoundary(regionLocation.getRegion().getStartKey(),
-                        regionLocation.getRegion().getEndKey());
-                if(!regionBoundaries.contains(regionBoundary)) {
-                    regionLocations.add(regionLocation);
-                    regionBoundaries.add(regionBoundary);
-                }
-                currentKey = regionLocation.getRegion().getEndKey();
-                // condition1 = currentKey != END_ROW_KEY
-                // condition2 = endKeyIsEndOfTable == true
-                // condition3 = currentKey < endKey
-                // condition4 = includeEndKey == true
-                // condition5 = currentKey == endKey
-                // while (condition1 && (condition2 || condition3 || (condition4 && condition5)))
-            } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW) &&
-                    (endKeyIsEndOfTable || Bytes.compareTo(currentKey, endKey) < 0 ||
-                            (includeEndKey && Bytes.compareTo(currentKey, endKey) == 0)));
-        }
-    }
-
     protected void explain(String prefix, List<String> planSteps,
-            ExplainPlanAttributesBuilder explainPlanAttributesBuilder, List<List<Scan>> scansList) {
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
         StringBuilder buf = new StringBuilder(prefix);
         ScanRanges scanRanges = context.getScanRanges();
         Scan scan = context.getScan();
@@ -337,89 +275,12 @@ public abstract class ExplainTable {
         if (groupByLimitBytes != null) {
             groupByLimit = (Integer) PInteger.INSTANCE.toObject(groupByLimitBytes);
         }
-        getRegionLocationsForExplainPlan(planSteps, explainPlanAttributesBuilder, scansList);
         groupBy.explain(planSteps, groupByLimit, explainPlanAttributesBuilder);
         if (scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX) != null) {
             planSteps.add("    SERVER ARRAY ELEMENT PROJECTION");
             if (explainPlanAttributesBuilder != null) {
                 explainPlanAttributesBuilder.setServerArrayElementProjection(true);
             }
-        }
-    }
-
-    /**
-     * Retrieve region locations from hbase client and set the values for the explain plan output. If the list
-     * of region locations exceed max limit, print only list with the max limit and print num of total list size.
-     *
-     * @param planSteps list of plan steps to add explain plan output to.
-     * @param explainPlanAttributesBuilder explain plan v2 attributes builder instance.
-     * @param scansList list of the list of scans, to be used for parallel scans.
-     */
-    private void getRegionLocationsForExplainPlan(List<String> planSteps,
-                                                  ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
-                                                  List<List<Scan>> scansList) {
-        StringBuilder buf;
-        try {
-            buf = new StringBuilder().append(" (region locations = ");
-            Set<RegionBoundary> regionBoundaries = new HashSet<>();
-            List<HRegionLocation> regionLocations = new ArrayList<>();
-            for (List<Scan> scans : scansList) {
-                for (Scan eachScan : scans) {
-                    getRegionsInRange(tableRef.getTable().getPhysicalName().getString(),
-                            eachScan.getStartRow(),
-                            eachScan.getStopRow(),
-                            true,
-                            false,
-                            regionBoundaries,
-                            regionLocations);
-                }
-            }
-            int maxLimitRegionLoc = context.getConnection().getQueryServices().getConfiguration()
-                    .getInt(QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN,
-                            QueryServicesOptions.DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN);
-            if (explainPlanAttributesBuilder != null) {
-                explainPlanAttributesBuilder.setRegionLocations(Collections.unmodifiableList(regionLocations));
-            }
-            if (regionLocations.size() > maxLimitRegionLoc) {
-                int originalSize = regionLocations.size();
-                List<HRegionLocation> trimmedRegionLocations = regionLocations.subList(0, maxLimitRegionLoc);
-                buf.append(trimmedRegionLocations);
-                buf.append("...total size = ");
-                buf.append(originalSize);
-            } else {
-                buf.append(regionLocations);
-            }
-            buf.append(") ");
-            planSteps.add(buf.toString());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    static class RegionBoundary {
-        private final byte[] startKey;
-        private final byte[] endKey;
-
-        public RegionBoundary(byte[] startKey, byte[] endKey) {
-            this.startKey = startKey;
-            this.endKey = endKey;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-            RegionBoundary that = (RegionBoundary) o;
-            return Bytes.compareTo(startKey, that.startKey) == 0 && Bytes.compareTo(endKey, that.endKey) == 0;
-        }
-
-        @Override
-        public int hashCode() {
-            return 0;
         }
     }
 

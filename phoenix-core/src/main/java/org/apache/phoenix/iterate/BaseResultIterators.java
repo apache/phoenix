@@ -1724,7 +1724,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
         }
 
-        explain(buf.toString(), planSteps, explainPlanAttributesBuilder, scans);
+        explain(buf.toString(), planSteps, explainPlanAttributesBuilder);
     }
 
     @Override
