@@ -90,11 +90,8 @@ public class UnverifiedRowFilter extends DelegateFilter {
                 return recordedRetCode != null ? recordedRetCode : delegate.filterCell(cell);
             } else {
                 // it is an unverified row, no need to look at more columns
-                ReturnCode ret = delegate.filterCell(cell);
-                // Optimization for Skip scan delegate filter to avoid
-                // unnecessary read repairs if the filter returns seek to next
-                return ret != ReturnCode.SEEK_NEXT_USING_HINT
-                        ? ReturnCode.INCLUDE_AND_SEEK_NEXT_ROW : ret;
+                // include it so that it can be repaired and evaluated again by the filter
+                return ReturnCode.INCLUDE_AND_SEEK_NEXT_ROW;
             }
         }
         // we haven't seen the empty column yet so don't know whether

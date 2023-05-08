@@ -29,6 +29,7 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -57,6 +58,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
@@ -1029,8 +1031,11 @@ public class GlobalIndexCheckerIT extends BaseTest {
             // No need to run the same test twice one for async = true and the other for async = false
             return;
         }
-
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        // running this test with PagingFilter disabled
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB,
+                String.valueOf(false));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
             conn.createStatement().execute("create table " + dataTableName +

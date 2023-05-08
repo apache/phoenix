@@ -210,19 +210,24 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
             }
 
             Filter filter = scan.getFilter();
+            Filter delegateFilter = filter;
             if (filter instanceof PagingFilter) {
-                Filter delegateFilter = ((PagingFilter) filter).getDelegateFilter();
-                if (shouldCreateUnverifiedRowFilter(delegateFilter)) {
-                    // we need to ensure that the PagingFilter remains the
-                    // topmost (or outermost) filter so wrap the UnverifiedRowFilter
-                    // around the original delegate and then set the UnverifiedRowFilter
-                    // as the delegate of the PagingFilter
-                    UnverifiedRowFilter unverifiedRowFilter =
-                            new UnverifiedRowFilter(delegateFilter, emptyCF, emptyCQ);
+                delegateFilter = ((PagingFilter) filter).getDelegateFilter();
+            }
+            if (shouldCreateUnverifiedRowFilter(delegateFilter)) {
+                // we need to ensure that the PagingFilter remains the
+                // topmost (or outermost) filter so wrap the UnverifiedRowFilter
+                // around the original delegate and then set the UnverifiedRowFilter
+                // as the delegate of the PagingFilter
+                UnverifiedRowFilter unverifiedRowFilter =
+                        new UnverifiedRowFilter(delegateFilter, emptyCF, emptyCQ);
+                if (filter instanceof PagingFilter) {
                     ((PagingFilter) filter).setDelegateFilter(unverifiedRowFilter);
-                    scanner.close();
-                    scanner = ((DelegateRegionScanner) delegate).getNewRegionScanner(scan);
+                } else {
+                    scan.setFilter(unverifiedRowFilter);
                 }
+                scanner.close();
+                scanner = ((DelegateRegionScanner) delegate).getNewRegionScanner(scan);
             }
         }
 
