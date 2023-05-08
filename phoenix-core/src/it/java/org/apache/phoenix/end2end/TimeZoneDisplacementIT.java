@@ -258,10 +258,10 @@ public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
             assertTrue(rs.next());
             assertEquals(1, rs.getInt("ID"));
             assertEquals(sqlDateLocal, rs.getDate("D"));
-            // UTC now() rowTs gets gets applied the displacement when read as java.sql.Date
+            // UTC now() rowTs gets applied the displacement when read as java.sql.Date
             // This is NOT intuitive, but at least the TS contains the current UTC epoch.
             assertTrue(Math.abs(DateUtil
-                    .applyOutputDisplacement(new java.sql.Date(new java.util.Date().getTime()), tz)
+                    .applyOutputDisplacement(new java.sql.Date(new java.util.Date().getTime()))
                     .getTime() - rs.getDate("ROWTS").getTime()) < 10000);
 
             assertTrue(rs.next());
@@ -292,7 +292,7 @@ public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
             assertEquals(nowDate, rs.getDate("ROWTS"));
             // To further demonstrate that the HBase TS is NOT the current epoch value.
             assertEquals(DateUtil.getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT)
-                    .format(DateUtil.applyInputDisplacement(nowDate, tz)),
+                    .format(DateUtil.applyInputDisplacement(nowDate)),
                 rs.getString("ROWTS"));
         }
     }

@@ -28,6 +28,7 @@ import java.sql.Types;
 import java.text.Format;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.List;
 import java.util.TimeZone;
 
@@ -58,7 +59,10 @@ public class DateUtil {
     public static final String DEFAULT_TIME_ZONE_ID = "GMT";
     public static final String LOCAL_TIME_ZONE_ID = "LOCAL";
     private static final TimeZone DEFAULT_TIME_ZONE = TimeZone.getTimeZone(DEFAULT_TIME_ZONE_ID);
-    
+    private static final TimeZone LOCAL_TIME_ZONE = TimeZone.getDefault();
+    private static final int LOCAL_TIME_ZONE_OFFSET_WITH_DST = 
+            LOCAL_TIME_ZONE.getRawOffset() + LOCAL_TIME_ZONE.getDSTSavings();
+
     public static final String DEFAULT_MS_DATE_FORMAT = "yyyy-MM-dd HH:mm:ss.SSS";
     public static final Format DEFAULT_MS_DATE_FORMATTER = FastDateFormat.getInstance(
             DEFAULT_MS_DATE_FORMAT, TimeZone.getTimeZone(DEFAULT_TIME_ZONE_ID));
@@ -81,7 +85,7 @@ public class DateUtil {
         .appendOptional(new DateTimeFormatterBuilder()
                 .append(ISODateTimeFormat.timeParser()).toParser())
         .toFormatter().withChronology(GJChronology.getInstanceUTC());
-    
+
     private DateUtil() {
     }
 
@@ -100,7 +104,7 @@ public class DateUtil {
             throw new RuntimeException(TypeMismatchException.newException(PTimestamp.INSTANCE, type));
         }
     }
-    
+
     public static TimeZone getTimeZone(String timeZoneId) {
         TimeZone parserTimeZone;
         if (timeZoneId == null || timeZoneId.equals(DateUtil.DEFAULT_TIME_ZONE_ID)) {
@@ -432,12 +436,19 @@ public class DateUtil {
      * Apply the time zone displacement to the input, so that the output represents the same
      * LocalDateTime in the UTC time zone as the Input in the specified time zone.
      * @param jdbc Date interpreted in timeZone
-     * @param timeZone for displacement calculation
+     * @param calendar for displacement calculation
      * @return input with the TZ displacement applied
      */
-    public static java.sql.Date applyInputDisplacement(java.sql.Date jdbc, TimeZone timeZone) {
+    public static java.sql.Date applyInputDisplacement(java.sql.Date jdbc, Calendar cal) {
         long epoch = jdbc.getTime();
-        return new java.sql.Date(epoch + timeZone.getOffset(epoch));
+        int offset = getOffsetFromCalendar(cal, epoch);
+        return new java.sql.Date(epoch + offset);
+    }
+
+    public static java.sql.Date applyInputDisplacement(java.sql.Date jdbc) {
+        // Uses deprecated methods, but instantiating a Calendar object for the calculation would be
+        // very slow
+        return new java.sql.Date(jdbc.getTime() - jdbc.getTimezoneOffset() * 60 * 1000);
     }
 
     /**
@@ -447,66 +458,140 @@ public class DateUtil {
      * @param timeZone for displacement calculation
      * @return input with the TZ displacement applied
      */
-    public static java.sql.Time applyInputDisplacement(java.sql.Time jdbc, TimeZone timeZone) {
+    public static java.sql.Time applyInputDisplacement(java.sql.Time jdbc, Calendar cal) {
         long epoch = jdbc.getTime();
-        return new java.sql.Time(epoch + timeZone.getOffset(epoch));
+        return new java.sql.Time(epoch + getOffsetFromCalendar(cal, epoch));
+    }
+
+    public static java.sql.Time applyInputDisplacement(java.sql.Time jdbc) {
+        // Uses deprecated methods, but instantiating a Calendar object for the calculation would be
+        // very slow
+        return new java.sql.Time(jdbc.getTime() - jdbc.getTimezoneOffset() * 60 * 1000);
     }
 
     /**
      * Apply the time zone displacement to the input, so that the output represents the same
      * LocalDateTime in the UTC time zone as the Input in the specified time zone.
-     * @param jdbc Timestamp interpreted in timeZone
-     * @param timeZone for displacement calculation
+     * @param jdbc Timestamp
+     * @param calendar for displacement calculation
      * @return input with the TZ displacement applied
      */
-    public static java.sql.Timestamp applyInputDisplacement(java.sql.Timestamp jdbc, TimeZone timeZone) {
+    public static java.sql.Timestamp applyInputDisplacement(java.sql.Timestamp jdbc, Calendar cal) {
         long epoch = jdbc.getTime();
-        java.sql.Timestamp ts = new java.sql.Timestamp(epoch + timeZone.getOffset(epoch));
+        int offset = getOffsetFromCalendar(cal, epoch);
+        java.sql.Timestamp ts = new java.sql.Timestamp(epoch + offset);
         ts.setNanos(jdbc.getNanos());
         return ts;
     }
 
-    /**
-     * Apply the time zone displacement to the input, so that the output represents the same
-     * LocalDateTime in the specified time zone as the Input in the UTC time zone.
-     * @param internal Date as UTC epoch
-     * @param timeZone for displacement calculation
-     * @return input with the TZ displacement applied
-     */
-    public static java.sql.Date applyOutputDisplacement(java.sql.Date internal, TimeZone timeZone) {
-        long epoch = internal.getTime();
-        return new java.sql.Date(epoch - getReverseOffset(epoch, timeZone));
+    public static java.sql.Timestamp applyInputDisplacement(java.sql.Timestamp jdbc) {
+        // Uses deprecated methods, but instantiating a Calendar object for the calculation would be
+        // very slow
+        return new java.sql.Timestamp(jdbc.getTime() - jdbc.getTimezoneOffset() * 60 * 1000);
     }
 
     /**
      * Apply the time zone displacement to the input, so that the output represents the same
-     * LocalDateTime in the specified time zone as the Input in the UTC time zone.
+     * LocalDateTime in the time zone of calendar as the Input in the UTC time zone.
      * @param internal Date as UTC epoch
-     * @param timeZone for displacement calculation
+     * @param calendar for displacement calculation
      * @return input with the TZ displacement applied
      */
-    public static java.sql.Time applyOutputDisplacement(java.sql.Time internal, TimeZone timeZone) {
+    public static java.sql.Date applyOutputDisplacement(java.sql.Date internal, Calendar cal) {
+        cal.setTime(internal);
         long epoch = internal.getTime();
-        return new java.sql.Time(epoch - getReverseOffset(epoch, timeZone));
+        int offset = getReverseOffsetFromCalendar(cal, epoch);
+        return new java.sql.Date(epoch - offset);
     }
 
     /**
      * Apply the time zone displacement to the input, so that the output represents the same
-     * LocalDateTime in the specified time zone as the Input in the UTC time zone.
+     * LocalDateTime in the default time zone as the Input in the UTC time zone.
+     * @param internal Date as UTC epoch
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Date applyOutputDisplacement(java.sql.Date internal) {
+        long epoch = internal.getTime();
+        return new java.sql.Date(epoch - getDefaultReverseOffset(epoch));
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the time zone ot calendar as the Input in the UTC time zone.
+     * @param internal Date as UTC epoch
+     * @param timeZone for displacement calculation
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Time applyOutputDisplacement(java.sql.Time internal, Calendar cal) {
+        cal.setTime(internal);
+        long epoch = internal.getTime();
+        int offset = getReverseOffsetFromCalendar(cal, epoch);
+        return new java.sql.Time(epoch - offset);
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the JVM time zone as the Input in the UTC time zone.
+     * @param internal Date as UTC epoch
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Time applyOutputDisplacement(java.sql.Time internal) {
+        long epoch = internal.getTime();
+        return new java.sql.Time(epoch - getDefaultReverseOffset(epoch));
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the time zone of calendar as the Input in the UTC time zone.
      * @param internal Timestamp as UTC epoch
-     * @param timeZone for displacement calculation
+     * @param calendar for displacement calculation
      * @return input with the TZ displacement applied
      */
-    public static java.sql.Timestamp applyOutputDisplacement(java.sql.Timestamp internal, TimeZone timeZone) {
+    public static java.sql.Timestamp applyOutputDisplacement(java.sql.Timestamp internal, Calendar cal) {
         long epoch = internal.getTime();
-        java.sql.Timestamp ts = new java.sql.Timestamp(epoch - getReverseOffset(epoch, timeZone));
+        int offset = getReverseOffsetFromCalendar(cal, epoch);
+        java.sql.Timestamp ts = new java.sql.Timestamp(epoch - offset);
         ts.setNanos(internal.getNanos());
         return ts;
     }
 
-    private static int getReverseOffset(long epoch, TimeZone tz) {
-        return tz.getOffset(
-            epoch - tz.getRawOffset() - tz.getDSTSavings());
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the default time zone as the Input in the UTC time zone.
+     * @param internal Timestamp as UTC epoch
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Timestamp applyOutputDisplacement(java.sql.Timestamp internal) {
+        long epoch = internal.getTime();
+        int offset = getDefaultReverseOffset(epoch);
+        java.sql.Timestamp ts = new java.sql.Timestamp(epoch - offset);
+        ts.setNanos(internal.getNanos());
+        return ts;
     }
 
+    private static int getOffsetFromCalendar(Calendar cal, long epoch) {
+        cal.setTimeInMillis(epoch);
+        return cal.get(Calendar.ZONE_OFFSET) + cal.get(Calendar.DST_OFFSET);
+    }
+
+    private static int getReverseOffsetFromCalendar(Calendar cal, long epoch) {
+        TimeZone tz = cal.getTimeZone();
+        cal.setTimeInMillis(epoch - tz.getRawOffset() - tz.getDSTSavings());
+        return cal.get(Calendar.ZONE_OFFSET) + cal.get(Calendar.DST_OFFSET);
+    }
+
+    /**
+     * Calculates the reverse offset for the internal representation.
+     * Using this methods saves the cost of instantiating a Calendar object for the calculation
+     * when no calendar is specified.
+     * 
+     * is equivalent to getReverseOffsetViaCalendar(epoch, Calendar.getDefault())
+     * 
+     * @param epoch
+     * @return the reverse offset in millis
+     */
+    private static int getDefaultReverseOffset(long epoch) {
+        return LOCAL_TIME_ZONE.getOffset(
+            epoch - LOCAL_TIME_ZONE_OFFSET_WITH_DST);
+    }
 }

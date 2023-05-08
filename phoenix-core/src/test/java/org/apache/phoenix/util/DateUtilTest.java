@@ -30,6 +30,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.Calendar;
 import java.util.TimeZone;
 
 import org.apache.phoenix.schema.IllegalDataException;
@@ -224,15 +225,22 @@ public class DateUtilTest {
         java.sql.Timestamp sqlTimestampNowGMT =
                 new java.sql.Timestamp(nowInstantGMT.toEpochMilli());
 
-        assertEquals(DateUtil.applyInputDisplacement(sqlDateNowLocal, tz), sqlDateNowGMT);
-        assertEquals(DateUtil.applyInputDisplacement(sqlTimeNowLocal, tz), sqlTimeNowGMT);
-        assertEquals(DateUtil.applyInputDisplacement(sqlTimestampNowLocal, tz), sqlTimestampNowGMT);
+        assertEquals(DateUtil.applyInputDisplacement(sqlDateNowLocal), sqlDateNowGMT);
+        assertEquals(DateUtil.applyInputDisplacement(sqlDateNowLocal, Calendar.getInstance()), sqlDateNowGMT);
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimeNowLocal), sqlTimeNowGMT);
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimeNowLocal, Calendar.getInstance()), sqlTimeNowGMT);
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimestampNowLocal), sqlTimestampNowGMT);
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimestampNowLocal, Calendar.getInstance()), sqlTimestampNowGMT);
 
-        assertEquals(DateUtil.applyOutputDisplacement(sqlDateNowGMT, tz), sqlDateNowLocal);
-        assertEquals(DateUtil.applyOutputDisplacement(sqlTimeNowGMT, tz), sqlTimeNowLocal);
-        assertEquals(DateUtil.applyOutputDisplacement(sqlTimestampNowGMT, tz),
+        assertEquals(DateUtil.applyOutputDisplacement(sqlDateNowGMT), sqlDateNowLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(sqlDateNowGMT, Calendar.getInstance()), sqlDateNowLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimeNowGMT), sqlTimeNowLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimeNowGMT, Calendar.getInstance()), sqlTimeNowLocal);
+
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimestampNowGMT),
             sqlTimestampNowLocal);
-
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimestampNowGMT, Calendar.getInstance()),
+            sqlTimestampNowLocal);
         // Make sure that we don't use a fixed offset
 
         LocalDateTime summerLDT = LocalDateTime.of(2023, 6, 01, 10, 10, 10);
@@ -268,32 +276,55 @@ public class DateUtilTest {
         java.sql.Timestamp sqlTimestampWinterDisplaced =
                 new java.sql.Timestamp(winterInstantDisplaced.toEpochMilli());
 
-        assertEquals(DateUtil.applyInputDisplacement(sqlDateSummerLocal, tz),
+        assertEquals(DateUtil.applyInputDisplacement(sqlDateSummerLocal),
             sqlDateSummerDisplaced);
-        assertEquals(DateUtil.applyInputDisplacement(sqlTimeSummerLocal, tz),
+        assertEquals(DateUtil.applyInputDisplacement(sqlDateSummerLocal, Calendar.getInstance()),
+            sqlDateSummerDisplaced);
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimeSummerLocal),
             sqlTimeSummerDisplaced);
-        assertEquals(DateUtil.applyInputDisplacement(sqlTimestampSummerLocal, tz),
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimeSummerLocal, Calendar.getInstance()),
+            sqlTimeSummerDisplaced);
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimestampSummerLocal),
             sqlTimestampSummerDisplaced);
-
-        assertEquals(DateUtil.applyOutputDisplacement(sqlDateSummerDisplaced, tz),
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimestampSummerLocal, Calendar.getInstance()),
+            sqlTimestampSummerDisplaced);
+        assertEquals(DateUtil.applyOutputDisplacement(sqlDateSummerDisplaced),
             sqlDateSummerLocal);
-        assertEquals(DateUtil.applyOutputDisplacement(sqlTimeSummerDisplaced, tz),
+        assertEquals(DateUtil.applyOutputDisplacement(sqlDateSummerDisplaced, Calendar.getInstance()),
+            sqlDateSummerLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimeSummerDisplaced),
             sqlTimeSummerLocal);
-        assertEquals(DateUtil.applyOutputDisplacement(sqlTimestampSummerDisplaced, tz),
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimeSummerDisplaced, Calendar.getInstance()),
+            sqlTimeSummerLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimestampSummerDisplaced),
             sqlTimestampSummerLocal);
-
-        assertEquals(DateUtil.applyInputDisplacement(sqlDateWinterLocal, tz),
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimestampSummerDisplaced, Calendar.getInstance()),
+            sqlTimestampSummerLocal);
+        
+        assertEquals(DateUtil.applyInputDisplacement(sqlDateWinterLocal),
             sqlDateWinterDisplaced);
-        assertEquals(DateUtil.applyInputDisplacement(sqlTimeWinterLocal, tz),
+        assertEquals(DateUtil.applyInputDisplacement(sqlDateWinterLocal, Calendar.getInstance()),
+            sqlDateWinterDisplaced);
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimeWinterLocal),
             sqlTimeWinterDisplaced);
-        assertEquals(DateUtil.applyInputDisplacement(sqlTimestampWinterLocal, tz),
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimeWinterLocal, Calendar.getInstance()),
+            sqlTimeWinterDisplaced);
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimestampWinterLocal),
+            sqlTimestampWinterDisplaced);
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimestampWinterLocal, Calendar.getInstance()),
             sqlTimestampWinterDisplaced);
 
-        assertEquals(DateUtil.applyOutputDisplacement(sqlDateWinterDisplaced, tz),
+        assertEquals(DateUtil.applyOutputDisplacement(sqlDateWinterDisplaced),
             sqlDateWinterLocal);
-        assertEquals(DateUtil.applyOutputDisplacement(sqlTimeWinterDisplaced, tz),
+        assertEquals(DateUtil.applyOutputDisplacement(sqlDateWinterDisplaced, Calendar.getInstance()),
+            sqlDateWinterLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimeWinterDisplaced),
             sqlTimeWinterLocal);
-        assertEquals(DateUtil.applyOutputDisplacement(sqlTimestampWinterDisplaced, tz),
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimeWinterDisplaced, Calendar.getInstance()),
+            sqlTimeWinterLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimestampWinterDisplaced),
+            sqlTimestampWinterLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimestampWinterDisplaced, Calendar.getInstance()),
             sqlTimestampWinterLocal);
 
         // This also demonstrates why you SHOULD NOT use the java.sql. temporal types with
@@ -316,16 +347,23 @@ public class DateUtilTest {
                 java.sql.Timestamp.from(endOfWinter.atZone(pacific).toInstant());
         java.sql.Timestamp endOfWinterDisplaced =
                 java.sql.Timestamp.from(endOfWinter.atZone(ZoneOffset.UTC).toInstant());
-        assertEquals(DateUtil.applyInputDisplacement(endOfWinterLocal, tz), endOfWinterDisplaced);
-        assertEquals(DateUtil.applyOutputDisplacement(endOfWinterDisplaced, tz), endOfWinterLocal);
-
+        assertEquals(DateUtil.applyInputDisplacement(endOfWinterLocal), endOfWinterDisplaced);
+        assertEquals(DateUtil.applyInputDisplacement(endOfWinterLocal, Calendar.getInstance()),
+            endOfWinterDisplaced);
+        assertEquals(DateUtil.applyOutputDisplacement(endOfWinterDisplaced), endOfWinterLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(endOfWinterDisplaced, Calendar.getInstance()), endOfWinterLocal);
+        
         java.sql.Timestamp startOfSummerLocal =
                 java.sql.Timestamp.from(startOfSummer.atZone(pacific).toInstant());
         java.sql.Timestamp startOfSummerDisplaced =
                 java.sql.Timestamp.from(startOfSummer.atZone(ZoneOffset.UTC).toInstant());
-        assertEquals(DateUtil.applyInputDisplacement(startOfSummerLocal, tz),
+        assertEquals(DateUtil.applyInputDisplacement(startOfSummerLocal),
             startOfSummerDisplaced);
-        assertEquals(DateUtil.applyOutputDisplacement(startOfSummerDisplaced, tz),
+        assertEquals(DateUtil.applyInputDisplacement(startOfSummerLocal, Calendar.getInstance()),
+            startOfSummerDisplaced);
+        assertEquals(DateUtil.applyOutputDisplacement(startOfSummerDisplaced),
+            startOfSummerLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(startOfSummerDisplaced, Calendar.getInstance()),
             startOfSummerLocal);
 
         // This just gives us 3:00
@@ -335,36 +373,52 @@ public class DateUtilTest {
         java.sql.Timestamp nonExistentDisplaced =
                 java.sql.Timestamp.from(nonExistent.atZone(ZoneOffset.UTC).toInstant());
         // we get a valid date
-        assertEquals(DateUtil.applyInputDisplacement(nonExistentLocal, tz), startOfSummerDisplaced);
+        assertEquals(DateUtil.applyInputDisplacement(nonExistentLocal), startOfSummerDisplaced);
+        assertEquals(DateUtil.applyInputDisplacement(nonExistentLocal, Calendar.getInstance()), startOfSummerDisplaced);
+
         // This conversion is ambigiuous, but in this direction we get one Local date for two
         // different displaced dates
         assertNotEquals(nonExistentDisplaced, startOfSummerDisplaced);
-        assertEquals(DateUtil.applyOutputDisplacement(nonExistentDisplaced, tz), nonExistentLocal);
-        assertEquals(DateUtil.applyOutputDisplacement(startOfSummerDisplaced, tz),
-            nonExistentLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(nonExistentDisplaced), nonExistentLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(nonExistentDisplaced, Calendar.getInstance()), nonExistentLocal);
 
+        assertEquals(DateUtil.applyOutputDisplacement(startOfSummerDisplaced),
+            nonExistentLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(startOfSummerDisplaced, Calendar.getInstance()),
+            nonExistentLocal);
+        
         java.sql.Timestamp endOfSummerLocal =
                 java.sql.Timestamp.from(endOfSummer.atZone(pacific).toInstant());
         java.sql.Timestamp endOfSummerDisplaced =
                 java.sql.Timestamp.from(endOfSummer.atZone(ZoneOffset.UTC).toInstant());
-        assertEquals(DateUtil.applyInputDisplacement(endOfSummerLocal, tz), endOfSummerDisplaced);
-        assertEquals(DateUtil.applyOutputDisplacement(endOfSummerDisplaced, tz), endOfSummerLocal);
+        assertEquals(DateUtil.applyInputDisplacement(endOfSummerLocal), endOfSummerDisplaced);
+        assertEquals(DateUtil.applyInputDisplacement(endOfSummerLocal, Calendar.getInstance()), endOfSummerDisplaced);
+
+        assertEquals(DateUtil.applyOutputDisplacement(endOfSummerDisplaced), endOfSummerLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(endOfSummerDisplaced, Calendar.getInstance()), endOfSummerLocal);
 
         // Confirm that we do the same thing as Java
         java.sql.Timestamp ambiguousLocal =
                 java.sql.Timestamp.from(ambiguous.atZone(pacific).toInstant());
         java.sql.Timestamp ambiguousDisplaced =
                 java.sql.Timestamp.from(ambiguous.atZone(ZoneOffset.UTC).toInstant());
-        assertEquals(DateUtil.applyInputDisplacement(ambiguousLocal, tz), ambiguousDisplaced);
-        assertEquals(DateUtil.applyOutputDisplacement(ambiguousDisplaced, tz), ambiguousLocal);
+        assertEquals(DateUtil.applyInputDisplacement(ambiguousLocal), ambiguousDisplaced);
+        assertEquals(DateUtil.applyInputDisplacement(ambiguousLocal, Calendar.getInstance()), ambiguousDisplaced);
+
+        assertEquals(DateUtil.applyOutputDisplacement(ambiguousDisplaced), ambiguousLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(ambiguousDisplaced, Calendar.getInstance()), ambiguousLocal);
 
         java.sql.Timestamp startOfWinterLocal =
                 java.sql.Timestamp.from(startOfWinter.atZone(pacific).toInstant());
         java.sql.Timestamp startOfWinterDisplaced =
                 java.sql.Timestamp.from(startOfWinter.atZone(ZoneOffset.UTC).toInstant());
-        assertEquals(DateUtil.applyInputDisplacement(startOfWinterLocal, tz),
+        assertEquals(DateUtil.applyInputDisplacement(startOfWinterLocal),
             startOfWinterDisplaced);
-        assertEquals(DateUtil.applyOutputDisplacement(startOfWinterDisplaced, tz),
+        assertEquals(DateUtil.applyInputDisplacement(startOfWinterLocal, Calendar.getInstance()),
+            startOfWinterDisplaced);
+        assertEquals(DateUtil.applyOutputDisplacement(startOfWinterDisplaced),
+            startOfWinterLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(startOfWinterDisplaced, Calendar.getInstance()),
             startOfWinterLocal);
     }
 }

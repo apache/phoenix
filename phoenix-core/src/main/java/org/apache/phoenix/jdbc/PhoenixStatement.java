@@ -283,8 +283,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private int maxRows;
     private int fetchSize = -1;
     private int queryTimeoutMillis;
-    // Caching per Statement
-    protected final Calendar localCalendar = Calendar.getInstance();
 
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
@@ -2505,10 +2503,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                     "There are Uncommitted mutations, which will be dropped on the execution of this DDL statement.");
             }
         }
-    }
-
-    public Calendar getLocalCalendar() {
-        return localCalendar;
     }
 
 }
