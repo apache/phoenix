@@ -895,6 +895,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         : TableDescriptorBuilder.newBuilder(TableName.valueOf(physicalTableName));
 
         ColumnFamilyDescriptor dataTableColDescForIndexTablePropSyncing = null;
+        boolean doNotAddGlobalIndexChecker = false;
         if (tableType == PTableType.INDEX || MetaDataUtil.isViewIndex(Bytes.toString(physicalTableName))) {
             byte[] defaultFamilyBytes =
                     defaultFamilyName == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : Bytes.toBytes(defaultFamilyName);
@@ -919,6 +920,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // to be the DEFAULT_COLUMN_FAMILY, so we choose the first column family for syncing properties
             if (dataTableColDescForIndexTablePropSyncing == null) {
                 dataTableColDescForIndexTablePropSyncing = baseTableDesc.getColumnFamilies()[0];
+            }
+            if (baseTableDesc.hasCoprocessor(org.apache.phoenix.hbase.index.Indexer.class.getName())) {
+                // The base table still uses the old indexing
+                doNotAddGlobalIndexChecker = true;
             }
         }
         // By default, do not automatically rebuild/catch up an index on a write failure
@@ -968,7 +973,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
         addCoprocessors(physicalTableName, tableDescriptorBuilder,
-            tableType, tableProps, existingDesc);
+            tableType, tableProps, existingDesc, doNotAddGlobalIndexChecker);
 
         // PHOENIX-3072: Set index priority if this is a system table or index table
         if (tableType == PTableType.SYSTEM) {
@@ -995,8 +1000,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
 
     private void addCoprocessors(byte[] tableName, TableDescriptorBuilder builder,
-                                 PTableType tableType, Map<String,Object> tableProps,
-                                 TableDescriptor existingDesc) throws SQLException {
+            PTableType tableType, Map<String, Object> tableProps, TableDescriptor existingDesc,
+            boolean doNotAddGlobalIndexChecker) throws SQLException {
         // The phoenix jar must be available on HBase classpath
         int priority = props.getInt(QueryServices.COPROCESSOR_PRIORITY_ATTRIB, QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
         try {
@@ -1027,7 +1032,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     if (newDesc.hasCoprocessor(IndexRegionObserver.class.getName())) {
                         builder.removeCoprocessor(IndexRegionObserver.class.getName());
                     }
-                    builder.addCoprocessor(GlobalIndexChecker.class.getName(), null, priority - 1, null);
+                    if (!doNotAddGlobalIndexChecker) {
+                        builder.addCoprocessor(GlobalIndexChecker.class.getName(), null, priority - 1, null);
+                    }
                 }
             }
 
@@ -2429,7 +2436,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             Map<TableDescriptor, TableDescriptor> oldToNewTableDescriptors) throws SQLException {
         byte[] physicalTableName = table.getPhysicalName().getBytes();
         try (Admin admin = getAdmin()) {
-            setTransactional(physicalTableName, tableDescriptorBuilder, table.getType(), txValue, tableProps);
+            TableDescriptor baseDesc = admin.getDescriptor(TableName.valueOf(physicalTableName));
+            boolean hasOldIndexing = baseDesc.hasCoprocessor(org.apache.phoenix.hbase.index.Indexer.class.getName());
+            setTransactional(physicalTableName, tableDescriptorBuilder, table.getType(), txValue, tableProps, hasOldIndexing);
             Map<String, Object> indexTableProps;
             if (txValue == null) {
                 indexTableProps = Collections.emptyMap();
@@ -2475,7 +2484,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         indexDescriptorBuilder.setColumnFamily(indexColDescriptor.build());
                     }
                 }
-                setTransactional(index.getPhysicalName().getBytes(), indexDescriptorBuilder, index.getType(), txValue, indexTableProps);
+                setTransactional(index.getPhysicalName().getBytes(), indexDescriptorBuilder, index.getType(), txValue, indexTableProps, hasOldIndexing);
                 descriptorsToUpdate.add(indexDescriptorBuilder.build());
             }
             try {
@@ -2489,7 +2498,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
                 TableDescriptorBuilder indexDescriptorBuilder = TableDescriptorBuilder.newBuilder(intermedIndexDesc);
                 setSharedIndexMaxVersion(table, tableDescriptorBuilder.build(), indexDescriptorBuilder);
-                setTransactional(MetaDataUtil.getViewIndexPhysicalName(physicalTableName), indexDescriptorBuilder, PTableType.INDEX, txValue, indexTableProps);
+                setTransactional(MetaDataUtil.getViewIndexPhysicalName(physicalTableName), indexDescriptorBuilder, PTableType.INDEX, txValue, indexTableProps, hasOldIndexing);
                 descriptorsToUpdate.add(indexDescriptorBuilder.build());
             } catch (org.apache.hadoop.hbase.TableNotFoundException ignore) {
                 // Ignore, as we may never have created a view index table
@@ -2505,7 +2514,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
                 TableDescriptorBuilder indexDescriptorBuilder = TableDescriptorBuilder.newBuilder(intermedIndexDesc);
                 setSharedIndexMaxVersion(table, tableDescriptorBuilder.build(), indexDescriptorBuilder);
-                setTransactional(MetaDataUtil.getViewIndexPhysicalName(physicalTableName), indexDescriptorBuilder, PTableType.INDEX, txValue, indexTableProps);
+                setTransactional(MetaDataUtil.getViewIndexPhysicalName(physicalTableName), indexDescriptorBuilder, PTableType.INDEX, txValue, indexTableProps, hasOldIndexing);
                 descriptorsToUpdate.add(indexDescriptorBuilder.build());
             } catch (org.apache.hadoop.hbase.TableNotFoundException ignore) {
                 // Ignore, as we may never have created a local index
@@ -2561,13 +2570,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
     }
-    private void setTransactional(byte[] physicalTableName, TableDescriptorBuilder tableDescriptorBuilder, PTableType tableType, String txValue, Map<String, Object> tableProps) throws SQLException {
+    private void setTransactional(byte[] physicalTableName, TableDescriptorBuilder tableDescriptorBuilder, PTableType tableType, String txValue, Map<String, Object> tableProps, boolean hasOldIndexing) throws SQLException {
         if (txValue == null) {
             tableDescriptorBuilder.removeValue(Bytes.toBytes(PhoenixTransactionContext.READ_NON_TX_DATA));
         } else {
             tableDescriptorBuilder.setValue(PhoenixTransactionContext.READ_NON_TX_DATA, txValue);
         }
-        this.addCoprocessors(physicalTableName, tableDescriptorBuilder, tableType, tableProps, null);
+        this.addCoprocessors(physicalTableName, tableDescriptorBuilder, tableType, tableProps, null, hasOldIndexing);
     }
 
     private Map<TableDescriptor, TableDescriptor> separateAndValidateProperties(PTable table,
