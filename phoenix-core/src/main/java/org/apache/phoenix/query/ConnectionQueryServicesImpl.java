@@ -939,6 +939,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         : TableDescriptorBuilder.newBuilder(TableName.valueOf(physicalTableName));
 
         ColumnFamilyDescriptor dataTableColDescForIndexTablePropSyncing = null;
+        boolean doNotAddGlobalIndexChecker = false;
         if (tableType == PTableType.INDEX || MetaDataUtil.isViewIndex(Bytes.toString(physicalTableName))) {
             byte[] defaultFamilyBytes =
                     defaultFamilyName == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : Bytes.toBytes(defaultFamilyName);
@@ -963,6 +964,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // to be the DEFAULT_COLUMN_FAMILY, so we choose the first column family for syncing properties
             if (dataTableColDescForIndexTablePropSyncing == null) {
                 dataTableColDescForIndexTablePropSyncing = baseTableDesc.getColumnFamilies()[0];
+            }
+            if (baseTableDesc.hasCoprocessor(org.apache.phoenix.hbase.index.Indexer.class.getName())) {
+                // The base table still uses the old indexing
+                doNotAddGlobalIndexChecker = true;
             }
         }
         // By default, do not automatically rebuild/catch up an index on a write failure
@@ -1012,7 +1017,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
         addCoprocessors(physicalTableName, tableDescriptorBuilder,
-            tableType, tableProps, existingDesc);
+            tableType, tableProps, existingDesc, doNotAddGlobalIndexChecker);
 
         // PHOENIX-3072: Set index priority if this is a system table or index table
         if (tableType == PTableType.SYSTEM) {
@@ -1039,8 +1044,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
 
     private void addCoprocessors(byte[] tableName, TableDescriptorBuilder builder,
-                                 PTableType tableType, Map<String,Object> tableProps,
-                                 TableDescriptor existingDesc) throws SQLException {
+            PTableType tableType, Map<String, Object> tableProps, TableDescriptor existingDesc,
+            boolean doNotAddGlobalIndexChecker) throws SQLException {
         // The phoenix jar must be available on HBase classpath
         int priority = props.getInt(QueryServices.COPROCESSOR_PRIORITY_ATTRIB, QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
         try {
@@ -1071,8 +1076,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     if (newDesc.hasCoprocessor(IndexRegionObserver.class.getName())) {
                         builder.removeCoprocessor(IndexRegionObserver.class.getName());
                     }
-                    builder.setCoprocessor(CoprocessorDescriptorBuilder.newBuilder(GlobalIndexChecker.class.getName())
-                            .setPriority(priority - 1).build());
+                    if (!doNotAddGlobalIndexChecker) {
+                        builder.setCoprocessor(CoprocessorDescriptorBuilder
+                                .newBuilder(GlobalIndexChecker.class.getName())
+                                .setPriority(priority - 1).build());
+                    }
                 }
             }
 
@@ -2747,7 +2755,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } else {
             tableDescriptorBuilder.setValue(PhoenixTransactionContext.READ_NON_TX_DATA, txValue);
         }
-        this.addCoprocessors(physicalTableName, tableDescriptorBuilder, tableType, tableProps, null);
+        this.addCoprocessors(physicalTableName, tableDescriptorBuilder, tableType, tableProps, null, true);
     }
 
     private Map<TableDescriptor, TableDescriptor> separateAndValidateProperties(PTable table,

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.ROLLBACK_OP;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -37,20 +38,22 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
+import java.util.UUID;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
-import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
-import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
+import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
+import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.mapreduce.index.IndexUpgradeTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -65,7 +68,6 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.export.DefaultSchemaRegistryRepository;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -1572,6 +1574,52 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 .getColumnQualifierBytes()));
         assertEquals(11, encodingScheme.decode(table.getColumnForColumnName("INT6")
                 .getColumnQualifierBytes()));
+    }
+
+    // Test for PHOENIX-6953
+    @Test
+    public void testCoprocessorsForCreateIndexOnOldImplementation() throws Exception {
+        String tableName = generateUniqueName();
+        String index1Name = generateUniqueName();
+        String index2Name = generateUniqueName();
+
+        String ddl =
+                "create table  " + tableName + " ( k integer PRIMARY KEY," + " v1 integer,"
+                        + " v2 integer)";
+        String index1Ddl = "create index  " + index1Name + " on " + tableName + " (v1)";
+        String index2Ddl = "create index  " + index2Name + " on " + tableName + " (v2)";
+
+        Properties props = new Properties();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement();) {
+            stmt.execute(ddl);
+            stmt.execute(index1Ddl);
+
+            TableDescriptor index1DescriptorBefore = admin.getDescriptor(TableName.valueOf(index1Name));
+            assertTrue(index1DescriptorBefore
+                    .hasCoprocessor(org.apache.phoenix.index.GlobalIndexChecker.class.getName()));
+
+            // Now roll back to the old indexing
+            IndexUpgradeTool iut =
+                    new IndexUpgradeTool(ROLLBACK_OP, tableName, null,
+                            "/tmp/index_upgrade_" + UUID.randomUUID().toString(), false, null,
+                            false);
+            iut.setConf(getUtility().getConfiguration());
+            iut.prepareToolSetup();
+            assertEquals(0, iut.executeTool());
+
+            TableDescriptor index1DescriptorAfter = admin.getDescriptor(TableName.valueOf(index1Name));
+            assertFalse(index1DescriptorAfter
+                    .hasCoprocessor(org.apache.phoenix.index.GlobalIndexChecker.class.getName()));
+
+            // New index must not have GlobalIndexChecker
+            stmt.execute(index2Ddl);
+            TableDescriptor index2Descriptor = admin.getDescriptor(TableName.valueOf(index2Name));
+            assertFalse(
+                index2Descriptor.hasCoprocessor(org.apache.phoenix.index.GlobalIndexChecker.class.getName()));
+        }
     }
 
     public static long verifyLastDDLTimestamp(String tableFullName, long startTS, Connection conn) throws SQLException {
