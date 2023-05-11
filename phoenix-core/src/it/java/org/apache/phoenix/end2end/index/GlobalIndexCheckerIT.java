@@ -29,6 +29,7 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -46,7 +47,6 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.TableName;
-import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.end2end.IndexToolIT;
@@ -58,6 +58,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
@@ -70,8 +71,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
@@ -1023,6 +1022,204 @@ public class GlobalIndexCheckerIT extends BaseTest {
             assertFalse(rs.next());
             // Add rows and check everything is still okay
             verifyTableHealth(conn, dataTableName, indexName);
+        }
+    }
+
+    @Test
+    public void testUnverifiedIndexRowWithFilter() throws Exception {
+        if (async) {
+            // No need to run the same test twice one for async = true and the other for async = false
+            return;
+        }
+        // running this test with PagingFilter disabled
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB,
+                String.valueOf(false));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String dataTableName = generateUniqueName();
+            String indexName = generateUniqueName();
+            conn.createStatement().execute("create table " + dataTableName +
+                    " (id integer primary key, name varchar, status integer, val varchar)" + tableDDLOptions);
+            conn.commit();
+            conn.createStatement().execute("create index " + indexName +
+                    " ON " + dataTableName + "(name) include (status, val)");
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " values (1, 'tom', 1, 'blah')");
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " values (2, 'jerry', 2, 'jee')");
+            conn.commit();
+
+            // fail phase 2
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            // update row (1, 'tom', 1) -> (1, 'tom', 2)
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " (id, status) values (1, 2)");
+            commitWithException(conn);
+
+            // unverified row doesn't match the filter status = 1 but the previous verified
+            // version of the same row matches the filter
+            String selectSql = "SELECT * from " + dataTableName + " WHERE name = 'tom' AND status = 1";
+            // Verify that we will read from the index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexName);
+            try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
+                assertTrue(rs.next());
+                assertEquals(1, rs.getInt(1));
+            } catch (AssertionError e) {
+                TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+                throw e;
+            }
+
+            // fail phase 2
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            // update row (1, 'tom', 1) -> (1, 'tom', 2)
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " (id, status) values (1, 2)");
+            commitWithException(conn);
+            // unverified row matches the filter status = 2 but the previous verified
+            // version of the same row does not match the filter
+            selectSql = "SELECT * from " + dataTableName + " WHERE name = 'tom' AND status = 2";
+            try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
+                assertFalse(rs.next());
+            } catch (AssertionError e) {
+                TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+                throw e;
+            }
+
+            // fail phase 2
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            // new row (3, 'tom', 1)
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " (id, name, status) values (3, 'tom', 1)");
+            commitWithException(conn);
+
+            // Test aggregate query
+            selectSql = "SELECT count(*) from " + dataTableName + " WHERE name = 'tom' and  id > 1";
+            // Verify that we will read from the index table
+            assertExplainPlan(conn, selectSql, dataTableName, indexName);
+            try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1));
+            } catch (AssertionError e) {
+                TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+                throw e;
+            }
+        }
+    }
+
+    @Test
+    public void testUnverifiedIndexRowWithSkipScanFilter() throws Exception {
+        if (async) {
+            // No need to run the same test twice one for async = true and the other for async = false
+            return;
+        }
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            String indexName = generateUniqueName();
+            populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+            conn.createStatement().execute("CREATE INDEX " + indexName + " on " +
+                    dataTableName + " (val1, val2) include (val3)" + this.indexDDLOptions);
+            conn.commit();
+
+            // fail phase 2
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            // update row ('b', 'bc', 'bcd', 'bcde') -> ('b', 'bc', 'bcdd', 'bcde')
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " (id, val1) values ('b', 'bcc')");
+            commitWithException(conn);
+
+            String selectSql = "SELECT id, val1, val3 from " + dataTableName + " WHERE val1 IN ('ab', 'bcc') ";
+            // Verify that we will read from the index table
+            try (ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql)) {
+                String actualExplainPlan = QueryUtil.getExplainPlan(rs);
+                String expectedExplainPlan = String.format("SKIP SCAN ON 2 KEYS OVER %s", indexName);
+                assertTrue(actualExplainPlan.contains(expectedExplainPlan));
+            }
+            try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
+                assertTrue(rs.next());
+                assertEquals("a", rs.getString("id"));
+                assertEquals("ab", rs.getString("val1"));
+                assertEquals("abcd", rs.getString("val3"));
+                assertFalse(rs.next());
+            } catch (AssertionError e) {
+                TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+                throw e;
+            }
+
+            // fail phase 2
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            // update row ('b', 'bc', 'bcd', 'bcde') -> ('b', 'bc', 'bcd', 'bcdf')
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " (id, val3) values ('b', 'bcdf')");
+            commitWithException(conn);
+
+            selectSql = "SELECT id, val3 from " + dataTableName +
+                    " WHERE val1 IN ('bc') AND val2 IN ('bcd', 'xcdf') AND val3 = 'bcde' ";
+            // Verify that we will read from the index table
+            try (ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql)) {
+                String actualExplainPlan = QueryUtil.getExplainPlan(rs);
+                String expectedExplainPlan = String.format("SKIP SCAN ON 2 KEYS OVER %s", indexName);
+                String filter = "SERVER FILTER BY";
+                assertTrue(String.format("actual=%s", actualExplainPlan),
+                        actualExplainPlan.contains(expectedExplainPlan));
+                assertTrue(String.format("actual=%s", actualExplainPlan),
+                        actualExplainPlan.contains(filter));
+            }
+            try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
+                assertTrue(rs.next());
+                assertEquals("b", rs.getString("id"));
+                assertEquals("bcde", rs.getString("val3"));
+                assertFalse(rs.next());
+            } catch (AssertionError e) {
+                TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+                throw e;
+            }
+        }
+    }
+
+    @Test
+    public void testUnverifiedIndexRowWithFirstKeyOnlyFilter() throws Exception {
+        if (async) {
+            // No need to run the same test twice one for async = true and the other for async = false
+            return;
+        }
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            String indexName = generateUniqueName();
+            populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
+            conn.createStatement().execute("CREATE INDEX " + indexName + " on " +
+                    dataTableName + " (val1, id, val2, val3) " + this.indexDDLOptions);
+            conn.commit();
+
+            // fail phase 2
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            // update row ('b', 'bc', 'bcd', 'bcde') -> ('b', 'bc', 'bcdd', 'bcde')
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " (id, val3) values ('b', 'bcdf')");
+            commitWithException(conn);
+
+            String selectSql = "SELECT id, val3 from " + dataTableName + " WHERE val1 = 'bc' and val2 = 'bcd' ";
+            // Verify that we will read from the index table
+            try (ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql)) {
+                String actualExplainPlan = QueryUtil.getExplainPlan(rs);
+                String expectedExplainPlan = String.format("RANGE SCAN OVER %s", indexName);
+                String filter = String.format("SERVER FILTER BY %s ONLY AND",
+                        encoded ? "FIRST KEY" : "EMPTY COLUMN");
+                assertTrue(String.format("actual=%s", actualExplainPlan),
+                        actualExplainPlan.contains(expectedExplainPlan));
+                assertTrue(String.format("actual=%s", actualExplainPlan),
+                        actualExplainPlan.contains(filter));
+            }
+            try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
+                assertTrue(rs.next());
+                assertEquals("b", rs.getString("id"));
+                assertEquals("bcde", rs.getString("val3"));
+                assertFalse(rs.next());
+            } catch (AssertionError e) {
+                TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+                throw e;
+            }
         }
     }
 
