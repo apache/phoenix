@@ -436,7 +436,7 @@ public abstract class ExplainTable {
         }
     }
 
-    static class RegionBoundary {
+    private static class RegionBoundary {
         private final byte[] startKey;
         private final byte[] endKey;
 
