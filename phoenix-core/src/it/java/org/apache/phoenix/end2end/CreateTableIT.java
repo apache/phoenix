@@ -1597,7 +1597,8 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             stmt.execute(ddl);
             stmt.execute(index1Ddl);
 
-            TableDescriptor index1DescriptorBefore = admin.getDescriptor(TableName.valueOf(index1Name));
+            TableDescriptor index1DescriptorBefore =
+                    admin.getDescriptor(TableName.valueOf(index1Name));
             assertTrue(index1DescriptorBefore
                     .hasCoprocessor(org.apache.phoenix.index.GlobalIndexChecker.class.getName()));
 
@@ -1610,15 +1611,16 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             iut.prepareToolSetup();
             assertEquals(0, iut.executeTool());
 
-            TableDescriptor index1DescriptorAfter = admin.getDescriptor(TableName.valueOf(index1Name));
+            TableDescriptor index1DescriptorAfter =
+                    admin.getDescriptor(TableName.valueOf(index1Name));
             assertFalse(index1DescriptorAfter
                     .hasCoprocessor(org.apache.phoenix.index.GlobalIndexChecker.class.getName()));
 
             // New index must not have GlobalIndexChecker
             stmt.execute(index2Ddl);
             TableDescriptor index2Descriptor = admin.getDescriptor(TableName.valueOf(index2Name));
-            assertFalse(
-                index2Descriptor.hasCoprocessor(org.apache.phoenix.index.GlobalIndexChecker.class.getName()));
+            assertFalse(index2Descriptor
+                    .hasCoprocessor(org.apache.phoenix.index.GlobalIndexChecker.class.getName()));
         }
     }
 
@@ -1641,8 +1643,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             stmt.execute(ddl);
             stmt.execute(index1Ddl);
 
-            //Transactional indexes don't have GlobalIndexChecker
-            TableDescriptor index1DescriptorBefore = admin.getDescriptor(TableName.valueOf(index1Name));
+            // Transactional indexes don't have GlobalIndexChecker
+            TableDescriptor index1DescriptorBefore =
+                    admin.getDescriptor(TableName.valueOf(index1Name));
             assertFalse(index1DescriptorBefore
                     .hasCoprocessor(org.apache.phoenix.index.GlobalIndexChecker.class.getName()));
 
@@ -1655,8 +1658,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             iut.prepareToolSetup();
             assertEquals(0, iut.executeTool());
 
-            //Make sure we don't add GlobalIndexChecker
-            TableDescriptor index1DescriptorAfter = admin.getDescriptor(TableName.valueOf(index1Name));
+            // Make sure we don't add GlobalIndexChecker
+            TableDescriptor index1DescriptorAfter =
+                    admin.getDescriptor(TableName.valueOf(index1Name));
             assertFalse(index1DescriptorAfter
                     .hasCoprocessor(org.apache.phoenix.index.GlobalIndexChecker.class.getName()));
 
