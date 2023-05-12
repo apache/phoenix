@@ -15,34 +15,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.phoenix.parse;
 
-import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
-
-public class ExplainStatement implements BindableStatement {
-    private final BindableStatement statement;
-    private final ExplainType explainType;
-
-    public ExplainStatement(BindableStatement statement, ExplainType explainType) {
-        this.statement = statement;
-        this.explainType = explainType;
-    }
-
-    public BindableStatement getStatement() {
-        return statement;
-    }
-
-    @Override
-    public int getBindCount() {
-        return statement.getBindCount();
-    }
-
-    @Override
-    public Operation getOperation() {
-        return Operation.QUERY;
-    }
-
-    public ExplainType getExplainType() {
-        return explainType;
-    }
+public enum ExplainType {
+    WITH_REGIONS,
+    DEFAULT
 }

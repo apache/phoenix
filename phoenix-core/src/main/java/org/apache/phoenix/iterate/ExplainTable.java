@@ -26,6 +26,12 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -63,14 +69,21 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 public abstract class ExplainTable {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExplainTable.class);
     private static final List<KeyRange> EVERYTHING = Collections.singletonList(KeyRange.EVERYTHING_RANGE);
     public static final String POINT_LOOKUP_ON_STRING = "POINT LOOKUP ON ";
+    public static final String REGION_LOCATIONS = " (region locations = ";
+
     protected final StatementContext context;
     protected final TableRef tableRef;
     protected final GroupBy groupBy;
@@ -78,6 +91,7 @@ public abstract class ExplainTable {
     protected final HintNode hint;
     protected final Integer limit;
     protected final Integer offset;
+    private final ExecutorService executorService;
    
     public ExplainTable(StatementContext context, TableRef table) {
         this(context, table, GroupBy.EMPTY_GROUP_BY, OrderBy.EMPTY_ORDER_BY, HintNode.EMPTY_HINT_NODE, null, null);
@@ -92,6 +106,10 @@ public abstract class ExplainTable {
         this.hint = hintNode;
         this.limit = limit;
         this.offset = offset;
+        this.executorService = Executors.newFixedThreadPool(5, new ThreadFactoryBuilder()
+                .setDaemon(true)
+                .setNameFormat("explain-region-info-%d")
+                .build());
     }
 
     private String explainSkipScan() {
@@ -173,8 +191,10 @@ public abstract class ExplainTable {
         }
     }
 
-    protected void explain(String prefix, List<String> planSteps,
-            ExplainPlanAttributesBuilder explainPlanAttributesBuilder, List<List<Scan>> scansList) {
+    protected void explain(String prefix,
+                           List<String> planSteps,
+                           ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
+                           List<List<Scan>> scansList) {
         StringBuilder buf = new StringBuilder(prefix);
         ScanRanges scanRanges = context.getScanRanges();
         Scan scan = context.getScan();
@@ -337,7 +357,7 @@ public abstract class ExplainTable {
         if (groupByLimitBytes != null) {
             groupByLimit = (Integer) PInteger.INSTANCE.toObject(groupByLimitBytes);
         }
-        getRegionLocationsForExplainPlan(planSteps, explainPlanAttributesBuilder, scansList);
+        getRegionLocations(planSteps, explainPlanAttributesBuilder, scansList);
         groupBy.explain(planSteps, groupByLimit, explainPlanAttributesBuilder);
         if (scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX) != null) {
             planSteps.add("    SERVER ARRAY ELEMENT PROJECTION");
@@ -348,19 +368,38 @@ public abstract class ExplainTable {
     }
 
     /**
-     * Retrieve region locations from hbase client and set the values for the explain plan output. If the list
-     * of region locations exceed max limit, print only list with the max limit and print num of total list size.
+     * Retrieve region locations and set the values in the explain plan output.
      *
      * @param planSteps list of plan steps to add explain plan output to.
      * @param explainPlanAttributesBuilder explain plan v2 attributes builder instance.
      * @param scansList list of the list of scans, to be used for parallel scans.
      */
-    private void getRegionLocationsForExplainPlan(List<String> planSteps,
-                                                  ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
-                                                  List<List<Scan>> scansList) {
-        StringBuilder buf;
+    private void getRegionLocations(List<String> planSteps,
+                                    ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
+                                    List<List<Scan>> scansList) {
+        Future<String> task = executorService.submit(
+                () -> getRegionLocationsForExplainPlan(explainPlanAttributesBuilder, scansList));
         try {
-            buf = new StringBuilder().append(" (region locations = ");
+            String regionLocations = task.get(5, TimeUnit.SECONDS);
+            planSteps.add(regionLocations);
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            LOGGER.error("Unable to retrieve region locations task result in 5s", e);
+            task.cancel(true);
+        }
+    }
+
+    /**
+     * Retrieve region locations from hbase client and set the values for the explain plan output. If the list
+     * of region locations exceed max limit, print only list with the max limit and print num of total list size.
+     *
+     * @param explainPlanAttributesBuilder explain plan v2 attributes builder instance.
+     * @param scansList list of the list of scans, to be used for parallel scans.
+     * @return region locations to be added to the explain plan output.
+     */
+    private String getRegionLocationsForExplainPlan(ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
+                                                  List<List<Scan>> scansList) {
+        try {
+            StringBuilder buf = new StringBuilder().append(REGION_LOCATIONS);
             Set<RegionBoundary> regionBoundaries = new HashSet<>();
             List<HRegionLocation> regionLocations = new ArrayList<>();
             for (List<Scan> scans : scansList) {
@@ -390,9 +429,10 @@ public abstract class ExplainTable {
                 buf.append(regionLocations);
             }
             buf.append(") ");
-            planSteps.add(buf.toString());
+            return buf.toString();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            LOGGER.error("Explain table unable to add region locations.", e);
+            return "";
         }
     }
 
@@ -552,5 +592,17 @@ public abstract class ExplainTable {
         }
         buf.setCharAt(buf.length()-1, ']');
         return buf.toString();
+    }
+
+    /**
+     * shutdown executor service, should be called by result iterator close.
+     */
+    protected void closeExecutorService() {
+        this.executorService.shutdown();
+        try {
+            this.executorService.awaitTermination(2, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            LOGGER.error("Interrupted while waiting for executor service shutdown.", e);
+        }
     }
 }
