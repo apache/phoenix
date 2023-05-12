@@ -1622,6 +1622,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
     }
 
+
     public static long verifyLastDDLTimestamp(String tableFullName, long startTS, Connection conn) throws SQLException {
         long endTS = EnvironmentEdgeManager.currentTimeMillis();
         //Now try the PTable API
