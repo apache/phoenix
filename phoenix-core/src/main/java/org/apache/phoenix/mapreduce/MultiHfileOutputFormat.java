@@ -265,7 +265,8 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
                                         .withBytesPerCheckSum(CompatUtil.getBytesPerChecksum(conf))
                                         .withBlockSize(blockSize)
                                         .withDataBlockEncoding(encoding)
-                                        .withCellComparator(CellComparatorImpl.COMPARATOR);
+                                        .withCellComparator(CellComparatorImpl.COMPARATOR)
+                                        .withCreateTime(System.currentTimeMillis());;
               HFileContext hFileContext = contextBuilder.build();
 
                 StoreFileWriter.Builder storeFileWriterBuilder =
