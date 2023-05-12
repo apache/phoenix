@@ -1622,6 +1622,48 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
     }
 
+    // Test for PHOENIX-6953
+    @Test
+    public void testCoprocessorsForTransactionalCreateIndexOnOldImplementation() throws Exception {
+        String tableName = generateUniqueName();
+        String index1Name = generateUniqueName();
+
+        String ddl =
+                "create table  " + tableName + " ( k integer PRIMARY KEY," + " v1 integer,"
+                        + " v2 integer) TRANSACTIONAL=TRUE";
+        String index1Ddl = "create index  " + index1Name + " on " + tableName + " (v1)";
+
+        Properties props = new Properties();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement();) {
+            stmt.execute(ddl);
+            stmt.execute(index1Ddl);
+
+            //Transactional indexes don't have GlobalIndexChecker
+            TableDescriptor index1DescriptorBefore = admin.getDescriptor(TableName.valueOf(index1Name));
+            assertFalse(index1DescriptorBefore
+                    .hasCoprocessor(org.apache.phoenix.index.GlobalIndexChecker.class.getName()));
+
+            // Now roll back to the old indexing
+            IndexUpgradeTool iut =
+                    new IndexUpgradeTool(ROLLBACK_OP, tableName, null,
+                            "/tmp/index_upgrade_" + UUID.randomUUID().toString(), false, null,
+                            false);
+            iut.setConf(getUtility().getConfiguration());
+            iut.prepareToolSetup();
+            assertEquals(0, iut.executeTool());
+
+            //Make sure we don't add GlobalIndexChecker
+            TableDescriptor index1DescriptorAfter = admin.getDescriptor(TableName.valueOf(index1Name));
+            assertFalse(index1DescriptorAfter
+                    .hasCoprocessor(org.apache.phoenix.index.GlobalIndexChecker.class.getName()));
+
+            // We should also test for setting / unsetting the transactional status, but both are
+            // forbidden at the time of writing.
+        }
+    }
 
     public static long verifyLastDDLTimestamp(String tableFullName, long startTS, Connection conn) throws SQLException {
         long endTS = EnvironmentEdgeManager.currentTimeMillis();
