@@ -820,7 +820,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             List<String> planSteps = plan.getExplainPlan().getPlanSteps();
             ExplainType explainType = getExplainType();
             if (explainType == ExplainType.DEFAULT) {
-                planSteps.removeIf(planStep -> planStep != null && planStep.contains(ExplainTable.REGION_LOCATIONS));
+                List<String> updatedExplainPlanSteps = new ArrayList<>(planSteps);
+                updatedExplainPlanSteps.removeIf(
+                        planStep -> planStep != null && planStep.contains(ExplainTable.REGION_LOCATIONS));
+                planSteps = Collections.unmodifiableList(updatedExplainPlanSteps);
             }
             List<Tuple> tuples = Lists.newArrayListWithExpectedSize(planSteps.size());
             Long estimatedBytesToScan = plan.getEstimatedBytesToScan();
