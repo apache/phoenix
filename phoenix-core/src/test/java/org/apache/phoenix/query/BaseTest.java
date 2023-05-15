@@ -160,6 +160,7 @@ import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -746,6 +747,12 @@ public abstract class BaseTest {
         }
         createSchema(url,tableName, ts);
         createTestTable(url, ddl, splits, ts);
+    }
+
+    public static ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder) throws SQLException {
+        PreparedStatement statement = conn.prepareStatement(queryBuilder.build());
+        ResultSet rs = statement.executeQuery();
+        return rs;
     }
 
     private static AtomicInteger NAME_SUFFIX = new AtomicInteger(0);

@@ -1274,8 +1274,7 @@ public class TestUtil {
                 if (realValue == null) {
                     assertNull("rowIndex:[" + rowIndex + "],columnIndex:[" + columnIndex + "]", expectedValue);
                 } else {
-                    assertEquals("rowIndex:[" + rowIndex + "],columnIndex:[" + columnIndex + "],realValue:[" +
-                            realValue + "],expectedValue:[" + expectedValue + "]",
+                    assertEquals("rowIndex:[" + rowIndex + "],columnIndex:[" + columnIndex + "]",
                         expectedValue,
                         realValue
                     );
