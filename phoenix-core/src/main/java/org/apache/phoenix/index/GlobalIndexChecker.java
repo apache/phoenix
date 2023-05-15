@@ -103,7 +103,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
     private static final Logger LOG =
         LoggerFactory.getLogger(GlobalIndexChecker.class);
     private static final String REPAIR_LOGGING_PERCENT_ATTRIB = "phoenix.index.repair.logging.percent";
-    private static final double DEFAULT_REPAIR_LOGGING_PERCENT = 1;
+    private static final double DEFAULT_REPAIR_LOGGING_PERCENT = 100;
 
     private GlobalIndexCheckerSource metricsSource;
     private CoprocessorEnvironment env;
@@ -601,8 +601,8 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
                     metricsSource.updateIndexRepairTime(indexName,
                         EnvironmentEdgeManager.currentTimeMillis() - repairStart);
                     if (shouldLog()) {
-                        LOG.info(String.format("Index row repair on region {} took {} ms.",
-                                env.getRegionInfo().getRegionNameAsString(), repairTime));
+                        LOG.info("Index row repair on region {} took {} ms.",
+                                env.getRegionInfo().getRegionNameAsString(), repairTime);
                     }
                 } catch (IOException e) {
                     repairTime = EnvironmentEdgeManager.currentTimeMillis() - repairStart;
