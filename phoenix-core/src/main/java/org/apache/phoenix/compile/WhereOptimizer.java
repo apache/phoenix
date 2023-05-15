@@ -155,6 +155,7 @@ public class WhereOptimizer {
             keySlots = whereClause.accept(visitor);
 
             if (keySlots == null && (tenantId == null || !table.isMultiTenant()) && table.getViewIndexId() == null && !minOffset.isPresent()) {
+                // FIXME this overwrites salting info in the scanRange
                 context.setScanRanges(ScanRanges.EVERYTHING);
                 return whereClause;
             }

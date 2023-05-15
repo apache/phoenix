@@ -30,16 +30,16 @@ import org.apache.phoenix.compile.StatementContext;
  */
 public interface ParallelScanGrouper {
 
-	/**
-	 * Determines whether to create a new group of parallel scans.
-	 *
-	 * @param scans						current scan group
-	 * @param plan						current query plan
-	 * @param startKey					start key of scan
-	 * @param crossedRegionBoundary		whether we crossed a region boundary
-	 * @return true if we should create a new group of scans
-	 */
-	boolean shouldStartNewScan(QueryPlan plan, List<Scan> scans, byte[] startKey, boolean crossedRegionBoundary);
+    /**
+     * Determines whether to create a new group of parallel scans.
+     * @param plan current query plan
+     * @param lastScan the last scan processed
+     * @param startKey of the new scan
+     * @param crossedRegionBoundary whether we crossed a region boundary
+     * @return true if we should create a new group of scans, starting with the scan whoose start
+     *         key we passed as startKey
+     */
+	boolean shouldStartNewScan(QueryPlan plan, Scan lastScan, byte[] startKey, boolean crossedRegionBoundary);
 
 	List<HRegionLocation> getRegionBoundaries(StatementContext context, byte[] tableName) throws SQLException;
 

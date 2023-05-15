@@ -245,7 +245,57 @@ public class ScanRanges {
         System.arraycopy(key, keyOffset, temp, 0, key.length - keyOffset);
         return temp;
     }
-    
+
+    // This variant adds synthetic scan boundaries at potentially missing salt bucket boundaries
+    public List<Scan> intersectScan(Scan scan, final byte[] originalStartKey,
+            final byte[] originalStopKey, final int keyOffset,
+            byte[] splitPostfix, Integer buckets) {
+        // FIXME Both the salted status and the pre-computed bucket list should be available in
+        // this, but in some cases they get overwritten, so we cannot use that.
+        if (buckets != null && buckets > 0) {
+            List<Scan> newScans = new ArrayList<Scan>();
+            byte[] wrkStartKey = originalStartKey;
+            do {
+                //This includes the zero bytes from the minimum PK
+                byte[] nextBucketStart = bucketEnd(wrkStartKey, splitPostfix);
+                //These are the bucket in byte and int
+                byte[] nextBucketByte = new byte[] {nextBucketStart[0]};
+                int nextBucketInt = Byte.toUnsignedInt(nextBucketByte[0]);
+                if (Bytes.compareTo(originalStopKey, nextBucketByte) < 0 || nextBucketInt >= buckets) {
+                    //Add the range for a non-last guidepost in the bucket
+                    newScans.add(intersectScan(scan, wrkStartKey, originalStopKey, keyOffset,
+                        false));
+                    break;
+                }
+                // This is where we add the synthetic guidepost
+                // OR the last/only guidepost of the the bucket or region, which needs to marked for
+                // the called intersectScan
+                newScans.add(
+                    intersectScan(scan, wrkStartKey, nextBucketStart, keyOffset, true));
+                // Guaranteed to be no cells between nextBucketByte and nextBucketStart
+                wrkStartKey = nextBucketStart;
+            } while (true);
+            return newScans;
+        } else {
+            // Definitely Not crossing buckets
+            return Collections.singletonList(intersectScan(scan, originalStartKey, originalStopKey,
+                keyOffset, false));
+        }
+    }
+
+    // The split (presplit for salted tables) code extends the split point to the minimum PK length.
+    // Adding the same postfix here avoids creating and extra [n,n\x00\x00\x00..\x00) scan for each
+    // bucket
+    private byte[] bucketEnd(byte[] key, byte[] splitPostfix) {
+        byte startByte = key.length > 0 ? key[0] : 0;
+        int nextBucket = Byte.toUnsignedInt(startByte) + 1;
+        byte[] bucketEnd = new byte[splitPostfix.length + 1];
+        bucketEnd[0] = (byte) nextBucket;
+        System.arraycopy(splitPostfix, 0, bucketEnd, 1, splitPostfix.length);
+        return bucketEnd;
+    }
+
+    //TODO split this for normal, salted and local index variants
     public Scan intersectScan(Scan scan, final byte[] originalStartKey, final byte[] originalStopKey, final int keyOffset, boolean crossesRegionBoundary) {
         byte[] startKey = originalStartKey;
         byte[] stopKey = originalStopKey;
