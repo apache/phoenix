@@ -655,24 +655,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 Math.min(estimate.lastUpdated,
                     gps.getGuidePostTimestamps()[guideIndex]);
     }
-    
-    private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan,
-            byte[] startKey, boolean crossedRegionBoundary, HRegionLocation regionLocation) {
-        boolean startNewScan = scanGrouper.shouldStartNewScan(plan, scans, startKey, crossedRegionBoundary);
-        if (scan != null) {
-            if (regionLocation.getServerName() != null) {
-                scan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER, regionLocation.getServerName().getVersionedBytes());
-            }
-            if (useStatsForParallelization || crossedRegionBoundary) {
-                scans.add(scan);
-            }
-        }
-        if (startNewScan && !scans.isEmpty()) {
-            parallelScans.add(scans);
-            scans = Lists.newArrayListWithExpectedSize(1);
-        }
-        return scans;
-    }
 
     private List<List<Scan>> getParallelScans() throws SQLException {
         // If the scan boundaries are not matching with scan in context that means we need to get
@@ -702,18 +684,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (scan.getStopRow().length > 0) {
             stopIndex = Math.min(stopIndex, regionIndex + getIndexContainingExclusive(regionBoundaries.subList(regionIndex, stopIndex), scan.getStopRow()));
         }
-        List<List<Scan>> parallelScans = Lists.newArrayListWithExpectedSize(stopIndex - regionIndex + 1);
-        List<Scan> scans = Lists.newArrayListWithExpectedSize(2);
+        ParallelScansCollector parallelScans = new ParallelScansCollector(scanGrouper);
         while (regionIndex <= stopIndex) {
             HRegionLocation regionLocation = regionLocations.get(regionIndex);
             RegionInfo regionInfo = regionLocation.getRegion();
             Scan newScan = ScanUtil.newScan(scan);
-            byte[] endKey;
-            if (regionIndex == stopIndex) {
-                endKey = scan.getStopRow();
-            } else {
-                endKey = regionBoundaries.get(regionIndex);
-            }
             if (ScanUtil.isLocalIndex(scan)) {
                 ScanUtil.setLocalIndexAttributes(newScan, 0, regionInfo.getStartKey(),
                     regionInfo.getEndKey(), newScan.getAttribute(SCAN_START_ROW_SUFFIX),
@@ -728,13 +703,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     newScan.setStopRow(regionInfo.getEndKey());
                 }
             }
-            scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
+            if (regionLocation.getServerName() != null) {
+                newScan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER,
+                    regionLocation.getServerName().getVersionedBytes());
+            }
+            parallelScans.addNewScan(plan, newScan, true);
             regionIndex++;
         }
-        if (!scans.isEmpty()) { // Add any remaining scans
-            parallelScans.add(scans);
-        }
-        return parallelScans;
+        return parallelScans.getParallelScans();
     }
 
     private static class GuidePostEstimate {
@@ -908,7 +884,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         // return true if we've clipped the rowKey
         return maxOffset != offset;
     }
-    
+
     /**
      * Compute the list of parallel scans to run for a given query. The inner scans
      * may be concatenated together directly, while the other ones may need to be
@@ -946,6 +922,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     Long.MAX_VALUE, false);
             return parallelScans;
         }
+        byte[] sampleProcessedSaltByte =
+                SchemaUtil.processSplit(new byte[] { 0 }, table.getPKColumns());
+        byte[] splitPostfix =
+                Arrays.copyOfRange(sampleProcessedSaltByte, 1, sampleProcessedSaltByte.length);
         List<HRegionLocation> regionLocations = getRegionBoundaries(scanGrouper);
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         boolean isSalted = table.getBucketNum() != null;
@@ -998,15 +978,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 stopKey = regionLocations.get(stopIndex).getRegion().getEndKey();
             }
         }
-        List<List<Scan>> parallelScans = Lists.newArrayListWithExpectedSize(stopIndex - regionIndex + 1);
+        ParallelScansCollector parallelScanCollector = new ParallelScansCollector(scanGrouper);
         
         ImmutableBytesWritable currentKey = new ImmutableBytesWritable(startKey);
         
         int gpsSize = gps.getGuidePostsCount();
-        int estGuidepostsPerRegion = gpsSize == 0 ? 1 : gpsSize / regionLocations.size() + 1;
         int keyOffset = 0;
         ImmutableBytesWritable currentGuidePost = ByteUtil.EMPTY_IMMUTABLE_BYTE_ARRAY;
-        List<Scan> scans = Lists.newArrayListWithExpectedSize(estGuidepostsPerRegion);
         ImmutableBytesWritable guidePosts = gps.getGuidePosts();
         ByteArrayInputStream stream = null;
         DataInput input = null;
@@ -1102,13 +1080,28 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 byte[] initialKeyBytes = currentKeyBytes;
                 int gpsComparedToEndKey = -1;
                 boolean everNotDelayed = false;
-                while (intersectWithGuidePosts && (endKey.length == 0 || (gpsComparedToEndKey=currentGuidePost.compareTo(endKey)) <= 0)) {
-                    Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
-                        false);
-                    if (newScan != null) {
-                        ScanUtil.setLocalIndexAttributes(newScan, keyOffset,
-                            regionInfo.getStartKey(), regionInfo.getEndKey(),
-                            newScan.getStartRow(), newScan.getStopRow());
+                while (intersectWithGuidePosts && (endKey.length == 0
+                        || (gpsComparedToEndKey = currentGuidePost.compareTo(endKey)) <= 0)) {
+                    List<Scan> newScans =
+                            scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes,
+                                keyOffset, splitPostfix, getTable().getBucketNum(),
+                                gpsComparedToEndKey == 0);
+                    if (useStatsForParallelization) {
+                        for (int newScanIdx = 0; newScanIdx < newScans.size(); newScanIdx++) {
+                            Scan newScan = newScans.get(newScanIdx);
+                            ScanUtil.setLocalIndexAttributes(newScan, keyOffset,
+                                regionInfo.getStartKey(), regionInfo.getEndKey(),
+                                newScan.getStartRow(), newScan.getStopRow());
+                            if (regionLocation.getServerName() != null) {
+                                newScan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER,
+                                    regionLocation.getServerName().getVersionedBytes());
+                            }
+                            boolean lastOfNew = newScanIdx == newScans.size() - 1;
+                            parallelScanCollector.addNewScan(plan, newScan,
+                                gpsComparedToEndKey == 0 && lastOfNew);
+                        }
+                    }
+                    if (newScans.size() > 0) {
                         // If we've delaying adding estimates, add the previous
                         // gp estimates now that we know they are in range.
                         if (delayAddingEst) {
@@ -1123,7 +1116,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         delayAddingEst = false;
                     }
                     everNotDelayed |= !delayAddingEst;
-                    scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
                     currentKeyBytes = currentGuidePostBytes;
                     try {
                         currentGuidePost = PrefixByteCodec.decode(decoder, input);
@@ -1142,10 +1134,21 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                      */
                     currentKeyBytes = initialKeyBytes;
                 }
-                Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, endKey, keyOffset, true);
-                if (newScan != null) {
+                List<Scan> newScans =
+                        scanRanges.intersectScan(scan, currentKeyBytes, endKey, keyOffset,
+                            splitPostfix, getTable().getBucketNum(), true);
+                for (int newScanIdx = 0; newScanIdx < newScans.size(); newScanIdx++) {
+                    Scan newScan = newScans.get(newScanIdx);
                     ScanUtil.setLocalIndexAttributes(newScan, keyOffset, regionInfo.getStartKey(),
                         regionInfo.getEndKey(), newScan.getStartRow(), newScan.getStopRow());
+                    if (regionLocation.getServerName() != null) {
+                        newScan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER,
+                            regionLocation.getServerName().getVersionedBytes());
+                    }
+                    boolean lastOfNew = newScanIdx == newScans.size() - 1;
+                    parallelScanCollector.addNewScan(plan, newScan, lastOfNew);
+                }
+                if (newScans.size() > 0) {
                     // Boundary case of no GP in region after delaying adding of estimates
                     if (!gpsInThisRegion && delayAddingEst) {
                         updateEstimates(gps, guideIndex-1, estimates);
@@ -1155,7 +1158,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 } else if (!gpsInThisRegion) {
                     delayAddingEst = false;
                 }
-                scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
                 currentKeyBytes = endKey;
                 // We have a guide post in the region if the above loop was entered
                 // or if the current key is less than the region end key (since the loop
@@ -1167,7 +1169,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     ( regionIndex == startRegionIndex && gpsForFirstRegion ) || // GP in first region (before start key)
                     ( gpsAfterStopKey = ( regionIndex == stopIndex && intersectWithGuidePosts && // GP in last region (after stop key)
                             ( endRegionKey.length == 0 || // then check if gp is in the region
-                            currentGuidePost.compareTo(endRegionKey) < 0)  ) );            
+                            currentGuidePost.compareTo(endRegionKey) < 0)));
                 if (gpsAfterStopKey) {
                     // If gp after stop key, but still in last region, track min ts as fallback 
                     fallbackTs =
@@ -1176,16 +1178,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
                 regionIndex++;
             }
-            if (!scans.isEmpty()) { // Add any remaining scans
-                parallelScans.add(scans);
-            }
-            generateEstimates(scanRanges, table, gps, emptyGuidePost, parallelScans, estimates,
+            generateEstimates(scanRanges, table, gps, emptyGuidePost, parallelScanCollector.getParallelScans(), estimates,
                     fallbackTs, gpsAvailableForAllRegions);
         } finally {
             if (stream != null) Closeables.closeQuietly(stream);
         }
-        sampleScans(parallelScans,this.plan.getStatement().getTableSamplingRate());
-        return parallelScans;
+        sampleScans(parallelScanCollector.getParallelScans(),this.plan.getStatement().getTableSamplingRate());
+        return parallelScanCollector.getParallelScans();
     }
 
     private void generateEstimates(ScanRanges scanRanges, PTable table, GuidePostsInfo gps,

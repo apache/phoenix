@@ -38,6 +38,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -593,7 +594,8 @@ public class SchemaUtil {
     }
     
     // Given the splits and the rowKeySchema, find out the keys that 
-    public static byte[][] processSplits(byte[][] splits, LinkedHashSet<PColumn> pkColumns, Integer saltBucketNum, boolean defaultRowKeyOrder) throws SQLException {
+    public static byte[][] processSplits(byte[][] splits, Collection<PColumn> pkColumns,
+            Integer saltBucketNum, boolean defaultRowKeyOrder) throws SQLException {
         // FIXME: shouldn't this return if splits.length == 0?
         if (splits == null) return null;
         // We do not accept user specified splits if the table is salted and we specify defaultRowKeyOrder. In this case,
@@ -607,6 +609,8 @@ public class SchemaUtil {
         }
         byte[][] newSplits = new byte[splits.length][];
         for (int i=0; i<splits.length; i++) {
+            // Salted tables don't need this processing, but the Split policy uses it for all
+            // tables, so it makes sense to apply to those to be consistent
             newSplits[i] = processSplit(splits[i], pkColumns); 
         }
         return newSplits;
@@ -614,7 +618,7 @@ public class SchemaUtil {
 
     // Go through each slot in the schema and try match it with the split byte array. If the split
     // does not confer to the schema, extends its length to match the schema.
-    private static byte[] processSplit(byte[] split, LinkedHashSet<PColumn> pkColumns) {
+    public static byte[] processSplit(byte[] split, Collection<PColumn> pkColumns) {
         int pos = 0, offset = 0, maxOffset = split.length;
         Iterator<PColumn> iterator = pkColumns.iterator();
         while (pos < pkColumns.size()) {
