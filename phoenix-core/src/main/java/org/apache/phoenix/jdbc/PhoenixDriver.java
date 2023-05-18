@@ -183,8 +183,8 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
 
     @Override
     public QueryServices getQueryServices() throws SQLException {
+        lockInterruptibly(LockMode.READ);
         try {
-            lockInterruptibly(LockMode.READ);
             checkClosed();
             // Lazy initialize QueryServices so that we only attempt to create an HBase Configuration
             // object upon the first attempt to connect to any cluster. Otherwise, an attempt will be
@@ -215,8 +215,8 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
         if (!acceptsURL(url)) {
           return null;
         }
+        lockInterruptibly(LockMode.READ);
         try {
-            lockInterruptibly(LockMode.READ);
             checkClosed();
             return createConnection(url, info);
         } finally {
@@ -226,8 +226,8 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     
     @Override
     protected ConnectionQueryServices getConnectionQueryServices(String url, final Properties info) throws SQLException {
+        lockInterruptibly(LockMode.READ);
         try {
-            lockInterruptibly(LockMode.READ);
             checkClosed();
             ConnectionInfo connInfo = ConnectionInfo.create(url);
             SQLException sqlE = null;
@@ -292,8 +292,8 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
 
     @Override
     public synchronized void close() throws SQLException {
+        lockInterruptibly(LockMode.WRITE);
         try {
-            lockInterruptibly(LockMode.WRITE);
             if (closed) {
                 return;
             }
