@@ -41,7 +41,7 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
     private List<Scan> scans;
     private KeyRange keyRange;
     private String regionLocation = null;
-    private long regionSize = 0;
+    private long splitSize = 0;
    
     /**
      * No Arg constructor
@@ -57,11 +57,11 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
         this(scans, 0, null);
     }
 
-    public PhoenixInputSplit(final List<Scan> scans, long regionSize, String regionLocation) {
+    public PhoenixInputSplit(final List<Scan> scans, long splitSize, String regionLocation) {
         Preconditions.checkNotNull(scans);
         Preconditions.checkState(!scans.isEmpty());
         this.scans = scans;
-        this.regionSize = regionSize;
+        this.splitSize = splitSize;
         this.regionLocation = regionLocation;
         init();
     }
@@ -81,7 +81,7 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
     @Override
     public void readFields(DataInput input) throws IOException {
         regionLocation = WritableUtils.readString(input);
-        regionSize = WritableUtils.readVLong(input);
+        splitSize = WritableUtils.readVLong(input);
         int count = WritableUtils.readVInt(input);
         scans = Lists.newArrayListWithExpectedSize(count);
         for (int i = 0; i < count; i++) {
@@ -97,7 +97,7 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
     @Override
     public void write(DataOutput output) throws IOException {
         WritableUtils.writeString(output, regionLocation);
-        WritableUtils.writeVLong(output, regionSize);
+        WritableUtils.writeVLong(output, splitSize);
 
         Preconditions.checkNotNull(scans);
         WritableUtils.writeVInt(output, scans.size());
@@ -111,15 +111,14 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
 
     @Override
     public long getLength() throws IOException, InterruptedException {
-         return regionSize;
+        return splitSize;
     }
 
     @Override
     public String[] getLocations() throws IOException, InterruptedException {
-        if(regionLocation == null) {
+        if (regionLocation == null) {
             return new String[]{};
-        }
-        else {
+        } else {
             return new String[]{regionLocation};
         }
     }
@@ -142,6 +141,10 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
             if (other.keyRange != null) { return false; }
         } else if (!keyRange.equals(other.keyRange)) { return false; }
         return true;
+    }
+
+    public void setLength(long length) {
+        this.splitSize = length;
     }
 
 }

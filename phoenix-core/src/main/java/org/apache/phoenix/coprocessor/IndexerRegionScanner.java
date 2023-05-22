@@ -71,8 +71,10 @@ import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
@@ -139,8 +141,8 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
 
     private boolean verifySingleIndexRow(Result indexRow, final Put dataRow,
             IndexToolVerificationResult.PhaseResult verificationPhaseResult) throws IOException {
-        ValueGetter valueGetter = new SimpleValueGetter(dataRow);
-        long ts = getMaxTimestamp(dataRow);
+        ValueGetter valueGetter = new IndexUtil.SimpleValueGetter(dataRow);
+        long ts = IndexUtil.getMaxTimestamp(dataRow);
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
                 valueGetter, new ImmutableBytesWritable(dataRow.getRow()), ts, null, null, false);
 
@@ -228,7 +230,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
             long currentTime = EnvironmentEdgeManager.currentTime();
             while(itr.hasNext()) {
                 Entry<byte[], Put> entry = itr.next();
-                long ts = getMaxTimestamp(entry.getValue());
+                long ts = IndexUtil.getMaxTimestamp(entry.getValue());
                 if (isTimestampBeforeTTL(indexTableTTL, currentTime, ts)) {
                     itr.remove();
                     verificationPhaseResult.setExpiredIndexRowCount(verificationPhaseResult.getExpiredIndexRowCount()+1);
@@ -239,7 +241,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
         if (!perTaskDataKeyToDataPutMap.isEmpty()) {
             for (Entry<byte[], Put> entry : perTaskDataKeyToDataPutMap.entrySet()) {
                 Put put = entry.getValue();
-                long ts = getMaxTimestamp(put);
+                long ts = IndexUtil.getMaxTimestamp(put);
                 long currentTime = EnvironmentEdgeManager.currentTime();
                 if (isTimestampBeyondMaxLookBack(maxLookBackInMills, currentTime, ts)) {
                     verificationPhaseResult.
@@ -287,7 +289,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
         verificationPhaseResultList.add(perTaskVerificationPhaseResult);
 
         for (Map.Entry<byte[], Put> entry: indexKeyToDataPutMap.entrySet()) {
-            keys.add(PVarbinary.INSTANCE.getKeyRange(entry.getKey()));
+            keys.add(PVarbinary.INSTANCE.getKeyRange(entry.getKey(), SortOrder.ASC));
             perTaskDataKeyToDataPutMap.put(entry.getValue().getRow(), entry.getValue());
             if (keys.size() == rowCountPerTask) {
                 addVerifyTask(tasks, keys, perTaskDataKeyToDataPutMap, perTaskVerificationPhaseResult);
@@ -404,7 +406,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
                             uuidValue = commitIfReady(uuidValue, mutations);
                         } else {
                             indexKeyToDataPutMap
-                                    .put(getIndexRowKey(indexMaintainer, put), put);
+                                    .put(indexMaintainer.getIndexRowKey(put), put);
                         }
                         rowCount++;
 

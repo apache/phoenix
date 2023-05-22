@@ -250,9 +250,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
     
             stmt.executeUpdate("DELETE FROM " + dataTableName + " WHERE id = 1");
             Thread.sleep(10L);
-    
             TestUtil.doMajorCompaction(conn, dataTableName);
-    
             Properties historicalProps = new Properties();
             historicalProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                     Long.toString(afterFirstInsert));

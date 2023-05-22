@@ -30,9 +30,9 @@ import java.util.concurrent.Future;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
@@ -50,7 +50,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
@@ -87,10 +86,11 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
                                              final IndexMaintainer indexMaintainer,
                                              final byte[][] viewConstants,
                                              final ImmutableBytesWritable ptr,
-                                             final long pageSizeMs)
+                                             final long pageSizeMs,
+                                             final long queryLimit)
             throws IOException {
         super(innerScanner, region, scan, env, dataTableScan, tupleProjector, indexMaintainer,
-                viewConstants, ptr, pageSizeMs);
+                viewConstants, ptr, pageSizeMs, queryLimit);
         final Configuration config = env.getConfiguration();
         hTableFactory = IndexWriterUtils.getDefaultDelegateHTableFactory(env);
         rowCountPerTask = config.getInt(INDEX_ROW_COUNTS_PER_TASK_CONF_KEY,
@@ -103,10 +103,12 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
                         INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env));
         byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
         dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
-        try (org.apache.hadoop.hbase.client.Connection connection =
-                     HBaseFactoryProvider.getHConnectionFactory().createConnection(
-                             env.getConfiguration())) {
-            regionEndKeys = connection.getRegionLocator(dataHTable.getName()).getEndKeys();
+        regionEndKeys = hTableFactory.getConnection().getRegionLocator(dataHTable.getName()).getEndKeys();
+        if (indexMaintainer.isUncovered()) {
+            // Empty column should also be added to the data columns to join for uncovered
+            // global indexes. This is required to verify the index row against the data table row and repair it
+            ScanUtil.addEmptyColumnToScan(dataTableScan, indexMaintainer.getDataEmptyKeyValueCF(),
+                    indexMaintainer.getEmptyKeyValueQualifierForDataTable());
         }
     }
 

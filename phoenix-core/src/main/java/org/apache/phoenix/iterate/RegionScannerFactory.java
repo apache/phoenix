@@ -159,27 +159,42 @@ public abstract class RegionScannerFactory {
               if (limitBytes != null) {
                   extraLimit = Bytes.toLong(limitBytes);
               }
-              if (ScanUtil.isLocalOrUncoveredGlobalIndex(scan) && tupleProjector != null) {
-                  PTable.ImmutableStorageScheme storageScheme =
+            if (ScanUtil.isLocalOrUncoveredGlobalIndex(scan)
+                    && (tupleProjector != null
+                    || (indexMaintainer != null && indexMaintainer.isUncovered()))) {
+
+              PTable.ImmutableStorageScheme storageScheme =
                           indexMaintainer.getIndexStorageScheme();
                   Scan dataTableScan = new Scan();
-                  for (int i = 0; i < dataColumns.length; i++) {
+                  if (dataColumns != null) {
+                    for (int i = 0; i < dataColumns.length; i++) {
                       if (storageScheme ==
                               PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
-                          dataTableScan.addFamily(dataColumns[i].getFamily());
+                        dataTableScan.addFamily(dataColumns[i].getFamily());
                       } else {
-                          dataTableScan.addColumn(dataColumns[i].getFamily(),
-                                  dataColumns[i].getQualifier());
+                        dataTableScan.addColumn(dataColumns[i].getFamily(),
+                                dataColumns[i].getQualifier());
                       }
+                    }
+                  } else  if (indexMaintainer.isUncovered()) {
+                    // Indexed columns should also be added to the data columns to join for uncovered global indexes.
+                    // This is required to verify the index row against the data table row.
+                    for (ColumnReference cr: indexMaintainer.getIndexedColumns()) {
+                      if (storageScheme == PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                        dataTableScan.addFamily(cr.getFamily());
+                      } else {
+                        dataTableScan.addColumn(cr.getFamily(), cr.getQualifier());
+                      }
+                    }
                   }
                   if (ScanUtil.isLocalIndex(scan)) {
                     s = new UncoveredLocalIndexRegionScanner(regionScanner, dataRegion, scan, env,
                             dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
-                            pageSizeMs, offset, actualStartKey);
+                            pageSizeMs, offset, actualStartKey, extraLimit);
                   } else {
                     s = new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
                             dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
-                            pageSizeMs);
+                            pageSizeMs, extraLimit);
                   }
               }
           }

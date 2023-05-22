@@ -29,7 +29,6 @@ import java.sql.Clob;
 import java.sql.Date;
 import java.sql.NClob;
 import java.sql.ParameterMetaData;
-import java.sql.PreparedStatement;
 import java.sql.Ref;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -39,6 +38,7 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLXML;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -56,6 +56,7 @@ import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
 
 /**
@@ -158,11 +159,23 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
         return compileMutation(statement, query);
     }
 
-    boolean execute(boolean batched) throws SQLException {
+    void executeForBatch() throws SQLException {
         throwIfUnboundParameters();
-        if (!batched && statement.getOperation().isMutation() && !batch.isEmpty()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
-            .build().buildException();
+        if (!statement.getOperation().isMutation()) {
+            throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.EXECUTE_BATCH_FOR_STMT_WITH_RESULT_SET)
+                    .build().buildException();
+        }
+        executeMutation(statement, createAuditQueryLogger(statement, query));
+    }
+
+    @Override
+    public boolean execute() throws SQLException {
+        throwIfUnboundParameters();
+        if (statement.getOperation().isMutation() && !batch.isEmpty()) {
+            throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
+                    .build().buildException();
         }
         if (statement.getOperation().isMutation()) {
             executeMutation(statement, createAuditQueryLogger(statement,query));
@@ -170,12 +183,6 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
         }
         executeQuery(statement, createQueryLogger(statement,query));
         return true;
-        
-    }
-
-    @Override
-    public boolean execute() throws SQLException {
-        return execute(false);
     }
 
     @Override
@@ -363,19 +370,24 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
 
     @Override
     public void setDate(int parameterIndex, Date x) throws SQLException {
-        if (x != null) { // Since Date is mutable, make a copy
-            x = new Date(x.getTime());
-        }
-        setParameter(parameterIndex, x);
+        setDate(parameterIndex, x, localCalendar);
     }
 
     @Override
     public void setDate(int parameterIndex, Date x, Calendar cal) throws SQLException {
+        setParameter(parameterIndex, processDate(x, cal));
+    }
+
+    private java.sql.Date processDate(Date x, Calendar cal) {
         if (x != null) { // Since Date is mutable, make a copy
-            x = new Date(x.getTime());
+            if (connection.isApplyTimeZoneDisplacement()) {
+                return DateUtil.applyInputDisplacement(x, cal.getTimeZone());
+            } else {
+                // Since Date is mutable, make a copy
+                return new Date(x.getTime());
+            }
         }
-        cal.setTime(x);
-        setParameter(parameterIndex, new Date(cal.getTimeInMillis()));
+        return x;
     }
 
     @Override
@@ -440,11 +452,12 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
 
     @Override
     public void setObject(int parameterIndex, Object o) throws SQLException {
-        setParameter(parameterIndex, o);
+        setParameter(parameterIndex, processObject(o));
     }
 
     @Override
     public void setObject(int parameterIndex, Object o, int targetSqlType) throws SQLException {
+        o = processObject(o);
         PDataType targetType = PDataType.fromTypeId(targetSqlType);
         if (o != null) {
             PDataType sourceType = PDataType.fromLiteral(o);
@@ -485,39 +498,47 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
 
     @Override
     public void setTime(int parameterIndex, Time x) throws SQLException {
-        if (x != null) { // Since Time is mutable, make a copy
-            x = new Time(x.getTime());
-        }
-        setParameter(parameterIndex, x);
+        setTime(parameterIndex, x, localCalendar);
     }
 
     @Override
     public void setTime(int parameterIndex, Time x, Calendar cal) throws SQLException {
-        if (x != null) { // Since Time is mutable, make a copy
-            x = new Time(x.getTime());
-        }
-        cal.setTime(x);
-        setParameter(parameterIndex, new Time(cal.getTimeInMillis()));
+        setParameter(parameterIndex, processTime(x, cal));
     }
 
-    private void setTimestampParameter(int parameterIndex, Timestamp x, Calendar cal) throws SQLException {
-        if (x != null) { // Since Timestamp is mutable, make a copy
-            int nanos = x.getNanos();
-            x = new Timestamp(x.getTime());
-            x.setNanos(nanos);
+    private java.sql.Time processTime(Time x, Calendar cal) {
+        if (x != null) {
+            if (connection.isApplyTimeZoneDisplacement()) {
+                return DateUtil.applyInputDisplacement(x, cal.getTimeZone());
+            } else {
+                // Since Time is mutable, make a copy
+                return new Time(x.getTime());
+            }
         }
-        // TODO: deal with Calendar
-        setParameter(parameterIndex, x);
+        return x;
     }
-    
+
     @Override
     public void setTimestamp(int parameterIndex, Timestamp x) throws SQLException {
-        setTimestampParameter(parameterIndex, x, null);
+        setTimestamp(parameterIndex, x, localCalendar);
     }
 
     @Override
     public void setTimestamp(int parameterIndex, Timestamp x, Calendar cal) throws SQLException {
-        setTimestampParameter(parameterIndex, x, cal);
+        setParameter(parameterIndex, processTimestamp(x, cal));
+    }
+
+    private java.sql.Timestamp processTimestamp(Timestamp x, Calendar cal) {
+        if (x != null) {
+            if (connection.isApplyTimeZoneDisplacement()) {
+                return DateUtil.applyInputDisplacement(x, cal.getTimeZone());
+            } else {
+                int nanos = x.getNanos();
+                x = new Timestamp(x.getTime());
+                x.setNanos(nanos);
+            }
+        }
+        return x;
     }
 
     @Override
@@ -528,5 +549,37 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
     @Override
     public void setUnicodeStream(int parameterIndex, InputStream x, int length) throws SQLException {
         throw new SQLFeatureNotSupportedException();
+    }
+
+    // Convert objects to their canonical forms as expected by the Phoenix type system and apply
+    // TZ displacement
+    private Object processObject(Object o) {
+        // We cannot use the direct conversions, as those work in the local TZ.
+        if (o instanceof java.time.temporal.Temporal) {
+            if (o instanceof java.time.LocalDateTime) {
+                return java.sql.Timestamp.from(((java.time.LocalDateTime) o).toInstant(ZoneOffset.UTC));
+            } else if (o instanceof java.time.LocalDate) {
+                // java.sql.Date.from() is inherited from j.u.Date.from() and returns j.u.Date
+                return new java.sql.Date(((java.time.LocalDate) o).atStartOfDay()
+                        .toInstant(ZoneOffset.UTC).toEpochMilli());
+            } else if (o instanceof java.time.LocalTime) {
+                // preserve nanos if writing to timestamp
+                return java.sql.Timestamp.from(
+                    ((java.time.LocalTime) o).atDate(DateUtil.LD_EPOCH).toInstant(ZoneOffset.UTC));
+            }
+        } else if (o instanceof java.util.Date) {
+            if (o instanceof java.sql.Date) {
+                return processDate((java.sql.Date) o, localCalendar);
+            } else if (o instanceof java.sql.Timestamp) {
+                return processTimestamp((java.sql.Timestamp) o, localCalendar);
+            } else if (o instanceof java.sql.Time) {
+                return processTime((java.sql.Time) o, localCalendar);
+            } else {
+                // We could use Timestamp, we don't have millis, and don't differentiate anyway
+                return processDate(new java.sql.Date(((java.util.Date) o).getTime()), localCalendar)
+                        .getTime();
+            }
+        }
+        return o;
     }
 }

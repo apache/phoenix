@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -30,7 +31,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertEquals;
 
-
+@Category(ParallelStatsDisabledTest.class)
 public class IndexWithDefaultValueIT extends ParallelStatsDisabledIT {
 
     @Test

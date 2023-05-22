@@ -199,6 +199,9 @@ public class ColumnProjectionFilter extends FilterBase implements Writable {
         NavigableSet<ImmutableBytesPtr> columns = columnsTracker.get(cf);
 
         if (columns == null) {
+            if (columnsTracker.containsKey(cf)) {
+                return;
+            }
             columns = new TreeSet<>();
             columnsTracker.put(cf, columns);
         }

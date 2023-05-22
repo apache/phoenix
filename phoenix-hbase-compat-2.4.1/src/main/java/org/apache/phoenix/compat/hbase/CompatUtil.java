@@ -17,18 +17,22 @@
  */
 package org.apache.phoenix.compat.hbase;
 
+import java.io.IOException;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.io.hfile.HFileContext;
 import org.apache.hadoop.hbase.io.hfile.HFileContextBuilder;
 import org.apache.hadoop.hbase.regionserver.StoreUtils;
 import org.apache.hadoop.hbase.util.ChecksumType;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +41,9 @@ public class CompatUtil {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(
         CompatUtil.class);
+
+    private static boolean hasFixedShortCircuitConnection =
+            VersionInfo.compareVersion(VersionInfo.getVersion(), "2.4.12") >= 0;
 
     private CompatUtil() {
         //Not to be instantiated
@@ -66,4 +73,12 @@ public class CompatUtil {
         return StoreUtils.getBytesPerChecksum(conf);
     }
 
+    public static Connection createShortCircuitConnection(final Configuration configuration,
+            final RegionCoprocessorEnvironment env) throws IOException {
+        if (hasFixedShortCircuitConnection) {
+            return env.createConnection(configuration);
+        } else {
+            return org.apache.hadoop.hbase.client.ConnectionFactory.createConnection(configuration);
+        }
+    }
 }

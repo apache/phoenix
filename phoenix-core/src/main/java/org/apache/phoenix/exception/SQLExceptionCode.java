@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.exception;
 
+import java.sql.BatchUpdateException;
 import java.sql.SQLException;
 import java.sql.SQLTimeoutException;
 import java.util.Map;
@@ -454,6 +455,8 @@ public enum SQLExceptionCode {
             "Duplicate ENCODED_QUALIFIER."),
     MISSING_CQ(1150, "XCL49",
             "Missing ENCODED_QUALIFIER."),
+    EXECUTE_BATCH_FOR_STMT_WITH_RESULT_SET(1151, "XCL51", "A batch operation can't include a "
+            + "statement that produces result sets.", Factory.BATCH_UPDATE_ERROR),
 
 
     /**
@@ -634,15 +637,16 @@ public enum SQLExceptionCode {
     }
 
     public static interface Factory {
-        public static final Factory DEFAULT = new Factory() {
+        Factory DEFAULT = new Factory() {
 
             @Override
             public SQLException newException(SQLExceptionInfo info) {
-                return new SQLException(info.toString(), info.getCode().getSQLState(), info.getCode().getErrorCode(), info.getRootCause());
+                return new SQLException(info.toString(), info.getCode().getSQLState(),
+                        info.getCode().getErrorCode(), info.getRootCause());
             }
             
         };
-        public static final Factory SYNTAX_ERROR = new Factory() {
+        Factory SYNTAX_ERROR = new Factory() {
 
             @Override
             public SQLException newException(SQLExceptionInfo info) {
@@ -650,7 +654,16 @@ public enum SQLExceptionCode {
             }
             
         };
-        public SQLException newException(SQLExceptionInfo info);
+        Factory BATCH_UPDATE_ERROR = new Factory() {
+
+            @Override
+            public SQLException newException(SQLExceptionInfo info) {
+                return new BatchUpdateException(info.toString(), info.getCode().getSQLState(),
+                        info.getCode().getErrorCode(), (int[]) null, info.getRootCause());
+            }
+
+        };
+        SQLException newException(SQLExceptionInfo info);
     }
     
     private static final Map<Integer,SQLExceptionCode> errorCodeMap = Maps.newHashMapWithExpectedSize(SQLExceptionCode.values().length);

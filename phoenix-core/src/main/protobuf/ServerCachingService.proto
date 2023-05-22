@@ -68,6 +68,7 @@ message IndexMaintainer {
   optional string logicalIndexName = 25;
   optional int32 dataEncodingScheme = 26;
   optional int32 dataImmutableStorageScheme = 27;
+  optional bool isUncovered = 28;
 }
 
 message TransformMaintainer {

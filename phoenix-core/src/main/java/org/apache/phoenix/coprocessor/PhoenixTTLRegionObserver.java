@@ -20,6 +20,7 @@ package org.apache.phoenix.coprocessor;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -318,11 +319,6 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
                 if (ScanUtil.isEmptyColumn(cell, this.emptyCF, this.emptyCQ)) {
                     LOG.trace(String.format("** PHOENIX-TTL: Row expired for [%s], expired = %s **",
                             cell.toString(), ScanUtil.isTTLExpired(cell, this.scan, this.now)));
-                    // Empty column is not supposed to be returned to the client
-                    // except when it is the only column included in the scan.
-                    if (cellListSize > 1) {
-                        cellIterator.remove();
-                    }
                     return !ScanUtil.isTTLExpired(cell, this.scan, this.now);
                 }
             }
@@ -333,7 +329,12 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
 
         @Override
         public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
-            return new PhoenixTTLRegionScanner(env, scan, ((BaseRegionScanner)delegate).getNewRegionScanner(scan));
+            try {
+                return new PhoenixTTLRegionScanner(env, scan,
+                        ((DelegateRegionScanner)delegate).getNewRegionScanner(scan));
+            } catch (ClassCastException e) {
+                throw new DoNotRetryIOException(e);
+            }
         }
     }
 }

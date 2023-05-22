@@ -140,9 +140,6 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 
-import static org.apache.phoenix.util.IndexUtil.isHintedGlobalIndex;
-
-
 public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expression> {
     private boolean isAggregate;
     protected ParseNode aggregateFunction;
@@ -373,8 +370,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             // Rather than not use a local index when a column not contained by it is referenced, we
             // join back to the data table in our coprocessor since this is a relatively cheap
             // operation given that we know the join is local.
-            if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL
-                    || isHintedGlobalIndex(context.getCurrentTable())) {
+            if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(context.getCurrentTable())) {
                 try {
                     context.setUncoveredIndex(true);
                     return new IndexDataColumnRef(context, context.getCurrentTable(),

@@ -87,6 +87,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String MAX_MEMORY_PERC_ATTRIB = "phoenix.query.maxGlobalMemoryPercentage";
     public static final String MAX_TENANT_MEMORY_PERC_ATTRIB = "phoenix.query.maxTenantMemoryPercentage";
     public static final String MAX_SERVER_CACHE_SIZE_ATTRIB = "phoenix.query.maxServerCacheBytes";
+    public static final String APPLY_TIME_ZONE_DISPLACMENT_ATTRIB = "phoenix.query.applyTimeZoneDisplacement";
     public static final String DATE_FORMAT_TIMEZONE_ATTRIB = "phoenix.query.dateFormatTimeZone";
     public static final String DATE_FORMAT_ATTRIB = "phoenix.query.dateFormat";
     public static final String TIME_FORMAT_ATTRIB = "phoenix.query.timeFormat";
@@ -349,6 +350,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED = "phoenix.ttl.server_side.masking.enabled";
     // The time limit on the amount of work to be done in one RPC call
     public static final String PHOENIX_SERVER_PAGE_SIZE_MS = "phoenix.server.page.size.ms";
+    // Phoenix TTL implemented by CompactionScanner and TTLRegionScanner is enabled
+    public static final String PHOENIX_TABLE_TTL_ENABLED = "phoenix.table.ttl.enabled";
 
 
     // Before 4.15 when we created a view we included the parent table column metadata in the view

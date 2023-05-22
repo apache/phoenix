@@ -34,6 +34,6 @@ public class CurrentTimeParseNode extends FunctionParseNode {
 
     @Override
     public FunctionExpression create(List<Expression> children, StatementContext context) throws SQLException {
-        return new CurrentTimeFunction(context.getCurrentTime());
+        return new CurrentTimeFunction(context.getCurrentTimeWithDisplacement());
     }
 }

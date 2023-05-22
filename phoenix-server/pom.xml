@@ -120,6 +120,7 @@
                         <exclude>ch.qos.reload4j:*</exclude>
                         <exclude>org.slf4j:*</exclude>
                         <exclude>org.apache.logging.log4j:*</exclude>
+                        <exclude>org.apache.hbase.thirdparty:*</exclude>
                     </excludes>
                 </artifactSet>
                 <filters>
@@ -342,16 +343,6 @@
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-zookeeper</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase.thirdparty</groupId>
-      <artifactId>hbase-shaded-miscellaneous</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase.thirdparty</groupId>
-      <artifactId>hbase-shaded-protobuf</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>

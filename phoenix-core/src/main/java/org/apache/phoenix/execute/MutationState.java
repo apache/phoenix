@@ -970,7 +970,7 @@ public class MutationState implements SQLCloseable {
                 }
             }
         } catch(Throwable e) {
-            if(table != null) {
+            if (table != null) {
                 TableMetricsManager.updateMetricsForSystemCatalogTableMethod(table.getTableName().toString(),
                         NUM_METADATA_LOOKUP_FAILURES, 1);
             }
@@ -1516,13 +1516,13 @@ public class MutationState implements SQLCloseable {
 
                     if (allUpsertsMutations ^ allDeletesMutations) {
                         //success cases are updated for both cases autoCommit=true and conn.commit explicit
-                        if(areAllBatchesSuccessful){
+                        if (areAllBatchesSuccessful){
                             TableMetricsManager
                                     .updateMetricsMethod(htableNameStr, allUpsertsMutations ? UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER :
                                             DELETE_AGGREGATE_SUCCESS_SQL_COUNTER, 1);
                         }
                         //Failures cases are updated only for conn.commit explicit case.
-                        if(!areAllBatchesSuccessful && !connection.getAutoCommit()){
+                        if (!areAllBatchesSuccessful && !connection.getAutoCommit()){
                             TableMetricsManager.updateMetricsMethod(htableNameStr, allUpsertsMutations ? UPSERT_AGGREGATE_FAILURE_SQL_COUNTER :
                                     DELETE_AGGREGATE_FAILURE_SQL_COUNTER, 1);
                         }
@@ -1705,11 +1705,17 @@ public class MutationState implements SQLCloseable {
                         continue;
                     }
                     if (m instanceof Delete) {
-                        Put put = new Put(m.getRow());
-                        put.addColumn(emptyCF, emptyCQ, IndexRegionObserver.getMaxTimestamp(m),
-                                QueryConstants.UNVERIFIED_BYTES);
-                        // The Delete gets marked as unverified in Phase 1 and gets deleted on Phase 3.
-                        addToMap(unverifiedIndexMutations, tableInfo, put);
+                        if (tableInfo.getOrigTableRef().getTable().getIndexType()
+                                != PTable.IndexType.UNCOVERED_GLOBAL) {
+                            Put put = new Put(m.getRow());
+                            put.addColumn(emptyCF, emptyCQ, IndexRegionObserver.getMaxTimestamp(m),
+                                    QueryConstants.UNVERIFIED_BYTES);
+                            // The Delete gets marked as unverified in Phase 1 and gets deleted on Phase 3.
+                            addToMap(unverifiedIndexMutations, tableInfo, put);
+                        }
+                        // Uncovered indexes do not use two phase commit write and thus do not use
+                        // the verified status stored in the empty column. The index rows are
+                        // deleted only after their data table rows are deleted
                         addToMap(verifiedOrDeletedIndexMutations, tableInfo, m);
                     } else if (m instanceof Put) {
                         long timestamp = IndexRegionObserver.getMaxTimestamp(m);
@@ -1723,10 +1729,16 @@ public class MutationState implements SQLCloseable {
                         addToMap(unverifiedIndexMutations, tableInfo, m);
 
                         // Phase 3 mutations are verified
-                        Put verifiedPut = new Put(m.getRow());
-                        verifiedPut.addColumn(emptyCF, emptyCQ, timestamp,
+                        // Uncovered indexes do not use two phase commit write. The index rows are
+                        // updated only once and before their data table rows are updated. So
+                        // index rows do not have phase-3 put mutations
+                        if (tableInfo.getOrigTableRef().getTable().getIndexType()
+                                != PTable.IndexType.UNCOVERED_GLOBAL) {
+                            Put verifiedPut = new Put(m.getRow());
+                            verifiedPut.addColumn(emptyCF, emptyCQ, timestamp,
                                  QueryConstants.VERIFIED_BYTES);
-                        addToMap(verifiedOrDeletedIndexMutations, tableInfo, verifiedPut);
+                            addToMap(verifiedOrDeletedIndexMutations, tableInfo, verifiedPut);
+                        }
                     } else {
                         addToMap(unverifiedIndexMutations, tableInfo, m);
                     }
@@ -2240,4 +2252,7 @@ public class MutationState implements SQLCloseable {
         timeInExecuteMutationMap.clear();
     }
 
+    public boolean isEmpty() {
+        return mutationsMap != null ? mutationsMap.isEmpty() : true;
+    }
 }

@@ -18,9 +18,11 @@
 package org.apache.phoenix.schema.types;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.Format;
+import java.time.ZoneOffset;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -28,10 +30,9 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
-
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 public class PTimestamp extends PDataType<Timestamp> {
     public static final int MAX_NANOS_VALUE_EXCLUSIVE = 1000000;
@@ -167,6 +168,41 @@ public class PTimestamp extends PDataType<Timestamp> {
     }
 
     @Override
+    public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+            SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
+            throws SQLException {
+        java.sql.Timestamp sqlTs =
+                toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
+        return dateToClass(sqlTs, actualType, jdbcType);
+    }
+
+    Object dateToClass(java.sql.Timestamp sqlTs, PDataType actualType, Class jdbcType)
+            throws SQLException {
+        // FIXME java.time.Local conversions use ISO chronology, unlike the rest of Phoenix.
+        if (jdbcType == java.time.LocalDateTime.class) {
+            return java.time.LocalDateTime.ofInstant(sqlTs.toInstant(), ZoneOffset.UTC);
+        } else if (jdbcType == java.time.LocalTime.class) {
+            // This is NOT JDBC compliant
+            // This preserves nanos
+            return java.time.LocalDateTime.ofInstant(sqlTs.toInstant(), ZoneOffset.UTC)
+                    .toLocalTime();
+        } else if (jdbcType == java.time.LocalDate.class) {
+            // This is NOT JDBC compliant
+            return java.time.LocalDateTime.ofInstant(sqlTs.toInstant(), ZoneOffset.UTC)
+                    .toLocalDate();
+        } else if (jdbcType == java.sql.Timestamp.class) {
+            return sqlTs;
+        } else if (jdbcType == java.sql.Date.class) {
+            return new java.sql.Date(sqlTs.getTime());
+        } else if (jdbcType == java.util.Date.class) {
+            return new java.util.Date(sqlTs.getTime());
+        } else if (jdbcType == java.sql.Time.class) {
+            return new java.sql.Time(sqlTs.getTime());
+        }
+        throw newMismatchException(actualType, jdbcType);
+    }
+
+    @Override
     public boolean isCastableTo(PDataType targetType) {
         return PDate.INSTANCE.isCastableTo(targetType);
     }
@@ -257,39 +293,47 @@ public class PTimestamp extends PDataType<Timestamp> {
     }
 
     /**
-     * With timestamp, because our last 4 bytes store a value from [0 - 1000000), we need
-     * to detect when the boundary is crossed if we increment to the nextKey.
+     * With timestamp, because our last 4 bytes store a value from [0 - 1000000), we need to detect
+     * when the boundary is crossed if we increment to the nextKey.
      */
     @Override
-    public KeyRange getKeyRange(byte[] lowerRange, boolean lowerInclusive, byte[] upperRange, boolean upperInclusive) {
+    public KeyRange getKeyRange(byte[] lowerRange, boolean lowerInclusive, byte[] upperRange,
+            boolean upperInclusive, SortOrder sortOrder) {
         /*
-         * Force lower bound to be inclusive for fixed width keys because it makes comparisons less expensive when you
-         * can count on one bound or the other being inclusive. Comparing two fixed width exclusive bounds against each
-         * other is inherently more expensive, because you need to take into account if the bigger key is equal to the
-         * next key after the smaller key. For example: (A-B] compared against [A-B) An exclusive lower bound A is
-         * bigger than an exclusive upper bound B. Forcing a fixed width exclusive lower bound key to be inclusive
-         * prevents us from having to do this extra logic in the compare function.
-         * 
+         * Force lower bound to be inclusive for fixed width keys because it makes comparisons less
+         * expensive when you can count on one bound or the other being inclusive. Comparing two
+         * fixed width exclusive bounds against each other is inherently more expensive, because you
+         * need to take into account if the bigger key is equal to the next key after the smaller
+         * key. For example: (A-B] compared against [A-B) An exclusive lower bound A is bigger than
+         * an exclusive upper bound B. Forcing a fixed width exclusive lower bound key to be
+         * inclusive prevents us from having to do this extra logic in the compare function.
          */
         if (lowerRange != KeyRange.UNBOUND && !lowerInclusive && isFixedWidth()) {
             if (lowerRange.length != MAX_TIMESTAMP_BYTES) {
-                throw new IllegalDataException("Unexpected size of " + lowerRange.length + " for " + this);
+                throw new IllegalDataException(
+                        "Unexpected size of " + lowerRange.length + " for " + this);
             }
-            // Infer sortOrder based on most significant byte
-            SortOrder sortOrder = lowerRange[Bytes.SIZEOF_LONG] < 0 ? SortOrder.DESC : SortOrder.ASC;
-            int nanos = PUnsignedInt.INSTANCE.getCodec().decodeInt(lowerRange, Bytes.SIZEOF_LONG, sortOrder);
-            if ((sortOrder == SortOrder.DESC && nanos == 0) || (sortOrder == SortOrder.ASC && nanos == MAX_NANOS_VALUE_EXCLUSIVE-1)) {
-                // With timestamp, because our last 4 bytes store a value from [0 - 1000000), we need
+
+            int nanos =
+                    PUnsignedInt.INSTANCE.getCodec().decodeInt(lowerRange, Bytes.SIZEOF_LONG,
+                        sortOrder);
+            if ((sortOrder == SortOrder.DESC && nanos == 0)
+                    || (sortOrder == SortOrder.ASC && nanos == MAX_NANOS_VALUE_EXCLUSIVE - 1)) {
+                // With timestamp, because our last 4 bytes store a value from [0 - 1000000), we
+                // need
                 // to detect when the boundary is crossed with our nextKey
                 byte[] newLowerRange = new byte[MAX_TIMESTAMP_BYTES];
                 if (sortOrder == SortOrder.DESC) {
                     // Set nanos part as inverted 999999 as it needs to be the max nano value
                     // The millisecond part is moving to the previous value below
                     System.arraycopy(lowerRange, 0, newLowerRange, 0, Bytes.SIZEOF_LONG);
-                    PUnsignedInt.INSTANCE.getCodec().encodeInt(MAX_NANOS_VALUE_EXCLUSIVE-1, newLowerRange, Bytes.SIZEOF_LONG);
-                    SortOrder.invert(newLowerRange, Bytes.SIZEOF_LONG, newLowerRange, Bytes.SIZEOF_LONG, Bytes.SIZEOF_INT);
+                    PUnsignedInt.INSTANCE.getCodec().encodeInt(MAX_NANOS_VALUE_EXCLUSIVE - 1,
+                        newLowerRange, Bytes.SIZEOF_LONG);
+                    SortOrder.invert(newLowerRange, Bytes.SIZEOF_LONG, newLowerRange,
+                        Bytes.SIZEOF_LONG, Bytes.SIZEOF_INT);
                 } else {
-                    // Leave nanos part as zero as the millisecond part is rolling over to the next value
+                    // Leave nanos part as zero as the millisecond part is rolling over to the next
+                    // value
                     System.arraycopy(lowerRange, 0, newLowerRange, 0, Bytes.SIZEOF_LONG);
                 }
                 // Increment millisecond part, but leave nanos alone
@@ -301,7 +345,7 @@ public class PTimestamp extends PDataType<Timestamp> {
                 return KeyRange.getKeyRange(lowerRange, true, upperRange, upperInclusive);
             }
         }
-        return super.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
+        return super.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive, sortOrder);
     }
 
 }

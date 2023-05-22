@@ -37,6 +37,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 
 import java.sql.SQLException;
@@ -96,7 +97,7 @@ public class ServerBuildIndexCompiler {
             Scan scan = plan.getContext().getScan();
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             dataTable = tableRef.getTable();
-            if (index.getIndexType() == PTable.IndexType.GLOBAL &&  dataTable.isTransactional()) {
+            if (IndexUtil.isGlobalIndex(index)  &&  dataTable.isTransactional()) {
                 throw new IllegalArgumentException(
                         "ServerBuildIndexCompiler does not support global indexes on transactional tables");
             }

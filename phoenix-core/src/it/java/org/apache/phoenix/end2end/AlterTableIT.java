@@ -86,6 +86,8 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -108,7 +110,8 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     private String indexTableFullName;
     private String tableDDLOptions;
     private final boolean columnEncoded;
-    
+    private static final Logger LOGGER = LoggerFactory.getLogger(AlterTableIT.class);
+
     public AlterTableIT(boolean columnEncoded) {
         this.columnEncoded = columnEncoded;
         this.tableDDLOptions = columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0";
@@ -1506,35 +1509,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test
-    public void testSetPropertyDoesntUpdateDDLTimestamp() throws Exception {
-        Properties props = new Properties();
-        String tableDDL = "CREATE TABLE IF NOT EXISTS " + dataTableFullName + " ("
-            + " ENTITY_ID integer NOT NULL,"
-            + " COL1 integer NOT NULL,"
-            + " COL2 bigint NOT NULL,"
-            + " CONSTRAINT NAME_PK PRIMARY KEY (ENTITY_ID, COL1, COL2)"
-            + " ) " + generateDDLOptions("");
-
-        String setPropertyDDL = "ALTER TABLE " + dataTableFullName +
-            " SET UPDATE_CACHE_FREQUENCY=300000 ";
-        long startTS = EnvironmentEdgeManager.currentTimeMillis();
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.createStatement().execute(tableDDL);
-            //first get the original DDL timestamp when we created the table
-            long tableDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
-                dataTableFullName, startTS,
-                conn);
-            Thread.sleep(1);
-            //now change a property and make sure the timestamp DOES NOT update
-            conn.createStatement().execute(setPropertyDDL);
-            PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
-            assertNotNull(table);
-            assertNotNull(table.getLastDDLTimestamp());
-            assertEquals(tableDDLTimestamp, table.getLastDDLTimestamp().longValue());
-        }
-    }
-
 	private void assertEncodedCQValue(String columnFamily, String columnName, String schemaName, String tableName, int expectedValue) throws Exception {
         String query = "SELECT " + COLUMN_QUALIFIER + " FROM \"SYSTEM\".CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
                 + " = ? " + " AND " + COLUMN_FAMILY + " = ?" + " AND " + COLUMN_NAME  + " = ?" + " AND " + COLUMN_QUALIFIER  + " IS NOT NULL";
@@ -1852,4 +1826,27 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test that LAST_DDL_TIMESTAMP is updated when we alter properties of a table.
+     * @throws Exception
+     */
+    @Test
+    public void testChangePropertiesUpdatesLASTDDLTimestamp() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE  " + dataTableFullName +
+                    "  (a_string varchar not null, a_binary VARCHAR not null, col1 integer" +
+                    "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary)) " + tableDDLOptions;
+            conn.createStatement().execute(ddl);
+            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            PTable table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), dataTableFullName));
+            long oldLastDDLTimestamp = table.getLastDDLTimestamp();
+            LOGGER.info("Last DDL timestamp before changing property: " + oldLastDDLTimestamp);
+            conn.createStatement().execute("ALTER TABLE " + dataTableFullName + " SET DISABLE_WAL = true");
+            table = phxConn.getTable(new PTableKey(null, dataTableFullName));
+            long newLastDDLTimestamp = table.getLastDDLTimestamp();
+            LOGGER.info("Last DDL timestamp after changing property : " + newLastDDLTimestamp);
+            assertTrue("LastDDLTimestamp should have been updated",
+                    newLastDDLTimestamp > oldLastDDLTimestamp);
+        }
+    }
 }

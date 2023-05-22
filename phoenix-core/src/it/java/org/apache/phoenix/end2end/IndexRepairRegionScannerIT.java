@@ -116,7 +116,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             if (!(optionBuilder.length() == 0)) {
                 optionBuilder.append(",");
             }
-            optionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=0 ");
+            optionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=2 ");
             indexOptionBuilder.append(" IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS,COLUMN_ENCODED_BYTES=2");
         }
         optionBuilder.append(" SPLIT ON(1,2)");

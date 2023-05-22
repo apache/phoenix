@@ -30,8 +30,8 @@ import org.junit.experimental.categories.Category;
 @Category(ParallelStatsDisabledTest.class)
 public class GlobalMutableNonTxIndexWithLazyPostBatchWriteIT extends GlobalMutableNonTxIndexIT {
 
-    public GlobalMutableNonTxIndexWithLazyPostBatchWriteIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded, boolean skipPostIndexUpdates) {
-        super(localIndex, mutable, transactionProvider, columnEncoded, skipPostIndexUpdates);
+    public GlobalMutableNonTxIndexWithLazyPostBatchWriteIT(boolean columnEncoded) {
+        super(columnEncoded);
     }
 
     @BeforeClass

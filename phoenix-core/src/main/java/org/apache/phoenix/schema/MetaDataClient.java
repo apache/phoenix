@@ -1164,19 +1164,23 @@ public class MetaDataClient {
     private long updateStatisticsInternal(PName physicalName, PTable logicalTable, Map<String, Object> statsProps, List<byte[]> cfs, boolean checkLastStatsUpdateTime) throws SQLException {
         ReadOnlyProps props = connection.getQueryServices().getProps();
         final long msMinBetweenUpdates = props
-                .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_MIN_STATS_UPDATE_FREQ_MS);
+            .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB,
+                QueryServicesOptions.DEFAULT_MIN_STATS_UPDATE_FREQ_MS);
         Long scn = connection.getSCN();
         // Always invalidate the cache
         long clientTimeStamp = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
         long msSinceLastUpdate = Long.MAX_VALUE;
         if (checkLastStatsUpdateTime) {
-            String query = "SELECT CURRENT_DATE()," + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
-                    + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
-                    + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
-            ResultSet rs = connection.createStatement().executeQuery(query);
-
-            if (rs.next()) {
-                msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
+            String query = "SELECT CURRENT_DATE()," + LAST_STATS_UPDATE_TIME + " FROM "
+                + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
+                + " WHERE " + PHYSICAL_NAME + "= ?  AND " + COLUMN_FAMILY
+                + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
+            try (PreparedStatement selectStatsStmt = connection.prepareStatement(query)) {
+                selectStatsStmt.setString(1, physicalName.getString());
+                ResultSet rs = selectStatsStmt.executeQuery(query);
+                if (rs.next()) {
+                    msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
+                }
             }
         }
         long rowCount = 0;
@@ -4482,8 +4486,9 @@ public class MetaDataClient {
         }
         buf.setCharAt(buf.length()-1, ')');
 
-        connection.createStatement().execute(buf.toString());
-
+        try (PreparedStatement delCol = connection.prepareStatement(buf.toString())) {
+            delCol.execute();
+        }
         Collections.sort(columnsToDrop,new Comparator<PColumn> () {
             @Override
             public int compare(PColumn left, PColumn right) {
@@ -4493,21 +4498,25 @@ public class MetaDataClient {
 
         boolean isSalted = table.getBucketNum() != null;
         int columnsToDropIndex = 0;
-        PreparedStatement colUpdate = connection.prepareStatement(UPDATE_COLUMN_POSITION);
-        colUpdate.setString(1, tenantId);
-        colUpdate.setString(2, schemaName);
-        colUpdate.setString(3, tableName);
-        for (int i = columnsToDrop.get(columnsToDropIndex).getPosition() + 1; i < table.getColumns().size(); i++) {
-            PColumn column = table.getColumns().get(i);
-            if (columnsToDrop.contains(column)) {
-                columnsToDropIndex++;
-                continue;
+        try (PreparedStatement colUpdate = connection.prepareStatement(UPDATE_COLUMN_POSITION)) {
+            colUpdate.setString(1, tenantId);
+            colUpdate.setString(2, schemaName);
+            colUpdate.setString(3, tableName);
+            for (int i = columnsToDrop.get(columnsToDropIndex).getPosition() + 1;
+                i < table.getColumns().size(); i++) {
+                PColumn column = table.getColumns().get(i);
+                if (columnsToDrop.contains(column)) {
+                    columnsToDropIndex++;
+                    continue;
+                }
+                colUpdate.setString(4, column.getName().getString());
+                colUpdate.setString(5, column.getFamilyName() == null
+                    ? null : column.getFamilyName().getString());
+                // Adjust position to not include the salt column
+                colUpdate.setInt(6,
+                    column.getPosition() - columnsToDropIndex - (isSalted ? 1 : 0));
+                colUpdate.execute();
             }
-            colUpdate.setString(4, column.getName().getString());
-            colUpdate.setString(5, column.getFamilyName() == null ? null : column.getFamilyName().getString());
-            // Adjust position to not include the salt column
-            colUpdate.setInt(6, column.getPosition() - columnsToDropIndex - (isSalted ? 1 : 0));
-            colUpdate.execute();
         }
         return familyName;
     }
@@ -5012,7 +5021,7 @@ public class MetaDataClient {
                 if (newIndexState == PIndexState.BUILDING && !isAsync) {
                     PTable index = indexRef.getTable();
                     // First delete any existing rows of the index
-                    if (index.getIndexType().equals(IndexType.GLOBAL) && index.getViewIndexId() == null) {
+                    if (IndexUtil.isGlobalIndex(index) && index.getViewIndexId() == null) {
                         //for a global index of a normal base table, it's safe to just truncate and
                         //rebuild. We preserve splits to reduce the amount of splitting we need to do
                         //during rebuild
@@ -5032,7 +5041,9 @@ public class MetaDataClient {
                     } else {
                         Long scn = connection.getSCN();
                         long ts = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
-                        MutationPlan plan = new PostDDLCompiler(connection).compile(Collections.singletonList(indexRef), null, null, Collections.<PColumn>emptyList(), ts);
+                        MutationPlan plan = new PostDDLCompiler(connection)
+                            .compile(Collections.singletonList(indexRef), null,
+                                null, Collections.<PColumn>emptyList(), ts);
                         connection.getQueryServices().updateData(plan);
                     }
                     NamedTableNode dataTableNode = NamedTableNode.create(null,

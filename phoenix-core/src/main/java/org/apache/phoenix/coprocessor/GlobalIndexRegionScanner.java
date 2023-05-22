@@ -23,7 +23,6 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -39,9 +38,9 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.filter.PagedFilter;
+import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
+import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
-import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.filter.AllVersionsIndexRebuildFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
@@ -63,6 +62,7 @@ import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -257,66 +257,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         }
     }
 
-    public static class SimpleValueGetter implements ValueGetter {
-        final ImmutableBytesWritable valuePtr = new ImmutableBytesWritable();
-        final Put put;
-        public SimpleValueGetter (final Put put) {
-            this.put = put;
-        }
-        @Override
-        public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) {
-            Cell cell = getLatestCell(ref, ts);
-            if (cell == null) {
-                return null;
-            }
-            valuePtr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
-            return valuePtr;
-        }
-        public Cell getLatestCell(ColumnReference ref, long ts) {
-            List<Cell> cellList = put.get(ref.getFamily(), ref.getQualifier());
-            if (cellList == null || cellList.isEmpty()) {
-                return null;
-            }
-            return cellList.get(0);
-        }
-        @Override
-        public KeyValue getLatestKeyValue(ColumnReference ref, long ts) {
-            Cell cell = getLatestCell(ref, ts);
-            KeyValue kv = cell == null ? null :
-                new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
-                    cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
-                    cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                    cell.getTimestamp(), KeyValue.Type.codeToType(cell.getType().getCode()),
-                    cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
-            return kv;
-        }
-        @Override
-        public byte[] getRowKey() {
-            return put.getRow();
-        }
-
-    }
-
-    public static byte[] getIndexRowKey(IndexMaintainer indexMaintainer, final Put dataRow) {
-        ValueGetter valueGetter = new SimpleValueGetter(dataRow);
-        return indexMaintainer.buildRowKey(valueGetter, new ImmutableBytesWritable(dataRow.getRow()),
-                null, null, getMaxTimestamp(dataRow));
-    }
-
-    public static long getMaxTimestamp(Mutation m) {
-        long ts = 0;
-        for (List<Cell> cells : m.getFamilyCellMap().values()) {
-            if (cells == null) {
-                continue;
-            }
-            for (Cell cell : cells) {
-                if (ts < cell.getTimestamp()) {
-                    ts = cell.getTimestamp();
-                }
-            }
-        }
-        return ts;
-    }
 
     public static long getTimestamp(Mutation m) {
         for (List<Cell> cells : m.getFamilyCellMap().values()) {
@@ -1130,7 +1070,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     protected Scan prepareIndexScan(Map<byte[], List<Mutation>> indexMutationMap) throws IOException {
         List<KeyRange> keys = new ArrayList<>(indexMutationMap.size());
         for (byte[] indexKey : indexMutationMap.keySet()) {
-            keys.add(PVarbinary.INSTANCE.getKeyRange(indexKey));
+            keys.add(PVarbinary.INSTANCE.getKeyRange(indexKey, SortOrder.ASC));
         }
 
         ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
@@ -1341,7 +1281,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 if (mutation.getFamilyCellMap().size() != 0) {
                     // Add this put on top of the current data row state to get the next data row state
                     Put nextDataRow = (currentDataRowState == null) ? new Put((Put)mutation) : applyNew((Put)mutation, currentDataRowState);
-                    ValueGetter nextDataRowVG = new SimpleValueGetter(nextDataRow);
+                    ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRow);
                     Put indexPut = prepareIndexPutForRebuid(indexMaintainer, rowKeyPtr, nextDataRowVG, ts);
                     indexMutations.add(indexPut);
                     // Delete the current index row if the new index key is different than the current one
@@ -1376,7 +1316,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                     currentDataRowState = null;
                     indexRowKeyForCurrentDataRow = null;
                 } else {
-                    ValueGetter nextDataRowVG = new SimpleValueGetter(nextDataRowState);
+                    ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
                     Put indexPut = prepareIndexPutForRebuid(indexMaintainer, rowKeyPtr, nextDataRowVG, ts);
                     indexMutations.add(indexPut);
                     // Delete the current index row if the new index key is different than the current one
@@ -1433,18 +1373,24 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         // For rebuilds we need all columns and all versions
 
         Filter filter = scan.getFilter();
-        if (filter instanceof PagedFilter) {
-            PagedFilter pageFilter = (PagedFilter) filter;
+        if (filter instanceof PagingFilter) {
+            PagingFilter pageFilter = (PagingFilter) filter;
             Filter delegateFilter = pageFilter.getDelegateFilter();
-            if (delegateFilter instanceof FirstKeyOnlyFilter) {
+            if (delegateFilter instanceof EmptyColumnOnlyFilter) {
                 pageFilter.setDelegateFilter(null);
+            } else if (delegateFilter instanceof FirstKeyOnlyFilter) {
+                scan.setFilter(null);
+                return true;
             } else if (delegateFilter != null) {
                 // Override the filter so that we get all versions
                 pageFilter.setDelegateFilter(new AllVersionsIndexRebuildFilter(delegateFilter));
             }
-        } else if (filter instanceof FirstKeyOnlyFilter) {
+        } else if (filter instanceof EmptyColumnOnlyFilter) {
             scan.setFilter(null);
             return true;
+        } else if (filter instanceof FirstKeyOnlyFilter) {
+                scan.setFilter(null);
+                return true;
         } else if (filter != null) {
             // Override the filter so that we get all versions
             scan.setFilter(new AllVersionsIndexRebuildFilter(filter));
@@ -1471,7 +1417,9 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 incrScan.withStartRow(nextStartKey);
             }
             List<KeyRange> keys = new ArrayList<>();
-            try (RegionScanner scanner = new PagedRegionScanner(region, region.getScanner(incrScan), incrScan)) {
+
+            try (RegionScanner scanner = new TTLRegionScanner(env, incrScan,
+                    new PagingRegionScanner(region, region.getScanner(incrScan), incrScan))) {
                 List<Cell> row = new ArrayList<>();
                 int rowCount = 0;
                 // collect row keys that have been modified in the given time-range
@@ -1484,7 +1432,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                             row.clear();
                             continue;
                         }
-                        keys.add(PVarbinary.INSTANCE.getKeyRange(CellUtil.cloneRow(row.get(0))));
+                        keys.add(PVarbinary.INSTANCE.getKeyRange(CellUtil.cloneRow(row.get(0)),
+                            SortOrder.ASC));
                         rowCount++;
                     }
                     row.clear();

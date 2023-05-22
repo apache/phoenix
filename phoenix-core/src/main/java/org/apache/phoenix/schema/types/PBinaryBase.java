@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.sql.SQLException;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.SortOrder;
 
@@ -111,5 +113,17 @@ public abstract class PBinaryBase extends PDataType<byte[]> {
             return maxLength <= desiredMaxLength;
         }
         return true;
+    }
+
+    @Override
+    public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+            SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
+            throws SQLException {
+        if (jdbcType == byte[].class) {
+            return toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
+        } else {
+            // TODO we could duplicate getString() for String type
+            throw newMismatchException(actualType, jdbcType);
+        }
     }
 }

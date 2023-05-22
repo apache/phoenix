@@ -15,15 +15,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.compat.hbase;
+package org.apache.phoenix.end2end.index;
 
-import org.apache.hadoop.hbase.regionserver.SteppingSplitPolicy;
+import java.util.Arrays;
+import java.util.Collection;
 
-public class CompatSteppingSplitPolicy extends SteppingSplitPolicy {
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
+import org.junit.experimental.categories.Category;
+import org.junit.runners.Parameterized.Parameters;
 
-    protected boolean canSplit() {
-        //dummy
-        return false;
+@Category(ParallelStatsDisabledTest.class)
+public class UncoveredGlobalImmutableNonTxIndexIT extends BaseIndexIT {
+
+    public UncoveredGlobalImmutableNonTxIndexIT(boolean columnEncoded) {
+        super(false, true, false, null, columnEncoded);
+    }
+
+    // name is used by failsafe as file name in reports
+    @Parameters(name="UncoveredGlobalImmutableNonTxIndexIT_columnEncoded={0}")
+    public static synchronized Collection<Object[]> data() {
+        return Arrays.asList(new Object[][] {
+                {false}, {true}
+           });
     }
 
 }

@@ -756,7 +756,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         for (byte[] key : keys) {
             byte[] stopKey = ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
             ByteUtil.nextKey(stopKey, stopKey.length);
-            keyRanges.add(PVarbinary.INSTANCE.getKeyRange(key, true, stopKey, false));
+            keyRanges
+                    .add(PVarbinary.INSTANCE.getKeyRange(key, true, stopKey, false, SortOrder.ASC));
         }
         Scan scan = new Scan();
         scan.setTimeRange(MIN_TABLE_TIMESTAMP, clientTimeStamp);
@@ -792,7 +793,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         for (byte[] key : keys) {
             byte[] stopKey = ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
             ByteUtil.nextKey(stopKey, stopKey.length);
-            keyRanges.add(PVarbinary.INSTANCE.getKeyRange(key, true, stopKey, false));
+            keyRanges
+                    .add(PVarbinary.INSTANCE.getKeyRange(key, true, stopKey, false, SortOrder.ASC));
         }
         Scan scan = new Scan();
         if (clientTimeStamp != HConstants.LATEST_TIMESTAMP
@@ -2396,33 +2398,29 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             (ExtendedCellBuilder)env.getCellBuilder());
                 }
                 //set the last DDL timestamp to the current server time since we're creating the
-                // table. We only need to do this for tables and views because indexes and system
-                // tables aren't relevant to external systems that may be tracking our schema
-                // changes.
-                if (MetaDataUtil.isTableDirectlyQueried(tableType)) {
-                    tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(tableKey,
-                        clientTimeStamp, EnvironmentEdgeManager.currentTimeMillis()));
+                // table/index/views.
+                tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(tableKey,
+                    clientTimeStamp, EnvironmentEdgeManager.currentTimeMillis()));
 
-                    //and if we're doing change detection on this table or view, notify the
-                    //external schema registry and get its schema id
-                    if (isChangeDetectionEnabled) {
-                        long startTime = EnvironmentEdgeManager.currentTimeMillis();
-                        try {
-                            exportSchema(tableMetadata, tableKey, clientTimeStamp, clientVersion, null);
-                            metricsSource.incrementCreateExportCount();
-                            metricsSource.updateCreateExportTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
-                        } catch (IOException ie){
-                            metricsSource.incrementCreateExportFailureCount();
-                            metricsSource.updateCreateExportFailureTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
-                            //If we fail to write to the schema registry, fail the entire
-                            //CREATE TABLE or VIEW operation so we stay consistent
-                            LOGGER.error("Error writing schema to external schema registry", ie);
-                            builder.setReturnCode(
-                                MetaDataProtos.MutationCode.ERROR_WRITING_TO_SCHEMA_REGISTRY);
-                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                            done.run(builder.build());
-                            return;
-                        }
+                //and if we're doing change detection on this table or view, notify the
+                //external schema registry and get its schema id
+                if (isChangeDetectionEnabled) {
+                    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+                    try {
+                        exportSchema(tableMetadata, tableKey, clientTimeStamp, clientVersion, null);
+                        metricsSource.incrementCreateExportCount();
+                        metricsSource.updateCreateExportTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
+                    } catch (IOException ie){
+                        metricsSource.incrementCreateExportFailureCount();
+                        metricsSource.updateCreateExportFailureTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
+                        //If we fail to write to the schema registry, fail the entire
+                        //CREATE TABLE or VIEW operation so we stay consistent
+                        LOGGER.error("Error writing schema to external schema registry", ie);
+                        builder.setReturnCode(
+                            MetaDataProtos.MutationCode.ERROR_WRITING_TO_SCHEMA_REGISTRY);
+                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                        done.run(builder.build());
+                        return;
                     }
                 }
 
@@ -4102,6 +4100,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     if (setRowKeyOrderOptimizableCell) {
                         UpgradeUtil.addRowKeyOrderOptimizableCell(tableMetadata, key, timeStamp);
                     }
+                    // We are updating the state of an index, so update the DDL timestamp.
+                    long serverTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+                    tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(
+                            key, clientTimeStamp, serverTimestamp));
                     mutateRowsWithLocks(this.accessCheckEnabled, region, tableMetadata, Collections.<byte[]>emptySet(),
                         HConstants.NO_NONCE, HConstants.NO_NONCE);
                     // Invalidate from cache

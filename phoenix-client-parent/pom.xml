@@ -225,6 +225,14 @@
                 <shadedPattern>${shaded.package}.javax.validation.</shadedPattern>
               </relocation>
               <relocation>
+                <pattern>javax/xml/bind/</pattern>
+                <shadedPattern>${shaded.package}.javax.xml.bind.</shadedPattern>
+              </relocation>
+              <relocation>
+                <pattern>javax/activation/</pattern>
+                <shadedPattern>${shaded.package}.javax.activation.</shadedPattern>
+              </relocation>
+              <relocation>
                 <pattern>net/</pattern>
                 <shadedPattern>${shaded.package}.net.</shadedPattern>
                 <excludes>

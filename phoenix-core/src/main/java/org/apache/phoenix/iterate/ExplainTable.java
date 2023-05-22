@@ -41,6 +41,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
+import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
@@ -163,6 +164,7 @@ public abstract class ExplainTable {
         
         PageFilter pageFilter = null;
         FirstKeyOnlyFilter firstKeyOnlyFilter = null;
+        EmptyColumnOnlyFilter emptyColumnOnlyFilter = null;
         BooleanExpressionFilter whereFilter = null;
         DistinctPrefixFilter distinctFilter = null;
         Iterator<Filter> filterIterator = ScanUtil.getFilterIterator(scan);
@@ -171,6 +173,8 @@ public abstract class ExplainTable {
                 Filter filter = filterIterator.next();
                 if (filter instanceof FirstKeyOnlyFilter) {
                     firstKeyOnlyFilter = (FirstKeyOnlyFilter)filter;
+                } else if (filter instanceof EmptyColumnOnlyFilter) {
+                    emptyColumnOnlyFilter = (EmptyColumnOnlyFilter)filter;
                 } else if (filter instanceof PageFilter) {
                     pageFilter = (PageFilter)filter;
                 } else if (filter instanceof BooleanExpressionFilter) {
@@ -203,6 +207,7 @@ public abstract class ExplainTable {
         if (whereFilterStr != null) {
             String serverWhereFilter = "SERVER FILTER BY "
                 + (firstKeyOnlyFilter == null ? "" : "FIRST KEY ONLY AND ")
+                + (emptyColumnOnlyFilter == null ? "" : "EMPTY COLUMN ONLY AND ")
                 + whereFilterStr;
             planSteps.add("    " + serverWhereFilter);
             if (explainPlanAttributesBuilder != null) {
@@ -213,6 +218,12 @@ public abstract class ExplainTable {
             if (explainPlanAttributesBuilder != null) {
                 explainPlanAttributesBuilder.setServerWhereFilter(
                     "SERVER FILTER BY FIRST KEY ONLY");
+            }
+        } else if (emptyColumnOnlyFilter != null) {
+            planSteps.add("    SERVER FILTER BY EMPTY COLUMN ONLY");
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setServerWhereFilter(
+                        "SERVER FILTER BY EMPTY COLUMN ONLY");
             }
         }
         if (distinctFilter != null) {
@@ -243,7 +254,7 @@ public abstract class ExplainTable {
             if (pageFilter != null) {
                 limit = pageFilter.getPageSize();
             } else {
-                byte[] limitBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_LIMIT);
+                byte[] limitBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_LIMIT);
                 if (limitBytes != null) {
                     limit = Bytes.toLong(limitBytes);
                 }

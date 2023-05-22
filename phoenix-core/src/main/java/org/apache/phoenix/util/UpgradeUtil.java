@@ -1492,7 +1492,7 @@ public class UpgradeUtil {
             Map<String, Object> syncedProps, Set<TableDescriptor> tableDescsToSync) throws SQLException {
         for (PTable indexTable: baseTable.getIndexes()) {
             // We already handle local index property synchronization when considering all column families of the base table
-            if (indexTable.getIndexType() == IndexType.GLOBAL) {
+            if (IndexUtil.isGlobalIndex(indexTable)) {
                 addTableDescIfPropsChanged(cqs.getTableDescriptor(indexTable.getPhysicalName().getBytes()),
                         defaultColFam, syncedProps, tableDescsToSync);
             }
@@ -1823,6 +1823,25 @@ public class UpgradeUtil {
         }
     }
 
+    private static String getTableRVCWithParam(List<String> tableNames) {
+        StringBuilder query = new StringBuilder("(");
+        for (int i = 0; i < tableNames.size(); i += 3) {
+            String tenantId = tableNames.get(i);
+            String schemaName = tableNames.get(i + 1);
+            String tableName = tableNames.get(i + 2);
+            query.append('(');
+            query.append(tenantId == null ? "null" : " ? ");
+            query.append(',');
+            query.append(schemaName == null ? "null" : " ? ");
+            query.append(',');
+            query.append(" ? ");
+            query.append("),");
+        }
+        // Replace trailing , with ) to end IN expression
+        query.setCharAt(query.length() - 1, ')');
+        return query.toString();
+    }
+
     private static String getTableRVC(List<String> tableNames) {
         StringBuilder query = new StringBuilder("(");
         for (int i = 0; i < tableNames.size(); i+=3) {
@@ -1857,25 +1876,44 @@ public class UpgradeUtil {
         // Find the header rows for tables that have not been upgraded already.
         // We don't care about views, as the row key cannot be different than the table.
         // We need this query to find physical tables which won't have a link row.
-        String query = "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME,TABLE_TYPE\n" + 
-                "FROM SYSTEM.CATALOG (ROW_KEY_ORDER_OPTIMIZABLE BOOLEAN)\n" + 
-                "WHERE COLUMN_NAME IS NULL\n" + 
-                "AND COLUMN_FAMILY IS NULL\n" + 
-                "AND ROW_KEY_ORDER_OPTIMIZABLE IS NULL\n" +
-                "AND TABLE_TYPE IN ('" + PTableType.TABLE.getSerializedValue() + "','" + otherType.getSerializedValue() + "')\n" +
-                "AND (TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN " + getTableRVC(tableNames);
-        rs = conn.createStatement().executeQuery(query);
-        
-        while (rs.next()) {
-            if (PTableType.TABLE.getSerializedValue().equals(rs.getString(4))) {
-                physicalTables.add(SchemaUtil.getTableName(rs.getString(2), rs.getString(3)));
-            } else {
-                otherTables.add(rs.getString(1));
-                otherTables.add(rs.getString(2));
-                otherTables.add(rs.getString(3));
+
+        String query = String.format("SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME,TABLE_TYPE"
+                + "FROM SYSTEM.CATALOG (ROW_KEY_ORDER_OPTIMIZABLE BOOLEAN)"
+                + "WHERE COLUMN_NAME IS NULL"
+                + "AND COLUMN_FAMILY IS NULL"
+                + "AND ROW_KEY_ORDER_OPTIMIZABLE IS NULL"
+                + "AND TABLE_TYPE IN (%s , %s )"
+                + "AND (TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN %s ",
+            PTableType.TABLE.getSerializedValue(), otherType.getSerializedValue(),
+            getTableRVCWithParam(tableNames));
+        try (PreparedStatement selSysCat = conn.prepareStatement(query)) {
+            int param = 0;
+            for (int i = 0; i < tableNames.size(); i += 3) {
+                String tenantId = tableNames.get(i);
+                String schemaName = tableNames.get(i + 1);
+                String tableName = tableNames.get(i + 2);
+                if (tenantId != null) {
+                    selSysCat.setString(++param, tenantId);
+                }
+                if (schemaName != null) {
+                    selSysCat.setString(++param, schemaName);
+                }
+                selSysCat.setString(++param, tableName);
             }
+            rs = selSysCat.executeQuery();
+            while (rs.next()) {
+                if (PTableType.TABLE.getSerializedValue()
+                    .equals(rs.getString(4))) {
+                    physicalTables.add(SchemaUtil
+                        .getTableName(rs.getString(2), rs.getString(3)));
+                } else {
+                    otherTables.add(rs.getString(1));
+                    otherTables.add(rs.getString(2));
+                    otherTables.add(rs.getString(3));
+                }
+            }
+            return otherTables;
         }
-        return otherTables;
     }
     
     // Return all types that are descending and either:
@@ -2031,16 +2069,28 @@ public class UpgradeUtil {
                 String theTenantId = tableNames.get(i);
                 String theSchemaName = tableNames.get(i+1);
                 String theTableName = tableNames.get(i+2);
-                globalConn.createStatement().execute("UPSERT INTO " + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + 
-                    " (" + PhoenixDatabaseMetaData.TENANT_ID + "," +
-                           PhoenixDatabaseMetaData.TABLE_SCHEM + "," +
-                           PhoenixDatabaseMetaData.TABLE_NAME + "," +
-                           MetaDataEndpointImpl.ROW_KEY_ORDER_OPTIMIZABLE + " BOOLEAN"
-                   + ") VALUES (" +
-                           "'" + (theTenantId == null ? StringUtil.EMPTY_STRING : theTenantId) + "'," +
-                           "'" + (theSchemaName == null ? StringUtil.EMPTY_STRING : theSchemaName) + "'," +
-                           "'" + theTableName + "'," +
-                           "TRUE)");
+                String upsSyscat = String.format("UPSERT INTO "
+                    + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME
+                    + " (" + PhoenixDatabaseMetaData.TENANT_ID + ","
+                    + PhoenixDatabaseMetaData.TABLE_SCHEM + ","
+                    + PhoenixDatabaseMetaData.TABLE_NAME + ","
+                    + MetaDataEndpointImpl.ROW_KEY_ORDER_OPTIMIZABLE + " BOOLEAN"
+                    + ") VALUES ( ?, ?, ?, TRUE)");
+                try (PreparedStatement upsSyscatStmt = globalConn.prepareStatement(upsSyscat)) {
+                    int param = 0;
+                    if (theTenantId == null) {
+                        upsSyscatStmt.setNull(++param, Types.VARCHAR);
+                    } else {
+                        upsSyscatStmt.setString(++param, theTenantId);
+                    }
+                    if (theSchemaName == null) {
+                        upsSyscatStmt.setNull(++param, Types.VARCHAR);
+                    } else {
+                        upsSyscatStmt.setString(++param, theSchemaName);
+                    }
+                    upsSyscatStmt.setString(++param, theTableName);
+                    upsSyscatStmt.execute();
+                }
             }
             globalConn.commit();
             for (int i = 0; i < tableNames.size(); i += 3) {
@@ -2163,45 +2213,51 @@ public class UpgradeUtil {
      * @return true if any upgrades were performed and false otherwise.
      */
     private static boolean upgradeSharedIndex(PhoenixConnection upgradeConn, PhoenixConnection globalConn, String physicalName, boolean bypassUpgrade) throws SQLException {
-        String query =
-                "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME\n" + 
-                "FROM SYSTEM.CATALOG cat1\n" + 
-                "WHERE COLUMN_NAME IS NULL\n" + 
-                "AND COLUMN_FAMILY = '" + physicalName + "'\n" + 
-                "AND LINK_TYPE = " + LinkType.PHYSICAL_TABLE.getSerializedValue() + "\n" +
-                "ORDER BY TENANT_ID";
-        ResultSet rs = globalConn.createStatement().executeQuery(query);
-        String lastTenantId = null;
-        Connection conn = globalConn;
-        String url = globalConn.getURL();
-        boolean wasUpgraded = false;
-        while (rs.next()) {
-            String fullTableName = SchemaUtil.getTableName(
+        String query = String.format(
+            "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME"
+                + "FROM SYSTEM.CATALOG cat1"
+                + "WHERE COLUMN_NAME IS NULL"
+                + "AND COLUMN_FAMILY = ? "
+                + "AND LINK_TYPE = %s "
+                + "ORDER BY TENANT_ID", LinkType.PHYSICAL_TABLE.getSerializedValue());
+        try (PreparedStatement selSysCatstmt = globalConn.prepareStatement(query)) {
+            selSysCatstmt.setString(1, physicalName);
+            ResultSet rs = selSysCatstmt.executeQuery();
+            String lastTenantId = null;
+            Connection conn = globalConn;
+            String url = globalConn.getURL();
+            boolean wasUpgraded = false;
+            while (rs.next()) {
+                String fullTableName = SchemaUtil.getTableName(
                     rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
                     rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
-            String tenantId = rs.getString(1);
-            if (tenantId != null && !tenantId.equals(lastTenantId))  {
-                if (lastTenantId != null) {
-                    conn.close();
+                String tenantId = rs.getString(1);
+                if (tenantId != null && !tenantId.equals(lastTenantId)) {
+                    if (lastTenantId != null) {
+                        conn.close();
+                    }
+                    // Open tenant-specific connection when we find a new one
+                    Properties props = new Properties(globalConn.getClientInfo());
+                    props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                    conn = DriverManager.getConnection(url, props);
+                    lastTenantId = tenantId;
                 }
-                // Open tenant-specific connection when we find a new one
-                Properties props = new Properties(globalConn.getClientInfo());
-                props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-                conn = DriverManager.getConnection(url, props);
-                lastTenantId = tenantId;
+                PTable table = PhoenixRuntime.getTable(conn, fullTableName);
+                String tableTenantId =
+                    table.getTenantId() == null ? null : table.getTenantId().getString();
+                if (Objects.equal(lastTenantId, tableTenantId) && !table.rowKeyOrderOptimizable()) {
+                    upgradeDescVarLengthRowKeys(upgradeConn, globalConn,
+                        table.getSchemaName().getString(), table.getTableName().getString(), false,
+                        bypassUpgrade);
+                    wasUpgraded = true;
+                }
             }
-            PTable table = PhoenixRuntime.getTable(conn, fullTableName);
-            String tableTenantId = table.getTenantId() == null ? null : table.getTenantId().getString();
-            if (Objects.equal(lastTenantId, tableTenantId) && !table.rowKeyOrderOptimizable()) {
-                upgradeDescVarLengthRowKeys(upgradeConn, globalConn, table.getSchemaName().getString(), table.getTableName().getString(), false, bypassUpgrade);
-                wasUpgraded = true;
+            rs.close();
+            if (lastTenantId != null) {
+                conn.close();
             }
+            return wasUpgraded;
         }
-        rs.close();
-        if (lastTenantId != null) {
-            conn.close();
-        }
-        return wasUpgraded;
     }
 
     public static void addRowKeyOrderOptimizableCell(List<Mutation> tableMetadata, byte[] tableHeaderRowKey, long clientTimeStamp) {
@@ -2563,13 +2619,18 @@ public class UpgradeUtil {
         String newSchemaName = MetaDataUtil.getViewIndexSequenceSchemaName(physicalName, true);
         String newSequenceName = MetaDataUtil.getViewIndexSequenceName(physicalName, tenantId, true);
         // create new entry with new schema format
-        String upsert = "UPSERT INTO " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " SELECT NULL,\'" + newSchemaName +
-            "\',\'" + newSequenceName
-                + "\'," + START_WITH + "," + CURRENT_VALUE + "," + INCREMENT_BY + "," + CACHE_SIZE + "," + MIN_VALUE
-                + "," + MAX_VALUE + "," + CYCLE_FLAG + "," + LIMIT_REACHED_FLAG + " FROM "
-                + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE " + PhoenixDatabaseMetaData.TENANT_ID
-                + " IS NULL AND " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + oldSchemaName + "'";
-        connection.createStatement().executeUpdate(upsert);
+        String upsert = "UPSERT INTO " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
+            + " SELECT NULL, ?, ?, " + START_WITH + "," + CURRENT_VALUE + "," + INCREMENT_BY
+            + "," + CACHE_SIZE + "," + MIN_VALUE + "," + MAX_VALUE + "," + CYCLE_FLAG + ","
+            + LIMIT_REACHED_FLAG + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE "
+            + PhoenixDatabaseMetaData.TENANT_ID + " IS NULL AND "
+            + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " =  ?";
+        try (PreparedStatement upsertSeqStmt = connection.prepareStatement(upsert)) {
+            upsertSeqStmt.setString(1, newSchemaName);
+            upsertSeqStmt.setString(2, newSequenceName);
+            upsertSeqStmt.setString(3, oldSchemaName);
+            upsertSeqStmt.executeUpdate();
+        }
     }
 
     private static void updateLink(PhoenixConnection conn, String srcTableName,
