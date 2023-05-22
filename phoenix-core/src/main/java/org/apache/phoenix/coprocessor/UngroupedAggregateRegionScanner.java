@@ -677,6 +677,22 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
 
     private void annotateDataMutations(UngroupedAggregateRegionObserver.MutationList mutationsList,
                                        Scan scan) {
+
+        byte[] tenantId =
+                scan.getAttribute(MutationState.MutationMetadataType.TENANT_ID.toString());
+        byte[] schemaName =
+                scan.getAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString());
+        byte[] logicalTableName =
+                scan.getAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString());
+        byte[] tableType =
+                scan.getAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString());
+        byte[] ddlTimestamp =
+                scan.getAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString());
+
+        for (Mutation m : mutationsList) {
+            annotateMutation(m, tenantId, schemaName, logicalTableName, tableType, ddlTimestamp);
+        }
+
         byte[] externalSchemaRegistryId = scan.getAttribute(
             MutationState.MutationMetadataType.EXTERNAL_SCHEMA_ID.toString());
         for (Mutation m : mutationsList) {

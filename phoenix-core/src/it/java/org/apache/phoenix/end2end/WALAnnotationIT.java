@@ -121,7 +121,8 @@ public class WALAnnotationIT extends BaseTest {
             conn.createStatement().execute(upsertSql);
             List<Map<String, byte[]>> entries =
                 getEntriesForTable(TableName.valueOf(builder.getPhysicalTableName(false)));
-            assertEquals(0, entries.size());
+            assertTrue("WAL annotations should not contain EXTERNAL_SCHEMA_ID", entries.size() == 0 ||
+                    !entries.get(0).containsKey(MutationState.MutationMetadataType.EXTERNAL_SCHEMA_ID.toString()));
             //now flip to TRUE so we can test disabling it
             String enableSql =
                 "ALTER TABLE " + builder.getEntityTableName() +
@@ -142,7 +143,8 @@ public class WALAnnotationIT extends BaseTest {
             conn.createStatement().execute(upsertSql);
             //check that we still didn't annotate anything
             entries = getEntriesForTable(TableName.valueOf(builder.getPhysicalTableName(false)));
-            assertEquals(0, entries.size());
+            assertTrue("WAL annotations should not contain EXTERNAL_SCHEMA_ID", entries.size() == 0 ||
+                    !entries.get(0).containsKey(MutationState.MutationMetadataType.EXTERNAL_SCHEMA_ID.toString()));
         }
     }
 
