@@ -56,7 +56,6 @@ public class VerifyLastDDLTimestamp {
         }
         DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers = deserialize(maintainersBytes);
         verifyLastDDLTimestampInternal(maintainers, env);
-        //scan.setAttribute(LAST_DDL_TIMESTAMP_MAINTAINERS_VERIFIED, TRUE_BYTES);
     }
 
     /**
