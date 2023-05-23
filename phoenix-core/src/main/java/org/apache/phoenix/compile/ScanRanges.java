@@ -259,7 +259,7 @@ public class ScanRanges {
                 //This includes the zero bytes from the minimum PK
                 byte[] nextBucketStart = bucketEnd(wrkStartKey, splitPostfix);
                 //These are the bucket in byte and int
-                byte[] nextBucketByte = new byte[] {nextBucketStart[0]};
+                byte[] nextBucketByte = new byte[] { nextBucketStart[0] };
                 int nextBucketInt = Byte.toUnsignedInt(nextBucketByte[0]);
                 if (Bytes.compareTo(originalStopKey, nextBucketByte) < 0 || nextBucketInt >= buckets) {
                     //Add the range for a non-last guidepost in the bucket
@@ -271,7 +271,7 @@ public class ScanRanges {
                 // OR the last/only guidepost of the the bucket or region, which needs to marked for
                 // the called intersectScan
                 newScans.add(
-                    intersectScan(scan, wrkStartKey, nextBucketStart, keyOffset, true));
+                    intersectScan(scan, wrkStartKey, nextBucketByte, keyOffset, true));
                 // Guaranteed to be no cells between nextBucketByte and nextBucketStart
                 wrkStartKey = nextBucketStart;
             } while (true);
