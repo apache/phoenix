@@ -92,6 +92,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.LastDDLTimestampMaintainerUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ScanUtil;
 
@@ -800,6 +801,7 @@ public class DeleteCompiler {
             PTable table = dataPlan.getTableRef().getTable();
             table.getIndexMaintainers(ptr, context.getConnection());
             ScanUtil.setWALAnnotationAttributes(table, context.getScan());
+            LastDDLTimestampMaintainerUtil.setLastDDLTimestamps(context.getScan(), table, connection);
             byte[] txState = table.isTransactional() ? connection.getMutationState().encodeTransaction() : ByteUtil.EMPTY_BYTE_ARRAY;
             ServerCache cache = null;
             try {

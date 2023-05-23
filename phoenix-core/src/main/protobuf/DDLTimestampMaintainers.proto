@@ -1,0 +1,17 @@
+option java_package = "org.apache.phoenix.coprocessor.generated";
+option java_outer_classname = "DDLTimestampMaintainersProtos";
+option java_generic_services = true;
+option java_generate_equals_and_hash = true;
+option optimize_for = SPEED;
+
+message DDLTimestampMaintainer {
+  // TODO Can we change tenantID and schemaName to optional?
+  optional bytes tenantID = 1;
+  optional bytes schemaName = 2;
+  required bytes tableName = 3;
+  required int64 lastDDLTimestamp = 4;
+}
+
+message DDLTimestampMaintainers {
+  repeated DDLTimestampMaintainer DDLTimestampMaintainers = 1;
+}

@@ -115,6 +115,7 @@ import org.apache.phoenix.transaction.TransactionFactory.Provider;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.LastDDLTimestampMaintainerUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SQLCloseable;
@@ -1327,6 +1328,8 @@ public class MutationState implements SQLCloseable {
                 final ServerCache cache = tableInfo.isDataTable() ?
                         IndexMetaDataCacheClient.setMetaDataOnMutations(connection, table,
                                 mutationList, indexMetaDataPtr) : null;
+                // Set LAST_DDL_TIMESTAMP maintainers on mutation.
+                LastDDLTimestampMaintainerUtil.getLastDDLTimestampMaintainers(mutationList, connection, table);
                 // If we haven't retried yet, retry for this case only, as it's possible that
                 // a split will occur after we send the index metadata cache to all known
                 // region servers.
@@ -1467,7 +1470,7 @@ public class MutationState implements SQLCloseable {
                                 // for first batch in list only.
                                 for (Mutation m : mutationBatchList.get(0)) {
                                     if (!PhoenixIndexMetaData.isIndexRebuild(
-                                            m.getAttributesMap())){
+                                            m.getAttributesMap())) {
                                         m.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
                                                 BaseScannerRegionObserver.REPLAY_ONLY_INDEX_WRITES
                                         );
@@ -1516,13 +1519,13 @@ public class MutationState implements SQLCloseable {
 
                     if (allUpsertsMutations ^ allDeletesMutations) {
                         //success cases are updated for both cases autoCommit=true and conn.commit explicit
-                        if (areAllBatchesSuccessful){
+                        if (areAllBatchesSuccessful) {
                             TableMetricsManager
                                     .updateMetricsMethod(htableNameStr, allUpsertsMutations ? UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER :
                                             DELETE_AGGREGATE_SUCCESS_SQL_COUNTER, 1);
                         }
                         //Failures cases are updated only for conn.commit explicit case.
-                        if (!areAllBatchesSuccessful && !connection.getAutoCommit()){
+                        if (!areAllBatchesSuccessful && !connection.getAutoCommit()) {
                             TableMetricsManager.updateMetricsMethod(htableNameStr, allUpsertsMutations ? UPSERT_AGGREGATE_FAILURE_SQL_COUNTER :
                                     DELETE_AGGREGATE_FAILURE_SQL_COUNTER, 1);
                         }
@@ -1551,7 +1554,9 @@ public class MutationState implements SQLCloseable {
                                 sqlE = ServerUtil.parseServerException(e);
                             }
                         }
-                        if (sqlE != null) { throw sqlE; }
+                        if (sqlE != null) {
+                            throw sqlE;
+                        }
                     }
                 }
             } while (shouldRetry && retryCount++ < 1);

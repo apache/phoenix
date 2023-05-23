@@ -150,7 +150,10 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String EMPTY_COLUMN_QUALIFIER_NAME = "_EmptyCQName";
     public static final String INDEX_ROW_KEY = "_IndexRowKey";
     public static final String READ_REPAIR_TRANSFORMING_TABLE = "_ReadRepairTransformingTable";
-    
+    public static final String LAST_DDL_TIMESTAMP_MAINTAINERS = "_LastDDLTimestampMaintainers";
+    // Sets the value to true once atleast one co-processor verify the LAST_DDL_TIMESTAMP.
+    public static final String LAST_DDL_TIMESTAMP_MAINTAINERS_VERIFIED = "_LastDDLTimestampMaintainersVerified";
+
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);
     // In case of Index Write failure, we need to determine that Index mutation
@@ -260,6 +263,8 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             if (!skipRegionBoundaryCheck(scan) || ScanUtil.isLocalIndex(scan)) {
                 throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());
             }
+            // Validate LAST_DDL_TIMESTAMP for tables/indexes/views.
+            VerifyLastDDLTimestamp.verifyLastDDLTimestamp(scan, c.getEnvironment());
             // Muck with the start/stop row of the scan and set as reversed at the
             // last possible moment. You need to swap the start/stop and make the
             // start exclusive and the stop inclusive.

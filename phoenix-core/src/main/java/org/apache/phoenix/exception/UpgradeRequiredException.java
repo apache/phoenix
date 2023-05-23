@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.exception;
 
-import org.apache.hadoop.hbase.HConstants;
-
 public class UpgradeRequiredException extends RetriableUpgradeException {
     private final long systemCatalogTimestamp;
 

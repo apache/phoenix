@@ -37,6 +37,7 @@ import java.util.Optional;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.phoenix.coprocessor.VerifyLastDDLTimestamp;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -1142,7 +1143,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         identifyIndexMaintainerTypes(indexMetaData, context);
         identifyMutationTypes(miniBatchOp, context);
         context.populateOriginalMutations(miniBatchOp);
-
+        VerifyLastDDLTimestamp.verifyLastDDLTimestamp(miniBatchOp, c.getEnvironment());
         if (context.hasDelete) {
             // Need to add cell tags to Delete Marker before we do any index processing
             // since we add tags to tables which doesn't have indexes also.

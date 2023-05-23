@@ -387,6 +387,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                                     context.getScan().toString() :
                                                     null);
                                 }
+                                //
                                 context.getOverallQueryMetrics().startQuery();
                                 rs =
                                         newResultSet(resultIterator, plan.getProjector(),

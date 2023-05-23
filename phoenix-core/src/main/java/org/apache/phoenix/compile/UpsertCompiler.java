@@ -114,6 +114,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.LastDDLTimestampMaintainerUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -1104,6 +1105,7 @@ public class UpsertCompiler {
             PTable table = tableRef.getTable();
             table.getIndexMaintainers(ptr, context.getConnection());
             ScanUtil.setWALAnnotationAttributes(table, scan);
+            LastDDLTimestampMaintainerUtil.getLastDDLTimestampMaintainers(scan, table, connection);
             byte[] txState = table.isTransactional() ?
                     connection.getMutationState().encodeTransaction() : ByteUtil.EMPTY_BYTE_ARRAY;
 
