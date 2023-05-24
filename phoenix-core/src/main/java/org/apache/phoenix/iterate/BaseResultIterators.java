@@ -1121,7 +1121,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         || (gpsComparedToEndKey = currentGuidePost.compareTo(endKey)) <= 0)) {
                     List<Scan> newScans =
                             scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes,
-                                keyOffset, splitPostfix, getTable().getBucketNum());
+                                keyOffset, splitPostfix, getTable().getBucketNum(),
+                                crossedRegionBoundary);
                     for (Scan newScan : newScans) {
                         if (newScan != null && useStatsForParallelization) {
                             ScanUtil.setLocalIndexAttributes(newScan, keyOffset,
@@ -1167,7 +1168,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
                 List<Scan> newScans =
                         scanRanges.intersectScan(scan, currentKeyBytes, endKey, keyOffset,
-                            splitPostfix, getTable().getBucketNum());
+                            splitPostfix, getTable().getBucketNum(), crossedRegionBoundary);
                 for (Scan newScan : newScans) {
                     if (newScan != null) {
                         ScanUtil.setLocalIndexAttributes(newScan, keyOffset,
