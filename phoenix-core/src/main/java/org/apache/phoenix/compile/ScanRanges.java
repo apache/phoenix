@@ -249,7 +249,7 @@ public class ScanRanges {
     // This variant adds synthetic scan boundaries at potentially missing salt bucket boundaries
     public List<Scan> intersectScan(Scan scan, final byte[] originalStartKey,
             final byte[] originalStopKey, final int keyOffset,
-            byte[] splitPostfix, Integer buckets) {
+            byte[] splitPostfix, Integer buckets, boolean crossedRegionBoundary) {
         // FIXME Both the salted status and the pre-computed bucket list should be available in
         // this, but in some cases they get overwritten, so we cannot use that.
         if (buckets != null && buckets > 0) {
@@ -269,7 +269,7 @@ public class ScanRanges {
                 }
                 // This is where we add the synthetic guidepost
                 // OR the last/only guidepost of the the bucket or region, which needs to marked for
-                // the called intersectScan
+                // the called as crossedRegionBoundary for intersectScan
                 newScans.add(
                     intersectScan(scan, wrkStartKey, nextBucketByte, keyOffset, true));
                 // Guaranteed to be no cells between nextBucketByte and nextBucketStart
@@ -279,7 +279,7 @@ public class ScanRanges {
         } else {
             // Definitely Not crossing buckets
             return Collections.singletonList(intersectScan(scan, originalStartKey, originalStopKey,
-                keyOffset, false));
+                keyOffset, crossedRegionBoundary));
         }
     }
 
