@@ -36,7 +36,7 @@ public interface ParallelScanGrouper {
      * @param lastScan the last scan processed
      * @param startKey of the new scan
      * @param crossedRegionBoundary whether we crossed a region boundary
-     * @return true if we should create a new group of scans, starting with the scan whoose start
+     * @return true if we should create a new group of scans, starting with the scan whose start
      *         key we passed as startKey
      */
 	boolean shouldStartNewScan(QueryPlan plan, Scan lastScan, byte[] startKey, boolean crossedRegionBoundary);

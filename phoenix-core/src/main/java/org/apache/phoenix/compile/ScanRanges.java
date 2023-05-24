@@ -261,10 +261,11 @@ public class ScanRanges {
                 //These are the bucket in byte and int
                 byte[] nextBucketByte = new byte[] { nextBucketStart[0] };
                 int nextBucketInt = Byte.toUnsignedInt(nextBucketByte[0]);
-                if (Bytes.compareTo(originalStopKey, nextBucketByte) < 0 || nextBucketInt >= buckets) {
-                    //Add the range for a non-last guidepost in the bucket
-                    newScans.add(intersectScan(scan, wrkStartKey, originalStopKey, keyOffset,
-                        false));
+                if (Bytes.compareTo(originalStopKey, nextBucketByte) < 0
+                        || nextBucketInt >= buckets) {
+                    // Add the range for a non-last guidepost in the bucket
+                    newScans.add(
+                        intersectScan(scan, wrkStartKey, originalStopKey, keyOffset, false));
                     break;
                 }
                 // This is where we add the synthetic guidepost
