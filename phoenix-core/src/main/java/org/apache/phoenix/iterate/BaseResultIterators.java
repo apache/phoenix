@@ -675,6 +675,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     private void addNewScan(List<List<Scan>> parallelScans, Scan scan,
             boolean crossedRegionBoundary, HRegionLocation regionLocation) {
+        if (scan == null) {
+            return;
+        }
         List<Scan> lastBatch = parallelScans.get(parallelScans.size() - 1);
         Scan lastScan = lastBatch.isEmpty() ? null : lastBatch.get(lastBatch.size() - 1);
         boolean startNewScan =
@@ -684,14 +687,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             lastBatch = Lists.newArrayListWithExpectedSize(1);
             parallelScans.add(lastBatch);
         }
-
-        if (scan != null) {
-            if (regionLocation.getServerName() != null) {
-                scan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER,
-                    regionLocation.getServerName().getVersionedBytes());
-            }
-            lastBatch.add(scan);
+        if (regionLocation.getServerName() != null) {
+            scan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER,
+                regionLocation.getServerName().getVersionedBytes());
         }
+        lastBatch.add(scan);
     }
 
     private List<List<Scan>> getParallelScans() throws SQLException {
