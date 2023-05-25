@@ -45,20 +45,20 @@ public class DefaultParallelScanGrouper implements ParallelScanGrouper {
     }
 
     /**
-     * Returns true if THIS scan is to be the first of a new batch
+     * Returns true if the scan with the startKey is to be the first of a new batch
      */
     @Override
     public boolean shouldStartNewScan(QueryPlan plan, Scan lastScan, byte[] startKey,
-            boolean crossedRegionBoundary) {
+            boolean crossesRegionBoundary) {
         PTable table = plan.getTableRef().getTable();
         if (lastScan == null) {
             return false;
         } else if (!plan.isRowKeyOrdered()) {
             return true;
-        } else if (crossedRegionBoundary && table.getIndexType() == IndexType.LOCAL) {
+        } else if (crossesRegionBoundary && table.getIndexType() == IndexType.LOCAL) {
             return true;
         } else if (table.getBucketNum() != null ) {
-            return crossedRegionBoundary
+            return crossesRegionBoundary
                     || ScanUtil.crossesPrefixBoundary(startKey,
                         ScanUtil.getPrefix(lastScan.getStartRow(),
                             SaltingUtil.NUM_SALTING_BYTES),

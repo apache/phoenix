@@ -673,27 +673,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     gps.getGuidePostTimestamps()[guideIndex]);
     }
 
-    private void addNewScan(List<List<Scan>> parallelScans, Scan scan,
-            boolean crossedRegionBoundary, HRegionLocation regionLocation) {
-        if (scan == null) {
-            return;
-        }
-        List<Scan> lastBatch = parallelScans.get(parallelScans.size() - 1);
-        Scan lastScan = lastBatch.isEmpty() ? null : lastBatch.get(lastBatch.size() - 1);
-        boolean startNewScan =
-                scanGrouper.shouldStartNewScan(plan, lastScan, scan.getStartRow(),
-                    crossedRegionBoundary);
-        if (!lastBatch.isEmpty() && startNewScan) {
-            lastBatch = Lists.newArrayListWithExpectedSize(1);
-            parallelScans.add(lastBatch);
-        }
-        if (regionLocation.getServerName() != null) {
-            scan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER,
-                regionLocation.getServerName().getVersionedBytes());
-        }
-        lastBatch.add(scan);
-    }
-
     private List<List<Scan>> getParallelScans() throws SQLException {
         // If the scan boundaries are not matching with scan in context that means we need to get
         // parallel scans for the chunk after split/merge.
@@ -722,8 +701,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (scan.getStopRow().length > 0) {
             stopIndex = Math.min(stopIndex, regionIndex + getIndexContainingExclusive(regionBoundaries.subList(regionIndex, stopIndex), scan.getStopRow()));
         }
-        List<List<Scan>> parallelScans = Lists.newArrayListWithExpectedSize(stopIndex - regionIndex + 1);
-        parallelScans.add(new ArrayList<Scan>());
+        ParallelScansCollector parallelScans = new ParallelScansCollector(scanGrouper);
         while (regionIndex <= stopIndex) {
             HRegionLocation regionLocation = regionLocations.get(regionIndex);
             RegionInfo regionInfo = regionLocation.getRegion();
@@ -742,10 +720,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     newScan.withStopRow(regionInfo.getEndKey());
                 }
             }
-            addNewScan(parallelScans, newScan, true, regionLocation);
+            if (regionLocation.getServerName() != null) {
+                newScan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER,
+                    regionLocation.getServerName().getVersionedBytes());
+            }
+            parallelScans.addNewScan(plan, newScan, true);
             regionIndex++;
         }
-        return parallelScans;
+        return parallelScans.getParallelScans();
     }
 
     private static class GuidePostEstimate {
@@ -919,7 +901,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         // return true if we've clipped the rowKey
         return maxOffset != offset;
     }
-    
+
     /**
      * Compute the list of parallel scans to run for a given query. The inner scans
      * may be concatenated together directly, while the other ones may need to be
@@ -1013,8 +995,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 stopKey = regionLocations.get(stopIndex).getRegion().getEndKey();
             }
         }
-        List<List<Scan>> parallelScans = Lists.newArrayListWithExpectedSize(stopIndex - regionIndex + 1);
-        parallelScans.add(new ArrayList<Scan>());
+        ParallelScansCollector parallelScanCollector = new ParallelScansCollector(scanGrouper);
         
         ImmutableBytesWritable currentKey = new ImmutableBytesWritable(startKey);
         
@@ -1086,7 +1067,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 } else {
                     endKey = regionBoundaries.get(regionIndex);
                 }
-                boolean crossedRegionBoundary = true;
                 if (isLocalIndex) {
                     if (dataPlan != null && dataPlan.getTableRef().getTable().getType() != PTableType.INDEX) { // Sanity check
                         ScanRanges dataScanRanges = dataPlan.getContext().getScanRanges();
@@ -1122,18 +1102,23 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     List<Scan> newScans =
                             scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes,
                                 keyOffset, splitPostfix, getTable().getBucketNum(),
-                                crossedRegionBoundary);
-                    for (Scan newScan : newScans) {
-                        if (newScan != null && useStatsForParallelization) {
+                                gpsComparedToEndKey == 0);
+                    if (useStatsForParallelization) {
+                        for (int newScanIdx = 0; newScanIdx < newScans.size(); newScanIdx++) {
+                            Scan newScan = newScans.get(newScanIdx);
                             ScanUtil.setLocalIndexAttributes(newScan, keyOffset,
                                 regionInfo.getStartKey(), regionInfo.getEndKey(),
                                 newScan.getStartRow(), newScan.getStopRow());
-                            addNewScan(parallelScans, newScan, crossedRegionBoundary,
-                                regionLocation);
-                            crossedRegionBoundary = false;
+                            if (regionLocation.getServerName() != null) {
+                                newScan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER,
+                                    regionLocation.getServerName().getVersionedBytes());
+                            }
+                            boolean lastOfNew = newScanIdx == newScans.size() - 1;
+                            parallelScanCollector.addNewScan(plan, newScan,
+                                gpsComparedToEndKey == 0 && lastOfNew);
                         }
                     }
-                    if (newScans.size() > 0 && newScans.get(0) != null) {
+                    if (newScans.size() > 0) {
                         // If we've delaying adding estimates, add the previous
                         // gp estimates now that we know they are in range.
                         if (delayAddingEst) {
@@ -1168,17 +1153,19 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
                 List<Scan> newScans =
                         scanRanges.intersectScan(scan, currentKeyBytes, endKey, keyOffset,
-                            splitPostfix, getTable().getBucketNum(), crossedRegionBoundary);
-                for (Scan newScan : newScans) {
-                    if (newScan != null) {
-                        ScanUtil.setLocalIndexAttributes(newScan, keyOffset,
-                            regionInfo.getStartKey(), regionInfo.getEndKey(), newScan.getStartRow(),
-                            newScan.getStopRow());
-                        addNewScan(parallelScans, newScan, crossedRegionBoundary, regionLocation);
-                        crossedRegionBoundary = false;
+                            splitPostfix, getTable().getBucketNum(), true);
+                for (int newScanIdx = 0; newScanIdx < newScans.size(); newScanIdx++) {
+                    Scan newScan = newScans.get(newScanIdx);
+                    ScanUtil.setLocalIndexAttributes(newScan, keyOffset, regionInfo.getStartKey(),
+                        regionInfo.getEndKey(), newScan.getStartRow(), newScan.getStopRow());
+                    if (regionLocation.getServerName() != null) {
+                        newScan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER,
+                            regionLocation.getServerName().getVersionedBytes());
                     }
+                    boolean lastOfNew = newScanIdx == newScans.size() - 1;
+                    parallelScanCollector.addNewScan(plan, newScan, lastOfNew);
                 }
-                if (newScans.size() > 0 && newScans.get(0) != null) {
+                if (newScans.size() > 0) {
                     // Boundary case of no GP in region after delaying adding of estimates
                     if (!gpsInThisRegion && delayAddingEst) {
                         updateEstimates(gps, guideIndex-1, estimates);
@@ -1208,13 +1195,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
                 regionIndex++;
             }
-            generateEstimates(scanRanges, table, gps, emptyGuidePost, parallelScans, estimates,
+            generateEstimates(scanRanges, table, gps, emptyGuidePost, parallelScanCollector.getParallelScans(), estimates,
                     fallbackTs, gpsAvailableForAllRegions);
         } finally {
             if (stream != null) Closeables.closeQuietly(stream);
         }
-        sampleScans(parallelScans,this.plan.getStatement().getTableSamplingRate());
-        return parallelScans;
+        sampleScans(parallelScanCollector.getParallelScans(),this.plan.getStatement().getTableSamplingRate());
+        return parallelScanCollector.getParallelScans();
     }
 
     private void generateEstimates(ScanRanges scanRanges, PTable table, GuidePostsInfo gps,

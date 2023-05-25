@@ -35,11 +35,11 @@ public interface ParallelScanGrouper {
      * @param plan current query plan
      * @param lastScan the last scan processed
      * @param startKey of the new scan
-     * @param crossedRegionBoundary whether we crossed a region boundary
+     * @param crossesRegionBoundary whether startKey in a different region than lastScan
      * @return true if we should create a new group of scans, starting with the scan whose start
      *         key we passed as startKey
      */
-	boolean shouldStartNewScan(QueryPlan plan, Scan lastScan, byte[] startKey, boolean crossedRegionBoundary);
+	boolean shouldStartNewScan(QueryPlan plan, Scan lastScan, byte[] startKey, boolean crossesRegionBoundary);
 
 	List<HRegionLocation> getRegionBoundaries(StatementContext context, byte[] tableName) throws SQLException;
 

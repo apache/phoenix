@@ -247,13 +247,14 @@ public class ScanRanges {
     }
 
     // This variant adds synthetic scan boundaries at potentially missing salt bucket boundaries
+    // and won't return null Scans
     public List<Scan> intersectScan(Scan scan, final byte[] originalStartKey,
             final byte[] originalStopKey, final int keyOffset, byte[] splitPostfix, Integer buckets,
-            boolean crossedRegionBoundary) {
+            boolean crossesRegionBoundary) {
         // FIXME Both the salted status and the pre-computed bucket list should be available in
-        // this, but in some cases they get overwritten, so we cannot use that.
+        // this object, but in some cases they get overwritten, so we cannot use that.
+        List<Scan> newScans = new ArrayList<Scan>();
         if (buckets != null && buckets > 0) {
-            List<Scan> newScans = new ArrayList<Scan>();
             byte[] wrkStartKey = originalStartKey;
             do {
                 boolean lastBucket = false;
@@ -264,27 +265,34 @@ public class ScanRanges {
                 } else {
                     // This includes the zero bytes from the minimum PK
                     nextBucketStart = bucketEnd(wrkStartKey, splitPostfix);
-                    // These are the bucket in byte and int
+                    // These is the start of the next bucket in byte[], without the PK suffix
                     nextBucketByte = new byte[] { nextBucketStart[0] };
                 }
-                if (lastBucket || Bytes.compareTo(originalStopKey, nextBucketByte) < 0) {
-                    // Add the range for a non-last guidepost in the bucket
-                    newScans.add(
-                        intersectScan(scan, wrkStartKey, originalStopKey, keyOffset, false));
+                if (lastBucket || Bytes.compareTo(originalStopKey, nextBucketStart) <= 0) {
+                    // either we don't need to add synthetic guideposts, or we already have, and
+                    // are at the last bucket of the original scan
+                    addIfNotNull(newScans, intersectScan(scan, wrkStartKey, originalStopKey,
+                        keyOffset, crossesRegionBoundary));
                     break;
                 }
-                // This is where we add the synthetic guidepost
-                // OR the last/only guidepost of the the bucket or region, which needs to marked for
-                // the called as crossedRegionBoundary for intersectScan
-                newScans.add(intersectScan(scan, wrkStartKey, nextBucketByte, keyOffset, true));
-                // Guaranteed to be no cells between nextBucketByte and nextBucketStart
+                // This is where we add the synthetic guidepost.
+                // We skip [nextBucketByte, nextBucketStart), but it's guaranteed that there are no
+                // rows there.
+                addIfNotNull(newScans,
+                    intersectScan(scan, wrkStartKey, nextBucketByte, keyOffset, false));
                 wrkStartKey = nextBucketStart;
             } while (true);
-            return newScans;
         } else {
             // Definitely Not crossing buckets
-            return Collections.singletonList(intersectScan(scan, originalStartKey, originalStopKey,
-                keyOffset, crossedRegionBoundary));
+            addIfNotNull(newScans, intersectScan(scan, originalStartKey, originalStopKey, keyOffset,
+                crossesRegionBoundary));
+        }
+        return newScans;
+    }
+
+    private void addIfNotNull(List<Scan> scans, Scan newScan) {
+        if (newScan != null) {
+            scans.add(newScan);
         }
     }
 
