@@ -41,8 +41,8 @@ import java.util.stream.IntStream;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
-import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
+import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
+import org.apache.phoenix.end2end.ParallelStatsEnabledTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
@@ -57,8 +57,8 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(ParallelStatsDisabledTest.class)
-public class SaltedTableMergeBucketsIT extends ParallelStatsDisabledIT {
+@Category(ParallelStatsEnabledTest.class)
+public class SaltedTableMergeBucketsIT extends ParallelStatsEnabledIT {
 
     @Test
     public void testWithVariousPKTypes() throws Exception {
@@ -416,7 +416,28 @@ public class SaltedTableMergeBucketsIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testMerges() throws Exception {
+    public void testMergesWithWideGuidepostsAndWithStatsForParallelization() throws Exception {
+        testMerges(true, true);
+    }
+
+    @Test
+    public void testMergesWithWideGuidepostsAndWithoutStatsForParallelization() throws Exception {
+        testMerges(true, false);
+    }
+
+    @Test
+    public void testMergesWithoutWideGuidepostsAndWithStatsForParallelization() throws Exception {
+        testMerges(false, true);
+    }
+
+    @Test
+    public void testMergesWithoutWideGuidepostsAndWithoutStatsForParallelization()
+            throws Exception {
+        testMerges(false, false);
+    }
+
+    public void testMerges(boolean withWideGuideposts, boolean withStatsForParallelization)
+            throws Exception {
         String tableName = generateUniqueName();
 
         List<String> range =
@@ -425,6 +446,9 @@ public class SaltedTableMergeBucketsIT extends ParallelStatsDisabledIT {
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.FALSE.toString());
+        if (!withStatsForParallelization) {
+            props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.FALSE.toString());
+        }
         try (Connection connection = DriverManager.getConnection(getUrl(), props);
                 Statement statement = connection.createStatement();) {
             statement.execute("CREATE TABLE " + tableName
@@ -435,6 +459,17 @@ public class SaltedTableMergeBucketsIT extends ParallelStatsDisabledIT {
                         + "','HORTONWORKS_WEEKLY_TEST','v3','" + c1 + "')");
             }
             connection.commit();
+
+            if (withWideGuideposts) {
+                // This is way bigger than the regions, guaranteeing no guideposts inside the
+                // original regions
+                statement.execute(
+                    "UPDATE STATISTICS " + tableName + " SET GUIDE_POSTS_WIDTH = 1000000");
+            } else {
+                //The default 20 bytes for these tests
+                statement.execute(
+                    "UPDATE STATISTICS " + tableName);
+            }
 
             mergeRegions(tableName);
 
