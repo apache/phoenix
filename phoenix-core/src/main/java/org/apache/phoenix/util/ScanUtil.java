@@ -26,7 +26,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
-import static org.apache.phoenix.util.LastDDLTimestampMaintainerUtil.getLastDDLTimestampMaintainers;
+import static org.apache.phoenix.util.LastDDLTimestampMaintainerUtil.createLastDDLTimestampMaintainers;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -1333,7 +1333,7 @@ public class ScanUtil {
             }
             scan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS, Bytes.toBytes(Long.valueOf(pageSizeMs)));
         }
-        LastDDLTimestampMaintainerUtil.getLastDDLTimestampMaintainers(scan, table, phoenixConnection);
+        LastDDLTimestampMaintainerUtil.createLastDDLTimestampMaintainers(scan, table, phoenixConnection);
     }
 
     public static void getDummyResult(byte[] rowKey, List<Cell> result) {

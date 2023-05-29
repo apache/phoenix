@@ -1216,6 +1216,7 @@ public class TestUtil {
                 Thread.sleep(1000);
             }
         }
+        assertCoprocessorAdded(conn, tableName, coprocessorClass);
     }
 
     public static void removeCoprocessor(Connection conn, String tableName, Class coprocessorClass) throws Exception {
@@ -1226,7 +1227,7 @@ public class TestUtil {
                 .collect(Collectors.toList()).contains(coprocessorClass.getName())) {
             descriptorBuilder=TableDescriptorBuilder.newBuilder(descriptor);
             descriptorBuilder.removeCoprocessor(coprocessorClass.getName());
-        }else{
+        } else {
             return;
         }
         final int retries = 10;
@@ -1245,6 +1246,19 @@ public class TestUtil {
                 Thread.sleep(1000);
             }
         }
+    }
+
+    private static void assertCoprocessorAdded(Connection conn, String tableName, Class coprocessorClass) throws SQLException {
+        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        TableDescriptor descriptor = services.getTableDescriptor(Bytes.toBytes(tableName));
+        Collection<CoprocessorDescriptor> coprocs = descriptor.getCoprocessorDescriptors();
+        boolean coprocFound = false;
+        for (CoprocessorDescriptor coproc: coprocs) {
+            if (coproc.getClassName().equals(coprocessorClass.getName())) {
+                coprocFound = true;
+            }
+        }
+        assertTrue("Coprocessor " + coprocessorClass.getName() + "not found", coprocFound);
     }
 
     public static boolean compare(CompareOperator op, ImmutableBytesWritable lhsOutPtr, ImmutableBytesWritable rhsOutPtr) {

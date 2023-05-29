@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.coprocessor.generated.DDLTimestampMaintainersProtos;
+import org.apache.phoenix.util.LastDDLTimestampMaintainerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,7 +55,8 @@ public class VerifyLastDDLTimestamp {
             //  handle this situation.
             return;
         }
-        DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers = deserialize(maintainersBytes);
+        DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers =
+                LastDDLTimestampMaintainerUtil.deserialize(maintainersBytes);
         verifyLastDDLTimestampInternal(maintainers, env);
     }
 
@@ -83,7 +85,8 @@ public class VerifyLastDDLTimestamp {
             //  handle this situation.
             return;
         }
-        DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers = deserialize(maintainersBytes);
+        DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers
+                = LastDDLTimestampMaintainerUtil.deserialize(maintainersBytes);
         verifyLastDDLTimestampInternal(maintainers, env);
         scan.setAttribute(LAST_DDL_TIMESTAMP_MAINTAINERS_VERIFIED, TRUE_BYTES);
     }
@@ -114,21 +117,6 @@ public class VerifyLastDDLTimestamp {
                         maintainer.getTenantID().toStringUtf8(), maintainer.getSchemaName().toStringUtf8(),
                         maintainer.getTableName().toStringUtf8(), maintainer.getLastDDLTimestamp(), lastDDLTimestamp);
             }
-        }
-    }
-
-    /**
-     * De-serialize the DDLTimestampMaintainers from byte array
-     * @param b DDLTimestampMaintainers in byte array.
-     * @return DDLTimestampMaintainers
-     */
-    public static DDLTimestampMaintainersProtos.DDLTimestampMaintainers deserialize(byte[] b) {
-        try {
-            DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers =
-                    DDLTimestampMaintainersProtos.DDLTimestampMaintainers.parseFrom(b);
-            return maintainers;
-        } catch (IOException e) {
-            throw new RuntimeException(e);
         }
     }
 }

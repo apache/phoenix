@@ -27,6 +27,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -45,9 +46,9 @@ public class LastDDLTimestampMaintainerUtil {
      * @param table table
      * @throws SQLException
      */
-    public static void getLastDDLTimestampMaintainers(List<Mutation> mutationList, PhoenixConnection connection, PTable table)
+    public static void createLastDDLTimestampMaintainers(List<Mutation> mutationList, PhoenixConnection connection, PTable table)
             throws SQLException {
-        byte[] maintainers = getLastDDLTimestampMaintainers(table, connection);
+        byte[] maintainers = createLastDDLTimestampMaintainers(table, connection);
         if (maintainers == null) {
             // This means it is a system table.
             return;
@@ -64,9 +65,9 @@ public class LastDDLTimestampMaintainerUtil {
      * @param connection
      * @throws SQLException
      */
-    public static void getLastDDLTimestampMaintainers(Scan scan, PTable table, PhoenixConnection connection)
+    public static void createLastDDLTimestampMaintainers(Scan scan, PTable table, PhoenixConnection connection)
             throws SQLException {
-        byte[] maintainers = getLastDDLTimestampMaintainers(table, connection);
+        byte[] maintainers = createLastDDLTimestampMaintainers(table, connection);
         if (maintainers == null) {
             // This means it is a system table.
             return;
@@ -82,11 +83,10 @@ public class LastDDLTimestampMaintainerUtil {
      * @return maintainers object
      * @throws SQLException
      */
-    public static byte[] getLastDDLTimestampMaintainers(PTable table, PhoenixConnection connection)
+    public static byte[] createLastDDLTimestampMaintainers(PTable table, PhoenixConnection connection)
         throws SQLException {
         // TODO Skip setting last ddl timestamp attribute on SYSTEM tables for now. Think how can we handle SYSTEM tables
         if (PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(table.getSchemaName().getString())) {
-            LOGGER.info("RSS Skipping");
             return null;
         }
         // TODO Think of better way to convert bytes to bytesString.
@@ -94,14 +94,14 @@ public class LastDDLTimestampMaintainerUtil {
                 = DDLTimestampMaintainersProtos.DDLTimestampMaintainers.newBuilder();
 
         // Add LastDDLTimestampMaintainer for the referenced table/view/index.
-        builder.addDDLTimestampMaintainers(getLastDDLTimestampMaintainerBuilder(table));
+        builder.addDDLTimestampMaintainers(createLastDDLTimestampMaintainerBuilder(table));
 
         // TODO We don't have to add indexes if it is a read request and table scanned to base table.
         // TODO Only for upsert request on a base table, we have to add indexes.
         // For view or table with indexes, add them to the builder
         for (PTable index: table.getIndexes()) {
             DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder indexMaintainerBuilder =
-                    getLastDDLTimestampMaintainerBuilder(index);
+                    createLastDDLTimestampMaintainerBuilder(index);
             builder.addDDLTimestampMaintainers(indexMaintainerBuilder);
         }
 
@@ -115,7 +115,7 @@ public class LastDDLTimestampMaintainerUtil {
                 String parentSchemaNameStr = parentSchemaName == null ? null : parentSchemaName.getString();
                 String fullParentTableStr = SchemaUtil.getTableName(parentSchemaNameStr, parentTableNameStr);
                 PTable parentTable = PhoenixRuntime.getTable(connection, fullParentTableStr);
-                builder.addDDLTimestampMaintainers(getLastDDLTimestampMaintainerBuilder(parentTable));
+                builder.addDDLTimestampMaintainers(createLastDDLTimestampMaintainerBuilder(parentTable));
                 parentTableName = parentTable.getParentTableName();
                 parentSchemaName = parentTable.getParentSchemaName();
             }
@@ -125,7 +125,7 @@ public class LastDDLTimestampMaintainerUtil {
 
     // This table can be base table, index or view.
     private static DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder
-    getLastDDLTimestampMaintainerBuilder(PTable table) {
+    createLastDDLTimestampMaintainerBuilder(PTable table) {
         DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder maintainerBuilder =
                 DDLTimestampMaintainersProtos.DDLTimestampMaintainer.newBuilder();
         if (table.getTenantId() != null) {
@@ -137,5 +137,20 @@ public class LastDDLTimestampMaintainerUtil {
         maintainerBuilder.setTableName(ByteStringer.wrap(table.getTableName().getBytes()));
         maintainerBuilder.setLastDDLTimestamp(table.getLastDDLTimestamp());
         return maintainerBuilder;
+    }
+
+    /**
+     * De-serialize the DDLTimestampMaintainers from byte array
+     * @param b DDLTimestampMaintainers in byte array.
+     * @return DDLTimestampMaintainers
+     */
+    public static DDLTimestampMaintainersProtos.DDLTimestampMaintainers deserialize(byte[] b) {
+        try {
+            DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers =
+                    DDLTimestampMaintainersProtos.DDLTimestampMaintainers.parseFrom(b);
+            return maintainers;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
