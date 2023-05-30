@@ -89,6 +89,8 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -2857,23 +2859,32 @@ public class UpgradeUtil {
         }
     }
 
-    //When upgrading to Phoenix 4.16 or 5.1, make each existing table's DDL timestamp equal to its
+    //When upgrading to Phoenix 4.16 or 5.1, make each existing table's/view's DDL timestamp equal to its
     // last updated row timestamp.
-    public static void bootstrapLastDDLTimestamp(Connection metaConnection) throws SQLException  {
+    public static void bootstrapLastDDLTimestampForTablesAndViews(Connection metaConnection) throws SQLException  {
+        bootstrapLastDDLTimestamp(metaConnection, new String[]{PTableType.TABLE.getSerializedValue(), PTableType.VIEW.getSerializedValue()});
+    }
+
+    //When upgrading to Phoenix 5.2, make each existing index's DDL timestamp equal to its last updated row timestamp.
+    public static void bootstrapLastDDLTimestampForIndexes(Connection metaConnection) throws SQLException {
+        bootstrapLastDDLTimestamp(metaConnection, new String[]{PTableType.INDEX.getSerializedValue()});
+    }
+
+    private static void bootstrapLastDDLTimestamp(Connection metaConnection, String[] tableTypes) throws SQLException {
+        String tableTypesString = Stream.of(tableTypes).collect(Collectors.joining("','", "'", "'")).toString();
         String pkCols = TENANT_ID + ", " + TABLE_SCHEM +
-            ", " + TABLE_NAME + ", " + COLUMN_NAME + ", " + COLUMN_FAMILY;
+                ", " + TABLE_NAME + ", " + COLUMN_NAME + ", " + COLUMN_FAMILY;
         final String upsertSql =
-            "UPSERT INTO " + SYSTEM_CATALOG_NAME + " (" + pkCols + ", " +
-        LAST_DDL_TIMESTAMP + ")" + " " +
-            "SELECT " + pkCols + ", PHOENIX_ROW_TIMESTAMP() FROM " + SYSTEM_CATALOG_NAME + " " +
-                "WHERE " + TABLE_TYPE + " " + " in " + "('" + PTableType.TABLE.getSerializedValue()
-                + "', '" + PTableType.VIEW.getSerializedValue() + "')";
-        LOGGER.info("Setting DDL timestamps for tables and views to row timestamps");
+                "UPSERT INTO " + SYSTEM_CATALOG_NAME + " (" + pkCols + ", " +
+                        LAST_DDL_TIMESTAMP + ")" + " " +
+                        "SELECT " + pkCols + ", PHOENIX_ROW_TIMESTAMP() FROM " + SYSTEM_CATALOG_NAME + " " +
+                        "WHERE " + TABLE_TYPE + " " + " in " + "(" + tableTypesString + ")";
+        LOGGER.info(String.format("Setting DDL timestamps for table_type=%s to row timestamps", tableTypesString));
         try (PreparedStatement stmt = metaConnection.prepareStatement(upsertSql)) {
             stmt.execute();
             metaConnection.commit();
         }
-        LOGGER.info("Setting DDL timestamps for tables and views is complete");
+        LOGGER.info(String.format("Setting DDL timestamps for table_type=%s is complete", tableTypesString));
     }
 
     public static boolean tableHasKeepDeleted(PhoenixConnection conn, String pTableName)

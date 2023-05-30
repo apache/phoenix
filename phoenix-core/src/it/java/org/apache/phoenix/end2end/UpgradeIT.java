@@ -687,6 +687,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         String schemaName = "S_" + generateUniqueName();
         String tableName = "T_" + generateUniqueName();
         String viewName = "V_" + generateUniqueName();
+        String indexName = "I_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         String fullViewName = SchemaUtil.getTableName(schemaName, viewName);
         try (Connection conn = getConnection(false, null)) {
@@ -697,6 +698,8 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(
                 "CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName);
 
+            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (KV1) ASYNC");
+
             //Now we null out any existing last ddl timestamps
             nullDDLTimestamps(conn);
 
@@ -704,14 +707,24 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             long tableTS = getRowTimestampForMetadata(conn, schemaName, tableName,
                 PTableType.TABLE);
             long viewTS = getRowTimestampForMetadata(conn, schemaName, viewName, PTableType.VIEW);
+            long indexTS = getRowTimestampForMetadata(conn, schemaName, indexName, PTableType.INDEX);
 
-            UpgradeUtil.bootstrapLastDDLTimestamp(conn.unwrap(PhoenixConnection.class));
+            // bootstrap last ddl timestamp for tables and views
+            UpgradeUtil.bootstrapLastDDLTimestampForTablesAndViews(conn.unwrap(PhoenixConnection.class));
             long actualTableTS = getLastTimestampForMetadata(conn, schemaName, tableName,
                 PTableType.TABLE);
             long actualViewTS = getLastTimestampForMetadata(conn, schemaName, viewName,
                 PTableType.VIEW);
+            long actualIndexTS = getLastTimestampForMetadata(conn, schemaName, indexName,
+                    PTableType.INDEX);
             assertEquals(tableTS, actualTableTS);
             assertEquals(viewTS, actualViewTS);
+            assertEquals(0L, actualIndexTS);
+
+            // bootstrap last ddl timestamp for indexes
+            UpgradeUtil.bootstrapLastDDLTimestampForIndexes(conn.unwrap(PhoenixConnection.class));
+            actualIndexTS = getLastTimestampForMetadata(conn, schemaName, indexName, PTableType.INDEX);
+            assertEquals(indexTS, actualIndexTS);
 
         }
     }
