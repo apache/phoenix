@@ -683,7 +683,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLastDDLTimestampBootstrap() throws Exception {
-        Long testStartTime = System.currentTimeMillis();
+        Long testStartTime = EnvironmentEdgeManager.currentTimeMillis();
         //Create a table, view, and index
         String schemaName = "S_" + generateUniqueName();
         String tableName = "T_" + generateUniqueName();
