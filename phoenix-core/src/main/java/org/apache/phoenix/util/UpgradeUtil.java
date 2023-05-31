@@ -2859,31 +2859,39 @@ public class UpgradeUtil {
         }
     }
 
-    //When upgrading to Phoenix 4.16 or 5.1, make each existing table's/view's DDL timestamp equal to its
-    // last updated row timestamp.
-    public static void bootstrapLastDDLTimestampForTablesAndViews(Connection metaConnection) throws SQLException  {
-        bootstrapLastDDLTimestamp(metaConnection, new String[]{PTableType.TABLE.getSerializedValue(), PTableType.VIEW.getSerializedValue()});
+    //When upgrading to Phoenix 4.16 or 5.1, make each existing table's/view's DDL timestamp equal
+    //to its last updated row timestamp.
+    public static void bootstrapLastDDLTimestampForTablesAndViews(Connection metaConnection)
+            throws SQLException  {
+        bootstrapLastDDLTimestamp(metaConnection,
+                new String[]{PTableType.TABLE.getSerializedValue(),
+                        PTableType.VIEW.getSerializedValue()});
     }
 
-    //When upgrading to Phoenix 5.2, make each existing index's DDL timestamp equal to its last updated row timestamp.
-    public static void bootstrapLastDDLTimestampForIndexes(Connection metaConnection) throws SQLException {
-        bootstrapLastDDLTimestamp(metaConnection, new String[]{PTableType.INDEX.getSerializedValue()});
+    //When upgrading to Phoenix 5.2, make each existing index's DDL timestamp equal to its
+    //last updated row timestamp.
+    public static void bootstrapLastDDLTimestampForIndexes(Connection metaConnection)
+            throws SQLException {
+        bootstrapLastDDLTimestamp(metaConnection,
+                new String[]{PTableType.INDEX.getSerializedValue()});
     }
 
     /**
-     * Sets the LAST_DDL_TIMESTAMP for the metadata header rows for all objects of the given table types to their PHOENIX_ROW_TIMESTAMP()
+     * Sets the LAST_DDL_TIMESTAMP for the metadata header rows for all objects of the given table
+     * types to their PHOENIX_ROW_TIMESTAMP()
      * @param metaConnection a {@link PhoenixConnection}
      * @param tableTypes array of serialized {@link PTableType} values
      */
-    private static void bootstrapLastDDLTimestamp(Connection metaConnection, String[] tableTypes) throws SQLException {
-        String tableTypesString = Stream.of(tableTypes).collect(Collectors.joining("','", "'", "'")).toString();
+    private static void bootstrapLastDDLTimestamp(Connection metaConnection, String[] tableTypes)
+            throws SQLException {
+        String tableTypesString = Stream.of(tableTypes).collect(
+                Collectors.joining("','", "'", "'")).toString();
         String pkCols = TENANT_ID + ", " + TABLE_SCHEM +
                 ", " + TABLE_NAME + ", " + COLUMN_NAME + ", " + COLUMN_FAMILY;
         final String upsertSql =
-                "UPSERT INTO " + SYSTEM_CATALOG_NAME + " (" + pkCols + ", " +
-                        LAST_DDL_TIMESTAMP + ")" + " " +
-                        "SELECT " + pkCols + ", PHOENIX_ROW_TIMESTAMP() FROM " + SYSTEM_CATALOG_NAME + " " +
-                        "WHERE " + TABLE_TYPE + " " + " in " + "(" + tableTypesString + ")";
+            "UPSERT INTO " + SYSTEM_CATALOG_NAME + " (" + pkCols + ", " + LAST_DDL_TIMESTAMP + ")"
+                + " " + "SELECT " + pkCols + ", PHOENIX_ROW_TIMESTAMP() FROM " + SYSTEM_CATALOG_NAME
+                + " " + "WHERE " + TABLE_TYPE + " " + " in " + "(" + tableTypesString + ")";
         LOGGER.info("Setting DDL timestamps for table_type={} to row timestamps", tableTypesString);
         try (PreparedStatement stmt = metaConnection.prepareStatement(upsertSql)) {
             stmt.execute();
