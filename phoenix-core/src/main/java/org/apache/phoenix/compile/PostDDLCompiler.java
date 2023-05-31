@@ -56,6 +56,7 @@ import org.apache.phoenix.util.TransactionUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SKIP_LAST_DDL_TIMESTAMP_VERIFICATION;
 
 /**
  * 
@@ -217,6 +218,9 @@ public class PostDDLCompiler {
                                     scan.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                                 }
                                 */
+                                // Skip verifying LAST_DDL_TIMESTAMP for this request. We have already deleted the
+                                // logical table from SYSCAT, so there is NO need to verify LAST_DDL_TIMESTAMP
+                                scan.setAttribute(SKIP_LAST_DDL_TIMESTAMP_VERIFICATION, QueryConstants.TRUE);
                             } else {
                                 // In the case of the empty key value column family changing, do not send the index
                                 // metadata, as we're currently managing this from the client. It's possible for the

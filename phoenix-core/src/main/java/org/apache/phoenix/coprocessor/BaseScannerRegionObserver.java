@@ -153,6 +153,8 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String LAST_DDL_TIMESTAMP_MAINTAINERS = "_LastDDLTimestampMaintainers";
     // Sets the value to true once atleast one co-processor verify the LAST_DDL_TIMESTAMP.
     public static final String LAST_DDL_TIMESTAMP_MAINTAINERS_VERIFIED = "_LastDDLTimestampMaintainersVerified";
+    // For some cases, we don't want to verify last ddl timestamps. Set this flag in that case.
+    public static final String SKIP_LAST_DDL_TIMESTAMP_VERIFICATION = "_SkipLastDDLTimestampVerification";
 
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);

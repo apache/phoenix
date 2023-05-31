@@ -18,6 +18,7 @@ package org.apache.phoenix.util;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.ByteStringer;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.generated.DDLTimestampMaintainersProtos;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -32,6 +33,8 @@ import java.sql.SQLException;
 import java.util.List;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LAST_DDL_TIMESTAMP_MAINTAINERS;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SKIP_LAST_DDL_TIMESTAMP_VERIFICATION;
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 /**
  * Util for verifying LastDDLTimestamps.
@@ -67,6 +70,12 @@ public class LastDDLTimestampMaintainerUtil {
      */
     public static void createLastDDLTimestampMaintainers(Scan scan, PTable table, PhoenixConnection connection)
             throws SQLException {
+        // If SKIP_LAST_DDL_TIMESTAMP_VERIFICATION is set to true for this request, then we don't need to set
+        // LAST_DDL_TIMESTAMP maintainers for this scan.
+        if (Bytes.equals(scan.getAttribute(SKIP_LAST_DDL_TIMESTAMP_VERIFICATION), TRUE_BYTES)) {
+            LOGGER.debug("Skip setting LAST_DDL_TIMESTAMP for this request");
+            return;
+        }
         byte[] maintainers = createLastDDLTimestampMaintainers(table, connection);
         if (maintainers == null) {
             // This means it is a system table.
@@ -86,7 +95,10 @@ public class LastDDLTimestampMaintainerUtil {
     public static byte[] createLastDDLTimestampMaintainers(PTable table, PhoenixConnection connection)
         throws SQLException {
         // TODO Skip setting last ddl timestamp attribute on SYSTEM tables for now. Think how can we handle SYSTEM tables
-        if (PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(table.getSchemaName().getString())) {
+        // Skip setting LastDDLTimestampMaintainers for view index table. Since this table is a physical table, we don't
+        // need to verify LastDDLTimestamps.
+        if (PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(table.getSchemaName().getString()) ||
+                MetaDataUtil.isViewIndex(table.getTableName().getString())) {
             return null;
         }
         // TODO Think of better way to convert bytes to bytesString.
