@@ -92,7 +92,7 @@
     <top.dir>${project.basedir}/..</top.dir>
 
     <!-- Dependency versions -->
-    <jackson-bom.version>2.12.6.20220326</jackson-bom.version>
+    <jackson-bom.version>2.14.1</jackson-bom.version>
     <antlr.version>3.5.2</antlr.version>
     <!-- Only used for tests with HBase 2.1-2.4 -->
     <reload4j.version>1.2.19</reload4j.version>
