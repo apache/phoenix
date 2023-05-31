@@ -2870,6 +2870,11 @@ public class UpgradeUtil {
         bootstrapLastDDLTimestamp(metaConnection, new String[]{PTableType.INDEX.getSerializedValue()});
     }
 
+    /**
+     * Sets the LAST_DDL_TIMESTAMP for the metadata header rows for all objects of the given table types to their PHOENIX_ROW_TIMESTAMP()
+     * @param metaConnection a {@link PhoenixConnection}
+     * @param tableTypes array of serialized {@link PTableType} values
+     */
     private static void bootstrapLastDDLTimestamp(Connection metaConnection, String[] tableTypes) throws SQLException {
         String tableTypesString = Stream.of(tableTypes).collect(Collectors.joining("','", "'", "'")).toString();
         String pkCols = TENANT_ID + ", " + TABLE_SCHEM +

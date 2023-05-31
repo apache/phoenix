@@ -683,6 +683,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLastDDLTimestampBootstrap() throws Exception {
+        Long testStartTime = System.currentTimeMillis();
         //Create a table, view, and index
         String schemaName = "S_" + generateUniqueName();
         String tableName = "T_" + generateUniqueName();
@@ -708,6 +709,9 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                 PTableType.TABLE);
             long viewTS = getRowTimestampForMetadata(conn, schemaName, viewName, PTableType.VIEW);
             long indexTS = getRowTimestampForMetadata(conn, schemaName, indexName, PTableType.INDEX);
+            assertTrue(tableTS > testStartTime);
+            assertTrue(viewTS > testStartTime);
+            assertTrue(indexTS > testStartTime);
 
             // bootstrap last ddl timestamp for tables and views
             UpgradeUtil.bootstrapLastDDLTimestampForTablesAndViews(conn.unwrap(PhoenixConnection.class));
@@ -719,6 +723,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                     PTableType.INDEX);
             assertEquals(tableTS, actualTableTS);
             assertEquals(viewTS, actualViewTS);
+            // only tables and views were bootstrapped
             assertEquals(0L, actualIndexTS);
 
             // bootstrap last ddl timestamp for indexes
