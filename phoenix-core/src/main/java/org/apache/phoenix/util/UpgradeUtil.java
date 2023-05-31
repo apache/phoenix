@@ -2884,12 +2884,12 @@ public class UpgradeUtil {
                         LAST_DDL_TIMESTAMP + ")" + " " +
                         "SELECT " + pkCols + ", PHOENIX_ROW_TIMESTAMP() FROM " + SYSTEM_CATALOG_NAME + " " +
                         "WHERE " + TABLE_TYPE + " " + " in " + "(" + tableTypesString + ")";
-        LOGGER.info(String.format("Setting DDL timestamps for table_type=%s to row timestamps", tableTypesString));
+        LOGGER.info("Setting DDL timestamps for table_type={} to row timestamps", tableTypesString);
         try (PreparedStatement stmt = metaConnection.prepareStatement(upsertSql)) {
             stmt.execute();
             metaConnection.commit();
         }
-        LOGGER.info(String.format("Setting DDL timestamps for table_type=%s is complete", tableTypesString));
+        LOGGER.info("Setting DDL timestamps for table_type={} is complete", tableTypesString);
     }
 
     public static boolean tableHasKeepDeleted(PhoenixConnection conn, String pTableName)
