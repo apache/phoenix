@@ -31,8 +31,8 @@ import org.apache.phoenix.util.PhoenixKeyValueUtil;
 public class UngroupedAggregatingResultIterator extends GroupedAggregatingResultIterator {
     private boolean hasRows = false;
 
-    public UngroupedAggregatingResultIterator( PeekingResultIterator resultIterator, Aggregators aggregators) {
-        super(resultIterator, aggregators);
+    public UngroupedAggregatingResultIterator( ResultIterator resultIterator, Aggregators aggregators) {
+        super(LookAheadResultIterator.wrap(resultIterator), aggregators);
     }
     @Override
     public Tuple next() throws SQLException {

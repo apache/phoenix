@@ -58,6 +58,7 @@ import org.apache.phoenix.iterate.ParallelIterators;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.iterate.RoundRobinResultIterator;
 import org.apache.phoenix.iterate.RowKeyOrderedAggregateResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.SerialIterators;
@@ -288,7 +289,7 @@ public class AggregatePlan extends BaseQueryPlan {
         AggregatingResultIterator aggResultIterator;
         // No need to merge sort for ungrouped aggregation
         if (groupBy.isEmpty() || groupBy.isUngroupedAggregate()) {
-            aggResultIterator = new UngroupedAggregatingResultIterator(new ConcatResultIterator(iterators), aggregators);
+            aggResultIterator = new UngroupedAggregatingResultIterator(new RoundRobinResultIterator(iterators, this), aggregators);
         // If salted or local index we still need a merge sort as we'll potentially have multiple group by keys that aren't contiguous.
         } else if (groupBy.isOrderPreserving() && !(this.getTableRef().getTable().getBucketNum() != null || this.getTableRef().getTable().getIndexType() == IndexType.LOCAL)) {
             aggResultIterator = new RowKeyOrderedAggregateResultIterator(iterators, aggregators);
