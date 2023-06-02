@@ -59,12 +59,7 @@ public abstract class ReadRepairScanner extends BaseRegionScanner {
     public long maxTimestamp;
     public long ageThreshold;
     public boolean restartScanDueToPageFilterRemoval = false;
-
-    /*
-    Scanner used for checking ground truth to help with read repair.
-     */
-    private Scan externalScan = null;
-    public Scan getExternalScan() { return externalScan; }
+    public boolean isPageFilterRemoved = false;
 
     public ReadRepairScanner(RegionCoprocessorEnvironment env, Scan scan, RegionScanner scanner) {
         super(scanner);
@@ -152,13 +147,13 @@ public abstract class ReadRepairScanner extends BaseRegionScanner {
         }
         else {
             try {
-                if (externalScan == null) {
+                if (!isPageFilterRemoved) {
                     PageFilter pageFilter = removePageFilter(scan);
                     if (pageFilter != null) {
                         pageSize = pageFilter.getPageSize();
                         restartScanDueToPageFilterRemoval = true;
                     }
-                    externalScan = new Scan();
+                    isPageFilterRemoved = true;
                 }
                 repairRow(cellList);
             } catch (IOException e) {

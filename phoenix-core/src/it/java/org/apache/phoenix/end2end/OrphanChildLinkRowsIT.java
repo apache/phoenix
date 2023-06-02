@@ -25,7 +25,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.coprocessor.tasks.ChildLinkScanTask;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableAlreadyExistsException;

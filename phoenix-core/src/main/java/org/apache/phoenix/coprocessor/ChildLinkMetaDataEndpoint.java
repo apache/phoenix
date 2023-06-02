@@ -22,6 +22,7 @@ import com.google.protobuf.RpcController;
 import com.google.protobuf.Service;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
@@ -37,6 +38,7 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -48,6 +50,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -65,10 +68,10 @@ import java.util.Optional;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CHECK_VERIFY_COLUMN;
 import static org.apache.phoenix.coprocessor.MetaDataEndpointImpl.mutateRowsWithLocks;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
-import static org.apache.phoenix.util.ScanUtil.getDummyResult;
-import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 
 /**
@@ -147,11 +150,15 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
 
         private Table sysCatHTable;
         private Scan childLinkScan;
+        private Scan sysCatViewHeaderRowScan;
+        private Scan sysCatChildParentLinkScan;
 
         public ChildLinkMetaDataScanner(RegionCoprocessorEnvironment env,
                                         Scan scan,
                                         RegionScanner scanner) throws IOException {
             super(env, scan, scanner);
+            sysCatChildParentLinkScan = new Scan();
+            setSysCatViewHeaderRowScan();
             ageThreshold = env.getConfiguration().getLong(
                     QueryServices.CHILD_LINK_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB,
                     QueryServicesOptions.DEFAULT_CHILD_LINK_ROW_AGE_THRESHOLD_TO_DELETE_MS);
@@ -201,25 +208,16 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
             byte[] rowKey = CellUtil.cloneRow(cell);
             long ts = row.get(0).getTimestamp();
 
-            Scan sysCatScan = getExternalScan();
             childLinkScan = new Scan(scan);
 
+            boolean isChildParentLinkPresent = isRowPresentInSysCat(sysCatChildParentLinkScan, getChildParentLinkSysCatRowKey(rowKey));
 
-            // build syscat rowKey using given rowKey
-            byte[] sysCatRowKey = getSysCatRowKey(rowKey);
-
-            // scan syscat to find row
-            sysCatScan.withStartRow(sysCatRowKey, true);
-            sysCatScan.withStopRow(sysCatRowKey, true);
-            sysCatScan.setTimeRange(0, maxTimestamp);
-            Result result = null;
-            try (ResultScanner resultScanner = sysCatHTable.getScanner(sysCatScan)){
-                result = resultScanner.next();
-            } catch (Throwable t) {
-                ServerUtil.throwIOException(sysCatHTable.getName().toString(), t);
+            boolean isViewHeaderRowPresent = false;
+            if (isChildParentLinkPresent) {
+                isViewHeaderRowPresent = isRowPresentInSysCat(sysCatViewHeaderRowScan, getViewHeaderSysCatRowKey(rowKey));
             }
             // if row found, repair and verifyRowAndRemoveEmptyColumn
-            if (result != null && !result.isEmpty()) {
+            if (isChildParentLinkPresent && isViewHeaderRowPresent) {
                 markChildLinkVerified(rowKey, ts, region);
                 scanner.close();
                 childLinkScan.withStartRow(rowKey, true);
@@ -240,12 +238,45 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
             row.clear();
         }
 
+        private boolean isRowPresentInSysCat(Scan scan, byte[] rowKey) throws IOException {
+            scan.withStartRow(rowKey, true);
+            scan.withStopRow(rowKey, true);
+            scan.setTimeRange(0, maxTimestamp);
+
+            Result result = null;
+            try (ResultScanner resultScanner = sysCatHTable.getScanner(scan)) {
+                result = resultScanner.next();
+            }
+            catch (Throwable t) {
+                ServerUtil.throwIOException(sysCatHTable.getName().toString(), t);
+            }
+
+            return (result != null) && (!result.isEmpty());
+        }
+
         /*
-        Construct row key for SYSTEM.CATALOG from a given SYSTEM.CHILD_LINK row key
+        Construct row key for SYSTEM.CATALOG view header row from a given SYSTEM.CHILD_LINK row key
+         */
+        private byte[] getViewHeaderSysCatRowKey(byte[] childLinkRowKey) {
+            String NULL_DELIMITER = "\0";
+            String[] childLinkRowKeyCols = new String(childLinkRowKey, StandardCharsets.UTF_8).split(NULL_DELIMITER);
+            checkArgument(childLinkRowKeyCols.length == 5);
+            String childTenantId = childLinkRowKeyCols[3];
+            String childFullName = childLinkRowKeyCols[4];
+
+            String childSchema = SchemaUtil.getSchemaNameFromFullName(childFullName);
+            String childTable = SchemaUtil.getTableNameFromFullName(childFullName);
+
+            String[] sysCatRowKeyCols = new String[] {childTenantId, childSchema, childTable};
+            return String.join(NULL_DELIMITER, sysCatRowKeyCols).getBytes(StandardCharsets.UTF_8);
+        }
+
+        /*
+        Construct row key for SYSTEM.CATALOG parent->child link from a given SYSTEM.CHILD_LINK row key
         SYSTEM.CATALOG -> (CHILD_TENANT_ID, CHILD_SCHEMA, CHILD_TABLE, PARENT_TENANT_ID, PARENT_FULL_NAME)
         SYSTEM.CHILD_LINK -> (PARENT_TENANT_ID, PARENT_SCHEMA, PARENT_TABLE, CHILD_TENANT_ID, CHILD_FULL_NAME)
          */
-        private byte[] getSysCatRowKey(byte[] childLinkRowKey) {
+        private byte[] getChildParentLinkSysCatRowKey(byte[] childLinkRowKey) {
             String NULL_DELIMITER = "\0";
             String[] childLinkRowKeyCols = new String(childLinkRowKey, StandardCharsets.UTF_8).split(NULL_DELIMITER);
             checkArgument(childLinkRowKeyCols.length == 5);
@@ -274,12 +305,19 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
 
 
         private void markChildLinkVerified(byte[] rowKey, long ts, Region region) throws IOException {
-            Put put = new Put(rowKey);
+            Put put = new Put(rowKey, ts);
             put.addColumn(emptyCF, emptyCQ, ts, VERIFIED_BYTES);
             Mutation[] mutations = new Mutation[]{put};
             region.batchMutate(mutations);
         }
 
+        private void setSysCatViewHeaderRowScan() {
+            sysCatViewHeaderRowScan = new Scan();
+            sysCatViewHeaderRowScan.addColumn(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
+            SingleColumnValueFilter tableTypeFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES,
+                    TABLE_TYPE_BYTES, CompareOperator.EQUAL, PTableType.VIEW.getSerializedValue().getBytes());
+            sysCatViewHeaderRowScan.setFilter(tableTypeFilter);
+        }
 
     }
 
