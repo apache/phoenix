@@ -23,7 +23,6 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -39,9 +38,9 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.filter.PagedFilter;
+import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
+import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
-import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.filter.AllVersionsIndexRebuildFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
@@ -63,6 +62,7 @@ import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -1070,7 +1070,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     protected Scan prepareIndexScan(Map<byte[], List<Mutation>> indexMutationMap) throws IOException {
         List<KeyRange> keys = new ArrayList<>(indexMutationMap.size());
         for (byte[] indexKey : indexMutationMap.keySet()) {
-            keys.add(PVarbinary.INSTANCE.getKeyRange(indexKey));
+            keys.add(PVarbinary.INSTANCE.getKeyRange(indexKey, SortOrder.ASC));
         }
 
         ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
@@ -1373,18 +1373,24 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         // For rebuilds we need all columns and all versions
 
         Filter filter = scan.getFilter();
-        if (filter instanceof PagedFilter) {
-            PagedFilter pageFilter = (PagedFilter) filter;
+        if (filter instanceof PagingFilter) {
+            PagingFilter pageFilter = (PagingFilter) filter;
             Filter delegateFilter = pageFilter.getDelegateFilter();
-            if (delegateFilter instanceof FirstKeyOnlyFilter) {
+            if (delegateFilter instanceof EmptyColumnOnlyFilter) {
                 pageFilter.setDelegateFilter(null);
+            } else if (delegateFilter instanceof FirstKeyOnlyFilter) {
+                scan.setFilter(null);
+                return true;
             } else if (delegateFilter != null) {
                 // Override the filter so that we get all versions
                 pageFilter.setDelegateFilter(new AllVersionsIndexRebuildFilter(delegateFilter));
             }
-        } else if (filter instanceof FirstKeyOnlyFilter) {
+        } else if (filter instanceof EmptyColumnOnlyFilter) {
             scan.setFilter(null);
             return true;
+        } else if (filter instanceof FirstKeyOnlyFilter) {
+                scan.setFilter(null);
+                return true;
         } else if (filter != null) {
             // Override the filter so that we get all versions
             scan.setFilter(new AllVersionsIndexRebuildFilter(filter));
@@ -1411,7 +1417,9 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 incrScan.withStartRow(nextStartKey);
             }
             List<KeyRange> keys = new ArrayList<>();
-            try (RegionScanner scanner = new PagedRegionScanner(region, region.getScanner(incrScan), incrScan)) {
+
+            try (RegionScanner scanner = new TTLRegionScanner(env, incrScan,
+                    new PagingRegionScanner(region, region.getScanner(incrScan), incrScan))) {
                 List<Cell> row = new ArrayList<>();
                 int rowCount = 0;
                 // collect row keys that have been modified in the given time-range
@@ -1424,7 +1432,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                             row.clear();
                             continue;
                         }
-                        keys.add(PVarbinary.INSTANCE.getKeyRange(CellUtil.cloneRow(row.get(0))));
+                        keys.add(PVarbinary.INSTANCE.getKeyRange(CellUtil.cloneRow(row.get(0)),
+                            SortOrder.ASC));
                         rowCount++;
                     }
                     row.clear();

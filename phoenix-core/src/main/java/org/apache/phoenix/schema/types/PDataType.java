@@ -289,6 +289,11 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
                 .setMessage(source + " cannot be coerced to " + target).build().buildException());
     }
 
+    protected static SQLException newMismatchException(PDataType source, Class target) {
+        return new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH)
+                .setMessage(source + " cannot be retrieved as " + target).build().buildException();
+    }
+
     protected static RuntimeException newIllegalDataException() {
         return new IllegalDataException(new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA).build()
                 .buildException());
@@ -857,6 +862,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         return (date == null || date.getTime() >= 0);
     }
 
+    //FIXME this is misnamed
     protected static void throwIfNonNegativeDate(java.util.Date date) {
         if (!isNonNegativeDate(date)) { throw newIllegalDataException("Value may not be negative(" + date + ")"); }
     }
@@ -865,6 +871,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         return v == null || v.longValue() >= 0;
     }
 
+    //FIXME this is misnamed
     protected static void throwIfNonNegativeNumber(Number v) {
         if (!isNonNegativeNumber(v)) { throw newIllegalDataException("Value may not be negative(" + v + ")"); }
     }
@@ -962,6 +969,10 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     public abstract Object toObject(byte[] bytes, int offset, int length, PDataType actualType, SortOrder sortOrder,
             Integer maxLength, Integer scale);
 
+    public abstract Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+            SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
+            throws SQLException;
+
     @SuppressWarnings("unchecked")
     @Override
     public T decode(PositionedByteRange pbr) {
@@ -1003,6 +1014,13 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     public final Object toObject(ImmutableBytesWritable ptr, PDataType actualType, SortOrder sortOrder,
             Integer maxLength, Integer scale) {
         return this.toObject(ptr.get(), ptr.getOffset(), ptr.getLength(), actualType, sortOrder, maxLength, scale);
+    }
+
+    public final Object toObject(ImmutableBytesWritable ptr, PDataType actualType,
+            SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
+            throws SQLException {
+        return this.toObject(ptr.get(), ptr.getOffset(), ptr.getLength(), actualType, sortOrder,
+            maxLength, scale, jdbcType);
     }
 
     public final Object toObject(ImmutableBytesWritable ptr, SortOrder sortOrder, Integer maxLength, Integer scale) {
@@ -1078,8 +1096,8 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         return this.sqlType;
     }
 
-    public KeyRange getKeyRange(byte[] point) {
-        return getKeyRange(point, true, point, true);
+    public KeyRange getKeyRange(byte[] point, SortOrder order) {
+        return getKeyRange(point, true, point, true, order);
     }
 
     public final String toStringLiteral(ImmutableBytesWritable ptr, Format formatter) {
@@ -1128,14 +1146,16 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         return actualType.getArrayFactory().newArray(actualType, elements);
     }
 
-    public KeyRange getKeyRange(byte[] lowerRange, boolean lowerInclusive, byte[] upperRange, boolean upperInclusive) {
+    public KeyRange getKeyRange(byte[] lowerRange, boolean lowerInclusive, byte[] upperRange,
+            boolean upperInclusive, SortOrder order) {
         /*
-         * Force lower bound to be inclusive for fixed width keys because it makes comparisons less expensive when you
-         * can count on one bound or the other being inclusive. Comparing two fixed width exclusive bounds against each
-         * other is inherently more expensive, because you need to take into account if the bigger key is equal to the
-         * next key after the smaller key. For example: (A-B] compared against [A-B) An exclusive lower bound A is
-         * bigger than an exclusive upper bound B. Forcing a fixed width exclusive lower bound key to be inclusive
-         * prevents us from having to do this extra logic in the compare function.
+         * Force lower bound to be inclusive for fixed width keys because it makes comparisons less
+         * expensive when you can count on one bound or the other being inclusive. Comparing two
+         * fixed width exclusive bounds against each other is inherently more expensive, because you
+         * need to take into account if the bigger key is equal to the next key after the smaller
+         * key. For example: (A-B] compared against [A-B) An exclusive lower bound A is bigger than
+         * an exclusive upper bound B. Forcing a fixed width exclusive lower bound key to be
+         * inclusive prevents us from having to do this extra logic in the compare function.
          */
         if (lowerRange != KeyRange.UNBOUND && !lowerInclusive && isFixedWidth()) {
             lowerRange = ByteUtil.nextKey(lowerRange);
@@ -1144,18 +1164,24 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
             }
             lowerInclusive = true;
         }
-        return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
+        return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive,
+            order == SortOrder.DESC);
     }
 
+    //TODO this could be improved by some lookup tables instead of iterating over all types
     public static PDataType fromLiteral(Object value) {
-        if (value == null) { return null; }
+        if (value == null) {
+            return null;
+        }
         for (PDataType type : PDataType.values()) {
             if (type.isArrayType()) {
                 if (value instanceof PhoenixArray) {
                     PhoenixArray arr = (PhoenixArray)value;
                     if ((type.getSqlType() == arr.baseType.sqlType + PDataType.ARRAY_TYPE_BASE)
-                            && type.getJavaClass().isInstance(value)) { return type; }
-                } else {
+                            && type.getJavaClass().isInstance(value)) {
+                        return type;
+                    }
+                } else if (value instanceof Array) {
                     Array arr = (Array) value;
                     try {
                         // Does the array's component type make sense for what we were told it is
@@ -1165,7 +1191,9 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
                     } catch (SQLException e) { /* Passthrough to fail */ }
                 }
             } else {
-                if (type.getJavaClass().isInstance(value)) { return type; }
+                if (type.getJavaClass().isInstance(value)) {
+                    return type;
+                }
             }
         }
         throw new UnsupportedOperationException("Unsupported literal value [" + value + "] of type "
@@ -1191,4 +1219,5 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         Preconditions.checkArgument(arrayType.isArrayType(), "Not a phoenix array type");
         return fromTypeId(arrayType.getSqlType() - ARRAY_TYPE_BASE);
     }
+
 }

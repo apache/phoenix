@@ -163,10 +163,11 @@ public class ChunkedResultIterator implements PeekingResultIterator {
             ScanMetricsHolder scanMetricsHolder = ScanMetricsHolder.getInstance(readMetrics, tableName, scan,
                     context.getConnection().getLogLevel());
             long renewLeaseThreshold = context.getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
+            //Chunking is deprecated, putting max value for timeout here.
             ResultIterator singleChunkResultIterator =
                     new SingleChunkResultIterator(new TableResultIterator(mutationState, scan,
                             scanMetricsHolder, renewLeaseThreshold, plan,
-                            DefaultParallelScanGrouper.getInstance()), chunkSize);
+                            DefaultParallelScanGrouper.getInstance(), Long.MAX_VALUE), chunkSize);
             resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator, scan, tableName, plan);
         }
         return resultIterator;

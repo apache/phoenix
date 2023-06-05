@@ -112,6 +112,7 @@ import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -864,7 +865,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 }
             }
             else {
-                keys.add(PVarbinary.INSTANCE.getKeyRange(rowKeyPtr.get()));
+                keys.add(PVarbinary.INSTANCE.getKeyRange(rowKeyPtr.get(), SortOrder.ASC));
             }
         }
         if (keys.isEmpty()) {

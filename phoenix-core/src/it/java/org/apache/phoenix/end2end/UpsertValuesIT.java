@@ -17,16 +17,19 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.PhoenixRuntime.REQUEST_METRIC_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.closeStatement;
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.sql.BatchUpdateException;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -36,6 +39,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.Result;
@@ -45,6 +49,8 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.DateUtil;
@@ -55,6 +61,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.function.ThrowingRunnable;
 
 
 @Category(ParallelStatsDisabledTest.class)
@@ -454,23 +461,25 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
              closeStmtAndConn(stmt, conn);
         }
     }
-        
-    
-    @Test
-    public void testBatchedUpsert() throws Exception {
+
+    private void testBatchedUpsert(boolean autocommit) throws Exception {
         String tableName = generateUniqueName();
         Properties props = new Properties();
+        props.setProperty(REQUEST_METRIC_ATTRIB, "true");
+        props.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
         Connection conn = null;
         PreparedStatement pstmt = null;
+        Statement stmt = null;
         try {
             conn = DriverManager.getConnection(getUrl(), props);
             conn.createStatement().execute("create table " + tableName + " (k varchar primary key, v integer)");
         } finally {
             closeStmtAndConn(pstmt, conn);
         }
-        
+
         try {
             conn = DriverManager.getConnection(getUrl(), props);
+            conn.setAutoCommit(autocommit);
             pstmt = conn.prepareStatement("upsert into " + tableName + " values (?, ?)");
             pstmt.setString(1, "a");
             pstmt.setInt(2, 1);
@@ -478,12 +487,22 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
             pstmt.setString(1, "b");
             pstmt.setInt(2, 2);
             pstmt.addBatch();
+            pstmt.setString(1, "c");
+            pstmt.setInt(2, 3);
+            pstmt.addBatch();
             pstmt.executeBatch();
-            conn.commit();
+            if (!autocommit) {
+                conn.commit();
+            }
+            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+            Map<String, Map<MetricType, Long>> mutationMetrics = pConn.getMutationMetrics();
+            Assert.assertEquals(3, (long) mutationMetrics.get(tableName).get(MetricType.MUTATION_BATCH_SIZE));
+            Assert.assertEquals(3, (long) mutationMetrics.get(tableName).get(MetricType.UPSERT_MUTATION_SQL_COUNTER));
+            Assert.assertEquals(autocommit, conn.getAutoCommit());
         } finally {
-             closeStmtAndConn(pstmt, conn);
+            closeStmtAndConn(pstmt, conn);
         }
-        
+
         try {
             conn = DriverManager.getConnection(getUrl(), props);
             pstmt = conn.prepareStatement("select * from " + tableName);
@@ -494,49 +513,161 @@ public class UpsertValuesIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals("b", rs.getString(1));
             assertEquals(2, rs.getInt(2));
+            assertTrue(rs.next());
+            assertEquals("c", rs.getString(1));
+            assertEquals(3, rs.getInt(2));
             assertFalse(rs.next());
         } finally {
-             closeStmtAndConn(pstmt, conn);
+            closeStmtAndConn(pstmt, conn);
         }
-        
-        conn = DriverManager.getConnection(getUrl(), props);
-        Statement stmt = conn.createStatement();
-        try {
-            stmt.addBatch("upsert into " + tableName + " values ('c', 3)");
-            stmt.addBatch("select count(*) from " + tableName);
-            stmt.addBatch("upsert into " + tableName + " values ('a', 4)");
-            ResultSet rs = stmt.executeQuery("select count(*) from " + tableName);
-            assertTrue(rs.next());
-            assertEquals(2, rs.getInt(1));
-            int[] result = stmt.executeBatch();
-            assertEquals(3,result.length);
-            assertEquals(result[0], 1);
-            assertEquals(result[1], -2);
-            assertEquals(result[2], 1);
-            conn.commit();
-        } finally {
-             closeStmtAndConn(pstmt, conn);
-        }
-        
+
         try {
             conn = DriverManager.getConnection(getUrl(), props);
-            pstmt = conn.prepareStatement("select * from " + tableName);
-            ResultSet rs = pstmt.executeQuery();
+            conn.setAutoCommit(autocommit);
+            stmt = conn.createStatement();
+            stmt.addBatch("upsert into " + tableName + " values ('d', 4)");
+            stmt.addBatch("upsert into " + tableName + " values ('a', 5)");
+            ResultSet rs = stmt.executeQuery("select count(*) from " + tableName);
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+            int[] result = stmt.executeBatch();
+            assertEquals(2, result.length);
+            assertEquals(result[0], 1);
+            assertEquals(result[1], 1);
+            conn.commit();
+        } finally {
+            closeStmtAndConn(stmt, conn);
+        }
+
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery("select * from " + tableName);
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
-            assertEquals(4, rs.getInt(2));
+            assertEquals(5, rs.getInt(2));
             assertTrue(rs.next());
             assertEquals("b", rs.getString(1));
             assertEquals(2, rs.getInt(2));
             assertTrue(rs.next());
             assertEquals("c", rs.getString(1));
             assertEquals(3, rs.getInt(2));
+            assertTrue(rs.next());
+            assertEquals("d", rs.getString(1));
+            assertEquals(4, rs.getInt(2));
             assertFalse(rs.next());
         } finally {
-             closeStmtAndConn(pstmt, conn);
+            closeStmtAndConn(stmt, conn);
+        }
+
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            conn.setAutoCommit(autocommit);
+            stmt = conn.createStatement();
+            stmt.addBatch("delete from " + tableName + " where v <= 4");
+            stmt.addBatch("delete from " + tableName + " where v = 5");
+            int[] result = stmt.executeBatch();
+            assertEquals(2, result.length);
+            assertEquals(result[0], 3);
+            assertEquals(result[1], 1);
+            conn.commit();
+        } finally {
+            closeStmtAndConn(stmt, conn);
+        }
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            pstmt = conn.prepareStatement("select count(*) from " + tableName);
+            ResultSet rs = pstmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+        } finally {
+            closeStmtAndConn(stmt, conn);
+        }
+
+    }
+
+    @Test
+    public void testBatchedUpsert() throws Exception {
+        testBatchedUpsert(false);
+    }
+
+    @Test
+    public void testBatchedUpsertAutoCommit() throws Exception {
+        testBatchedUpsert(true);
+    }
+
+    @Test
+    public void testBatchedUpsertMultipleBatches() throws Exception {
+        String tableName = generateUniqueName();
+        Properties props = new Properties();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("create table " + tableName + " (k varchar primary key, v integer)");
+            PreparedStatement pstmt = conn.prepareStatement("upsert into " + tableName + " values (?, ?)");
+            pstmt.setString(1, "a");
+            pstmt.setInt(2, 1);
+            pstmt.addBatch();
+            pstmt.executeBatch();
+            pstmt.setString(1, "b");
+            pstmt.setInt(2, 2);
+            pstmt.addBatch();
+            pstmt.executeBatch();
+            conn.commit();
+        }
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery("select count(*) from " + tableName);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
         }
     }
-    
+
+    private void testBatchRollback(boolean autocommit) throws Exception {
+        String tableName = generateUniqueName();
+        Properties props = new Properties();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("create table " + tableName + " (k varchar primary key, v integer)");
+            conn.setAutoCommit(autocommit);
+            PreparedStatement pstmt = conn.prepareStatement("upsert into " + tableName + " values (?, ?)");
+            pstmt.setString(1, "a");
+            pstmt.setInt(2, 1);
+            pstmt.addBatch();
+            pstmt.executeBatch();
+            conn.rollback();
+        }
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery("select count(*) from " + tableName);
+            assertTrue(rs.next());
+            assertEquals(autocommit ? 1 : 0, rs.getInt(1));
+        }
+    }
+
+    @Test
+    public void testBatchRollback() throws Exception {
+        testBatchRollback(false);
+    }
+
+    @Test
+    public void testBatchNoRollbackWithAutoCommit() throws Exception {
+        testBatchRollback(true);
+    }
+
+    @Test
+    public void testDQLFailsInBatch() throws Exception {
+        String tableName = generateUniqueName();
+        Properties props = new Properties();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("create table " + tableName + " (k varchar primary key, v integer)");
+            Statement stmt = conn.createStatement();
+            stmt.addBatch("select * from " + tableName);
+            BatchUpdateException ex = assertThrows(BatchUpdateException.class, () -> stmt.executeBatch());
+            assertEquals("java.sql.BatchUpdateException: ERROR 1151 (XCL51): A batch operation can't include a statement that produces result sets.",
+                    ex.getMessage());
+        }
+    }
+
     private static Date toDate(String dateString) {
         return DateUtil.parseDate(dateString);
     }

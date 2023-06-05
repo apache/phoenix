@@ -165,7 +165,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             ResultSet rs = conn.createStatement().executeQuery(sql);
             assertFalse(rs.next());
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 390L, info.estimatedBytes);
+            assertEquals((Long) 691L, info.estimatedBytes);
             assertEquals((Long) 10L, info.estimatedRows);
             assertTrue(info.estimateInfoTs > 0);
 
@@ -204,7 +204,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
                 assertTrue(rs.next());
             }
             Estimate info = getByteRowEstimates(conn, sql, binds);
-            assertEquals((Long) 390L, info.estimatedBytes);
+            assertEquals((Long) 691L, info.estimatedBytes);
             assertEquals((Long) 10L, info.estimatedRows);
             assertTrue(info.estimateInfoTs > 0);
         }

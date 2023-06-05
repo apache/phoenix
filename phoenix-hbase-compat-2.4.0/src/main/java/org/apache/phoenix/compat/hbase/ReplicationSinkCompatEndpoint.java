@@ -15,22 +15,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.exception;
 
-import java.sql.SQLException;
+package org.apache.phoenix.compat.hbase;
 
-public class BatchUpdateExecution extends SQLException {
-    private static final long serialVersionUID = 1L;
-    private static SQLExceptionCode code = SQLExceptionCode.BATCH_EXCEPTION;
-    private final int batchIndex;
+import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
 
-    public BatchUpdateExecution(Throwable cause, int batchIndex) {
-        super(new SQLExceptionInfo.Builder(code).build().toString(),
-                code.getSQLState(), code.getErrorCode(), cause);
-        this.batchIndex = batchIndex;
+import java.util.Optional;
+
+/**
+ * No-op replication sink compat endpoint.
+ */
+public class ReplicationSinkCompatEndpoint
+        implements RegionServerCoprocessor, RegionServerObserver {
+
+    @Override
+    public Optional<RegionServerObserver> getRegionServerObserver() {
+        return Optional.of(this);
     }
 
-    public int getBatchIndex() {
-        return batchIndex;
-    }
 }

@@ -52,7 +52,7 @@ public class CurrentTimeFunction extends CurrentDateTimeFunction {
     }
 
     public CurrentTimeFunction(List<Expression> children, StatementContext context) throws SQLException {
-        this(context.getCurrentTime());
+        this(context.getCurrentTimeWithDisplacement());
     }
 
     public CurrentTimeFunction(long timeStamp) {

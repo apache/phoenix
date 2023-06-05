@@ -33,14 +33,13 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 import edu.umd.cs.findbugs.annotations.SuppressWarnings;
-
-import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * The datatype for PColummns that are Arrays. Any variable length array would follow the below order. Every element
@@ -386,6 +385,16 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
 
     static int getOffset(byte[] bytes, int arrayIndex, boolean useShort, int indexOffset, byte serializationVersion) {
         return Math.abs(getSerializedOffset(bytes, arrayIndex, useShort, indexOffset, serializationVersion));
+    }
+
+    @Override
+    public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+            SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
+            throws SQLException {
+        if (java.sql.Array.class.isAssignableFrom(jdbcType)) {
+            return toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
+        }
+        throw newMismatchException(actualType, jdbcType);
     }
 
 	static int getSerializedOffset(byte[] bytes, int arrayIndex, boolean useShort, int indexOffset, byte serializationVersion) {

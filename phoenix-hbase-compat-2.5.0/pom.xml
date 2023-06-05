@@ -31,7 +31,7 @@
   <description>Compatibility module for HBase 2.5.0+</description>
 
   <properties>
-    <hbase25.compat.version>2.5.0</hbase25.compat.version>
+    <hbase25.compat.version>2.5.3-hadoop3</hbase25.compat.version>
   </properties>
 
   <dependencies>

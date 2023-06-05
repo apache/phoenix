@@ -15,15 +15,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.phoenix.compat.hbase;
 
-import org.apache.hadoop.hbase.regionserver.SteppingSplitPolicy;
+import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
 
-public class CompatSteppingSplitPolicy extends SteppingSplitPolicy {
+import java.util.Optional;
 
-    protected boolean canSplit() {
-        //dummy
-        return false;
+/**
+ * No-op replication sink compat endpoint.
+ */
+public class ReplicationSinkCompatEndpoint
+        implements RegionServerCoprocessor, RegionServerObserver {
+
+    @Override
+    public Optional<RegionServerObserver> getRegionServerObserver() {
+        return Optional.of(this);
     }
 
 }

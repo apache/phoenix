@@ -23,7 +23,6 @@ import java.util.Set;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.ColumnExpression;
-import org.apache.phoenix.expression.IsNullExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.TableName;
@@ -36,6 +35,7 @@ import org.apache.phoenix.util.IndexUtil;
  */
 public class IndexDataColumnRef extends ColumnRef {
     final private int position;
+    // Despite the final keyword, columns IS mutable, and must not be used for equality/hashCode
     final private Set<PColumn> columns;
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
 
@@ -76,7 +76,6 @@ public class IndexDataColumnRef extends ColumnRef {
         final int prime = 31;
         int result = super.hashCode();
         result = prime * result + position;
-        result = prime * result + ((columns == null) ? 0 : columns.hashCode());
         return result;
     }
 
@@ -86,9 +85,6 @@ public class IndexDataColumnRef extends ColumnRef {
             return false;
         }
         IndexDataColumnRef that = (IndexDataColumnRef) o;
-        if (position != that.position) {
-            return false;
-        }
-        return columns.equals(that.columns);
+        return position == that.position;
     }
 }

@@ -86,10 +86,11 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
                                              final IndexMaintainer indexMaintainer,
                                              final byte[][] viewConstants,
                                              final ImmutableBytesWritable ptr,
-                                             final long pageSizeMs)
+                                             final long pageSizeMs,
+                                             final long queryLimit)
             throws IOException {
         super(innerScanner, region, scan, env, dataTableScan, tupleProjector, indexMaintainer,
-                viewConstants, ptr, pageSizeMs);
+                viewConstants, ptr, pageSizeMs, queryLimit);
         final Configuration config = env.getConfiguration();
         hTableFactory = IndexWriterUtils.getDefaultDelegateHTableFactory(env);
         rowCountPerTask = config.getInt(INDEX_ROW_COUNTS_PER_TASK_CONF_KEY,

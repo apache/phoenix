@@ -15,10 +15,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.compat.hbase;
 
-import org.apache.hadoop.hbase.regionserver.SteppingSplitPolicy;
+package org.apache.phoenix.coprocessor;
 
-public class CompatSteppingSplitPolicy extends SteppingSplitPolicy {
+import org.apache.phoenix.compat.hbase.ReplicationSinkCompatEndpoint;
+
+/**
+ * This class is to be used as regionserver coproc when Phoenix metadata attribute values like
+ * Tenant id, Schema name, logical table, table type etc need to be replicated across the
+ * replication sink cluster.
+ */
+public class ReplicationSinkEndpoint extends ReplicationSinkCompatEndpoint {
 
 }

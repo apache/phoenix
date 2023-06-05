@@ -21,9 +21,9 @@ import java.sql.Connection;
 import java.util.Properties;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.hadoop.classification.InterfaceStability;
-import org.apache.http.annotation.Immutable;
 import org.apache.phoenix.exception.FailoverSQLException;
+
+import net.jcip.annotations.Immutable;
 
 /**
  * A failover policy defines how failover connection deals with existing connections in case of
@@ -94,7 +94,6 @@ public interface FailoverPolicy {
      * In case of {@link FailoverSQLException} exception, clients can still re-connect to this HA
      * group by creating a new failover connection, OR call static method failover() explicitly.
      */
-    @InterfaceStability.Unstable
     class FailoverToActivePolicy implements FailoverPolicy {
         public static final String NAME = "active";
         private static final int MAX_FAILOVER_COUNT_DEFAULT = 3;

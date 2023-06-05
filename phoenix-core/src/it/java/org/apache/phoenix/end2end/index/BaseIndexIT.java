@@ -57,6 +57,8 @@ import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.end2end.CreateTableIT;
+import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -66,7 +68,9 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
@@ -93,12 +97,14 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
     private final boolean transactional;
     private final TransactionFactory.Provider transactionProvider;
     private final boolean mutable;
+    private final boolean columnEncoded;
     private final String tableDDLOptions;
 
     protected BaseIndexIT(boolean localIndex, boolean uncovered, boolean mutable, String transactionProvider, boolean columnEncoded) {
         this.localIndex = localIndex;
         this.uncovered = uncovered;
         this.mutable = mutable;
+        this.columnEncoded = columnEncoded;
         StringBuilder optionBuilder = new StringBuilder();
         if (!columnEncoded) {
             if (optionBuilder.length()!=0)
@@ -156,7 +162,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
             if (!uncovered) {
                 // Optimizer would not select the uncovered index for this query
-                assertEquals("SERVER FILTER BY FIRST KEY ONLY",
+                assertEquals(columnEncoded ? "SERVER FILTER BY FIRST KEY ONLY" :
+                                "SERVER FILTER BY EMPTY COLUMN ONLY",
                         explainPlanAttributes.getServerWhereFilter());
             }
 
@@ -584,8 +591,9 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 plan.getPlanStepsAsAttributes();
             assertEquals("PARALLEL 1-WAY",
                 explainPlanAttributes.getIteratorTypeAndScanSize());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
-                explainPlanAttributes.getServerWhereFilter());
+            assertEquals(columnEncoded ? "SERVER FILTER BY FIRST KEY ONLY" :
+                            "SERVER FILTER BY EMPTY COLUMN ONLY",
+                    explainPlanAttributes.getServerWhereFilter());
             if (localIndex) {
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
@@ -618,8 +626,9 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             explainPlanAttributes = plan.getPlanStepsAsAttributes();
             assertEquals("PARALLEL 1-WAY",
                 explainPlanAttributes.getIteratorTypeAndScanSize());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
-                explainPlanAttributes.getServerWhereFilter());
+            assertEquals(columnEncoded ? "SERVER FILTER BY FIRST KEY ONLY" :
+                            "SERVER FILTER BY EMPTY COLUMN ONLY",
+                    explainPlanAttributes.getServerWhereFilter());
             if (localIndex) {
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
@@ -994,8 +1003,9 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                 .getExplainPlan();
             ExplainPlanAttributes explainPlanAttributes =
                 plan.getPlanStepsAsAttributes();
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
-                explainPlanAttributes.getServerWhereFilter());
+            assertEquals(columnEncoded ? "SERVER FILTER BY FIRST KEY ONLY" :
+                            "SERVER FILTER BY EMPTY COLUMN ONLY",
+                    explainPlanAttributes.getServerWhereFilter());
             if (localIndex) {
                 assertEquals("PARALLEL 2-WAY",
                     explainPlanAttributes.getIteratorTypeAndScanSize());
@@ -1429,4 +1439,86 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Tests that we add LAST_DDL_TIMESTAMP when we create an index and we update LAST_DDL_TIMESTAMP when we update
+     * an index.
+     * @throws Exception
+     */
+    @Test
+    public void testLastDDLTimestampOnIndexes() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+
+        String ddl ="CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions;
+        long startTs = EnvironmentEdgeManager.currentTimeMillis();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            Statement stmt = conn.createStatement();
+            stmt.execute(ddl);
+            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " ON " + fullTableName
+                    + " (long_col1, long_col2)"
+                    + (uncovered ? "" : " INCLUDE (decimal_col1, decimal_col2)");
+            stmt.execute(ddl);
+            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
+
+            long activeIndexLastDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(fullIndexName, startTs, conn);
+            Thread.sleep(1);
+            // Disable an index. This should change the LAST_DDL_TIMESTAMP.
+            String disableIndexDDL = "ALTER INDEX " + indexName + " ON " +  TestUtil.DEFAULT_SCHEMA_NAME +
+                    QueryConstants.NAME_SEPARATOR + tableName + " DISABLE";
+            stmt.execute(disableIndexDDL);
+            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.DISABLE);
+            CreateTableIT.verifyLastDDLTimestamp(fullIndexName, activeIndexLastDDLTimestamp  + 1, conn);
+        }
+    }
+
+    /**
+     * Tests that we add LAST_DDL_TIMESTAMP when we create an async index
+     * and we update LAST_DDL_TIMESTAMP when we update an index.
+     * For ASYNC indexes, the state goes from BUILDING --> ACTIVE --> DISABLE
+     * Verify that LAST_DDL_TIMESTAMP changes at every step.
+     * @throws Exception
+     */
+    @Test
+    public void testLastDDLTimestampOnAsyncIndexes() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+
+        String ddl ="CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions;
+        long startTs = EnvironmentEdgeManager.currentTimeMillis();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            Statement stmt = conn.createStatement();
+            stmt.execute(ddl);
+            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " ON " + fullTableName
+                    + " (long_col1, long_col2)"
+                    + (uncovered ? " ASYNC" : " INCLUDE (decimal_col1, decimal_col2) ASYNC");
+            stmt.execute(ddl);
+            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.BUILDING);
+            long buildingIndexLastDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(fullIndexName, startTs, conn);
+            Thread.sleep(1);
+
+            // run the index MR job.
+            IndexToolIT.runIndexTool(false, TestUtil.DEFAULT_SCHEMA_NAME, tableName, indexName);
+            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
+            long activeIndexLastDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
+                    fullIndexName, buildingIndexLastDDLTimestamp + 1, conn);
+            Thread.sleep(1);
+
+            // Disable an index. This should change the LAST_DDL_TIMESTAMP.
+            String disableIndexDDL = "ALTER INDEX " + indexName + " ON " +  TestUtil.DEFAULT_SCHEMA_NAME +
+                    QueryConstants.NAME_SEPARATOR + tableName + " DISABLE";
+            stmt.execute(disableIndexDDL);
+            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.DISABLE);
+            CreateTableIT.verifyLastDDLTimestamp(fullIndexName, activeIndexLastDDLTimestamp + 1, conn);
+        }
+    }
 }

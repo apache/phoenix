@@ -70,7 +70,7 @@ public class ToDateFunction extends ScalarFunction {
             dateFormat = context.getDateFormat();
         }
         if (timeZoneId == null) {
-            timeZoneId = context.getDateFormatTimeZone().getID();
+            timeZoneId = context.getDateFormatTimeZoneId();
         }
         init(dateFormat, timeZoneId);
     }

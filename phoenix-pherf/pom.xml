@@ -137,10 +137,6 @@
       <artifactId>commons-csv</artifactId>
     </dependency>
     <dependency>
-      <groupId>joda-time</groupId>
-      <artifactId>joda-time</artifactId>
-    </dependency>
-    <dependency>
       <groupId>stax</groupId>
       <artifactId>stax-api</artifactId>
     </dependency>
@@ -156,10 +152,6 @@
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
       <version>${gson.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase.thirdparty</groupId>
-      <artifactId>hbase-shaded-miscellaneous</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
@@ -339,6 +331,7 @@
         <configuration>
           <workingDirectory>${java.io.tmpdir}</workingDirectory>
           <forkCount>1</forkCount>
+          <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
         </configuration>
       </plugin>
       <plugin>
@@ -387,7 +380,6 @@
                   <include>org.apache.commons:commons-lang3</include>
                   <include>org.apache.commons:commons-math3</include>
                   <include>org.apache.phoenix.thirdparty:phoenix-shaded-commons-cli</include>
-                  <include>joda-time:joda-time</include>
                   <include>org.apache.commons:commons-csv</include>
                   <include>commons-lang:commons-lang</include>
                   <include>commons-io:commons-io</include>

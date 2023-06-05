@@ -57,10 +57,7 @@
                   hbasePatch = Integer.parseInt(versionMatcher.group(3));
 
                   hbaseMajor == 2 &amp;&amp; (
-                    ("${hbase.compat.version}".equals("2.3.0")
-                      &amp;&amp; hbaseMinor == 3
-                      &amp;&amp; hbasePatch &gt;=0)
-                    || ("${hbase.compat.version}".equals("2.4.0")
+                    ("${hbase.compat.version}".equals("2.4.0")
                       &amp;&amp; hbaseMinor == 4
                       &amp;&amp; hbasePatch == 0)
                     || ("${hbase.compat.version}".equals("2.4.1")
@@ -281,15 +278,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-hdfs-client</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-annotations</artifactId>
     </dependency>
 
     <!-- Hadoop test dependencies -->
@@ -301,14 +290,18 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-hdfs</artifactId>
-      <version>${hadoop.version}</version>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs</artifactId>
       <type>test-jar</type>
+      <classifier>tests</classifier>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
-      <version>${hadoop.version}</version>
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
@@ -358,14 +351,6 @@
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-zookeeper</artifactId>
     </dependency>
-    <dependency>
-      <groupId>org.apache.hbase.thirdparty</groupId>
-      <artifactId>hbase-shaded-miscellaneous</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase.thirdparty</groupId>
-      <artifactId>hbase-shaded-protobuf</artifactId>
-    </dependency>
 
     <!-- HBase test dependencies -->
     <dependency>
@@ -408,6 +393,10 @@
     <dependency>
       <groupId>org.apache.zookeeper</groupId>
       <artifactId>zookeeper</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper-jute</artifactId>
     </dependency>
 
     <!-- Transaction dependencies -->
@@ -565,10 +554,6 @@
       <artifactId>disruptor</artifactId>
     </dependency>
     <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.jruby.joni</groupId>
       <artifactId>joni</artifactId>
     </dependency>
@@ -579,17 +564,6 @@
     <dependency>
       <groupId>org.hdrhistogram</groupId>
       <artifactId>HdrHistogram</artifactId>
-      <version>2.1.12</version>
-    </dependency>
-    <dependency>
-      <groupId>com.sun.xml.bind</groupId>
-      <artifactId>jaxb-impl</artifactId>
-      <version>2.2.3-1</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.httpcomponents</groupId>
-      <artifactId>httpcore</artifactId>
-      <version>4.4.4</version>
     </dependency>
 
     <!-- Other test dependencies -->

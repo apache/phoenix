@@ -46,6 +46,7 @@ import static org.apache.phoenix.monitoring.MetricType.UPSERT_SUCCESS_SQL_COUNTE
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
+import java.sql.BatchUpdateException;
 import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -56,6 +57,7 @@ import java.sql.Statement;
 import java.text.Format;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -100,7 +102,6 @@ import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.compile.TraceQueryPlan;
 import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.exception.BatchUpdateExecution;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.UpgradeRequiredException;
@@ -282,7 +283,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private int maxRows;
     private int fetchSize = -1;
     private int queryTimeoutMillis;
-    
+    // Caching per Statement
+    protected final Calendar localCalendar = Calendar.getInstance();
+
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
         this.queryTimeoutMillis = getDefaultQueryTimeoutMillis();
@@ -540,7 +543,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 isDelete = stmt instanceof ExecutableDeleteStatement;
                                 isAtomicUpsert = isUpsert && ((ExecutableUpsertStatement)stmt).getOnDupKeyPairs() != null;
                                 if (plan.getTargetRef() != null && plan.getTargetRef().getTable() != null) {
-                                    if(!Strings.isNullOrEmpty(plan.getTargetRef().getTable().getPhysicalName().toString())) {
+                                    if (!Strings.isNullOrEmpty(plan.getTargetRef().getTable().getPhysicalName().toString())) {
                                         tableName = plan.getTargetRef().getTable().getPhysicalName().toString();
                                     }
                                     if (plan.getTargetRef().getTable().isTransactional()) {
@@ -564,7 +567,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 setLastUpdateCount(lastUpdateCount);
                                 setLastUpdateOperation(stmt.getOperation());
                                 connection.incrementStatementExecutionCounter();
-                                if(queryLogger.isAuditLoggingEnabled()) {
+                                if (queryLogger.isAuditLoggingEnabled()) {
                                     queryLogger.log(QueryLogInfo.TABLE_NAME_I, getTargetForAudit(stmt));
                                     queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.COMPLETED.toString());
                                     queryLogger.log(QueryLogInfo.NO_OF_RESULTS_ITERATED_I, lastUpdateCount);
@@ -646,7 +649,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                     }, PhoenixContextExecutor.inContext(),
                         Tracing.withTracing(connection, this.toString()));
         } catch (Exception e) {
-            if(queryLogger.isAuditLoggingEnabled()) {
+            if (queryLogger.isAuditLoggingEnabled()) {
                 queryLogger.log(QueryLogInfo.TABLE_NAME_I, getTargetForAudit(stmt));
                 queryLogger.log(QueryLogInfo.EXCEPTION_TRACE_I, Throwables.getStackTraceAsString(e));
                 queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.FAILED.toString());
@@ -1018,7 +1021,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         @SuppressWarnings("unchecked")
         @Override
         public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
-            if(!getUdfParseNodes().isEmpty()) {
+            if (!getUdfParseNodes().isEmpty()) {
                 stmt.throwIfUnallowedUserDefinedFunctions(getUdfParseNodes());
             }
 		    DeleteCompiler compiler = new DeleteCompiler(stmt, this.getOperation());
@@ -1986,26 +1989,41 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     /**
      * Execute the current batch of statements. If any exception occurs
-     * during execution, a org.apache.phoenix.exception.BatchUpdateException
-     * is thrown which includes the index of the statement within the
-     * batch when the exception occurred.
+     * during execution, a {@link java.sql.BatchUpdateException}
+     * is thrown which compposes the update counts for statements executed so
+     * far.
      */
     @Override
     public int[] executeBatch() throws SQLException {
         int i = 0;
+        int[] returnCodes = new int [batch.size()];
+        Arrays.fill(returnCodes, -1);
+        boolean autoCommit = connection.getAutoCommit();
+        connection.setAutoCommit(false);
         try {
-            int[] returnCodes = new int [batch.size()];
             for (i = 0; i < returnCodes.length; i++) {
                 PhoenixPreparedStatement statement = batch.get(i);
-                returnCodes[i] = statement.execute(true) ? Statement.SUCCESS_NO_INFO : statement.getUpdateCount();
+                statement.executeForBatch();
+                returnCodes[i] = statement.getUpdateCount();
             }
             // Flush all changes in batch if auto flush is true
             flushIfNecessary();
             // If we make it all the way through, clear the batch
             clearBatch();
+            if (autoCommit) {
+                connection.commit();
+            }
             return returnCodes;
-        } catch (Throwable t) {
-            throw new BatchUpdateExecution(t,i);
+        } catch (SQLException t) {
+            if (i == returnCodes.length) {
+                // Exception after for loop, perhaps in commit(), discard returnCodes.
+                throw new BatchUpdateException(t);
+            } else {
+                returnCodes[i] = Statement.EXECUTE_FAILED;
+                throw new BatchUpdateException(returnCodes, t);
+            }
+        } finally {
+            connection.setAutoCommit(autoCommit);
         }
     }
 
@@ -2088,7 +2106,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         TableName tableName = null;
         if (stmt instanceof ExecutableSelectStatement) {
             TableNode from = ((ExecutableSelectStatement)stmt).getFrom();
-            if(from instanceof NamedTableNode) {
+            if (from instanceof NamedTableNode) {
                 tableName = ((NamedTableNode)from).getName();
             }
         } else if (stmt instanceof ExecutableUpsertStatement) {
@@ -2488,4 +2506,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             }
         }
     }
+
+    public Calendar getLocalCalendar() {
+        return localCalendar;
+    }
+
 }

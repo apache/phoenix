@@ -17,19 +17,18 @@
  */
 package org.apache.phoenix.pherf.rules;
 
-import org.apache.phoenix.pherf.configuration.Column;
-import org.apache.phoenix.pherf.configuration.DataSequence;
-import org.joda.time.LocalDateTime;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
-import org.junit.Test;
-
-import java.util.ArrayList;
-import java.util.List;
-
 import static org.apache.phoenix.pherf.configuration.DataTypeMapping.DATE;
 import static org.apache.phoenix.pherf.configuration.DataTypeMapping.VARCHAR;
 import static org.junit.Assert.assertEquals;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.apache.phoenix.pherf.configuration.Column;
+import org.apache.phoenix.pherf.configuration.DataSequence;
+import org.junit.Test;
 
 public class SequentialListDataGeneratorTest {
     SequentialListDataGenerator generator;
@@ -46,9 +45,9 @@ public class SequentialListDataGeneratorTest {
 
     @Test(expected = IllegalArgumentException.class)
     public void testRejectsNonVarchar() {
-        DateTimeFormatter FMT = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss.SSS");
-        LocalDateTime startDateTime = new LocalDateTime();
-        String formattedDateTime = startDateTime.toString(FMT);
+        DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+        LocalDateTime startDateTime = LocalDateTime.now();
+        String formattedDateTime = startDateTime.format(FMT);
         Column columnA = new Column();
         columnA.setType(DATE);
         columnA.setDataSequence(DataSequence.SEQUENTIAL);

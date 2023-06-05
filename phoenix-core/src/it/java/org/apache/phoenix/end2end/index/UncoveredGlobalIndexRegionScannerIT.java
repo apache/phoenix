@@ -18,7 +18,11 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
-import static org.junit.Assert.*;
+import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -320,21 +324,22 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
                     + indexTableName + " on " + dataTableName + " (val1) " +
                     (uncovered ? "" : "INCLUDE (val2)"));
             String selectSql;
+            int limit = 10;
             if (!uncovered) {
                 // Verify that without an index hint, a covered index table is not selected
                 assertIndexTableNotSelected(conn, dataTableName, indexTableName,
                         "SELECT val3 from " + dataTableName +
-                                " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')");
+                                " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde') LIMIT 10");
                 // Verify that with index hint, we will read from the index table
                 // even though val3 is not included by the index table
                 selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ val2, val3 from "
-                        + dataTableName + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')";
-                assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+                        + dataTableName + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde') LIMIT " + limit;
+                assertExplainPlanWithLimit(conn, selectSql, dataTableName, indexTableName, limit);
             } else {
                 // Verify that an index hint is not necessary for an uncovered index
                 selectSql = "SELECT  val2, val3 from " + dataTableName
-                        + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')";
-                assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+                        + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde') LIMIT " + limit;
+                assertExplainPlanWithLimit(conn, selectSql, dataTableName, indexTableName, limit);
             }
 
             ResultSet rs = conn.createStatement().executeQuery(selectSql);

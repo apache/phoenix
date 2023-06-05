@@ -65,6 +65,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
@@ -173,7 +174,8 @@ public class PhoenixTxIndexMutationGenerator {
         if (!findPriorValueMutations.isEmpty()) {
             List<KeyRange> keys = Lists.newArrayListWithExpectedSize(mutations.size());
             for (ImmutableBytesPtr ptr : findPriorValueMutations.keySet()) {
-                keys.add(PVarbinary.INSTANCE.getKeyRange(ptr.copyBytesIfNecessary()));
+                keys.add(
+                    PVarbinary.INSTANCE.getKeyRange(ptr.copyBytesIfNecessary(), SortOrder.ASC));
             }
             Scan scan = new Scan();
             // Project all mutable columns

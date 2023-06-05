@@ -28,6 +28,7 @@ import static org.apache.phoenix.mapreduce.index.IndexVerificationResultReposito
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.AbstractMap;
@@ -598,18 +599,24 @@ public class IndexTool extends Configured implements Tool {
         }
         
         private long getMaxRebuildAsyncDate(String schemaName, List<String> disableIndexes) throws SQLException {
-            Long maxRebuilAsyncDate=HConstants.LATEST_TIMESTAMP;
-            Long maxDisabledTimeStamp=0L;
-            if (disableIndexes == null || disableIndexes.isEmpty()) { return 0; }
-            List<String> quotedIndexes = new ArrayList<String>(disableIndexes.size());
-            for (String index : disableIndexes) {
-                quotedIndexes.add("'" + index + "'");
+            Long maxRebuilAsyncDate = HConstants.LATEST_TIMESTAMP;
+            Long maxDisabledTimeStamp = 0L;
+            if (disableIndexes == null || disableIndexes.isEmpty()) {
+                return 0;
             }
-            try (ResultSet rs = connection.createStatement()
-                    .executeQuery("SELECT MAX(" + ASYNC_REBUILD_TIMESTAMP + "),MAX("+INDEX_DISABLE_TIMESTAMP+") FROM " + SYSTEM_CATALOG_NAME + " ("
-                            + ASYNC_REBUILD_TIMESTAMP + " BIGINT) WHERE " + TABLE_SCHEM
-                            + (schemaName != null && schemaName.length() > 0 ? "='" + schemaName + "'" : " IS NULL")
-                            + " and " + TABLE_NAME + " IN (" + StringUtils.join(",", quotedIndexes) + ")")) {
+            String query = String.format("SELECT MAX(" + ASYNC_REBUILD_TIMESTAMP + "), "
+                    + "MAX(" + INDEX_DISABLE_TIMESTAMP + ") FROM "
+                    + SYSTEM_CATALOG_NAME + " (" + ASYNC_REBUILD_TIMESTAMP
+                    + " BIGINT) WHERE " + TABLE_SCHEM +  " %s  AND " + TABLE_NAME + " IN ( %s )",
+                        (schemaName != null && schemaName.length() > 0) ? " = ? " : " IS NULL ",
+                QueryUtil.generateInListParams(disableIndexes.size()));
+            try (PreparedStatement selSyscat = connection.prepareStatement(query)) {
+                int param = 0;
+                if (schemaName != null && schemaName.length() > 0) {
+                    selSyscat.setString(++param, schemaName);
+                }
+                QueryUtil.setQuoteInListElements(selSyscat, disableIndexes, param);
+                ResultSet rs = selSyscat.executeQuery();
                 if (rs.next()) {
                     maxRebuilAsyncDate = rs.getLong(1);
                     maxDisabledTimeStamp = rs.getLong(2);
@@ -619,7 +626,7 @@ public class IndexTool extends Configured implements Tool {
                     return maxRebuilAsyncDate;
                 } else {
                     throw new RuntimeException(
-                            "Inconsistent state we have one or more index tables which are disabled after the async is called!!");
+                        "Inconsistent state we have one or more index tables which are disabled after the async is called!!");
                 }
             }
         }
@@ -716,13 +723,13 @@ public class IndexTool extends Configured implements Tool {
                     Long.toString(indexRebuildClientScannerTimeOutMs));
             configuration.set(HConstants.HBASE_RPC_TIMEOUT_KEY,
                     Long.toString(indexRebuildRPCTimeoutMs));
-            configuration.set(HConstants.HBASE_RPC_READ_TIMEOUT_KEY,
-                    Long.toString(indexRebuildRPCTimeoutMs));
-            configuration.set(HConstants.HBASE_RPC_WRITE_TIMEOUT_KEY,
-                    Long.toString(indexRebuildRPCTimeoutMs));
             configuration.set(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
                     Long.toString(indexRebuildRpcRetriesCounter));
             configuration.set("mapreduce.task.timeout", Long.toString(indexRebuildQueryTimeoutMs));
+
+            // Randomize execution order, unless explicitly set
+            configuration.setBooleanIfUnset(
+                PhoenixConfigurationUtil.MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER, true);
 
             PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, dataTableWithSchema);
             PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);

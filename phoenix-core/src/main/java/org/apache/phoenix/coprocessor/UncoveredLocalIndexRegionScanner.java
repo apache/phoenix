@@ -57,9 +57,10 @@ public class UncoveredLocalIndexRegionScanner extends UncoveredIndexRegionScanne
                                             final ImmutableBytesWritable ptr,
                                             final long pageSizeMs,
                                             final int offset,
-                                            final byte[] actualStartKey) {
+                                            final byte[] actualStartKey,
+                                            final long queryLimit) {
         super(innerScanner, region, scan, env, dataTableScan, tupleProjector, indexMaintainer,
-                viewConstants, ptr, pageSizeMs);
+                viewConstants, ptr, pageSizeMs, queryLimit);
         this.offset = offset;
         this.actualStartKey = actualStartKey;
     }

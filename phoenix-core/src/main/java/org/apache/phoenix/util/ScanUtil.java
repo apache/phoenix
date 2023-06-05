@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -41,13 +42,15 @@ import java.util.TreeMap;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptor;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
-import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
+import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -69,7 +72,7 @@ import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
-import org.apache.phoenix.filter.PagedFilter;
+import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
@@ -93,7 +96,6 @@ import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueSchema.Field;
-import org.apache.phoenix.schema.tool.SchemaExtractionProcessor;
 import org.apache.phoenix.schema.transform.SystemTransformRecord;
 import org.apache.phoenix.schema.transform.Transform;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
@@ -617,7 +619,7 @@ public class ScanUtil {
     public static ScanRanges newScanRanges(List<? extends Mutation> mutations) throws SQLException {
         List<KeyRange> keys = Lists.newArrayListWithExpectedSize(mutations.size());
         for (Mutation m : mutations) {
-            keys.add(PVarbinary.INSTANCE.getKeyRange(m.getRow()));
+            keys.add(PVarbinary.INSTANCE.getKeyRange(m.getRow(), SortOrder.ASC));
         }
         ScanRanges keyRanges = ScanRanges.createPointLookup(keys);
         return keyRanges;
@@ -791,8 +793,8 @@ public class ScanUtil {
         if (filter == null) {
             return;
         }
-        if (filter instanceof PagedFilter) {
-            filter = ((PagedFilter) filter).getDelegateFilter();
+        if (filter instanceof PagingFilter) {
+            filter = ((PagingFilter) filter).getDelegateFilter();
             if (filter == null) {
                 return;
             }
@@ -1045,10 +1047,8 @@ public class ScanUtil {
     }
 
     public static boolean isEmptyColumn(Cell cell, byte[] emptyCF, byte[] emptyCQ) {
-        return Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(),
-                cell.getFamilyLength(), emptyCF, 0, emptyCF.length) == 0 &&
-                Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
-                        cell.getQualifierLength(), emptyCQ, 0, emptyCQ.length) == 0;
+        return CellUtil.matchingFamily(cell, emptyCF, 0, emptyCF.length) &&
+               CellUtil.matchingQualifier(cell, emptyCQ, 0, emptyCQ.length);
     }
 
     public static long getMaxTimestamp(List<Cell> cellList) {
@@ -1071,77 +1071,71 @@ public class ScanUtil {
         return ts + ttl < nowTS;
     }
 
-    private static boolean containsOneOrMoreColumn(Scan scan) {
+    /**
+     * This determines if we need to add the empty column to the scan. The empty column is
+     * added only when the scan includes another column family but not the empty column family or
+     * the empty column family includes at least one column.
+     */
+    private static boolean shouldAddEmptyColumn(Scan scan, byte[] emptyCF) {
         Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
         if (familyMap == null || familyMap.isEmpty()) {
+            // This means that scan includes all columns. Nothing more to do.
             return false;
         }
         for (Map.Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
-            NavigableSet<byte[]> family = entry.getValue();
-            if (family != null && !family.isEmpty()) {
-                return true;
+            byte[] cf = entry.getKey();
+            if (java.util.Arrays.equals(cf, emptyCF)) {
+                NavigableSet<byte[]> family = entry.getValue();
+                if (family != null && !family.isEmpty()) {
+                    // Found the empty column family, and it is not empty. The empty column
+                    // may be already included but no need to check as adding a new one will replace
+                    // the old one
+                    return true;
+                }
+                return false;
             }
         }
-        return false;
+        // The colum family is not found and there is another column family in the scan. In this
+        // we need to add the empty column
+        return true;
     }
 
-    private static boolean addEmptyColumnToFilter(Scan scan, byte[] emptyCF, byte[] emptyCQ, Filter filter,  boolean addedEmptyColumn) {
+    private static void addEmptyColumnToFilter(Filter filter, byte[] emptyCF, byte[] emptyCQ) {
         if (filter instanceof EncodedQualifiersColumnProjectionFilter) {
-            ((EncodedQualifiersColumnProjectionFilter) filter).addTrackedColumn(ENCODED_EMPTY_COLUMN_NAME);
-            if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
-                scan.addColumn(emptyCF, emptyCQ);
-                return true;
-            }
+            ((EncodedQualifiersColumnProjectionFilter) filter).
+                    addTrackedColumn(ENCODED_EMPTY_COLUMN_NAME);
+        } else if (filter instanceof ColumnProjectionFilter) {
+            ((ColumnProjectionFilter) filter).addTrackedColumn(new ImmutableBytesPtr(emptyCF),
+                    new ImmutableBytesPtr(emptyCQ));
+        } else if (filter instanceof MultiEncodedCQKeyValueComparisonFilter) {
+            ((MultiEncodedCQKeyValueComparisonFilter) filter).
+                    setMinQualifier(ENCODED_EMPTY_COLUMN_NAME);
         }
-        else if (filter instanceof ColumnProjectionFilter) {
-            ((ColumnProjectionFilter) filter).addTrackedColumn(new ImmutableBytesPtr(emptyCF), new ImmutableBytesPtr(emptyCQ));
-            if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
-                scan.addColumn(emptyCF, emptyCQ);
-                return true;
-            }
-        }
-        else if (filter instanceof MultiEncodedCQKeyValueComparisonFilter) {
-            ((MultiEncodedCQKeyValueComparisonFilter) filter).setMinQualifier(ENCODED_EMPTY_COLUMN_NAME);
-        }
-        else if (!addedEmptyColumn && filter instanceof FirstKeyOnlyFilter) {
-            scan.addColumn(emptyCF, emptyCQ);
-            return true;
-        }
-        return addedEmptyColumn;
     }
 
-    private static boolean addEmptyColumnToFilterList(Scan scan, byte[] emptyCF, byte[] emptyCQ, FilterList filterList, boolean addedEmptyColumn) {
+    private static void addEmptyColumnToFilterList(FilterList filterList,
+            byte[] emptyCF, byte[] emptyCQ) {
         Iterator<Filter> filterIterator = filterList.getFilters().iterator();
         while (filterIterator.hasNext()) {
             Filter filter = filterIterator.next();
             if (filter instanceof FilterList) {
-                if (addEmptyColumnToFilterList(scan, emptyCF, emptyCQ, (FilterList) filter, addedEmptyColumn)) {
-                    addedEmptyColumn =  true;
-                }
+                addEmptyColumnToFilterList((FilterList) filter, emptyCF, emptyCQ);
             } else {
-                if (addEmptyColumnToFilter(scan, emptyCF, emptyCQ, filter, addedEmptyColumn)) {
-                    addedEmptyColumn =  true;
-                }
+                addEmptyColumnToFilter(filter, emptyCF, emptyCQ);
             }
         }
-        return addedEmptyColumn;
     }
 
     public static void addEmptyColumnToScan(Scan scan, byte[] emptyCF, byte[] emptyCQ) {
-        boolean addedEmptyColumn = false;
         Filter filter = scan.getFilter();
         if (filter != null) {
             if (filter instanceof FilterList) {
-                if (addEmptyColumnToFilterList(scan, emptyCF, emptyCQ, (FilterList) filter, addedEmptyColumn)) {
-                    addedEmptyColumn = true;
-                }
+                addEmptyColumnToFilterList((FilterList) filter, emptyCF, emptyCQ);
             } else {
-                if (addEmptyColumnToFilter(scan, emptyCF, emptyCQ, filter, addedEmptyColumn)) {
-                    addedEmptyColumn = true;
-                }
+                addEmptyColumnToFilter(filter, emptyCF, emptyCQ);
             }
         }
-        if (!addedEmptyColumn && containsOneOrMoreColumn(scan)) {
+        if (shouldAddEmptyColumn(scan, emptyCF)) {
             scan.addColumn(emptyCF, emptyCQ);
         }
     }
@@ -1228,7 +1222,9 @@ public class ScanUtil {
                 scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
             }
             if (IndexUtil.isCoveredGlobalIndex(indexTable)) {
-                scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
+                if (!isIndexRebuild(scan)) {
+                    scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
+                }
             } else {
                 scan.setAttribute(BaseScannerRegionObserver.UNCOVERED_GLOBAL_INDEX, TRUE_BYTES);
             }
@@ -1241,7 +1237,6 @@ public class ScanUtil {
             if (scan.getAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS) == null) {
                 BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
             }
-            addEmptyColumnToScan(scan, emptyCF, emptyCQ);
         }
     }
 
@@ -1308,32 +1303,6 @@ public class ScanUtil {
         }
     }
 
-    public static Long getRPCReadTimeout(ReadOnlyProps props) {
-        if (props.get(HConstants.HBASE_RPC_READ_TIMEOUT_KEY) != null) {
-            return props.getLong(HConstants.HBASE_RPC_READ_TIMEOUT_KEY,
-                    HConstants.DEFAULT_HBASE_RPC_TIMEOUT);
-        } else {
-            return props.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY,
-                    HConstants.DEFAULT_HBASE_RPC_TIMEOUT);
-        }
-    }
-
-    public static Long getPageSizeInMs(ReadOnlyProps props) {
-        if (props.getBoolean(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB,
-                QueryServicesOptions.DEFAULT_PHOENIX_SERVER_PAGING_ENABLED)) {
-            long pageSizeMs = props.getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
-            if (pageSizeMs == -1) {
-                // Use the half of the HBase RPC read timeout value as the server page size to
-                // make sure that the HBase region server will be able to send a heartbeat
-                // message to the client before the client times out
-                return getRPCReadTimeout(props) / 2;
-            } else {
-                return pageSizeMs;
-            }
-        }
-        return null;
-    }
-
     private static void setScanAtrributesForChildLinkRepair(Scan scan, PTable table, PhoenixConnection phoenixConnection) {
         if (table.getName().getString().equals(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME)) {
             scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
@@ -1354,12 +1323,29 @@ public class ScanUtil {
         byte[] emptyCQ = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME);
         if (emptyCF != null && emptyCQ != null) {
             addEmptyColumnToScan(scan, emptyCF, emptyCQ);
+        } else if (!isAnalyzeTable(scan)) {
+            emptyCF = SchemaUtil.getEmptyColumnFamily(table);
+            emptyCQ = table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
+                    QueryConstants.EMPTY_COLUMN_BYTES :
+                    table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
+            addEmptyColumnToScan(scan, emptyCF, emptyCQ);
         }
-        Long pageSizeMs = getPageSizeInMs(phoenixConnection.getQueryServices().getProps());
-        if (pageSizeMs != null) {
-            scan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS,
-                    Bytes.toBytes(pageSizeMs));
+        if (phoenixConnection.getQueryServices().getProps().getBoolean(
+                QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB,
+                QueryServicesOptions.DEFAULT_PHOENIX_SERVER_PAGING_ENABLED)) {
+            long pageSizeMs = phoenixConnection.getQueryServices().getProps()
+                    .getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
+            if (pageSizeMs == -1) {
+                // Use the half of the HBase RPC timeout value as the the server page size to make sure that the HBase
+                // region server will be able to send a heartbeat message to the client before the client times out
+                pageSizeMs = (long) (phoenixConnection.getQueryServices().getProps()
+                        .getLong(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT) * 0.5);
+            }
+            scan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS, Bytes.toBytes(Long.valueOf(pageSizeMs)));
         }
+
     }
 
     public static void getDummyResult(byte[] rowKey, List<Cell> result) {
@@ -1419,10 +1405,10 @@ public class ScanUtil {
         return false;
     }
 
-    public static PagedFilter getPhoenixPagedFilter(Scan scan) {
+    public static PagingFilter getPhoenixPagingFilter(Scan scan) {
         Filter filter = scan.getFilter();
-        if (filter != null && filter instanceof PagedFilter) {
-            PagedFilter pageFilter = (PagedFilter) filter;
+        if (filter != null && filter instanceof PagingFilter) {
+            PagingFilter pageFilter = (PagingFilter) filter;
             return pageFilter;
         }
         return null;
@@ -1430,12 +1416,13 @@ public class ScanUtil {
 
     /**
      *
-     * The server page size expressed in ms is the maximum time we want the Phoenix server code to spend
-     * for each iteration of ResultScanner. For each ResultScanner#next() can be translated into one or more
-     * HBase RegionScanner#next() calls by a Phoenix RegionScanner object in a loop. To ensure that the total
-     * time spent by the Phoenix server code will not exceed the configured page size value, SERVER_PAGE_SIZE_MS,
-     * the loop time in a Phoenix region scanner is limited by 0.6 * SERVER_PAGE_SIZE_MS and
-     * each HBase RegionScanner#next() time which is controlled by PagedFilter is set to 0.3 * SERVER_PAGE_SIZE_MS.
+     * The server page size expressed in ms is the maximum time we want the Phoenix server code to
+     * spend for each iteration of ResultScanner. For each ResultScanner#next() can be translated
+     * into one or more HBase RegionScanner#next() calls by a Phoenix RegionScanner object in
+     * a loop. To ensure that the total time spent by the Phoenix server code will not exceed
+     * the configured page size value, SERVER_PAGE_SIZE_MS, the loop time in a Phoenix region
+     * scanner is limited by 0.6 * SERVER_PAGE_SIZE_MS and each HBase RegionScanner#next() time
+     * which is controlled by PagingFilter is set to 0.3 * SERVER_PAGE_SIZE_MS.
      *
      */
     private static long getPageSizeMs(Scan scan, double factor) {
@@ -1464,11 +1451,73 @@ public class ScanUtil {
      * @param scan Scan to trigger the server-side coproc
      */
     public static void setWALAnnotationAttributes(PTable table, Scan scan) {
+        if (table.getTenantId() != null) {
+            scan.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(),
+                    table.getTenantId().getBytes());
+        }
+        scan.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
+                table.getSchemaName().getBytes());
+        scan.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
+                table.getTableName().getBytes());
+        scan.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(),
+                table.getType().getValue().getBytes());
+        if (table.getLastDDLTimestamp() != null) {
+            scan.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(),
+                    Bytes.toBytes(table.getLastDDLTimestamp()));
+        }
+
         if (table.isChangeDetectionEnabled()) {
             if (table.getExternalSchemaId() != null) {
                 scan.setAttribute(MutationState.MutationMetadataType.EXTERNAL_SCHEMA_ID.toString(),
                     Bytes.toBytes(table.getExternalSchemaId()));
             }
         }
+    }
+    public static PageFilter removePageFilterFromFilterList(FilterList filterList) {
+        Iterator<Filter> filterIterator = filterList.getFilters().iterator();
+        while (filterIterator.hasNext()) {
+            Filter filter = filterIterator.next();
+            if (filter instanceof PageFilter) {
+                filterIterator.remove();
+                return (PageFilter) filter;
+            } else if (filter instanceof FilterList) {
+                PageFilter pageFilter = removePageFilterFromFilterList((FilterList) filter);
+                if (pageFilter != null) {
+                    return pageFilter;
+                }
+            }
+        }
+        return null;
+    }
+
+    // This method assumes that there is at most one instance of PageFilter in a scan
+    public static PageFilter removePageFilter(Scan scan) {
+        Filter filter = scan.getFilter();
+        if (filter != null) {
+            if (filter instanceof PagingFilter) {
+                filter = ((PagingFilter) filter).getDelegateFilter();
+                if (filter == null) {
+                    return null;
+                }
+            }
+            if (filter instanceof PageFilter) {
+                scan.setFilter(null);
+                return (PageFilter) filter;
+            } else if (filter instanceof FilterList) {
+                return removePageFilterFromFilterList((FilterList) filter);
+            }
+        }
+        return null;
+    }
+    public static boolean hasCoprocessor(RegionCoprocessorEnvironment env,
+            String CoprocessorClassName) {
+        Collection<CoprocessorDescriptor> coprocessors =
+                env.getRegion().getTableDescriptor().getCoprocessorDescriptors();
+        for (CoprocessorDescriptor coprocessor:  coprocessors) {
+            if (coprocessor.getClassName().equals(CoprocessorClassName)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
