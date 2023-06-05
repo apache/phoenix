@@ -2227,7 +2227,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 childLinkMutations.add(delete);
             }
             else {
-                Put put = new Put(m.getRow());
+                Put put = isVerified ? new Put(m.getRow()) : (Put)m;
                 byte[] emptyColumnValue = isVerified ? VERIFIED_BYTES : UNVERIFIED_BYTES;
                 put.addColumn(emptyCF, emptyCQ, IndexUtil.getMaxTimestamp(m), emptyColumnValue);
                 childLinkMutations.add(put);
