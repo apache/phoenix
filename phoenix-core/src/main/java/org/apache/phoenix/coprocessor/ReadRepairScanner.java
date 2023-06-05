@@ -21,20 +21,17 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.filter.Filter;
-import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.filter.PagedFilter;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.List;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME;
@@ -148,7 +145,7 @@ public abstract class ReadRepairScanner extends BaseRegionScanner {
         else {
             try {
                 if (!isPageFilterRemoved) {
-                    PageFilter pageFilter = removePageFilter(scan);
+                    PageFilter pageFilter = ScanUtil.removePageFilter(scan);
                     if (pageFilter != null) {
                         pageSize = pageFilter.getPageSize();
                         restartScanDueToPageFilterRemoval = true;
@@ -166,43 +163,6 @@ public abstract class ReadRepairScanner extends BaseRegionScanner {
             }
             return true;
         }
-    }
-
-    private PageFilter removePageFilterFromFilterList(FilterList filterList) {
-        Iterator<Filter> filterIterator = filterList.getFilters().iterator();
-        while (filterIterator.hasNext()) {
-            Filter filter = filterIterator.next();
-            if (filter instanceof PageFilter) {
-                filterIterator.remove();
-                return (PageFilter) filter;
-            } else if (filter instanceof FilterList) {
-                PageFilter pageFilter = removePageFilterFromFilterList((FilterList) filter);
-                if (pageFilter != null) {
-                    return pageFilter;
-                }
-            }
-        }
-        return null;
-    }
-
-    // This method assumes that there is at most one instance of PageFilter in a scan
-    private PageFilter removePageFilter(Scan scan) {
-        Filter filter = scan.getFilter();
-        if (filter != null) {
-            if (filter instanceof PagedFilter) {
-                filter = ((PagedFilter) filter).getDelegateFilter();
-                if (filter == null) {
-                    return null;
-                }
-            }
-            if (filter instanceof PageFilter) {
-                scan.setFilter(null);
-                return (PageFilter) filter;
-            } else if (filter instanceof FilterList) {
-                return removePageFilterFromFilterList((FilterList) filter);
-            }
-        }
-        return null;
     }
 
     public boolean isEmptyColumn(Cell cell) {
