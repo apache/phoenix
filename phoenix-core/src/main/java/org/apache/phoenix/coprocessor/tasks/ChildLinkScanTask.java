@@ -11,7 +11,8 @@ import org.slf4j.LoggerFactory;
 import java.sql.ResultSet;
 
 /*
-Task to run a simple select * query on SYSTEM.CHILD_LINK table to trigger read repair and verify any unverified rows.
+Task to run a simple select * query on SYSTEM.CHILD_LINK table
+to trigger read repair and verify any unverified rows.
  */
 public class ChildLinkScanTask extends BaseTask {
 
@@ -28,25 +29,30 @@ public class ChildLinkScanTask extends BaseTask {
     public TaskRegionObserver.TaskResult run(Task.TaskRecord taskRecord) {
 
         if (isDisabled) {
-            return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.FAIL, "ChildLinkScan task is disabled.");
+            return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.FAIL,
+                    "ChildLinkScan task is disabled.");
         }
 
         int count = 0;
         try {
-            PhoenixConnection pconn = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
+            PhoenixConnection pconn = QueryUtil.getConnectionOnServer(
+                    env.getConfiguration()).unwrap(PhoenixConnection.class);
             ResultSet rs = pconn.createStatement().executeQuery(CHILD_LINK_QUERY);
             rs.next();
             count = rs.getInt(1);
         }
         catch (Exception e) {
             LOGGER.error("Exception in Child Link Scan Task: " + e);
-            return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.FAIL, e.getMessage());
+            return new TaskRegionObserver.TaskResult(
+                    TaskRegionObserver.TaskResultCode.FAIL, e.getMessage());
         }
-        return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.SUCCESS, "Number of rows in SYSTEM.CHILD_LINK: " + count);
+        return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.SUCCESS,
+                                            "Number of rows in SYSTEM.CHILD_LINK: " + count);
     }
 
     @Override
-    public TaskRegionObserver.TaskResult checkCurrentResult(Task.TaskRecord taskRecord) throws Exception {
+    public TaskRegionObserver.TaskResult checkCurrentResult(Task.TaskRecord taskRecord)
+            throws Exception {
         return null;
     }
 }

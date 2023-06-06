@@ -154,7 +154,8 @@ public abstract class ReadRepairScanner extends BaseRegionScanner {
                 }
                 repairRow(cellList);
             } catch (IOException e) {
-                LOGGER.warn("Row Repair failure on region {}.", env.getRegionInfo().getRegionNameAsString());
+                LOGGER.warn("Row Repair failure on region {}.",
+                        env.getRegionInfo().getRegionNameAsString());
                 throw e;
             }
 
@@ -166,9 +167,11 @@ public abstract class ReadRepairScanner extends BaseRegionScanner {
     }
 
     public boolean isEmptyColumn(Cell cell) {
-        return Bytes.compareTo(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
+        return Bytes.compareTo(
+                cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(),
                 emptyCF, 0, emptyCF.length) == 0 &&
-                Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
-                        emptyCQ, 0, emptyCQ.length) == 0;
+                Bytes.compareTo(
+                    cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
+                    emptyCQ, 0, emptyCQ.length) == 0;
     }
 }

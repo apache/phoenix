@@ -401,7 +401,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_PHOENIX_TABLE_TTL_ENABLED = true;
 
 
-    public static final long DEFAULT_CHILD_LINK_ROW_AGE_THRESHOLD_TO_DELETE_MS = 1*60*60*1000; // 1 hour
+    public static final long DEFAULT_CHILD_LINK_ROW_AGE_THRESHOLD_TO_DELETE_MS = 1 * 60 * 60 * 1000; // 1 hour
 
     private final Configuration config;
 

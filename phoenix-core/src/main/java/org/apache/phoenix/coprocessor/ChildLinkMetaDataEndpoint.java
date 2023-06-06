@@ -79,9 +79,11 @@ import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions
  * The {@code parent->child } links ({@link org.apache.phoenix.schema.PTable.LinkType#CHILD_TABLE})
  * are stored in the SYSTEM.CHILD_LINK table.
  *
- * After PHOENIX-6141, this also serves as an observer coprocessor that verifies scanned rows of SYSTEM.CHILD_LINK table.
+ * After PHOENIX-6141, this also serves as an observer coprocessor
+ * that verifies scanned rows of SYSTEM.CHILD_LINK table.
  */
-public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implements RegionCoprocessor, RegionObserver {
+public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService
+        implements RegionCoprocessor, RegionObserver {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(ChildLinkMetaDataEndpoint.class);
     private RegionCoprocessorEnvironment env;
@@ -152,6 +154,7 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
         private Scan childLinkScan;
         private Scan sysCatViewHeaderRowScan;
         private Scan sysCatChildParentLinkScan;
+        private final String NULL_DELIMITER = "\0";
 
         public ChildLinkMetaDataScanner(RegionCoprocessorEnvironment env,
                                         Scan scan,
@@ -181,8 +184,10 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
             while (cellIterator.hasNext()) {
                 cell = cellIterator.next();
                 if (isEmptyColumn(cell)) {
-                    if (Bytes.compareTo(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
-                            VERIFIED_BYTES, 0, VERIFIED_BYTES.length) != 0) {
+                    if (Bytes.compareTo(
+                            cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(),
+                            VERIFIED_BYTES, 0, VERIFIED_BYTES.length) != 0
+                        ) {
                         return false;
                     }
                     // Empty column is not supposed to be returned to the client except
@@ -210,11 +215,13 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
 
             childLinkScan = new Scan(scan);
 
-            boolean isChildParentLinkPresent = isRowPresentInSysCat(sysCatChildParentLinkScan, getChildParentLinkSysCatRowKey(rowKey));
+            boolean isChildParentLinkPresent = isRowPresentInSysCat(sysCatChildParentLinkScan,
+                                                            getChildParentLinkSysCatRowKey(rowKey));
 
             boolean isViewHeaderRowPresent = false;
             if (isChildParentLinkPresent) {
-                isViewHeaderRowPresent = isRowPresentInSysCat(sysCatViewHeaderRowScan, getViewHeaderSysCatRowKey(rowKey));
+                isViewHeaderRowPresent = isRowPresentInSysCat(sysCatViewHeaderRowScan,
+                                                                getViewHeaderSysCatRowKey(rowKey));
             }
             // if row found, repair and verifyRowAndRemoveEmptyColumn
             if (isChildParentLinkPresent && isViewHeaderRowPresent) {
@@ -258,8 +265,8 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
         Construct row key for SYSTEM.CATALOG view header row from a given SYSTEM.CHILD_LINK row key
          */
         private byte[] getViewHeaderSysCatRowKey(byte[] childLinkRowKey) {
-            String NULL_DELIMITER = "\0";
-            String[] childLinkRowKeyCols = new String(childLinkRowKey, StandardCharsets.UTF_8).split(NULL_DELIMITER);
+            String[] childLinkRowKeyCols = new String(childLinkRowKey, StandardCharsets.UTF_8)
+                                                .split(NULL_DELIMITER);
             checkArgument(childLinkRowKeyCols.length == 5);
             String childTenantId = childLinkRowKeyCols[3];
             String childFullName = childLinkRowKeyCols[4];
@@ -277,8 +284,8 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
         SYSTEM.CHILD_LINK -> (PARENT_TENANT_ID, PARENT_SCHEMA, PARENT_TABLE, CHILD_TENANT_ID, CHILD_FULL_NAME)
          */
         private byte[] getChildParentLinkSysCatRowKey(byte[] childLinkRowKey) {
-            String NULL_DELIMITER = "\0";
-            String[] childLinkRowKeyCols = new String(childLinkRowKey, StandardCharsets.UTF_8).split(NULL_DELIMITER);
+            String[] childLinkRowKeyCols = new String(childLinkRowKey, StandardCharsets.UTF_8)
+                                                .split(NULL_DELIMITER);
             checkArgument(childLinkRowKeyCols.length == 5);
             String parentTenantId = childLinkRowKeyCols[0];
             String parentSchema = childLinkRowKeyCols[1];
@@ -290,7 +297,8 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
             String childSchema = SchemaUtil.getSchemaNameFromFullName(childFullName);
             String childTable = SchemaUtil.getTableNameFromFullName(childFullName);
 
-            String[] sysCatRowKeyCols = new String[] {childTenantId, childSchema, childTable, parentTenantId, parentFullName};
+            String[] sysCatRowKeyCols = new String[] {childTenantId, childSchema, childTable,
+                                                        parentTenantId, parentFullName};
             return String.join(NULL_DELIMITER, sysCatRowKeyCols).getBytes(StandardCharsets.UTF_8);
         }
 
@@ -314,8 +322,9 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
         private void setSysCatViewHeaderRowScan() {
             sysCatViewHeaderRowScan = new Scan();
             sysCatViewHeaderRowScan.addColumn(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
-            SingleColumnValueFilter tableTypeFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES,
-                    TABLE_TYPE_BYTES, CompareOperator.EQUAL, PTableType.VIEW.getSerializedValue().getBytes());
+            SingleColumnValueFilter tableTypeFilter = new SingleColumnValueFilter(
+                    TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES, CompareOperator.EQUAL,
+                    PTableType.VIEW.getSerializedValue().getBytes());
             sysCatViewHeaderRowScan.setFilter(tableTypeFilter);
         }
 
