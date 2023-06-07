@@ -272,7 +272,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         public String toString() {
             return toString;
         }
-    };
+    }
 
     protected final PhoenixConnection connection;
     private static final int NO_UPDATE = -1;
@@ -1044,8 +1044,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         ExecutableCreateTableStatement(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columnDefs,
                                        PrimaryKeyConstraint pkConstraint, List<ParseNode> splitNodes, PTableType tableType, boolean ifNotExists,
                                        TableName baseTableName, ParseNode tableTypeIdNode, int bindCount, Boolean immutableRows,
-                                       Map<String, Integer> familyCounters) {
-            super(tableName, props, columnDefs, pkConstraint, splitNodes, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows, familyCounters);
+                                       Map<String, Integer> familyCounters, boolean noVerify) {
+            super(tableName, props, columnDefs, pkConstraint, splitNodes, tableType, ifNotExists,
+                    baseTableName, tableTypeIdNode, bindCount, immutableRows, familyCounters,
+                    noVerify);
         }
 
         @SuppressWarnings("unchecked")
@@ -1817,14 +1819,36 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
 
         @Override
-        public CreateTableStatement createTable(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint, List<ParseNode> splits, PTableType tableType, boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode, int bindCount, Boolean immutableRows, Map<String, Integer> cqCounters) {
-            return new ExecutableCreateTableStatement(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows, cqCounters);
+        public CreateTableStatement createTable(TableName tableName,
+                ListMultimap<String, Pair<String, Object>> props, List<ColumnDef> columns,
+                PrimaryKeyConstraint pkConstraint, List<ParseNode> splits, PTableType tableType,
+                boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode,
+                int bindCount, Boolean immutableRows, Map<String, Integer> cqCounters,
+                boolean noVerify) {
+            return new ExecutableCreateTableStatement(tableName, props, columns, pkConstraint,
+                    splits, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount,
+                    immutableRows, cqCounters, noVerify);
         }
 
         @Override
-        public CreateTableStatement createTable(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint,
-                List<ParseNode> splits, PTableType tableType, boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode, int bindCount, Boolean immutableRows) {
-            return new ExecutableCreateTableStatement(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows, null);
+        public CreateTableStatement createTable(TableName tableName,
+                ListMultimap<String, Pair<String, Object>> props, List<ColumnDef> columns,
+                PrimaryKeyConstraint pkConstraint, List<ParseNode> splits, PTableType tableType,
+                boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode,
+                int bindCount, Boolean immutableRows, Map<String, Integer> cqCounters) {
+            return createTable(tableName, props, columns, pkConstraint, splits, tableType,
+                    ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows,
+                    cqCounters, false);
+        }
+
+        @Override
+        public CreateTableStatement createTable(TableName tableName,
+                ListMultimap<String, Pair<String, Object>> props, List<ColumnDef> columns,
+                PrimaryKeyConstraint pkConstraint, List<ParseNode> splits, PTableType tableType,
+                boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode,
+                int bindCount, Boolean immutableRows) {
+            return createTable(tableName, props, columns, pkConstraint, splits, tableType,
+                    ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows, null);
         }
 
         @Override

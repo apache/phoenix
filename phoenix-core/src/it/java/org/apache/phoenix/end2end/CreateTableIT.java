@@ -41,19 +41,28 @@ import java.util.Properties;
 import java.util.UUID;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Row;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.BloomType;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.index.IndexUpgradeTool;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -67,6 +76,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -1608,6 +1618,84 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
             // We should also test for setting / unsetting the transactional status, but both are
             // forbidden at the time of writing.
+        }
+    }
+
+    @Test
+    public void testCreateTableWithNoVerify() throws SQLException, IOException, InterruptedException {
+        final String tableName = SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
+        final byte[] tableBytes = tableName.getBytes();
+        final byte[] familyName = Bytes.toBytes(SchemaUtil.normalizeIdentifier("0"));
+        final byte[][] splits = new byte[][] {Bytes.toBytes(20), Bytes.toBytes(30)};
+
+        try (Admin admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin()) {
+            admin.createTable(TableDescriptorBuilder.newBuilder(TableName.valueOf(tableBytes))
+                    .addColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(familyName)
+                            .setKeepDeletedCells(KeepDeletedCells.TRUE).build())
+                    .build(), splits);
+        }
+
+        final byte[] uintCol = Bytes.toBytes("UINT_COL");
+        final byte[] ulongCol = Bytes.toBytes("ULONG_COL");
+        final byte[] key_1 = ByteUtil.concat(Bytes.toBytes(20), Bytes.toBytes(200L), Bytes.toBytes("b"));
+        final byte[] key_2 = ByteUtil.concat(Bytes.toBytes(40), Bytes.toBytes(400L), Bytes.toBytes("d"));
+        final byte[] emptyColumnQualifier = Bytes.toBytes("_0");
+
+        ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        try (Table hTable = services.getTable(tableBytes)) {
+            // Insert rows using standard HBase mechanism with standard HBase "types"
+            List<Row> mutations = new ArrayList<>();
+
+            Put put = new Put(key_1);
+            put.addColumn(familyName, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(5000));
+            put.addColumn(familyName, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(50000L));
+            mutations.add(put);
+
+            put = new Put(key_2);
+            put.addColumn(familyName, uintCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(4000));
+            put.addColumn(familyName, ulongCol, HConstants.LATEST_TIMESTAMP, Bytes.toBytes(40000L));
+            mutations.add(put);
+
+            hTable.batch(mutations, null);
+
+            Result result = hTable.get(new Get(key_1));
+            assertFalse(result.isEmpty());
+
+            result = hTable.get(new Get(key_2));
+            assertFalse(result.isEmpty());
+        }
+
+        String ddl = "create table " + tableName +
+                "   (uint_key unsigned_int not null," +
+                "    ulong_key unsigned_long not null," +
+                "    string_key varchar not null,\n" +
+                "    uint_col unsigned_int," +
+                "    ulong_col unsigned_long" +
+                "    CONSTRAINT pk PRIMARY KEY (uint_key, ulong_key, string_key)) noverify COLUMN_ENCODED_BYTES=NONE";
+
+        try (Connection conn = DriverManager.getConnection(url)) {
+            conn.createStatement().execute(ddl);
+        }
+
+        try (Table hTable = services.getTable(tableBytes)) {
+            Result result = hTable.get(new Get(key_1));
+
+            byte[] value = result.getValue(familyName, uintCol);
+            assertEquals(5000, Bytes.toInt(value));
+            value = result.getValue(familyName, ulongCol);
+            assertEquals(50000L, Bytes.toLong(value));
+
+            value = result.getValue(familyName, emptyColumnQualifier);
+            assertNull(value);
+
+            result = hTable.get(new Get(key_2));
+            value = result.getValue(familyName, uintCol);
+            assertEquals(4000, Bytes.toInt(value));
+            value = result.getValue(familyName, ulongCol);
+            assertEquals(40000L, Bytes.toLong(value));
+
+            value = result.getValue(familyName, emptyColumnQualifier);
+            assertNull(value);
         }
     }
 
