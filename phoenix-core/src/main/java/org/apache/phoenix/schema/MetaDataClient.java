@@ -290,7 +290,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Ints;
 
-import edu.umd.cs.findbugs.annotations.SuppressWarnings;
 
 public class MetaDataClient {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataClient.class);
@@ -1022,7 +1021,8 @@ public class MetaDataClient {
         }
         table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexIdType, viewColumnConstants, isViewColumnReferenced, false, null, null, tableProps, commonFamilyProps);
 
-        if (table == null || table.getType() == PTableType.VIEW /*|| table.isTransactional()*/) {
+        if (table == null || table.getType() == PTableType.VIEW
+                || statement.isNoVerify() /*|| table.isTransactional()*/) {
             return new MutationState(0, 0, connection);
         }
         // Hack to get around the case when an SCN is specified on the connection.
