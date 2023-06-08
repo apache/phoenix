@@ -356,7 +356,7 @@ public class DeleteCompiler {
     }
 
     /**
-     * MultiRowDeleteMutationPlan is selected if there is no index presented for a table
+     * Implementation of MutationPlan that is selected if there is no index presented for a table
      * and no LIMIT clause in the DELETE statement.
      */
     public class MultiRowDeleteMutationPlan implements MutationPlan {
@@ -670,7 +670,7 @@ public class DeleteCompiler {
     }
 
     /**
-     * Implementation of MutationPlan that is used for composing a MultiRowDeleteMutationPlan.
+     * Implementation of MutationPlan for composing a MultiRowDeleteMutationPlan.
      */
     private class SingleRowDeleteMutationPlan implements MutationPlan {
 
@@ -756,8 +756,12 @@ public class DeleteCompiler {
     }
 
     /**
-     * ServerSelectDeleteMutationPlan is selected for a DELETE statement without WHERE clause or a LIMIT clause
-     * if there is index presented for the table.
+     * Implementation of MutationPlan that is selected if
+     * 1) there are mutable indexes presented for the table,
+     * 2) auto commit is on,
+     * 3) the table is not transactional,
+     * 4) there is no WHERE clause, and
+     * 5) no LIMIT clause in the DELETE statement.
      */
     public class ServerSelectDeleteMutationPlan implements MutationPlan {
         private final StatementContext context;
@@ -884,8 +888,8 @@ public class DeleteCompiler {
     }
 
     /**
-     * Implementation of MutationPlan that is selected for a DELETE statement with WHERE clause or a LIMIT clause
-     * if there is index presented for the table.
+     * Implementation of MutationPlan that is selected if there are immutable indexes presented
+     * for the table, and does not meet the constraints of ServerSelectDeleteMutationPlan.
      */
     public class ClientSelectDeleteMutationPlan implements MutationPlan {
         private final StatementContext context;
