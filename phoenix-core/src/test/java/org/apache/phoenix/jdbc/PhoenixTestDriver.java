@@ -19,6 +19,8 @@ package org.apache.phoenix.jdbc;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -32,8 +34,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesTestImpl;
 import org.apache.phoenix.util.ReadOnlyProps;
 
-
-
 /**
  * 
  * JDBC Driver implementation of Phoenix for testing.
@@ -44,16 +44,17 @@ import org.apache.phoenix.util.ReadOnlyProps;
  */
 @ThreadSafe
 public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
-    
     @GuardedBy("this")
-    private ConnectionQueryServices connectionQueryServices;
     private final ReadOnlyProps overrideProps;
-    
+
     @GuardedBy("this")
     private final QueryServices queryServices;
     
     @GuardedBy("this")
     private boolean closed = false;
+    private final Map<ConnectionInfo, ConnectionQueryServices> connectionQueryServicesCache =
+            new HashMap<>();
+
 
     public PhoenixTestDriver() {
         this(ReadOnlyProps.EMPTY_PROPS);
@@ -82,27 +83,35 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         checkClosed();
         return super.connect(url, info);
     }
-    
+
     @Override // public for testing
-    public synchronized ConnectionQueryServices getConnectionQueryServices(String url, Properties info) throws SQLException {
+    public synchronized ConnectionQueryServices getConnectionQueryServices(String url, Properties info)
+            throws SQLException {
         checkClosed();
-        if (connectionQueryServices != null) { return connectionQueryServices; }
         ConnectionInfo connInfo = ConnectionInfo.create(url);
-        if (connInfo.isConnectionless()) {
-            connectionQueryServices = new ConnectionlessQueryServicesImpl(queryServices, connInfo, info);
+        final QueryServices services = getQueryServices();
+        ConnectionQueryServices connectionQueryServices;
+        final ConnectionInfo normalizedConnInfo = connInfo.normalize(services.getProps(), info);
+        connectionQueryServices = connectionQueryServicesCache.get(connInfo);
+        if (connectionQueryServices != null) {
+            return connectionQueryServices;
+        }
+        if (normalizedConnInfo.isConnectionless()) {
+            connectionQueryServices = new ConnectionlessQueryServicesImpl(services, normalizedConnInfo, info);
         } else {
-            connectionQueryServices = new ConnectionQueryServicesTestImpl(queryServices, connInfo, info);
+            connectionQueryServices = new ConnectionQueryServicesTestImpl(services, normalizedConnInfo, info);
         }
         connectionQueryServices.init(url, info);
+        connectionQueryServicesCache.put(connInfo, connectionQueryServices);
         return connectionQueryServices;
     }
-    
+
     private synchronized void checkClosed() {
         if (closed) {
             throw new IllegalStateException("The Phoenix jdbc test driver has been closed.");
         }
     }
-    
+
     @Override
     public synchronized void close() throws SQLException {
         if (closed) {
@@ -110,14 +119,16 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         }
         closed = true;
         try {
-            if (connectionQueryServices != null) connectionQueryServices.close();
+            for (ConnectionQueryServices connectionQueryServices: connectionQueryServicesCache.values()) {
+                connectionQueryServices.close();
+            }
         } finally {
             ThreadPoolExecutor executor = queryServices.getExecutor();
             try {
                 queryServices.close();
             } finally {
                 if (executor != null) executor.shutdownNow();
-                connectionQueryServices = null;
+                connectionQueryServicesCache.clear();
             }
         }
     }

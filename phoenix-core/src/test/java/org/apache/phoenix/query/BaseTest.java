@@ -557,7 +557,7 @@ public abstract class BaseTest {
     }
 
     protected static String getLocalClusterUrl(HBaseTestingUtility util) throws Exception {
-        String url = QueryUtil.getConnectionUrl(new Properties(), util.getConfiguration());
+        String url = QueryUtil.getConnectionUrl(new Properties(), util.getConfiguration(), "test-profile");
         return url + PHOENIX_TEST_DRIVER_URL_PARAM;
     }
     
