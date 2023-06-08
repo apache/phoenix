@@ -354,7 +354,11 @@ public class DeleteCompiler {
         }
         return Collections.emptyList();
     }
-    
+
+    /**
+     * MultiRowDeleteMutationPlan is selected if there is no index presented for a table
+     * and no LIMIT clause in the DELETE statement.
+     */
     public class MultiRowDeleteMutationPlan implements MutationPlan {
         private final List<MutationPlan> plans;
         private final MutationPlan firstPlan;
@@ -665,6 +669,9 @@ public class DeleteCompiler {
         }
     }
 
+    /**
+     * Implementation of MutationPlan that is used for composing a MultiRowDeleteMutationPlan.
+     */
     private class SingleRowDeleteMutationPlan implements MutationPlan {
 
         private final QueryPlan dataPlan;
@@ -748,6 +755,10 @@ public class DeleteCompiler {
         }
     }
 
+    /**
+     * ServerSelectDeleteMutationPlan is selected for a DELETE statement without WHERE clause or a LIMIT clause
+     * if there is index presented for the table.
+     */
     public class ServerSelectDeleteMutationPlan implements MutationPlan {
         private final StatementContext context;
         private final QueryPlan dataPlan;
@@ -872,6 +883,10 @@ public class DeleteCompiler {
         }
     }
 
+    /**
+     * Implementation of MutationPlan that is selected for a DELETE statement with WHERE clause or a LIMIT clause
+     * if there is index presented for the table.
+     */
     public class ClientSelectDeleteMutationPlan implements MutationPlan {
         private final StatementContext context;
         private final TableRef targetTableRef;
