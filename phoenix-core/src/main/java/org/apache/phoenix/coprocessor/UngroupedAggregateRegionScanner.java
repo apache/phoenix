@@ -544,6 +544,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                 put.addColumn(emptyCF, QueryConstants.EMPTY_COLUMN_BYTES, kvts,
                         ByteUtil.EMPTY_BYTE_ARRAY);
                 mutations.add(put);
+                timeStamps.add(kvts);
             }
         }
     }
