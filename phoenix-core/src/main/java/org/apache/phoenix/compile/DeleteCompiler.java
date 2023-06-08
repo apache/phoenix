@@ -356,8 +356,10 @@ public class DeleteCompiler {
     }
 
     /**
-     * Implementation of MutationPlan that is selected if there is no index presented for a table
-     * and no LIMIT clause in the DELETE statement.
+     * Implementation of MutationPlan that is selected if
+     * 1) there is no index presented for a table,
+     * 2) no LIMIT clause in the DELETE statement, and
+     * 3) the query is strictly point lookup.
      */
     public class MultiRowDeleteMutationPlan implements MutationPlan {
         private final List<MutationPlan> plans;
