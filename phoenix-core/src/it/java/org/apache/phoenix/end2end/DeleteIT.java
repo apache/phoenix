@@ -1056,7 +1056,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
             DeleteStatement deleteStmt = (DeleteStatement) parser.parseStatement();
             DeleteCompiler compiler = new DeleteCompiler(stmt, null);
             MutationPlan plan = compiler.compile(deleteStmt);
-            assertEquals(plan.getClass(), planClass);
+            assertEquals(planClass, plan.getClass());
         }
     }
     private void createAndUpsertTable(String tableName, String indexName, Properties props,
