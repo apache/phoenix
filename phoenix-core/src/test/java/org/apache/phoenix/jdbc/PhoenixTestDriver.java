@@ -44,7 +44,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
  */
 @ThreadSafe
 public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
-    @GuardedBy("this")
     private final ReadOnlyProps overrideProps;
 
     @GuardedBy("this")
@@ -52,6 +51,8 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     
     @GuardedBy("this")
     private boolean closed = false;
+
+    @GuardedBy("this")
     private final Map<ConnectionInfo, ConnectionQueryServices> connectionQueryServicesCache =
             new HashMap<>();
 
@@ -89,17 +90,15 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
             throws SQLException {
         checkClosed();
         ConnectionInfo connInfo = ConnectionInfo.create(url);
-        final QueryServices services = getQueryServices();
         ConnectionQueryServices connectionQueryServices;
-        final ConnectionInfo normalizedConnInfo = connInfo.normalize(services.getProps(), info);
         connectionQueryServices = connectionQueryServicesCache.get(connInfo);
         if (connectionQueryServices != null) {
             return connectionQueryServices;
         }
-        if (normalizedConnInfo.isConnectionless()) {
-            connectionQueryServices = new ConnectionlessQueryServicesImpl(services, normalizedConnInfo, info);
+        if (connInfo.isConnectionless()) {
+            connectionQueryServices = new ConnectionlessQueryServicesImpl(queryServices, connInfo, info);
         } else {
-            connectionQueryServices = new ConnectionQueryServicesTestImpl(services, normalizedConnInfo, info);
+            connectionQueryServices = new ConnectionQueryServicesTestImpl(queryServices, connInfo, info);
         }
         connectionQueryServices.init(url, info);
         connectionQueryServicesCache.put(connInfo, connectionQueryServices);

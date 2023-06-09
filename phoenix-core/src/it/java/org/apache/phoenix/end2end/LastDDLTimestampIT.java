@@ -624,7 +624,7 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
         public void preScannerOpen(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
                                    Scan scan) {
             byte[] maintainersBytes = scan.getAttribute(LAST_DDL_TIMESTAMP_MAINTAINERS);
-            LOGGER.info("RSS within preScannerOpen method, table name: {}",
+            LOGGER.info("within preScannerOpen method, table name: {}",
                     c.getEnvironment().getRegion().getTableDescriptor().getTableName().getNameAsString());
             populateDDLTimestampMaintainers(maintainersBytes, true);
         }
@@ -633,7 +633,7 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
         public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
                                    MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
             byte[] maintainersBytes = miniBatchOp.getOperation(0).getAttribute(LAST_DDL_TIMESTAMP_MAINTAINERS);
-            LOGGER.info("RSS within preBatchMutate method: {}",
+            LOGGER.info("Within preBatchMutate method: {}",
                     c.getEnvironment().getRegion().getTableDescriptor().getTableName().getNameAsString());
             populateDDLTimestampMaintainers(maintainersBytes, false);
         }
