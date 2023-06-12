@@ -248,11 +248,6 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             url = url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)
                     ? url.substring(PhoenixRuntime.JDBC_PROTOCOL.length())
                     : PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url;
-            // Sometimes test related code adds jdbc:phoenix: multiple times to the url.
-            // Need to remove all instances of jdbc:phoenix:.
-/*            while (url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
-                url = url.substring(PhoenixRuntime.JDBC_PROTOCOL.length() + 1);
-            }*/
             StringTokenizer tokenizer = new StringTokenizer(url, DELIMITERS, true);
             int nTokens = 0;
             String[] tokens = new String[5];

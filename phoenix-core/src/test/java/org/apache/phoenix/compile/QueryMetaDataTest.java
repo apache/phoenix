@@ -33,8 +33,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-
-
 /**
  * 
  * Tests for getting PreparedStatement meta data

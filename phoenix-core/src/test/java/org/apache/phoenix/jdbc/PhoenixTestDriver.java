@@ -33,8 +33,6 @@ import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesTestImpl;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * 
@@ -46,7 +44,6 @@ import org.slf4j.LoggerFactory;
  */
 @ThreadSafe
 public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
-    private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixTestDriver.class);
     private final ReadOnlyProps overrideProps;
 
     @GuardedBy("this")
@@ -93,7 +90,6 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
             throws SQLException {
         checkClosed();
         ConnectionInfo connInfo = ConnectionInfo.create(url);
-        LOGGER.info("RSS url: {},  connInfo: {}", url, connInfo);
         ConnectionQueryServices connectionQueryServices;
         connectionQueryServices = connectionQueryServicesCache.get(connInfo);
         if (connectionQueryServices != null) {
