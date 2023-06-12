@@ -253,7 +253,6 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
 /*            while (url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
                 url = url.substring(PhoenixRuntime.JDBC_PROTOCOL.length() + 1);
             }*/
-            url = PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url;
             StringTokenizer tokenizer = new StringTokenizer(url, DELIMITERS, true);
             int nTokens = 0;
             String[] tokens = new String[5];
@@ -656,7 +655,12 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         }
 
         public String toUrl() {
-            return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR  + toString();
+            // Some tests like PhoenixConfigurationUtilTest add JDBC_PROTOCOL to zookeeper quorum config.
+            if (toString().contains(JDBC_PROTOCOL)) {
+                return  toString();
+            } else {
+                return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + toString();
+            }
         }
 
         private static ConnectionInfo defaultConnectionInfo(String url) throws SQLException {
