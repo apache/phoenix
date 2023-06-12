@@ -245,11 +245,14 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                     || url.equalsIgnoreCase("jdbc:phoenix")) {
                 return defaultConnectionInfo(url);
             }
+            url = url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)
+                    ? url.substring(PhoenixRuntime.JDBC_PROTOCOL.length())
+                    : PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url;
             // Sometimes test related code adds jdbc:phoenix: multiple times to the url.
             // Need to remove all instances of jdbc:phoenix:.
-            while (url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
+/*            while (url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
                 url = url.substring(PhoenixRuntime.JDBC_PROTOCOL.length() + 1);
-            }
+            }*/
             url = PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url;
             StringTokenizer tokenizer = new StringTokenizer(url, DELIMITERS, true);
             int nTokens = 0;
@@ -653,8 +656,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         }
 
         public String toUrl() {
-            return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
-                    + toString();
+            return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR  + toString();
         }
 
         private static ConnectionInfo defaultConnectionInfo(String url) throws SQLException {
