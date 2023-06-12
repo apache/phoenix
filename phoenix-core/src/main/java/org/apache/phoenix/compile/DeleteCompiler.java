@@ -354,7 +354,12 @@ public class DeleteCompiler {
         }
         return Collections.emptyList();
     }
-    
+
+    /**
+     * Implementation of MutationPlan that is selected if
+     * 1) the query is strictly point lookup, and
+     * 2) the query has no LIMIT clause.
+     */
     public class MultiRowDeleteMutationPlan implements MutationPlan {
         private final List<MutationPlan> plans;
         private final MutationPlan firstPlan;
@@ -665,6 +670,9 @@ public class DeleteCompiler {
         }
     }
 
+    /**
+     * Implementation of MutationPlan for composing a MultiRowDeleteMutationPlan.
+     */
     private class SingleRowDeleteMutationPlan implements MutationPlan {
 
         private final QueryPlan dataPlan;
@@ -748,6 +756,14 @@ public class DeleteCompiler {
         }
     }
 
+    /**
+     * Implementation of MutationPlan that is selected if
+     * 1) there is no immutable index presented for the table,
+     * 2) auto commit is enabled as well as server side delete mutations are enabled,
+     * 3) the table is not transactional,
+     * 4) the query has no LIMIT clause, and
+     * 5) the query has WHERE clause and is not strictly point lookup.
+     */
     public class ServerSelectDeleteMutationPlan implements MutationPlan {
         private final StatementContext context;
         private final QueryPlan dataPlan;
@@ -873,6 +889,10 @@ public class DeleteCompiler {
         }
     }
 
+    /**
+     * Implementation of MutationPlan that is selected if the query doesn't match the criteria of
+     * ServerSelectDeleteMutationPlan.
+     */
     public class ClientSelectDeleteMutationPlan implements MutationPlan {
         private final StatementContext context;
         private final TableRef targetTableRef;
