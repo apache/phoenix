@@ -22,7 +22,6 @@ import org.apache.phoenix.schema.types.PLong;
 
 /**
  * Base class for PColumn implementors of type Long.
- * 
  * @since 0.1
  */
 public abstract class PLongColumn extends PBaseColumn {
