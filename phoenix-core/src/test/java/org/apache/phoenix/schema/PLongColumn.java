@@ -21,9 +21,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 
 /**
- * 
  * Base class for PColumn implementors of type Long.
- *
  * 
  * @since 0.1
  */
