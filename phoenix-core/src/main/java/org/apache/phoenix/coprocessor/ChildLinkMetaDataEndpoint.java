@@ -234,13 +234,6 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService
             // if not, delete if old enough, otherwise ignore
             else {
                 deleteIfAgedEnough(rowKey, ts, region);
-                if (restartScanDueToPageFilterRemoval) {
-                    scanner.close();
-                    childLinkScan.withStartRow(rowKey, true);
-                    scanner = region.getScanner(childLinkScan);
-                    hasMore = true;
-                    restartScanDueToPageFilterRemoval = false;
-                }
             }
             row.clear();
         }

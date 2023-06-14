@@ -55,8 +55,7 @@ public abstract class ReadRepairScanner extends BaseRegionScanner {
     public long rowCount = 0;
     public long maxTimestamp;
     public long ageThreshold;
-    public boolean restartScanDueToPageFilterRemoval = false;
-    public boolean isPageFilterRemoved = false;
+    public boolean initialized = false;
 
     public ReadRepairScanner(RegionCoprocessorEnvironment env, Scan scan, RegionScanner scanner) {
         super(scanner);
@@ -71,6 +70,18 @@ public abstract class ReadRepairScanner extends BaseRegionScanner {
         maxTimestamp = scan.getTimeRange().getMax();
     }
 
+    private void init() throws IOException {
+        if (!initialized) {
+            PageFilter pageFilter = ScanUtil.removePageFilter(scan);
+            if (pageFilter != null) {
+                System.out.println("page filter removed, page size set");
+                pageSize = pageFilter.getPageSize();
+                scanner.close();
+                scanner = region.getScanner(scan);
+            }
+            initialized = true;
+        }
+    }
 
     /*
     Method which checks whether a row is VERIFIED (i.e. does not need repair).
@@ -84,6 +95,7 @@ public abstract class ReadRepairScanner extends BaseRegionScanner {
 
     public boolean next(List<Cell> result, boolean raw) throws IOException {
         try {
+            init();
             long startTime = EnvironmentEdgeManager.currentTimeMillis();
             do {
                 if (raw) {
@@ -144,14 +156,6 @@ public abstract class ReadRepairScanner extends BaseRegionScanner {
         }
         else {
             try {
-                if (!isPageFilterRemoved) {
-                    PageFilter pageFilter = ScanUtil.removePageFilter(scan);
-                    if (pageFilter != null) {
-                        pageSize = pageFilter.getPageSize();
-                        restartScanDueToPageFilterRemoval = true;
-                    }
-                    isPageFilterRemoved = true;
-                }
                 repairRow(cellList);
             } catch (IOException e) {
                 LOGGER.warn("Row Repair failure on region {}.",
