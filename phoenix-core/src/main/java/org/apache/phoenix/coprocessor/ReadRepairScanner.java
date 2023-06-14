@@ -74,7 +74,6 @@ public abstract class ReadRepairScanner extends BaseRegionScanner {
         if (!initialized) {
             PageFilter pageFilter = ScanUtil.removePageFilter(scan);
             if (pageFilter != null) {
-                System.out.println("page filter removed, page size set");
                 pageSize = pageFilter.getPageSize();
                 scanner.close();
                 scanner = region.getScanner(scan);
