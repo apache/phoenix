@@ -641,7 +641,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                             table.getEncodingScheme()
                                                     == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
                                                     QueryConstants.EMPTY_COLUMN_BYTES :
-                                                    table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME)
+                                                    table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME),
+                                            table.getPhoenixTTL()
                                             );
                         }
                     }

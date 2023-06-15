@@ -57,6 +57,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_ARGS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_PHOENIX_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME_BYTES;
@@ -85,6 +86,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.VIEW_MODIFIED_PROPERTY_TAG_TYPE;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.INDEX;
+import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
@@ -138,9 +140,7 @@ import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
 import org.apache.hadoop.hbase.coprocessor.CoreCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
-import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcCall;
 import org.apache.hadoop.hbase.ipc.RpcUtil;
@@ -621,7 +621,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
         this.maxIndexesPerTable = config.getInt(QueryServices.MAX_INDEXES_PER_TABLE,
                 QueryServicesOptions.DEFAULT_MAX_INDEXES_PER_TABLE);
-        this.isTablesMappingEnabled = SchemaUtil.isNamespaceMappingEnabled(PTableType.TABLE,
+        this.isTablesMappingEnabled = SchemaUtil.isNamespaceMappingEnabled(TABLE,
                 new ReadOnlyProps(config.iterator()));
         this.allowSplittableSystemCatalogRollback = config.getBoolean(QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK,
                 QueryServicesOptions.DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
@@ -708,7 +708,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             }
             // the PTable of views and indexes on views might get updated because a column is added to one of
             // their parents (this won't change the timestamp)
-            if (table.getType() != PTableType.TABLE || table.getTimeStamp() != tableTimeStamp) {
+            if (table.getType() != TABLE || table.getTimeStamp() != tableTimeStamp) {
                 builder.setTable(PTableImpl.toProto(table));
             }
             done.run(builder.build());
@@ -1366,11 +1366,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
              useStatsForParallelization : oldTable != null ? oldTable.useStatsForParallelization() : null);
 
         Cell phoenixTTLKv = tableKeyValues[PHOENIX_TTL_INDEX];
-        long phoenixTTL = phoenixTTLKv == null ? PHOENIX_TTL_NOT_DEFINED :
+        long phoenixTTL = phoenixTTLKv == null ? (tableType == TABLE ? DEFAULT_PHOENIX_TTL : PHOENIX_TTL_NOT_DEFINED) :
                 PLong.INSTANCE.getCodec().decodeLong(phoenixTTLKv.getValueArray(),
                         phoenixTTLKv.getValueOffset(), SortOrder.getDefault());
         builder.setPhoenixTTL(phoenixTTLKv != null ? phoenixTTL :
-            oldTable != null ? oldTable.getPhoenixTTL() : PHOENIX_TTL_NOT_DEFINED);
+            oldTable != null ? oldTable.getPhoenixTTL() : (tableType == TABLE ? DEFAULT_PHOENIX_TTL : PHOENIX_TTL_NOT_DEFINED));
 
         Cell phoenixTTLHWMKv = tableKeyValues[PHOENIX_TTL_HWM_INDEX];
         long phoenixTTLHWM = phoenixTTLHWMKv == null ? MIN_PHOENIX_TTL_HWM :
@@ -1864,7 +1864,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private static PTable newDeletedTableMarker(long timestamp) {
         try {
             return new PTableImpl.Builder()
-                    .setType(PTableType.TABLE)
+                    .setType(TABLE)
                     .setTimeStamp(timestamp)
                     .setPkColumns(Collections.<PColumn>emptyList())
                     .setAllColumns(Collections.<PColumn>emptyList())
@@ -2657,7 +2657,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     TableName.valueOf(loadedTable.getPhysicalName().getBytes()),
                     getParentPhysicalTableName(loadedTable), pTableType, loadedTable.getIndexes());
 
-            if (pTableType == PTableType.TABLE || pTableType == PTableType.VIEW) {
+            if (pTableType == TABLE || pTableType == PTableType.VIEW) {
                 // check to see if the table has any child views
                 try (Table hTable = ServerUtil.getHTableForCoprocessorScan(env,
                         getSystemTableForChildLinks(clientVersion, env.getConfiguration()))) {
@@ -3054,7 +3054,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             final int clientVersion) throws IOException, SQLException {
         boolean isMutationAllowed = true;
         boolean isSchemaMutationAllowed = true;
-        if (expectedType == PTableType.TABLE || expectedType == PTableType.VIEW) {
+        if (expectedType == TABLE || expectedType == PTableType.VIEW) {
             try (Table hTable = ServerUtil.getHTableForCoprocessorScan(env,
                     getSystemTableForChildLinks(clientVersion, env.getConfiguration()))) {
                 childViews.addAll(findAllDescendantViews(hTable, env.getConfiguration(),
@@ -3426,13 +3426,15 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     long newPhoenixTTL = (long) PLong.INSTANCE.toObject(cell.getValueArray(),
                             cell.getValueOffset(), cell.getValueLength());
                     hasNewPhoenixTTLAttribute =  newPhoenixTTL != PHOENIX_TTL_NOT_DEFINED ;
+                    //TODO:- Reenable when we have ViewTTL
+                    isSchemaMutationAllowed = false;
                 }
             }
         }
 
         if (hasNewPhoenixTTLAttribute) {
             // Disallow if the parent has PHOENIX_TTL set.
-            if (parentTable != null &&  parentTable.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED) {
+            if (parentTable != null &&  parentTable.getPhoenixTTL() != DEFAULT_PHOENIX_TTL) {
                 isSchemaMutationAllowed = false;
             }
 

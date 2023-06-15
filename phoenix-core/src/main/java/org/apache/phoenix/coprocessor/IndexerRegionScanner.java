@@ -76,6 +76,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -95,7 +96,11 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
                           UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver) throws IOException {
         super(innerScanner, region, scan, env, ungroupedAggregateRegionObserver);
         indexHTable = hTableFactory.getTable(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
-        indexTableTTL = indexHTable.getDescriptor().getColumnFamilies()[0].getTimeToLive();
+        if (BaseScannerRegionObserver.isPhoenixTableTTLEnabled(env.getConfiguration())) {
+            indexTableTTL = ScanUtil.getPhoenixTTL(scan);
+        } else {
+            indexTableTTL = indexHTable.getDescriptor().getColumnFamilies()[0].getTimeToLive();
+        }
         pool = new WaitForCompletionTaskRunner(ThreadPoolManager.getExecutor(
                 new ThreadPoolBuilder("IndexVerify",
                         env.getConfiguration()).setMaxThread(NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY,

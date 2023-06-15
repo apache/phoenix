@@ -19,10 +19,13 @@ package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_PHOENIX_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
+import static org.apache.phoenix.schema.PTableType.SYSTEM;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
@@ -1061,6 +1064,12 @@ public class MetaDataClient {
                             .setMessage("Property: " + prop.getFirst()).build()
                             .buildException();
                 }
+                //If PhoenixTTL is enabled use TTL as Phoenix Table Property
+                if (isPhoenixTTLEnabled() && prop.getFirst().equalsIgnoreCase(TTL)) {
+                    tableProps.put(prop.getFirst(), prop.getSecond());
+                    continue;
+                }
+
                 // HTableDescriptor property or Phoenix Table Property
                 if (defaultDescriptor.getValue(Bytes.toBytes(prop.getFirst())) == null) {
                     // See PHOENIX-4891
@@ -1076,6 +1085,11 @@ public class MetaDataClient {
                 }
             }
         }
+    }
+
+    private boolean isPhoenixTTLEnabled() {
+        return connection.getQueryServices().getConfiguration().getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
+                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
     }
 
     public MutationState updateStatistics(UpdateStatisticsStatement updateStatisticsStmt)
@@ -1992,48 +2006,28 @@ public class MetaDataClient {
                     tableType == PTableType.VIEW ? parent.getColumns().size()
                             : QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 
-            Long phoenixTTL = PHOENIX_TTL_NOT_DEFINED;
+            Long phoenixTTL = DEFAULT_PHOENIX_TTL;
             Long phoenixTTLHighWaterMark = MIN_PHOENIX_TTL_HWM;
-            Long phoenixTTLProp = (Long) TableProperty.PHOENIX_TTL.getValue(tableProps);;
+            Long phoenixTTLProp = (Long) TableProperty.TTL.getValue(tableProps);
 
             // Validate PHOENIX_TTL prop value if set
             if (phoenixTTLProp != null) {
                 if (phoenixTTLProp < 0) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
-                            .setMessage(String.format("entity = %s, PHOENIX_TTL value should be > 0", tableName ))
+                            .setMessage(String.format("entity = %s, TTL value should be > 0", tableName ))
                             .build()
                             .buildException();
                 }
 
-                // TODO: PHOENIX_TABLE_TTL
-                if (tableType == VIEW  && parentPhysicalName != null) {
-                    TableDescriptor desc = connection.getQueryServices().getTableDescriptor(
-                        parentPhysicalName.getBytes(StandardCharsets.UTF_8));
-                    if (desc != null) {
-                        Integer tableTTLProp = desc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(parent)).getTimeToLive();
-                        if ((tableTTLProp != null) && (tableTTLProp != HConstants.FOREVER)) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SET_OR_ALTER_PHOENIX_TTL_FOR_TABLE_WITH_TTL)
-                                    .setMessage(String.format("table = %s, view = %s", parentPhysicalName, tableName ))
-                                    .build()
-                                    .buildException();
-                        }
-                    }
-                }
-
-                // Cannot set PHOENIX_TTL if parent has already defined it.
-                if (tableType == VIEW  && parent != null && parent.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED) {
-                    throw new SQLExceptionInfo.Builder(
-                            SQLExceptionCode.CANNOT_SET_OR_ALTER_PHOENIX_TTL)
-                            .setSchemaName(schemaName).setTableName(tableName).build().buildException();
-                }
-
-                if (tableType != VIEW) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.PHOENIX_TTL_SUPPORTED_FOR_VIEWS_ONLY)
+                if (tableType != TABLE && tableType != SYSTEM) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.PHOENIX_TTL_SUPPORTED_FOR_TABLES_ONLY)
                             .setSchemaName(schemaName)
                             .setTableName(tableName)
                             .build()
                             .buildException();
                 }
+                //Set TTL for table as defined in DDL.
+                phoenixTTL = phoenixTTLProp;
             }
 
             Boolean isChangeDetectionEnabledProp =
@@ -2047,6 +2041,8 @@ public class MetaDataClient {
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactionProvider != null, transactionProvider);
                 isImmutableRows = parent.isImmutableRows();
                 isAppendOnlySchema = parent.isAppendOnlySchema();
+                //Indexes on Views will also get PHOENIX_TTL_NOT_DEFINED = 0L as phoenixTTL until we introduce
+                //TTL on Views.
                 phoenixTTL = parent.getPhoenixTTL();
 
                 // Index on view
@@ -2249,7 +2245,9 @@ public class MetaDataClient {
                 .setSchemaName(schemaName).setTableName(tableName)
                 .build().buildException();
             }
-            if (TableProperty.TTL.getValue(commonFamilyProps) != null 
+            //Why was TTL there as a tableProperty, as it was never set as a TableProperty and then it's being used here.
+            //For now checking for PhoenixTTL so this will behave like before.
+            if (!isPhoenixTTLEnabled() && TableProperty.TTL.getValue(commonFamilyProps) != null
                     && transactionProvider != null 
                     && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.SET_TTL)) {
                 throw new SQLExceptionInfo.Builder(PhoenixTransactionProvider.Feature.SET_TTL.getCode())
@@ -2365,7 +2363,7 @@ public class MetaDataClient {
                         updateCacheFrequency = parent.getUpdateCacheFrequency();
                     }
 
-                    phoenixTTL = phoenixTTLProp == null ? parent.getPhoenixTTL() : phoenixTTLProp;
+                    phoenixTTL = PHOENIX_TTL_NOT_DEFINED;
 
                     disableWAL = (disableWALProp == null ? parent.isWALDisabled() : disableWALProp);
                     defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
@@ -2822,7 +2820,7 @@ public class MetaDataClient {
                         .setIndexes(Collections.<PTable>emptyList())
                         .setPhysicalNames(ImmutableList.<PName>of())
                         .setColumns(columns.values())
-                        .setPhoenixTTL(PHOENIX_TTL_NOT_DEFINED)
+                        .setPhoenixTTL(DEFAULT_PHOENIX_TTL)
                         .setPhoenixTTLHighWaterMark(MIN_PHOENIX_TTL_HWM)
                         .build();
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
@@ -3077,7 +3075,6 @@ public class MetaDataClient {
             } else {
                 tableUpsert.setString(35, streamingTopicName);
             }
-
             tableUpsert.execute();
 
             if (asyncCreatedDate != null) {
@@ -3206,7 +3203,7 @@ public class MetaDataClient {
                         .setParentTableName((parent == null) ? null : parent.getTableName())
                         .setPhysicalNames(ImmutableList.copyOf(physicalNames))
                         .setColumns(columns.values())
-                        .setPhoenixTTL(phoenixTTL == null ? PHOENIX_TTL_NOT_DEFINED : phoenixTTL)
+                        .setPhoenixTTL(phoenixTTL == null ? (tableType == VIEW ? PHOENIX_TTL_NOT_DEFINED : DEFAULT_PHOENIX_TTL) : phoenixTTL)
                         .setPhoenixTTLHighWaterMark(phoenixTTLHighWaterMark == null ? MIN_PHOENIX_TTL_HWM : phoenixTTLHighWaterMark)
                         .setViewModifiedUpdateCacheFrequency(tableType == PTableType.VIEW &&
                                 parent != null &&
@@ -5267,7 +5264,7 @@ public class MetaDataClient {
                         metaProperties.setColumnEncodedBytesProp(QualifierEncodingScheme.fromSerializedValue((byte)value));
                     } else if (propName.equalsIgnoreCase(USE_STATS_FOR_PARALLELIZATION)) {
                         metaProperties.setUseStatsForParallelizationProp((Boolean)value);
-                    } else if (propName.equalsIgnoreCase(PHOENIX_TTL)) {
+                    } else if (propName.equalsIgnoreCase(TTL) && isPhoenixTTLEnabled()) {
                         metaProperties.setPhoenixTTL((Long)value);
                     } else if (propName.equalsIgnoreCase(CHANGE_DETECTION_ENABLED)) {
                         metaProperties.setChangeDetectionEnabled((Boolean) value);
@@ -5442,9 +5439,15 @@ public class MetaDataClient {
         }
 
         if (metaProperties.getPhoenixTTL() != null) {
-            if (table.getType() != PTableType.VIEW) {
+            if (table.getType() == PTableType.INDEX) {
                 throw new SQLExceptionInfo.Builder(
-                        SQLExceptionCode.PHOENIX_TTL_SUPPORTED_FOR_VIEWS_ONLY)
+                        SQLExceptionCode.CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX)
+                        .build()
+                        .buildException();
+            }
+            if (table.getType() != PTableType.TABLE && table.getType() != SYSTEM) {
+                throw new SQLExceptionInfo.Builder(
+                        SQLExceptionCode.PHOENIX_TTL_SUPPORTED_FOR_TABLES_ONLY)
                         .build()
                         .buildException();
             }

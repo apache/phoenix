@@ -1242,10 +1242,10 @@ public class ScanUtil {
     public static void setScanAttributesForPhoenixTTL(Scan scan, PTable table,
             PhoenixConnection phoenixConnection) throws SQLException {
 
-        // If server side masking for PHOENIX_TTL is not enabled OR is a SYSTEM table then return.
-        if (!ScanUtil.isServerSideMaskingEnabled(phoenixConnection) || SchemaUtil.isSystemTable(
+        // If server side masking for PHOENIX_TTL is not enabled then return.
+        if (!ScanUtil.isServerSideMaskingEnabled(phoenixConnection) /*|| SchemaUtil.isSystemTable(
                 SchemaUtil.getTableNameAsBytes(table.getSchemaName().getString(),
-                        table.getTableName().getString()))) {
+                        table.getTableName().getString()))*/ ) {
             return;
         }
 
@@ -1274,7 +1274,6 @@ public class ScanUtil {
                 return;
             }
         }
-
         if (dataTable.getPhoenixTTL() != 0) {
             byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
             byte[] emptyColumnName =
@@ -1325,7 +1324,7 @@ public class ScanUtil {
             long pageSizeMs = phoenixConnection.getQueryServices().getProps()
                     .getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
             if (pageSizeMs == -1) {
-                // Use the half of the HBase RPC timeout value as the the server page size to make sure that the HBase
+                // Use the half of the HBase RPC timeout value as the server page size to make sure that the HBase
                 // region server will be able to send a heartbeat message to the client before the client times out
                 pageSizeMs = (long) (phoenixConnection.getQueryServices().getProps()
                         .getLong(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT) * 0.5);

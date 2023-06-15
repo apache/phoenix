@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -52,6 +53,7 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.ipc.controller.ServerToServerRpcController;
 import org.apache.phoenix.compat.hbase.CompatUtil;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.UpgradeRequiredException;
@@ -65,6 +67,8 @@ import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesTestImpl;
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.UpgradeUtil;
@@ -554,12 +558,10 @@ public class SystemTablesCreationOnConnectionIT {
         // Register the vanilla PhoenixDriver
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
         startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
-        try (Connection ignored = DriverManager.getConnection(getJdbcUrl());
-             Admin admin = testUtil.getAdmin()) {
-            TableDescriptor htd = admin.getDescriptor(SYSTEM_MUTEX_HBASE_TABLE_NAME);
-            ColumnFamilyDescriptor hColDesc = htd.getColumnFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES);
-            assertEquals("Did not find the correct TTL for SYSTEM.MUTEX", TTL_FOR_MUTEX,
-                    hColDesc.getTimeToLive());
+        try (Connection ignored = DriverManager.getConnection(getJdbcUrl())) {
+             PhoenixConnection pConn = ignored.unwrap(PhoenixConnection.class);
+             assertEquals("Did not find correct TTL for SYSTEM.MUTEX", TTL_FOR_MUTEX,
+                     pConn.getTable(new PTableKey(null, SYSTEM_MUTEX_NAME)).getPhoenixTTL());
         }
     }
 

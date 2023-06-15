@@ -40,6 +40,7 @@ import org.slf4j.LoggerFactory;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.isPhoenixTableTTLEnabled;
 
 /**
  *  TTLRegionScanner masks expired rows using the empty column cell timestamp
@@ -69,7 +70,11 @@ public class TTLRegionScanner extends BaseRegionScanner {
         emptyCF = scan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
         long currentTime = scan.getTimeRange().getMax() == HConstants.LATEST_TIMESTAMP ?
                 EnvironmentEdgeManager.currentTimeMillis() : scan.getTimeRange().getMax();
-        ttl = env.getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
+        if (isPhoenixTableTTLEnabled(env.getConfiguration())) {
+            ttl = ScanUtil.getPhoenixTTL(this.scan);
+        } else {
+            ttl = env.getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
+        }
         ttlWindowStart = ttl == HConstants.FOREVER ? 1 : currentTime - ttl * 1000;
         ttl *= 1000;
         // Regardless if the Phoenix Table TTL feature is disabled cluster wide or the client is

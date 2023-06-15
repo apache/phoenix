@@ -33,6 +33,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.hadoop.conf.Configuration;
@@ -166,7 +168,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                     PhoenixRuntime.generateColumnInfo(connection, qSourceTable, sourceColNames);
             LOGGER.info("Target table base query: " + targetTableQuery);
             md5 = MessageDigest.getInstance("MD5");
-            ttl = getTableTtl();
+            ttl = getTableTTL(configuration);
             maxLookbackAgeMillis = BaseScannerRegionObserver.getMaxLookbackInMillis(configuration);
         } catch (SQLException | NoSuchAlgorithmException e) {
             tryClosingResourceSilently(this.outputUpsertStmt);
@@ -323,7 +325,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
         return sourceTS <= maxLookBackTimeMillis;
     }
 
-    private int getTableTtl() throws SQLException, IOException {
+    private long getTableTTL(Configuration configuration) throws SQLException, IOException {
         PTable pSourceTable = PhoenixRuntime.getTable(connection, qSourceTable);
         if (pSourceTable.getType() == PTableType.INDEX
                 && pSourceTable.getIndexType() == PTable.IndexType.LOCAL) {
@@ -333,12 +335,17 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                 cqsi = connection.unwrap(PhoenixConnection.class).getQueryServices();
         String physicalTable = getSourceTableName(pSourceTable,
                 SchemaUtil.isNamespaceMappingEnabled(null, cqsi.getProps()));
-        TableDescriptor tableDesc;
-        try (Admin admin = cqsi.getAdmin()) {
-            tableDesc = admin.getDescriptor(TableName
-                .valueOf(physicalTable));
+        if (configuration.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
+                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED)) {
+            return pSourceTable.getPhoenixTTL();
+        } else {
+            TableDescriptor tableDesc;
+            try (Admin admin = cqsi.getAdmin()) {
+                tableDesc = admin.getDescriptor(TableName
+                        .valueOf(physicalTable));
+            }
+            return tableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(pSourceTable)).getTimeToLive();
         }
-        return tableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(pSourceTable)).getTimeToLive();
     }
 
     @VisibleForTesting

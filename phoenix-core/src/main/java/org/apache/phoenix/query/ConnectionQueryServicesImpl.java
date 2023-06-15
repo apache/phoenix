@@ -304,7 +304,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.StringUtil;
-import org.apache.phoenix.util.TimeKeeper;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1040,6 +1039,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
         return false;
+    }
+
+    private boolean isPhoenixTTLEnabled() {
+        return config.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
+                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
     }
 
 
@@ -2822,10 +2826,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             .setMessage("Property: " + propName).build()
                                             .buildException();
                                 }
-                                newTTL = ((Number)propValue).intValue();
-                                // Even though TTL is really a HColumnProperty we treat it specially.
-                                // We enforce that all column families have the same TTL.
-                                commonFamilyProps.put(propName, propValue);
+                                //If PhoenixTTL is enabled we are using it as a Phoenix Table level property.
+                                if (!isPhoenixTTLEnabled()) {
+                                    newTTL = ((Number)propValue).intValue();
+                                    // Even though TTL is really a HColumnProperty we treat it specially.
+                                    // We enforce that all column families have the same TTL.
+                                    commonFamilyProps.put(propName, propValue);
+                                    LOGGER.debug("------ Setting new TTL for tables :- " + propName + " " + propValue);
+                                }
                             } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTIONAL) && Boolean.TRUE.equals(propValue)) {
                                 willBeTransactional = isOrWillBeTransactional = true;
                                 tableProps.put(PhoenixTransactionContext.READ_NON_TX_DATA, propValue);
@@ -3664,7 +3672,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
 
         // The SYSTEM MUTEX table already exists so check its TTL
-        if (htd.getColumnFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES).getTimeToLive() != TTL_FOR_MUTEX) {
+        if (checkIfDescriptorLevelTTLChangeIsRequired(htd)) {
             LOGGER.debug("SYSTEM MUTEX already appears to exist, but has the wrong TTL. " +
                     "Will modify the TTL");
             ColumnFamilyDescriptor hColFamDesc = ColumnFamilyDescriptorBuilder
@@ -3681,6 +3689,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     "not creating it");
         }
         return true;
+    }
+
+    private boolean checkIfDescriptorLevelTTLChangeIsRequired(TableDescriptor htd) {
+        if (isPhoenixTTLEnabled()) {
+            //TODO: We have enabled Phoenix level TTL for SYSTEM tables but How can we update here if TTL doesn't match?
+        } else {
+            return htd.getColumnFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES).getTimeToLive() != TTL_FOR_MUTEX;
+        }
+        return false;
     }
 
     private boolean inspectIfAnyExceptionInChain(Throwable io, List<Class<? extends Exception>> ioList) {

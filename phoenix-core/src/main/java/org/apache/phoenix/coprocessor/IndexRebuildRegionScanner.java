@@ -57,6 +57,7 @@ import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.slf4j.Logger;
@@ -88,7 +89,11 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         super(innerScanner, region, scan, env, ungroupedAggregateRegionObserver);
 
         indexHTable = hTableFactory.getTable(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
-        indexTableTTL = indexHTable.getDescriptor().getColumnFamilies()[0].getTimeToLive();
+        if (BaseScannerRegionObserver.isPhoenixTableTTLEnabled(env.getConfiguration())) {
+            indexTableTTL = ScanUtil.getPhoenixTTL(scan);
+        } else {
+            indexTableTTL = indexHTable.getDescriptor().getColumnFamilies()[0].getTimeToLive();
+        }
         indexRowKeyforReadRepair = scan.getAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY);
         if (indexRowKeyforReadRepair != null) {
             setReturnCodeForSingleRowRebuild();

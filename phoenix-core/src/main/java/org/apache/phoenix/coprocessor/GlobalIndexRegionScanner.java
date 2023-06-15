@@ -154,7 +154,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     protected TaskRunner pool;
     protected String exceptionMessage;
     protected HTableFactory hTableFactory;
-    protected int indexTableTTL;
+    protected long indexTableTTL;
     protected long maxLookBackInMills;
     protected IndexToolVerificationResult verificationResult = null;
     protected IndexVerificationResultRepository verificationResultRepository = null;
