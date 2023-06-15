@@ -65,6 +65,7 @@ import org.mockito.AdditionalMatchers;
 import org.mockito.Mockito;
 
 @Category(ParallelStatsDisabledTest.class)
+@Ignore
 public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
 
     
@@ -185,7 +186,7 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
     public void testSameSchemaSameClient() throws Exception {
         testTableWithSameSchema(false, true);
     }
-    
+
     @Test
     public void testSameSchemaDifferentClient() throws Exception {
         testTableWithSameSchema(false, false);

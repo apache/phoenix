@@ -1151,7 +1151,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         String fullIndexeName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         // Check system tables priorities.
-        try (Admin admin = driver.getConnectionQueryServices(null, null).getAdmin();
+        try (Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
                 Connection c = DriverManager.getConnection(getUrl())) {
             ResultSet rs = c.getMetaData().getTables("", 
                     "\""+ PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + "\"", 
