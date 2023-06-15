@@ -18,11 +18,15 @@
 package org.apache.phoenix.schema;
 
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PLong;
 
-abstract public class PDateColumn extends PBaseColumn {
+/**
+ * Base class for PColumn implementors of type Long.
+ * @since 0.1
+ */
+public abstract class PLongColumn extends PBaseColumn {
     @Override
-    public PDataType getDataType() {
-        return PDate.INSTANCE;
+    public final PDataType getDataType() {
+        return PLong.INSTANCE;
     }
 }
