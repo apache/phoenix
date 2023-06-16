@@ -95,6 +95,9 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         if (connectionQueryServices != null) {
             return connectionQueryServices;
         }
+        if (info == null) {
+            info = new Properties();
+        }
         if (connInfo.isConnectionless()) {
             connectionQueryServices = new ConnectionlessQueryServicesImpl(queryServices, connInfo, info);
         } else {
