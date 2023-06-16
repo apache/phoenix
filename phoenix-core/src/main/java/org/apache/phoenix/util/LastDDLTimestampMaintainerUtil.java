@@ -34,6 +34,7 @@ import java.util.List;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LAST_DDL_TIMESTAMP_MAINTAINERS;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SKIP_LAST_DDL_TIMESTAMP_VERIFICATION;
+import static org.apache.phoenix.query.QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 /**
@@ -106,7 +107,9 @@ public class LastDDLTimestampMaintainerUtil {
                 = DDLTimestampMaintainersProtos.DDLTimestampMaintainers.newBuilder();
 
         // Add LastDDLTimestampMaintainer for the referenced table/view/index.
-        builder.addDDLTimestampMaintainers(createLastDDLTimestampMaintainerBuilder(table));
+        DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder maintainerBuilder =
+                createLastDDLTimestampMaintainerBuilder(table);
+        builder.addDDLTimestampMaintainers(maintainerBuilder);
 
         // TODO We don't have to add indexes if it is a read request and table scanned to base table.
         // TODO Only for upsert request on a base table, we have to add indexes.
@@ -118,7 +121,9 @@ public class LastDDLTimestampMaintainerUtil {
         }
 
         // For view, resolve all the parent views all the way upto the base table.
-        if (table.getType() == PTableType.VIEW) {
+        // Skip traversing the hierarchy if the view type is MAPPED since parent table name will be same as view name
+        // and we don't assign LAST_DDL_TIMESTAMP to table created via hbase api.
+        if (table.getType() == PTableType.VIEW && table.getViewType() != PTable.ViewType.MAPPED) {
             PName parentTableName = table.getParentTableName();
             PName parentSchemaName = table.getParentSchemaName();
 
@@ -138,6 +143,9 @@ public class LastDDLTimestampMaintainerUtil {
     // This table can be base table, index or view.
     private static DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder
     createLastDDLTimestampMaintainerBuilder(PTable table) {
+        if (table.getName().getString().contains(CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+            return getMaintainerForViewIndex(table);
+        }
         DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder maintainerBuilder =
                 DDLTimestampMaintainersProtos.DDLTimestampMaintainer.newBuilder();
         if (table.getTenantId() != null) {
@@ -148,6 +156,43 @@ public class LastDDLTimestampMaintainerUtil {
         }
         maintainerBuilder.setTableName(ByteStringer.wrap(table.getTableName().getBytes()));
         maintainerBuilder.setLastDDLTimestamp(table.getLastDDLTimestamp());
+        return maintainerBuilder;
+    }
+
+    private static String getIndexNameFromFullViewIndexName(String fullViewIndexName, String separator) {
+        int index = fullViewIndexName.lastIndexOf(separator);
+        if (index < 0) {
+            return fullViewIndexName;
+        }
+        return fullViewIndexName.substring(index+1);
+    }
+
+    private static DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder getMaintainerForViewIndex(PTable table) {
+        String tableFullName = getIndexNameFromFullViewIndexName(table.getName().getString(),
+                CHILD_VIEW_INDEX_NAME_SEPARATOR);
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(tableFullName);
+        String tableName = SchemaUtil.getTableNameFromFullName(tableFullName);
+        DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder maintainerBuilder =
+                createLastDDLTimestampMaintainerBuilder(table.getTenantId() == null ? null:
+                                table.getTenantId().getString(), schemaName, tableName,
+                        table.getLastDDLTimestamp());
+        return maintainerBuilder;
+    }
+
+    // This table can be base table, index or view.
+    private static DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder
+    createLastDDLTimestampMaintainerBuilder(String tenantID, String schemaName, String tableName,
+                                            long lastDDLTimestamp) {
+        DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder maintainerBuilder =
+                DDLTimestampMaintainersProtos.DDLTimestampMaintainer.newBuilder();
+        if (tenantID != null) {
+            maintainerBuilder.setTenantID(ByteStringer.wrap(tenantID.getBytes()));
+        }
+        if (schemaName != null) {
+            maintainerBuilder.setSchemaName(ByteStringer.wrap(schemaName.getBytes()));
+        }
+        maintainerBuilder.setTableName(ByteStringer.wrap(tableName.getBytes()));
+        maintainerBuilder.setLastDDLTimestamp(lastDDLTimestamp);
         return maintainerBuilder;
     }
 
