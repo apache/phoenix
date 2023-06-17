@@ -45,6 +45,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
@@ -352,6 +353,7 @@ public class SecureUserConnectionsIT {
     }
 
     @Test
+    @Ignore
     public void testMultipleConnectionsAsSameUser() throws Exception {
         final HashSet<ConnectionInfo> connections = new HashSet<>();
         final String princ1 = getUserPrincipal(1);

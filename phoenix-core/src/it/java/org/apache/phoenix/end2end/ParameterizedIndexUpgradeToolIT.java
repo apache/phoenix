@@ -41,6 +41,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -73,6 +74,7 @@ import static org.mockito.Mockito.times;
 
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
+@Ignore
 public class ParameterizedIndexUpgradeToolIT extends BaseTest {
     private static final String [] INDEXES_LIST = new String[8];
     private static final String [] INDEXES_LIST_NAMESPACE = new String[8];

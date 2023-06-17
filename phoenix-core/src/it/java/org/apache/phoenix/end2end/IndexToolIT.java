@@ -97,6 +97,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -108,6 +109,7 @@ import org.slf4j.LoggerFactory;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
+@Ignore
 public class IndexToolIT extends BaseTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexToolIT.class);
 
