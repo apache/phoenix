@@ -21,21 +21,16 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.MiniHBaseCluster;
-import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
-import org.apache.phoenix.query.ConnectionQueryServices.Feature;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.jdbc.PhoenixTestDriver;
+import org.apache.phoenix.util.QueryUtil;
 import org.junit.AfterClass;
-import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
+import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -44,14 +39,11 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.UUID;
 
-import static org.apache.hadoop.hbase.HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
-import static org.apache.phoenix.query.QueryServices.*;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
-
 
 /**
  * This is a separate from @PartialResultDisabledIT because it requires server side configuration
@@ -59,8 +51,8 @@ import static org.junit.Assert.fail;
 @Category(NeedsOwnMiniClusterTest.class)
 public class PartialResultServerConfigurationIT {
     private static HBaseTestingUtility hbaseTestUtil;
-    private static String zkQuorum;
     private static String url;
+    private static Driver testDriver = null;
 
     @BeforeClass
     public static synchronized void setUp() throws Exception {
@@ -73,16 +65,19 @@ public class PartialResultServerConfigurationIT {
         conf.setLong(HConstants.HBASE_SERVER_SCANNER_MAX_RESULT_SIZE_KEY, 5);
 
         hbaseTestUtil.startMiniCluster();
-        zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
-
+        url = QueryUtil.getConnectionUrl(new Properties(), conf);
+        // Register both PhoenixDriver and PhoenixTestDriver
+        // since connections originating from regionserver will use PhoenixTestDriver.
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+        testDriver  = new PhoenixTestDriver();
+        DriverManager.registerDriver(testDriver);
     }
 
     @AfterClass
     public static synchronized void tearDownAfterClass() throws Exception {
         try {
             DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
+            DriverManager.deregisterDriver(testDriver);
         } finally {
             hbaseTestUtil.shutdownMiniCluster();
         }

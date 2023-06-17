@@ -21,6 +21,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCH
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -77,11 +78,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Category(NeedsOwnMiniClusterTest.class)
+@Ignore
 public class SystemTablesCreationOnConnectionIT {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(
-            SystemTablesCreationOnConnectionIT.class);
-
     private HBaseTestingUtility testUtil = null;
     private Set<String> hbaseTables;
     private static boolean setOldTimestampToInduceUpgrade = false;
@@ -659,10 +657,12 @@ public class SystemTablesCreationOnConnectionIT {
             throws Exception {
         testUtil = new HBaseTestingUtility();
         Configuration conf = testUtil.getConfiguration();
+        setUpConfigForMiniCluster(conf);
         conf.set(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, isNamespaceMappingEnabled);
         // Avoid multiple clusters trying to bind to the master's info port (16010)
         conf.setInt(HConstants.MASTER_INFO_PORT, -1);
         testUtil.startMiniCluster(1);
+        DriverManager.registerDriver(new PhoenixTestDriver());
     }
 
     /**

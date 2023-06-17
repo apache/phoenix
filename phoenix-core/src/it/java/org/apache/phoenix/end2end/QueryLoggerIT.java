@@ -34,6 +34,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USER;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -127,20 +128,20 @@ public class QueryLoggerIT extends BaseTest {
             while (rs.next()) {
                 if (rs.getString(QUERY_ID).equals(queryId)) {
                     foundQueryLog = true;
-                    assertEquals(rs.getString(BIND_PARAMETERS), null);
-                    assertEquals(rs.getString(USER), System.getProperty("user.name"));
-                    assertEquals(rs.getString(CLIENT_IP), InetAddress.getLocalHost().getHostAddress());
-                    assertEquals(rs.getString(EXPLAIN_PLAN), QueryUtil.getExplainPlan(explainRS));
-                    assertEquals(rs.getString(GLOBAL_SCAN_DETAILS), context.getScan().toJSON());
-                    assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 10);
-                    assertEquals(rs.getString(QUERY), query);
-                    assertEquals(rs.getString(QUERY_STATUS), QueryStatus.COMPLETED.toString());
-                    assertEquals(rs.getString(TENANT_ID), null);
-                    assertTrue(rs.getString(SCAN_METRICS_JSON) == null);
-                    assertEquals(rs.getString(EXCEPTION_TRACE), null);
+                    assertNull(rs.getString(BIND_PARAMETERS));
+                    assertEquals(PRINCIPAL, rs.getString(USER));
+                    assertEquals(InetAddress.getLocalHost().getHostAddress(), rs.getString(CLIENT_IP));
+                    assertEquals(QueryUtil.getExplainPlan(explainRS), rs.getString(EXPLAIN_PLAN));
+                    assertEquals(context.getScan().toJSON(), rs.getString(GLOBAL_SCAN_DETAILS));
+                    assertEquals(10, rs.getLong(NO_OF_RESULTS_ITERATED));
+                    assertEquals(query, rs.getString(QUERY));
+                    assertEquals(QueryStatus.COMPLETED.toString(), rs.getString(QUERY_STATUS));
+                    assertNull(rs.getString(TENANT_ID));
+                    assertNull(rs.getString(SCAN_METRICS_JSON));
+                    assertNull(rs.getString(EXCEPTION_TRACE));
                 } else {
                     //confirm we are not logging system queries
-                    assertFalse(rs.getString(QUERY).toString().contains(SYSTEM_CATALOG_SCHEMA));
+                    assertFalse(rs.getString(QUERY).contains(SYSTEM_CATALOG_SCHEMA));
                 }
             }
             assertTrue(foundQueryLog);
@@ -212,14 +213,14 @@ public class QueryLoggerIT extends BaseTest {
             while (rs.next()) {
                 if (rs.getString(QUERY_ID).equals(queryId)) {
                     foundQueryLog = true;
-                    assertEquals(rs.getString(USER), System.getProperty("user.name"));
-                    assertEquals(rs.getString(CLIENT_IP), InetAddress.getLocalHost().getHostAddress());
-                    assertEquals(rs.getString(EXPLAIN_PLAN), null);
-                    assertEquals(rs.getString(GLOBAL_SCAN_DETAILS), null);
-                    assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 10);
-                    assertEquals(rs.getString(QUERY), query);
-                    assertEquals(rs.getString(QUERY_STATUS), QueryStatus.COMPLETED.toString());
-                    assertEquals(rs.getString(TENANT_ID), null);
+                    assertEquals(PRINCIPAL, rs.getString(USER));
+                    assertEquals(InetAddress.getLocalHost().getHostAddress(), rs.getString(CLIENT_IP));
+                    assertNull(rs.getString(EXPLAIN_PLAN));
+                    assertNull(rs.getString(GLOBAL_SCAN_DETAILS));
+                    assertEquals(10, rs.getLong(NO_OF_RESULTS_ITERATED));
+                    assertEquals(query, rs.getString(QUERY));
+                    assertEquals(QueryStatus.COMPLETED.toString(), rs.getString(QUERY_STATUS));
+                    assertNull(rs.getString(TENANT_ID));
                 }
             }
             assertTrue(foundQueryLog);
@@ -308,18 +309,18 @@ public class QueryLoggerIT extends BaseTest {
                 while (rs.next()) {
                     if (rs.getString(QUERY_ID).equals(queryId)) {
                         foundQueryLog = true;
-                        assertEquals(rs.getString(BIND_PARAMETERS), loglevel == LogLevel.TRACE ? "value5" : null);
-                        assertEquals(rs.getString(USER), System.getProperty("user.name"));
-                        assertEquals(rs.getString(CLIENT_IP), InetAddress.getLocalHost().getHostAddress());
-                        assertEquals(rs.getString(EXPLAIN_PLAN), QueryUtil.getExplainPlan(explainRS));
-                        assertEquals(rs.getString(GLOBAL_SCAN_DETAILS), context.getScan().toJSON());
-                        assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 1);
-                        assertEquals(rs.getString(QUERY), query);
-                        assertEquals(rs.getString(QUERY_STATUS), QueryStatus.COMPLETED.toString());
+                        assertEquals(loglevel == LogLevel.TRACE ? "value5" : null, rs.getString(BIND_PARAMETERS));
+                        assertEquals(PRINCIPAL, rs.getString(USER));
+                        assertEquals(InetAddress.getLocalHost().getHostAddress(), rs.getString(CLIENT_IP));
+                        assertEquals(QueryUtil.getExplainPlan(explainRS), rs.getString(EXPLAIN_PLAN));
+                        assertEquals(context.getScan().toJSON(), rs.getString(GLOBAL_SCAN_DETAILS));
+                        assertEquals(1, rs.getLong(NO_OF_RESULTS_ITERATED));
+                        assertEquals(query, rs.getString(QUERY));
+                        assertEquals(QueryStatus.COMPLETED.toString(), rs.getString(QUERY_STATUS));
                         assertTrue(LogLevel.TRACE == loglevel ? rs.getString(SCAN_METRICS_JSON).contains("scanMetrics")
                                 : rs.getString(SCAN_METRICS_JSON) == null);
-                        assertEquals(rs.getTimestamp(START_TIME).getTime(), 100);
-                        assertEquals(rs.getString(TENANT_ID), null);
+                        assertEquals(100, rs.getTimestamp(START_TIME).getTime());
+                        assertNull(rs.getString(TENANT_ID));
                     }
                 }
                 assertTrue(foundQueryLog);
@@ -358,12 +359,12 @@ public class QueryLoggerIT extends BaseTest {
         while (rs.next()) {
             if (QueryStatus.FAILED.name().equals(rs.getString(QUERY_STATUS))) {
                 foundQueryLog = true;
-                assertEquals(rs.getString(USER), System.getProperty("user.name"));
-                assertEquals(rs.getString(CLIENT_IP), InetAddress.getLocalHost().getHostAddress());
-                assertEquals(rs.getString(EXPLAIN_PLAN), null);
-                assertEquals(rs.getString(GLOBAL_SCAN_DETAILS), null);
-                assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 0);
-                assertEquals(rs.getString(QUERY), query);
+                assertEquals(PRINCIPAL, rs.getString(USER));
+                assertEquals(InetAddress.getLocalHost().getHostAddress(), rs.getString(CLIENT_IP));
+                assertNull(rs.getString(EXPLAIN_PLAN));
+                assertNull(rs.getString(GLOBAL_SCAN_DETAILS));
+                assertEquals(0, rs.getLong(NO_OF_RESULTS_ITERATED));
+                assertEquals(query, rs.getString(QUERY));
                 assertTrue(rs.getString(EXCEPTION_TRACE).contains(SQLExceptionCode.TABLE_UNDEFINED.getMessage()));
             }
         }

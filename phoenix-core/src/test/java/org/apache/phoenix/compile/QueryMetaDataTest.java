@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.compile;
 
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.junit.Assert.assertEquals;
 
 import java.math.BigDecimal;

@@ -210,6 +210,7 @@ public abstract class BaseTest {
             .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
     private static final ExecutorService dropHTableService = Executors
             .newSingleThreadExecutor(factory);
+    public static final String PRINCIPAL = "test-profile";
 
     @ClassRule
     public static final SystemExitRule SYSTEM_EXIT_RULE = new SystemExitRule();
@@ -557,7 +558,9 @@ public abstract class BaseTest {
     }
 
     protected static String getLocalClusterUrl(HBaseTestingUtility util) throws Exception {
-        String url = QueryUtil.getConnectionUrl(new Properties(), util.getConfiguration(), "test-profile");
+        // principal is used to differentiate between connections created from the test class and connections created
+        // by regionservers. We want to create different connections in both cases.
+        String url = QueryUtil.getConnectionUrl(new Properties(), util.getConfiguration(), PRINCIPAL);
         return url + PHOENIX_TEST_DRIVER_URL_PARAM;
     }
     

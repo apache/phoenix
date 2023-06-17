@@ -50,7 +50,6 @@ public class QueryLoggerUtil {
             if (tenantId != null) {
                 queryLogger.log(QueryLogInfo.TENANT_ID_I, tenantId.getString());
             }
-
             queryLogger.log(QueryLogInfo.USER_I, queryServices.getUserName() != null ? queryServices.getUserName()
                     : queryServices.getUser().getShortName());
         } catch (Exception e) {

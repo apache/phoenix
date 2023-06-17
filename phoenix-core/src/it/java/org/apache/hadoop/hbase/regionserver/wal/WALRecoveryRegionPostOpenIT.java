@@ -163,16 +163,11 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
         tableReferenceToMutation=null;
         handleFailureCalledCount=0;
         failIndexTableWrite=false;
-
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-
-
         try (Connection conn = driver.connect(url, props)) {
             conn.setAutoCommit(true);
             conn.createStatement().execute("CREATE TABLE " + DATA_TABLE_NAME
                     + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) ");
-
-
             conn.createStatement().execute(
                     "CREATE " +  "INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_NAME + " (v1) INCLUDE (v2)");
             String query = "SELECT * FROM " + DATA_TABLE_NAME;

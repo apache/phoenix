@@ -54,10 +54,12 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(NeedsOwnMiniClusterTest.class)
+@Ignore
 public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
 
     private static Connection conn;

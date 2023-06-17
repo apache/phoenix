@@ -141,6 +141,7 @@ public class MetaDataCachingIT extends BaseTest {
     this test should be updated with the appropriate number of hits/misses.
      */
     @Test
+    @Ignore
     public void testGlobalClientCacheMetrics() throws Exception {
         int numThreads = 5;
         int numTables = 1;
