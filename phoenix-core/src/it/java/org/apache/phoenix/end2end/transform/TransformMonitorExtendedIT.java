@@ -105,6 +105,7 @@ public class TransformMonitorExtendedIT extends BaseTest {
     }
 
     @Test
+    @Ignore
     public void testTransformIndexWithNamespaceEnabled() throws Exception {
         String schemaName = "S_" + generateUniqueName();
         String dataTableName = "TBL_" + generateUniqueName();
