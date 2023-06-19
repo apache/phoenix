@@ -78,7 +78,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Category(NeedsOwnMiniClusterTest.class)
-@Ignore
 public class SystemTablesCreationOnConnectionIT {
     private HBaseTestingUtility testUtil = null;
     private Set<String> hbaseTables;

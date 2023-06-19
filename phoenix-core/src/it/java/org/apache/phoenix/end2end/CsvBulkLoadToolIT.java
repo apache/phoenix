@@ -59,7 +59,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(NeedsOwnMiniClusterTest.class)
-@Ignore
 public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
 
     private static Connection conn;

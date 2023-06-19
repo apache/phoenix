@@ -45,7 +45,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(NeedsOwnMiniClusterTest.class)
-@Ignore
 public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
 
     private static Connection conn;

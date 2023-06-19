@@ -23,13 +23,12 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
 
-
 public class SequenceKey implements Comparable<SequenceKey> {
     private final String tenantId;
     private final String schemaName;
     private final String sequenceName;
     private final byte[] key;
-    
+
     public SequenceKey(String tenantId, String schemaName, String sequenceName, int nBuckets) {
         this.tenantId = tenantId;
         this.schemaName = schemaName;

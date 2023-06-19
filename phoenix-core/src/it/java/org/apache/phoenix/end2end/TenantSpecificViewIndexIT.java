@@ -49,7 +49,6 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(NeedsOwnMiniClusterTest.class)
-@Ignore
 public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
 	
     @Test

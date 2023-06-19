@@ -3495,6 +3495,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 success = true;
                                 return null;
                             }
+                            nSequenceSaltBuckets =  ConnectionQueryServicesImpl.this.props.getInt(
+                                    QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
+                                    QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
                             boolean isDoNotUpgradePropSet = UpgradeUtil.isNoUpgradeSet(props);
                             Properties scnProps = PropertiesUtil.deepCopy(props);
                             scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
@@ -3708,10 +3711,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private void createOtherSystemTables(PhoenixConnection metaConnection) throws SQLException, IOException {
         try {
-
-            nSequenceSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
-                    QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
-                    QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
             metaConnection.createStatement().execute(getSystemSequenceTableDDL(nSequenceSaltBuckets));
             // When creating the table above, DDL statements are
             // used. However, the CFD level properties are not set
@@ -4353,13 +4352,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public PhoenixConnection upgradeSystemSequence(
             PhoenixConnection metaConnection,
             Map<String, String> systemTableToSnapshotMap) throws SQLException, IOException {
-        int nSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
-                QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
-                QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
         try (Statement statement = metaConnection.createStatement()) {
-            String createSequenceTable = getSystemSequenceTableDDL(nSaltBuckets);
+            String createSequenceTable = getSystemSequenceTableDDL(nSequenceSaltBuckets);
             statement.executeUpdate(createSequenceTable);
-            nSequenceSaltBuckets = nSaltBuckets;
         } catch (NewerTableAlreadyExistsException e) {
             // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed
             // timestamp.
@@ -4392,7 +4387,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // If the table timestamp is before 4.2.1 then run the upgrade script
             if (currentServerSideTableTimeStamp <
                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_2_1) {
-                if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSaltBuckets, e.getTable())) {
+                if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSequenceSaltBuckets, e.getTable())) {
                     metaConnection.removeTable(null,
                             PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA,
                             PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE,
@@ -4404,7 +4399,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     clearTableRegionCache(TableName.valueOf(
                             PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES));
                 }
-                nSequenceSaltBuckets = nSaltBuckets;
             } else {
                 nSequenceSaltBuckets = getSaltBuckets(e);
             }
@@ -5275,6 +5269,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             sequence.getLock().lock();
             // Now that we have the lock we need, create the sequence
             Append append = sequence.createSequence(startWith, incrementBy, cacheSize, timestamp, minValue, maxValue, cycle);
+
             Table htable = this.getTable(SchemaUtil
                     .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, this.getProps()).getName());
             try {

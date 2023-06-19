@@ -167,7 +167,6 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
     }
 
     @Test
-    @Ignore
     public void testDeleteViewIndexSequences() throws Exception {
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
