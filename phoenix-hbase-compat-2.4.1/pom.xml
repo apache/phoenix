@@ -31,7 +31,7 @@
   <description>Compatibility module for HBase 2.4.1+</description>
 
   <properties>
-    <hbase24.compat.version>2.4.1</hbase24.compat.version>
+    <hbase24.compat.version>2.4.16</hbase24.compat.version>
   </properties>
 
   <dependencies>

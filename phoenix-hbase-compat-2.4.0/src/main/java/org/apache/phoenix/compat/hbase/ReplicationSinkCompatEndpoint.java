@@ -15,14 +15,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
 
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDate;
+package org.apache.phoenix.compat.hbase;
 
-abstract public class PDateColumn extends PBaseColumn {
+import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
+
+import java.util.Optional;
+
+/**
+ * No-op replication sink compat endpoint.
+ */
+public class ReplicationSinkCompatEndpoint
+        implements RegionServerCoprocessor, RegionServerObserver {
+
     @Override
-    public PDataType getDataType() {
-        return PDate.INSTANCE;
+    public Optional<RegionServerObserver> getRegionServerObserver() {
+        return Optional.of(this);
     }
+
 }

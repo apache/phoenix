@@ -15,38 +15,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
 
-import org.apache.phoenix.util.SizedUtil;
+package org.apache.phoenix.compat.hbase;
 
+import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
+
+import java.util.Optional;
 
 /**
- * 
- * Base class for PColumn implementors that provides
- * some reasonable default implementations.
- *
- * 
- * @since 0.1
+ * No-op replication sink compat endpoint.
  */
-public abstract class PBaseColumn implements PColumn {
+public class ReplicationSinkCompatEndpoint
+        implements RegionServerCoprocessor, RegionServerObserver {
 
     @Override
-    public final Integer getMaxLength() {
-        return null;
+    public Optional<RegionServerObserver> getRegionServerObserver() {
+        return Optional.of(this);
     }
 
-    @Override
-    public final Integer getScale() {
-        return null;
-    }
-
-    @Override
-    public boolean isNullable() {
-        return false;
-    }
-    
-    @Override
-    public int getEstimatedSize() {
-        return SizedUtil.OBJECT_SIZE; // Not really interested in sized of these
-    }
 }

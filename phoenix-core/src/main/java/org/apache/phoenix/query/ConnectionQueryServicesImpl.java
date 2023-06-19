@@ -4061,7 +4061,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0,
                 PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED
                     + " " + PBoolean.INSTANCE.getSqlTypeName());
-            UpgradeUtil.bootstrapLastDDLTimestamp(metaConnection);
+            UpgradeUtil.bootstrapLastDDLTimestampForTablesAndViews(metaConnection);
 
             boolean isNamespaceMapping =
                     SchemaUtil.isNamespaceMappingEnabled(null,  getConfiguration());
@@ -4122,6 +4122,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
                 MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0,
                 PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME + " " + PVarchar.INSTANCE.getSqlTypeName());
+            UpgradeUtil.bootstrapLastDDLTimestampForIndexes(metaConnection);
         }
         return metaConnection;
     }

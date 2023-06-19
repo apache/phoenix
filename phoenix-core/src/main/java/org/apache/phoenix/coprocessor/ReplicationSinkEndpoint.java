@@ -15,21 +15,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema;
 
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PLong;
+package org.apache.phoenix.coprocessor;
+
+import org.apache.phoenix.compat.hbase.ReplicationSinkCompatEndpoint;
 
 /**
- * 
- * Base class for PColumn implementors of type Long.
- *
- * 
- * @since 0.1
+ * This class is to be used as regionserver coproc when Phoenix metadata attribute values like
+ * Tenant id, Schema name, logical table, table type etc need to be replicated across the
+ * replication sink cluster.
  */
-public abstract class PLongColumn extends PBaseColumn {
-    @Override
-    public final PDataType getDataType() {
-        return PLong.INSTANCE;
-    }
+public class ReplicationSinkEndpoint extends ReplicationSinkCompatEndpoint {
+
 }

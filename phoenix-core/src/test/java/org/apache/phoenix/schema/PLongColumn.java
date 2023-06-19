@@ -18,20 +18,15 @@
 package org.apache.phoenix.schema;
 
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PLong;
 
 /**
- * 
- * Abstract class for columns of type {@link org.apache.phoenix.schema.types.PVarchar}
- *
- * 
+ * Base class for PColumn implementors of type Long.
  * @since 0.1
  */
-public abstract class PStringColumn extends PBaseColumn {
-
+public abstract class PLongColumn extends PBaseColumn {
     @Override
-    public PDataType getDataType() {
-        return PVarchar.INSTANCE;
+    public final PDataType getDataType() {
+        return PLong.INSTANCE;
     }
-
 }
