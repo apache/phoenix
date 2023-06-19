@@ -61,7 +61,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
-@Ignore
 public class TransformMonitorExtendedIT extends BaseTest {
     private static RegionCoprocessorEnvironment taskRegionEnvironment;
     protected String dataTableDdl = "";
