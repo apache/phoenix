@@ -342,8 +342,8 @@ public class QueryOptimizer {
                 || (indexState == PIndexState.PENDING_DISABLE && isUnderPendingDisableThreshold(indexTableRef.getCurrentTime(), indexTable.getIndexDisableTimestamp()))) {
             try {
             	// translate nodes that match expressions that are indexed to the associated column parse node
-                indexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, null, statement.getConnection(), indexSelect.getUdfParseNodes()));
-                QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans);
+                SelectStatement rewrittenIndexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, null, statement.getConnection(), indexSelect.getUdfParseNodes()));
+                QueryCompiler compiler = new QueryCompiler(statement, rewrittenIndexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans);
 
                 QueryPlan plan = compiler.compile();
 
@@ -369,6 +369,10 @@ public class QueryOptimizer {
                  * otherwise we just don't use this index (as opposed to trying to join back from
                  * the index table to the data table.
                  */
+                // Reset the state changes from the attempt above
+                indexTableRef.setHinted(false);
+                dataPlan.getContext().setUncoveredIndex(false);
+
                 SelectStatement dataSelect = (SelectStatement)dataPlan.getStatement();
                 ParseNode where = dataSelect.getWhere();
                 if (isHinted && where != null) {
