@@ -52,6 +52,7 @@ import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.ipc.controller.ServerToServerRpcController;
+import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -192,6 +193,7 @@ public class SystemTablesCreationOnConnectionIT {
                 testUtil.shutdownMiniCluster();
                 testUtil = null;
                 assertFalse("refCount leaked", refCountLeaked);
+                ServerMetadataCache.resetCache();
             }
         } catch (Exception e) {
             // ignore
@@ -524,7 +526,6 @@ public class SystemTablesCreationOnConnectionIT {
             }
             hbaseTables = getHBaseTables();
             assertEquals(PHOENIX_SYSTEM_TABLES, hbaseTables);
-
             // Now we can run any other query/mutation using this connection object
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute(String.format(CREATE_TABLE_STMT, tableName));
@@ -656,7 +657,6 @@ public class SystemTablesCreationOnConnectionIT {
             throws Exception {
         testUtil = new HBaseTestingUtility();
         Configuration conf = testUtil.getConfiguration();
-        setUpConfigForMiniCluster(conf);
         conf.set(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, isNamespaceMappingEnabled);
         // Avoid multiple clusters trying to bind to the master's info port (16010)
         conf.setInt(HConstants.MASTER_INFO_PORT, -1);

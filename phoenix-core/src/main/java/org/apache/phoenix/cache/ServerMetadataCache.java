@@ -118,4 +118,9 @@ public class ServerMetadataCache {
         }
         return table.getLastDDLTimestamp();
     }
+
+    public static  void resetCache() {
+        LOGGER.info("Resetting ServerMetadataCache");
+        INSTANCE = null;
+    }
 }
