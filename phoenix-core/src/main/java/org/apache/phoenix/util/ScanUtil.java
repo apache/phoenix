@@ -23,6 +23,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_AN
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_PHOENIX_TTL;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -1026,7 +1027,7 @@ public class ScanUtil {
     public static long getPhoenixTTL(Scan scan) {
         byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserver.PHOENIX_TTL);
         if (phoenixTTL == null) {
-            return 0L;
+            return DEFAULT_PHOENIX_TTL;
         }
         return Bytes.toLong(phoenixTTL);
     }
@@ -1066,7 +1067,7 @@ public class ScanUtil {
 
     public static boolean isTTLExpired(Cell cell, Scan scan, long nowTS) {
         long ts = cell.getTimestamp();
-        long ttl = ScanUtil.getPhoenixTTL(scan);
+        long ttl = ScanUtil.getPhoenixTTL(scan) * 1000;
         return ts + ttl < nowTS;
     }
 

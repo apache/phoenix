@@ -20,6 +20,7 @@ package org.apache.phoenix.coprocessor.metrics;
 /**
  * Factory object to create various metric sources for phoenix related coprocessors.
  */
+@Deprecated
 public class MetricsPhoenixCoprocessorSourceFactory {
 
     private static final MetricsPhoenixCoprocessorSourceFactory

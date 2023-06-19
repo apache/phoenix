@@ -1366,11 +1366,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
              useStatsForParallelization : oldTable != null ? oldTable.useStatsForParallelization() : null);
 
         Cell phoenixTTLKv = tableKeyValues[PHOENIX_TTL_INDEX];
-        long phoenixTTL = phoenixTTLKv == null ? (tableType == TABLE ? DEFAULT_PHOENIX_TTL : PHOENIX_TTL_NOT_DEFINED) :
+        long phoenixTTL = phoenixTTLKv == null ? PHOENIX_TTL_NOT_DEFINED :
                 PLong.INSTANCE.getCodec().decodeLong(phoenixTTLKv.getValueArray(),
                         phoenixTTLKv.getValueOffset(), SortOrder.getDefault());
         builder.setPhoenixTTL(phoenixTTLKv != null ? phoenixTTL :
-            oldTable != null ? oldTable.getPhoenixTTL() : (tableType == TABLE ? DEFAULT_PHOENIX_TTL : PHOENIX_TTL_NOT_DEFINED));
+            oldTable != null ? oldTable.getPhoenixTTL() : PHOENIX_TTL_NOT_DEFINED);
 
         Cell phoenixTTLHWMKv = tableKeyValues[PHOENIX_TTL_HWM_INDEX];
         long phoenixTTLHWM = phoenixTTLHWMKv == null ? MIN_PHOENIX_TTL_HWM :
@@ -3427,14 +3427,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             cell.getValueOffset(), cell.getValueLength());
                     hasNewPhoenixTTLAttribute =  newPhoenixTTL != PHOENIX_TTL_NOT_DEFINED ;
                     //TODO:- Reenable when we have ViewTTL
-                    isSchemaMutationAllowed = false;
+                    return false;
                 }
             }
         }
 
         if (hasNewPhoenixTTLAttribute) {
             // Disallow if the parent has PHOENIX_TTL set.
-            if (parentTable != null &&  parentTable.getPhoenixTTL() != DEFAULT_PHOENIX_TTL) {
+            if (parentTable != null &&  parentTable.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED) {
                 isSchemaMutationAllowed = false;
             }
 

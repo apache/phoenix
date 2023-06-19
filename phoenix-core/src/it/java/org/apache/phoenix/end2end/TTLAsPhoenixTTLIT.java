@@ -1,6 +1,5 @@
 package org.apache.phoenix.end2end;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PTable;
@@ -51,8 +50,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                         + " ) TTL=86400";
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute(ddl);
-        assertEquals("TTL is not set correctly at Phoenix level", DEFAULT_TTL_FOR_TEST,
-                conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName)).getPhoenixTTL());
+        assertTTLValueOfTableOrView(conn, DEFAULT_TTL_FOR_TEST, tableName);
     }
 
     @Test
@@ -61,13 +59,11 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
              PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);){
             String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, false);
             //Checking Default TTL in case of PhoenixTTLEnabled
-            assertEquals("TTL should be default at Phoenix level", HConstants.FOREVER,
-                    pConn.getTable(new PTableKey(null, tableName)).getPhoenixTTL());
+            assertTTLValueOfTableOrView(conn, PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED, tableName);
             String ddl = "ALTER TABLE  " + tableName
                     + " SET TTL=1000";
             conn.createStatement().execute(ddl);
-            assertEquals("TTL should be changed wrt Alter statement", 1000,
-                    pConn.getTable(new PTableKey(null, tableName)).getPhoenixTTL());
+            assertTTLValueOfTableOrView(conn, 1000, tableName);
         }
     }
 
@@ -82,7 +78,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             List<PTable> indexes = conn.unwrap(PhoenixConnection.class).getTable(
                     new PTableKey(null, tableName)).getIndexes();
             for (PTable index : indexes) {
-                assertEquals("TTL should be same as BaseTable", DEFAULT_TTL_FOR_TEST, index.getPhoenixTTL());
+                assertTTLValueOfIndex(DEFAULT_TTL_FOR_TEST, index);;
             }
 
             tableName = createTableWithOrWithOutTTLAsItsProperty(conn, false);
@@ -91,7 +87,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             String globalIndexName = createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.GLOBAL, false);
             indexes = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName)).getIndexes();
             for (PTable index : indexes) {
-                assertEquals("TTL should be same as BaseTable", HConstants.FOREVER, index.getPhoenixTTL());
+                assertTTLValueOfIndex(PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED, index);
             }
 
             //Test setting TTL as index property not allowed while creating them or setting them explicitly.
@@ -135,17 +131,17 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
 
-            //View Should have PhoenixTTL Not defined or not allowed to set TTL irrespective on parent's ttl
+            //View gets TTL value from its hierarchy
             String viewName = createViewOnTableOrViewWithTTL(conn, tableName, false);
-            assertEquals("Phoenix TTL should be Not Defined :-", PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED,
-                    conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, viewName)).getPhoenixTTL());
+            assertTTLValueOfTableOrView(conn, DEFAULT_TTL_FOR_TEST, viewName);
 
             createIndexOnTableOrViewProvidedWithTTL(conn, viewName, PTable.IndexType.GLOBAL,
                     false);
             List<PTable> indexes = conn.unwrap(PhoenixConnection.class).getTable(
                     new PTableKey(null, viewName)).getIndexes();
-            assertEquals("Phoenix TTL should be Not Defined :-", PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED,
-                    indexes.get(0).getPhoenixTTL());
+            assertTTLValueOfIndex(DEFAULT_TTL_FOR_TEST, indexes.get(0));
+
+//            String childView = createViewOnTableOrViewWithTTL(conn)
 
             //Setting TTL on Views should not be allowed.
 
@@ -163,6 +159,15 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                         CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX.getErrorCode(), sqe.getErrorCode());
             }
         }
+    }
+
+    private void assertTTLValueOfTableOrView(Connection conn, long expected, String name) throws SQLException {
+        assertEquals("TTL value did not match :-", expected,
+                conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, name)).getPhoenixTTL());
+    }
+
+    private void assertTTLValueOfIndex(long expected, PTable index) {
+        assertEquals("TTL value is not what expected :-", expected, index.getPhoenixTTL());
     }
 
 

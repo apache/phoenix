@@ -56,6 +56,7 @@ import static org.apache.phoenix.util.ScanUtil.isDummy;
 /**
  * Coprocessor that checks whether the row is expired based on the TTL spec.
  */
+@Deprecated
 public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implements RegionCoprocessor {
     private static final Logger LOG = LoggerFactory.getLogger(PhoenixTTLRegionObserver.class);
     private MetricsPhoenixTTLSource metricSource;

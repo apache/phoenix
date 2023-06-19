@@ -184,7 +184,6 @@ import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
-import org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver;
 import org.apache.phoenix.coprocessor.SystemCatalogRegionObserver;
 import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
@@ -1280,18 +1279,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
 
-            // The priority for this co-processor should be set higher than the GlobalIndexChecker so that the read repair scans
-            // are intercepted by the TTLAwareRegionObserver and only the rows that are not ttl-expired are returned.
-            if (!SchemaUtil.isSystemTable(tableName)) {
-                if (!newDesc.hasCoprocessor(PhoenixTTLRegionObserver.class.getName())) {
-                    builder.setCoprocessor(
-                            CoprocessorDescriptorBuilder
-                                    .newBuilder(PhoenixTTLRegionObserver.class.getName())
-                                    .setPriority(priority - 2)
-                                    .setProperties(Collections.emptyMap())
-                                    .build());
-                }
-            }
+
             if (Arrays.equals(tableName, SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, props).getName())) {
                 if (!newDesc.hasCoprocessor(SystemCatalogRegionObserver.class.getName())) {
                     builder.setCoprocessor(

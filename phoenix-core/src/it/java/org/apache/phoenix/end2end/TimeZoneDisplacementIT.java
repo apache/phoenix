@@ -255,6 +255,13 @@ public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
             upsertStmt.executeUpdate();
 
             ResultSet rs = stmt.executeQuery("select * from " + tableName + " order by id asc");
+            while (rs.next()) {
+                System.out.println(rs.getInt(1));
+                System.out.println(rs.getDate(2));
+                System.out.println(rs.getDate(3));
+                System.out.println("   ");
+            }
+
             assertTrue(rs.next());
             assertEquals(1, rs.getInt("ID"));
             assertEquals(sqlDateLocal, rs.getDate("D"));

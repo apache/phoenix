@@ -1064,7 +1064,7 @@ public class MetaDataClient {
                             .setMessage("Property: " + prop.getFirst()).build()
                             .buildException();
                 }
-                //If PhoenixTTL is enabled use TTL as Phoenix Table Property
+                //If Phoenix Level TTL is enabled use TTL as Phoenix Table Property as skip at HTableDescriptor level.
                 if (isPhoenixTTLEnabled() && prop.getFirst().equalsIgnoreCase(TTL)) {
                     tableProps.put(prop.getFirst(), prop.getSecond());
                     continue;
@@ -1952,6 +1952,35 @@ public class MetaDataClient {
         }
     }
 
+    /**
+     * Get TTL defined for Index or View in its parent hierarchy as defining TTL directly on index or view is
+     * not allowed. View on SYSTEM table is not allowed and already handled during plan compilation.
+     * @param parent
+     * @return appropriate TTL for the entity calling the function.
+     * @throws TableNotFoundException
+     */
+    private Long getTTLFromHierarchy(PTable parent) throws TableNotFoundException {
+        return (parent.getType() == TABLE || parent.getType() == SYSTEM) ? Long.valueOf(parent.getPhoenixTTL()) :
+                (parent.getType() == VIEW ? getTTLFromViewsAbove(parent) : null);
+    }
+
+    /**
+     * Get TTL defined for the given View according to its hierarchy.
+     * @param table
+     * @return appropriate TTL from Views defined above for the entity calling.
+     * @throws TableNotFoundException
+     */
+    private Long getTTLFromViewsAbove(PTable table) throws TableNotFoundException {
+        try {
+            return table.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED ? Long.valueOf(table.getPhoenixTTL()) :
+                    (table.getParentName() == null ? connection.getTable(new PTableKey(connection.getTenantId(),
+                            table.getPhysicalNames().get(0).getString())).getPhoenixTTL() :
+                            getTTLFromViewsAbove(connection.getTable(new PTableKey(connection.getTenantId(), table.getParentName().getString()))));
+        } catch (TableNotFoundException tne) {
+            throw new TableNotFoundException(table.getParentName().toString());
+        }
+    }
+
     private PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
             final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType,
             final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced, boolean allocateIndexId,
@@ -2006,7 +2035,7 @@ public class MetaDataClient {
                     tableType == PTableType.VIEW ? parent.getColumns().size()
                             : QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 
-            Long phoenixTTL = DEFAULT_PHOENIX_TTL;
+            Long phoenixTTL = PHOENIX_TTL_NOT_DEFINED;
             Long phoenixTTLHighWaterMark = MIN_PHOENIX_TTL_HWM;
             Long phoenixTTLProp = (Long) TableProperty.TTL.getValue(tableProps);
 
@@ -2026,7 +2055,7 @@ public class MetaDataClient {
                             .build()
                             .buildException();
                 }
-                //Set TTL for table as defined in DDL.
+                //Set Only in case of Tables and System Tables.
                 phoenixTTL = phoenixTTLProp;
             }
 
@@ -2041,9 +2070,8 @@ public class MetaDataClient {
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactionProvider != null, transactionProvider);
                 isImmutableRows = parent.isImmutableRows();
                 isAppendOnlySchema = parent.isAppendOnlySchema();
-                //Indexes on Views will also get PHOENIX_TTL_NOT_DEFINED = 0L as phoenixTTL until we introduce
-                //TTL on Views.
-                phoenixTTL = parent.getPhoenixTTL();
+                //Check up hierarchy and get appropriate TTL
+                phoenixTTL = getTTLFromHierarchy(parent);
 
                 // Index on view
                 // TODO: Can we support a multi-tenant index directly on a multi-tenant
@@ -2245,9 +2273,7 @@ public class MetaDataClient {
                 .setSchemaName(schemaName).setTableName(tableName)
                 .build().buildException();
             }
-            //Why was TTL there as a tableProperty, as it was never set as a TableProperty and then it's being used here.
-            //For now checking for PhoenixTTL so this will behave like before.
-            if (!isPhoenixTTLEnabled() && TableProperty.TTL.getValue(commonFamilyProps) != null
+            if (phoenixTTLProp != null && TableProperty.TTL.getValue(commonFamilyProps) != null
                     && transactionProvider != null 
                     && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.SET_TTL)) {
                 throw new SQLExceptionInfo.Builder(PhoenixTransactionProvider.Feature.SET_TTL.getCode())
@@ -2363,7 +2389,7 @@ public class MetaDataClient {
                         updateCacheFrequency = parent.getUpdateCacheFrequency();
                     }
 
-                    phoenixTTL = PHOENIX_TTL_NOT_DEFINED;
+                    phoenixTTL = getTTLFromHierarchy(parent);
 
                     disableWAL = (disableWALProp == null ? parent.isWALDisabled() : disableWALProp);
                     defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
@@ -2820,7 +2846,7 @@ public class MetaDataClient {
                         .setIndexes(Collections.<PTable>emptyList())
                         .setPhysicalNames(ImmutableList.<PName>of())
                         .setColumns(columns.values())
-                        .setPhoenixTTL(DEFAULT_PHOENIX_TTL)
+                        .setPhoenixTTL(PHOENIX_TTL_NOT_DEFINED)
                         .setPhoenixTTLHighWaterMark(MIN_PHOENIX_TTL_HWM)
                         .build();
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
@@ -3203,7 +3229,7 @@ public class MetaDataClient {
                         .setParentTableName((parent == null) ? null : parent.getTableName())
                         .setPhysicalNames(ImmutableList.copyOf(physicalNames))
                         .setColumns(columns.values())
-                        .setPhoenixTTL(phoenixTTL == null ? (tableType == VIEW ? PHOENIX_TTL_NOT_DEFINED : DEFAULT_PHOENIX_TTL) : phoenixTTL)
+                        .setPhoenixTTL(phoenixTTL == null ? PHOENIX_TTL_NOT_DEFINED : phoenixTTL)
                         .setPhoenixTTLHighWaterMark(phoenixTTLHighWaterMark == null ? MIN_PHOENIX_TTL_HWM : phoenixTTLHighWaterMark)
                         .setViewModifiedUpdateCacheFrequency(tableType == PTableType.VIEW &&
                                 parent != null &&

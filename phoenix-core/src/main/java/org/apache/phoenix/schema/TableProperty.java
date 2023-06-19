@@ -76,13 +76,6 @@ public enum TableProperty {
         }
     },
 
-//    TTL(ColumnFamilyDescriptorBuilder.TTL, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY, true, CANNOT_ALTER_PROPERTY, false, false) {
-//        @Override
-//        public Object getPTableValue(PTable table) {
-//            return null;
-//        }
-//    },
-
     STORE_NULLS(PhoenixDatabaseMetaData.STORE_NULLS, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false, false) {
         @Override
         public Object getPTableValue(PTable table) {

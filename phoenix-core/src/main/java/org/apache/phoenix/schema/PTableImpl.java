@@ -1933,7 +1933,7 @@ public class PTableImpl implements PTable {
         if (table.hasUseStatsForParallelization()) {
             useStatsForParallelization = table.getUseStatsForParallelization();
         }
-        long phoenixTTL = tableType == PTableType.VIEW ? PHOENIX_TTL_NOT_DEFINED : DEFAULT_PHOENIX_TTL;
+        long phoenixTTL =  PHOENIX_TTL_NOT_DEFINED;
         if (table.hasPhoenixTTL()) {
             phoenixTTL = table.getPhoenixTTL();
         }

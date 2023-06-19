@@ -25,6 +25,7 @@ import org.apache.phoenix.hbase.index.Indexer;
 /**
  * Interface for metrics about {@link org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver}.
  */
+@Deprecated
 public interface MetricsPhoenixTTLSource extends BaseSource {
 
     // Metrics2 and JMX constants
