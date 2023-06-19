@@ -341,9 +341,22 @@ public class QueryOptimizer {
         if (indexState == PIndexState.ACTIVE || indexState == PIndexState.PENDING_ACTIVE
                 || (indexState == PIndexState.PENDING_DISABLE && isUnderPendingDisableThreshold(indexTableRef.getCurrentTime(), indexTable.getIndexDisableTimestamp()))) {
             try {
+                if (select.getHint().hasHint(HintNode.Hint.NO_INDEX_SERVER_MERGE)) {
+                    String schemaNameStr = index.getSchemaName() == null ? null
+                            : index.getSchemaName().getString();
+                    String tableNameStr = index.getTableName() == null ? null
+                            : index.getTableName().getString();
+                    throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, "*");
+                }
             	// translate nodes that match expressions that are indexed to the associated column parse node
-                SelectStatement rewrittenIndexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, null, statement.getConnection(), indexSelect.getUdfParseNodes()));
-                QueryCompiler compiler = new QueryCompiler(statement, rewrittenIndexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans);
+                SelectStatement rewrittenIndexSelect =
+                        ParseNodeRewriter.rewrite(indexSelect,
+                            new IndexExpressionParseNodeRewriter(index, null,
+                                    statement.getConnection(), indexSelect.getUdfParseNodes()));
+                QueryCompiler compiler =
+                        new QueryCompiler(statement, rewrittenIndexSelect, resolver, targetColumns,
+                                parallelIteratorFactory, dataPlan.getContext().getSequenceManager(),
+                                isProjected, true, dataPlans);
 
                 QueryPlan plan = compiler.compile();
 
@@ -357,8 +370,10 @@ public class QueryOptimizer {
                     if (plan.getProjector().getColumnCount() == nColumns) {
                         return plan;
                     } else if (index.getIndexType() == IndexType.GLOBAL) {
-                        String schemaNameStr = index.getSchemaName()==null?null:index.getSchemaName().getString();
-                        String tableNameStr = index.getTableName()==null?null:index.getTableName().getString();
+                        String schemaNameStr = index.getSchemaName() == null ? null
+                                : index.getSchemaName().getString();
+                        String tableNameStr = index.getTableName() == null ? null
+                                : index.getTableName().getString();
                         throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, "*");
                     }
                 }
