@@ -74,7 +74,6 @@ import static org.mockito.Mockito.times;
 
 @RunWith(Parameterized.class)
 @Category(NeedsOwnMiniClusterTest.class)
-@Ignore
 public class ParameterizedIndexUpgradeToolIT extends BaseTest {
     private static final String [] INDEXES_LIST = new String[8];
     private static final String [] INDEXES_LIST_NAMESPACE = new String[8];

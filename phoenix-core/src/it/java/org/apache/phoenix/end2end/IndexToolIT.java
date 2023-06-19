@@ -109,7 +109,6 @@ import org.slf4j.LoggerFactory;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
-@Ignore
 public class IndexToolIT extends BaseTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexToolIT.class);
 
