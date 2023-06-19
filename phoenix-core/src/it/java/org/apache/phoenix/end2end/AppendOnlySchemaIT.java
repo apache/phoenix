@@ -58,17 +58,14 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.mockito.AdditionalMatchers;
 import org.mockito.Mockito;
 
 @Category(ParallelStatsDisabledTest.class)
-@Ignore
 public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
 
-    
     private void testTableWithSameSchema(boolean notExists, boolean sameClient) throws Exception {
 
         // use a spyed ConnectionQueryServices so we can verify calls to getTable

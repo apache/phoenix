@@ -50,7 +50,6 @@ import org.junit.runners.Parameterized.Parameters;
 
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
-@Ignore
 public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
 
     private String tableDDLOptions;
