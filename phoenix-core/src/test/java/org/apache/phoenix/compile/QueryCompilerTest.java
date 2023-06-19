@@ -7008,33 +7008,38 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
 
-    @Ignore //The fallback does not happen on 5.2.
     @Test
-    // If/when we add a hint to didable server merges, this can be used for testing that
     public void testUncoveredPhoenix6984() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE D (\n" + "K1 CHAR(6) NOT NULL,\n"
-                    + "K2 VARCHAR(22) NOT NULL,\n" + "K3 CHAR(2) NOT NULL,\n"
-                    + "K4 VARCHAR(36) NOT NULL,\n" + "V1 TIMESTAMP,\n" + "V2 TIMESTAMP,\n"
+                    + "K2 VARCHAR(22) NOT NULL,\n" 
+                    + "K3 CHAR(2) NOT NULL,\n"
+                    + "K4 VARCHAR(36) NOT NULL,\n" 
+                    + "V1 TIMESTAMP,\n" 
+                    + "V2 TIMESTAMP,\n"
                     + "CONSTRAINT PK_BILLING_ORDER PRIMARY KEY (K1,K2,K3,K4))");
 
             stmt.execute("CREATE INDEX I ON D(K2, K1, K3, K4)");
             String query =
-                    "SELECT /*+ INDEX(D I) */ * " + "FROM D " + "WHERE " + "K2 = 'XXX' AND "
+                    "SELECT /*+ INDEX(D I), NO_INDEX_SERVER_MERGE */ * "
+                            + "FROM D " 
+                            + "WHERE K2 = 'XXX' AND "
                             + "V2 >= TIMESTAMP '2023-05-31 23:59:59.000' AND "
-                            + "V1 <= TIMESTAMP '2023-04-01 00:00:00.000' " + "ORDER BY V2 asc";
+                            + "V1 <= TIMESTAMP '2023-04-01 00:00:00.000' " 
+                            + "ORDER BY V2 asc";
             ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
             String explainPlan = QueryUtil.getExplainPlan(rs);
             assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER D\n"
-                    + "    SERVER FILTER BY (V2 >= TIMESTAMP '2023-05-31 23:59:59.000' "
-                    + "        AND V1 <= TIMESTAMP '2023-04-01 00:00:00.000')\n"
-                    + "    SERVER SORTED BY [D.V2]\n" + "CLIENT MERGE SORT\n"
+                    + "    SERVER FILTER BY (V2 >= TIMESTAMP '2023-05-31 23:59:59.000'"
+                    + " AND V1 <= TIMESTAMP '2023-04-01 00:00:00.000')\n"
+                    + "    SERVER SORTED BY [D.V2]\n"
+                    + "CLIENT MERGE SORT\n"
                     + "    SKIP-SCAN-JOIN TABLE 0\n"
                     + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER I ['XXX']\n"
                     + "            SERVER FILTER BY FIRST KEY ONLY\n"
                     + "    DYNAMIC SERVER FILTER BY (\"D.K1\", \"D.K2\", \"D.K3\", \"D.K4\")"
-                    + "        IN (($3.$5, $3.$6, $3.$7, $3.$8))",
+                    + " IN (($2.$4, $2.$5, $2.$6, $2.$7))",
                 explainPlan);
         }
     }
