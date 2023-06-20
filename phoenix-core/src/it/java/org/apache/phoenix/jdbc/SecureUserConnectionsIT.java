@@ -353,7 +353,6 @@ public class SecureUserConnectionsIT {
     }
 
     @Test
-    @Ignore
     public void testMultipleConnectionsAsSameUser() throws Exception {
         final HashSet<ConnectionInfo> connections = new HashSet<>();
         final String princ1 = getUserPrincipal(1);

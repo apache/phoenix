@@ -104,6 +104,9 @@ public class ServerMetadataCache {
         // cache, it will return null instead of reading from SYSCAT.
         PTable table;
         String tenantIDStr = Bytes.toString(tenantID);
+        if (tenantIDStr == null || tenantIDStr.isEmpty()) {
+            tenantIDStr = null;
+        }
         String fullTableNameStr = SchemaUtil.getTableName(schemaName, tableName);
         // LastDDLTimestamp not present in cache so query SYSCAT regionserver.
         try(Connection connection = QueryUtil.getConnectionOnServer(this.conf)) {

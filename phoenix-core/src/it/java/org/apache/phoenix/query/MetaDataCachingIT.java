@@ -141,7 +141,6 @@ public class MetaDataCachingIT extends BaseTest {
     this test should be updated with the appropriate number of hits/misses.
      */
     @Test
-    @Ignore
     public void testGlobalClientCacheMetrics() throws Exception {
         int numThreads = 5;
         int numTables = 1;
@@ -152,9 +151,11 @@ public class MetaDataCachingIT extends BaseTest {
 
         simulateWorkload("testGlobalClientCacheMetrics", numTables, numThreads, numMaxDML);
 
-        // only 1 miss when the table is created
+        // Since we are making getTable call from regionserver and GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER is
+        // a static global cache and it can't differentiate between the rpcs coming from client and
+        // server side within tests.
         assertEquals("Incorrect number of client metadata cache misses",
-                1, GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER.getMetric().getValue());
+                4, GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER.getMetric().getValue());
 
         // (2 hits per upsert + 1 hit per select) per thread
         assertEquals("Incorrect number of client metadata cache hits",

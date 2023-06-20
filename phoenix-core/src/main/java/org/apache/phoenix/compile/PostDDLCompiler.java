@@ -55,7 +55,6 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.TransactionUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SKIP_LAST_DDL_TIMESTAMP_VERIFICATION;
 
 /**

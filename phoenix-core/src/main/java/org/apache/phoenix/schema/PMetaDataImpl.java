@@ -23,7 +23,6 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.function.Consumer;
 
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
@@ -44,7 +43,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * oldest entries when size grows beyond the maxSize specified at create time.
  */
 public class PMetaDataImpl implements PMetaData {
-    
     private PMetaDataCache metaData;
     private final TimeKeeper timeKeeper;
     private final PTableRefFactory tableRefFactory;
