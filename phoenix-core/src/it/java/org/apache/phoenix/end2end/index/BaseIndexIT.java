@@ -27,6 +27,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeFalse;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -37,6 +38,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
@@ -81,6 +83,7 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.TransactionUtil;
@@ -1519,6 +1522,112 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             stmt.execute(disableIndexDDL);
             TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.DISABLE);
             CreateTableIT.verifyLastDDLTimestamp(fullIndexName, activeIndexLastDDLTimestamp + 1, conn);
+        }
+    }
+
+    @Test
+    public void testSelectUncoveredWithCoveredFieldSimple() throws Exception {
+        assumeFalse(localIndex);
+        assumeFalse(uncovered);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
+            String ddl =
+                    "CREATE TABLE " + fullTableName
+                            + " (v1 integer, k integer primary key, v2 integer, v3 integer, v4 integer) "
+                            + tableDDLOptions;
+            String upsert = "UPSERT INTO " + fullTableName + " values (1, 2, 3, 4, 5)";
+            Statement stmt = conn.createStatement();
+            stmt.execute(ddl);
+            stmt.execute(upsert);
+            conn.commit();
+            ddl =
+                    "CREATE " + (uncovered ? "UNCOVERED" : "") + " INDEX " + indexName + " ON "
+                            + fullTableName + " (v2) include(v3)";
+            conn.createStatement().execute(ddl);
+            ResultSet rs =
+                    conn.createStatement().executeQuery("SELECT /*+ INDEX(" + fullTableName + " "
+                            + indexName + ")*/ * FROM " + fullTableName + " where v2=3 and v3=4");
+            // We're only testing the projector
+            assertTrue(rs.next());
+            assertEquals("1", rs.getString("v1"));
+            assertEquals("2", rs.getString("k"));
+            assertEquals("3", rs.getString("v2"));
+            assertEquals("4", rs.getString("v3"));
+            assertEquals("5", rs.getString("v4"));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testSelectUncoveredWithCoveredField() throws Exception {
+        assumeFalse(localIndex);
+        assumeFalse(uncovered);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+                Statement stmt = conn.createStatement()) {
+            conn.setAutoCommit(false);
+            String ddl =
+                    "CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions;
+            stmt.execute(ddl);
+            BaseTest.populateTestTable(fullTableName);
+            conn.commit();
+            ddl =
+                    "CREATE " + (uncovered ? "UNCOVERED" : "") + " INDEX " + indexName + " ON "
+                            + fullTableName + " ( int_col1 ASC)"
+                            + " INCLUDE (long_col1, long_col2)"
+            ;
+            stmt.execute(ddl);
+
+            String query;
+            ResultSet rs;
+
+            for (String columns : Arrays.asList(new String[] { "*",
+                    "varchar_pk,char_pk,int_pk,long_pk,decimal_pk,date_pk,a.varchar_col1,a.char_col1,a.int_col1,a.long_col1,a.decimal_col1,a.date1,b.varchar_col2,b.char_col2,b.int_col2,b.long_col2,b.decimal_col2,b.date2",
+                    "varchar_pk,char_pk,int_pk,long_pk,decimal_pk,date_pk,varchar_col1,char_col1,int_col1,long_col1,decimal_col1,date1,varchar_col2,char_col2,int_col2,long_col2,decimal_col2,date2", })) {
+
+                query =
+                        "SELECT /*+ INDEX(" + fullTableName + " " + indexName + ")*/ " + columns
+                                + " from " + fullTableName + " where int_col1=2 and long_col1=2";
+                rs = stmt.executeQuery("Explain " + query);
+                String explainPlan = QueryUtil.getExplainPlan(rs);
+                assertEquals("bad plan with columns:" + columns,
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName + " [2]\n"
+                            + "    SERVER MERGE [A.VARCHAR_COL1, A.CHAR_COL1, A.DECIMAL_COL1, A.DATE1, B.VARCHAR_COL2, B.CHAR_COL2, B.INT_COL2, B.DECIMAL_COL2, B.DATE2]\n"
+                            + "    SERVER FILTER BY A.\"LONG_COL1\" = 2",
+                    explainPlan);
+                rs = stmt.executeQuery(query);
+                assertTrue(rs.next());
+                // Test the projector thoroughly
+                assertEquals("varchar1", rs.getString("varchar_pk"));
+                assertEquals("char1", rs.getString("char_pk"));
+                assertEquals("1", rs.getString("int_pk"));
+                assertEquals("1", rs.getString("long_pk"));
+                assertEquals("1", rs.getString("decimal_pk"));
+                assertEquals("2015-01-01 00:00:00.000", rs.getString("date_pk"));
+                assertEquals("varchar_a", rs.getString("varchar_col1"));
+                assertEquals("chara", rs.getString("char_col1"));
+                assertEquals("2", rs.getString("int_col1"));
+                assertEquals("2", rs.getString("long_col1"));
+                assertEquals("2", rs.getString("decimal_col1"));
+                assertEquals("2015-01-01 00:00:00.000", rs.getString("date1"));
+                assertEquals("varchar_b", rs.getString("varchar_col2"));
+                assertEquals("charb", rs.getString("char_col2"));
+                assertEquals("3", rs.getString("int_col2"));
+                assertEquals("3", rs.getString("long_col2"));
+                assertEquals("3", rs.getString("decimal_col2"));
+                assertEquals("2015-01-01 00:00:00.000", rs.getString("date2"));
+                assertFalse(rs.next());
+            }
         }
     }
 }

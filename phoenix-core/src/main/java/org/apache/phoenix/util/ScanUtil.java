@@ -1194,10 +1194,10 @@ public class ScanUtil {
             scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
             scan.setAttribute(BaseScannerRegionObserver.READ_REPAIR_TRANSFORMING_TABLE, TRUE_BYTES);
         } else {
-            if (table.isTransactional() || table.getType() != PTableType.INDEX) {
+            if (table.getType() != PTableType.INDEX || !IndexUtil.isGlobalIndex(indexTable)) {
                 return;
             }
-            if (!IndexUtil.isGlobalIndex(indexTable)) {
+            if (table.isTransactional() && table.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
                 return;
             }
             PTable dataTable = ScanUtil.getDataTable(indexTable, phoenixConnection);
