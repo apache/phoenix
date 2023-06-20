@@ -1140,7 +1140,7 @@ public class ScanUtil {
     }
 
     public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table, PhoenixConnection phoenixConnection) throws SQLException {
-        if (table.isTransactional() || table.getType() != PTableType.INDEX) {
+        if (table.getType() != PTableType.INDEX) {
             return;
         }
         PTable indexTable = table;
