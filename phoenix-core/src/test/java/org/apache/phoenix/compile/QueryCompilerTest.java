@@ -7096,4 +7096,21 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                 explainPlan);
         }
     }
+
+    @Test
+    public void testUncoveredPhoenix6961() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement();) {
+            stmt.execute(
+                "create table d (k integer primary key, v1 integer, v2 integer, v3 integer, v4 integer)");
+            stmt.execute("create index i on d(v2) include (v3)");
+            String query = "select /*+ index(d i) */ * from d where v2=1 and v3=1";
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER I [1]\n"
+                    + "    SERVER MERGE [0.V1, 0.V4]\n"
+                    + "    SERVER FILTER BY \"V3\" = 1",
+                    explainPlan);
+        }
+    }
 }
