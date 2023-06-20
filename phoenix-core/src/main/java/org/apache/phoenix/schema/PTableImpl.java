@@ -744,14 +744,25 @@ public class PTableImpl implements PTable {
                 }
             });
 
+            // With the new uncovered index code, we pass the data table columns to the index
+            // PTable. This wreaks havoc with the code used disambiguate column qualifiers.
+            // localColumns only holds the actual columns of the table, and not external references
+            List<PColumn> localColumns = new ArrayList<>(this.columns.size());
+
+            //TODO should we just pass the global indexref columns separately instead ?
+            for (PColumn column : sortedColumns) {
+                if (!(column instanceof ProjectedColumn && ((ProjectedColumn) column)
+                        .getSourceColumnRef() instanceof IndexUncoveredDataColumnRef)) {
+                    localColumns.add(column);
+                }
+            }
+
             int position = 0;
             if (this.bucketNum != null) {
                 position = 1;
             }
             ListMultimap<String, PColumn> populateColumnsByName =
                     ArrayListMultimap.create(this.columns.size(), 1);
-            Map<KVColumnFamilyQualifier, PColumn> populateKvColumnsByQualifiers =
-                    Maps.newHashMapWithExpectedSize(this.columns.size());
             for (PColumn column : sortedColumns) {
                 allColumns[position] = column;
                 position++;
@@ -772,6 +783,10 @@ public class PTableImpl implements PTable {
                         }
                     }
                 }
+            }
+            Map<KVColumnFamilyQualifier, PColumn> populateKvColumnsByQualifiers =
+                    Maps.newHashMapWithExpectedSize(localColumns.size());
+            for (PColumn column : localColumns) {
                 byte[] cq = column.getColumnQualifierBytes();
                 String cf = column.getFamilyName() != null ?
                         column.getFamilyName().getString() : null;
@@ -779,7 +794,7 @@ public class PTableImpl implements PTable {
                     KVColumnFamilyQualifier info = new KVColumnFamilyQualifier(cf, cq);
                     if (populateKvColumnsByQualifiers.get(info) != null) {
                         throw new ColumnAlreadyExistsException(this.schemaName.getString(),
-                                fullName.getString(), columnName);
+                                fullName.getString(), column.getName().getString());
                     }
                     populateKvColumnsByQualifiers.put(info, column);
                 }
@@ -815,11 +830,13 @@ public class PTableImpl implements PTable {
                     if (column.isRowTimestamp()) {
                         rowTimestampCol = column;
                     }
-                }
-                if (familyName == null) {
                     estimatedSize += column.getEstimatedSize(); // PK columns
                     builder.addField(column, column.isNullable(), column.getSortOrder());
-                } else {
+                }
+            }
+            for (PColumn column : localColumns) {
+                PName familyName = column.getFamilyName();
+                if (familyName != null) {
                     List<PColumn> columnsInFamily = familyMap.get(familyName);
                     if (columnsInFamily == null) {
                         columnsInFamily = Lists.newArrayListWithExpectedSize(maxExpectedSize);
