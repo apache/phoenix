@@ -38,7 +38,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -104,7 +103,6 @@ public class TransformMonitorExtendedIT extends BaseTest {
     }
 
     @Test
-    @Ignore
     public void testTransformIndexWithNamespaceEnabled() throws Exception {
         String schemaName = "S_" + generateUniqueName();
         String dataTableName = "TBL_" + generateUniqueName();

@@ -592,9 +592,16 @@ public class Transform {
         }
     }
 
-    private static void getMetadataDifference(PhoenixConnection connection, SystemTransformRecord systemTransformRecord, List<String> columnNames, List<String> columnValues) throws SQLException {
-        PTable pOldTable = PhoenixRuntime.getTable(connection, SchemaUtil.getQualifiedTableName(systemTransformRecord.getSchemaName(),systemTransformRecord.getLogicalTableName()));
-        PTable pNewTable = PhoenixRuntime.getTable(connection, SchemaUtil.getQualifiedTableName(SchemaUtil.getSchemaNameFromFullName(systemTransformRecord.getNewPhysicalTableName()),
+    private static void getMetadataDifference(PhoenixConnection connection, SystemTransformRecord systemTransformRecord,
+                                              List<String> columnNames, List<String> columnValues) throws SQLException {
+        // Using getTableNoCache method since there are cases where we have stale cache and it doesn't show the correct
+        // value for index state for old table.
+        PTable pOldTable = PhoenixRuntime.getTableNoCache(connection,
+                SchemaUtil.getQualifiedTableName(systemTransformRecord.getSchemaName(),
+                        systemTransformRecord.getLogicalTableName()));
+        PTable pNewTable = PhoenixRuntime.getTableNoCache(connection,
+                SchemaUtil.getQualifiedTableName(
+                        SchemaUtil.getSchemaNameFromFullName(systemTransformRecord.getNewPhysicalTableName()),
                 SchemaUtil.getTableNameFromFullName(systemTransformRecord.getNewPhysicalTableName())));
 
         Map<String, String> map = pOldTable.getPropertyValues();
