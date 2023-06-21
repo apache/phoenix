@@ -563,7 +563,7 @@ public abstract class BaseTest {
     protected static String getLocalClusterUrl(HBaseTestingUtility util) throws Exception {
         // principal is used to differentiate between connections created from the test class and connections created
         // by regionservers. We want to create different connections in both cases.
-        String url = QueryUtil.getConnectionUrl(new Properties(), util.getConfiguration(), PRINCIPAL);
+        String url = QueryUtil.getConnectionUrl(new Properties(), util.getConfiguration()/*, PRINCIPAL*/);
         return url + PHOENIX_TEST_DRIVER_URL_PARAM;
     }
     
