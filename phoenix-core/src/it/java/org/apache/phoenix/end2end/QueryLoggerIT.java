@@ -129,7 +129,7 @@ public class QueryLoggerIT extends BaseTest {
                 if (rs.getString(QUERY_ID).equals(queryId)) {
                     foundQueryLog = true;
                     assertNull(rs.getString(BIND_PARAMETERS));
-                    assertEquals(PRINCIPAL, rs.getString(USER));
+                    assertEquals(System.getProperty("user.name"), rs.getString(USER));
                     assertEquals(InetAddress.getLocalHost().getHostAddress(), rs.getString(CLIENT_IP));
                     assertEquals(QueryUtil.getExplainPlan(explainRS), rs.getString(EXPLAIN_PLAN));
                     assertEquals(context.getScan().toJSON(), rs.getString(GLOBAL_SCAN_DETAILS));
@@ -213,7 +213,7 @@ public class QueryLoggerIT extends BaseTest {
             while (rs.next()) {
                 if (rs.getString(QUERY_ID).equals(queryId)) {
                     foundQueryLog = true;
-                    assertEquals(PRINCIPAL, rs.getString(USER));
+                    assertEquals(System.getProperty("user.name"), rs.getString(USER));
                     assertEquals(InetAddress.getLocalHost().getHostAddress(), rs.getString(CLIENT_IP));
                     assertNull(rs.getString(EXPLAIN_PLAN));
                     assertNull(rs.getString(GLOBAL_SCAN_DETAILS));
@@ -310,7 +310,7 @@ public class QueryLoggerIT extends BaseTest {
                     if (rs.getString(QUERY_ID).equals(queryId)) {
                         foundQueryLog = true;
                         assertEquals(loglevel == LogLevel.TRACE ? "value5" : null, rs.getString(BIND_PARAMETERS));
-                        assertEquals(PRINCIPAL, rs.getString(USER));
+                        assertEquals(System.getProperty("user.name"), rs.getString(USER));
                         assertEquals(InetAddress.getLocalHost().getHostAddress(), rs.getString(CLIENT_IP));
                         assertEquals(QueryUtil.getExplainPlan(explainRS), rs.getString(EXPLAIN_PLAN));
                         assertEquals(context.getScan().toJSON(), rs.getString(GLOBAL_SCAN_DETAILS));
@@ -359,7 +359,7 @@ public class QueryLoggerIT extends BaseTest {
         while (rs.next()) {
             if (QueryStatus.FAILED.name().equals(rs.getString(QUERY_STATUS))) {
                 foundQueryLog = true;
-                assertEquals(PRINCIPAL, rs.getString(USER));
+                assertEquals(System.getProperty("user.name"), rs.getString(USER));
                 assertEquals(InetAddress.getLocalHost().getHostAddress(), rs.getString(CLIENT_IP));
                 assertNull(rs.getString(EXPLAIN_PLAN));
                 assertNull(rs.getString(GLOBAL_SCAN_DETAILS));
