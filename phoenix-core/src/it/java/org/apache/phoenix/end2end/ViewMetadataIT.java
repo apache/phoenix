@@ -713,23 +713,6 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
             } catch (TableAlreadyExistsException ignored) {
                 // expected
             }
-
-            /*
-            PHOENIX-6141 implements read repair for UNVERIFIED rows in SYSTEM.CHILD_LINK
-            so running this query will get rid of the orphan links needed in some tests.
-
-            // Confirm that the orphan parent->child link exists after the
-            // second view creation
-            final String querySysChildLink =
-                    "SELECT * FROM SYSTEM.CHILD_LINK WHERE TABLE_SCHEM='%s' AND "
-                            + "TABLE_NAME='%s' AND COLUMN_FAMILY='%s' AND "
-                            + LINK_TYPE + " = " +
-                            PTable.LinkType.CHILD_TABLE.getSerializedValue();
-            ResultSet rs = stmt.executeQuery(String.format(querySysChildLink,
-                    parentSchema,  parent2, SchemaUtil.getTableName(
-                            viewSchema, viewName)));
-            assertTrue(rs.next());
-            */
         }
     }
 
