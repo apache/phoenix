@@ -166,6 +166,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_MAX_INDEXES_PER_TABLE = 10;
     public static final int DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD = 0;
     public static final boolean DEFAULT_SERVER_SIDE_MASKING_ENABLED = true;
+    public static final boolean DEFAULT_PHOENIX_VERIFY_LAST_DDL_TIMESTAMP = false;
 
     public final static int DEFAULT_MUTATE_BATCH_SIZE = 100; // Batch size for UPSERT SELECT and DELETE
     //Batch size in bytes for UPSERT, SELECT and DELETE. By default, 2MB

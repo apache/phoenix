@@ -95,9 +95,8 @@ public class ServerMetadataCache {
      * @return last DDL timestamp
      * @throws Exception
      */
-    // TODO Need to think how to handle SQLException?
-    public long getLastDDLTimestampForTable(DDLTimestampMaintainersProtos.DDLTimestampMaintainer maintainer)
-            throws IOException {
+    public long getLastDDLTimestampForTable(
+            DDLTimestampMaintainersProtos.DDLTimestampMaintainer maintainer) throws IOException {
         byte[] tenantID = maintainer.getTenantID().toByteArray();
         byte[] schemaName = maintainer.getSchemaName().toByteArray();
         byte[] tableName = maintainer.getTableName().toByteArray();
@@ -124,10 +123,13 @@ public class ServerMetadataCache {
         try (Connection connection = QueryUtil.getConnectionOnServer(properties, this.conf)) {
             // Using PhoenixRuntime#getTableNoCache since se don't want to read cached value.
             table = PhoenixRuntime.getTableNoCache(connection, fullTableNameStr);
+            // TODO PhoenixRuntime#getTableNoCache can throw TableNotFoundException.
+            //  In that case, do we want to throw non retryable exception back to the client?
             // Update cache with the latest DDL timestamp from SYSCAT server.
             lastDDLTimestampMap.put(tableKeyPtr, table.getLastDDLTimestamp());
         } catch (SQLException sqle) {
-            // TODO Think what exception to throw in this case?
+            // Throw IOException back to the client and let the client retry depending on
+            // the configured retry policies.
             LOGGER.warn("Exception while calling calling getTableNoCache for tenant id: {}," +
                             " tableName: {}", tenantIDStr, fullTableNameStr, sqle);
             throw new IOException(sqle);

@@ -1333,7 +1333,8 @@ public class ScanUtil {
             }
             scan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS, Bytes.toBytes(Long.valueOf(pageSizeMs)));
         }
-        LastDDLTimestampMaintainerUtil.createLastDDLTimestampMaintainers(scan, table, phoenixConnection);
+        LastDDLTimestampMaintainerUtil.createLastDDLTimestampMaintainers(scan, table,
+                phoenixConnection);
     }
 
     public static void getDummyResult(byte[] rowKey, List<Cell> result) {

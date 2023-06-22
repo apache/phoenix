@@ -816,7 +816,8 @@ public class DeleteCompiler {
             PTable table = dataPlan.getTableRef().getTable();
             table.getIndexMaintainers(ptr, context.getConnection());
             ScanUtil.setWALAnnotationAttributes(table, context.getScan());
-            LastDDLTimestampMaintainerUtil.createLastDDLTimestampMaintainers(context.getScan(), table, connection);
+            LastDDLTimestampMaintainerUtil.createLastDDLTimestampMaintainers(context.getScan(),
+                    table, connection);
             byte[] txState = table.isTransactional() ? connection.getMutationState().encodeTransaction() : ByteUtil.EMPTY_BYTE_ARRAY;
             ServerCache cache = null;
             try {

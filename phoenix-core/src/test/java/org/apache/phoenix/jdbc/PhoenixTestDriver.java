@@ -134,4 +134,8 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
             }
         }
     }
+
+    public void clearConnectionCache() {
+        connectionQueryServicesCache.clear();
+    }
 }

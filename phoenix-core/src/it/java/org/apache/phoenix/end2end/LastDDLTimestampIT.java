@@ -29,12 +29,22 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.generated.DDLTimestampMaintainersProtos;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.LastDDLTimestampMaintainerUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,19 +53,50 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LAST_DDL_TIMESTAMP_MAINTAINERS;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_VERIFY_LAST_DDL_TIMESTAMP;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VERIFY_LAST_DDL_TIMESTAMP;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
+@Category({NeedsOwnMiniClusterTest.class })
+@RunWith(Parameterized.class)
+public class LastDDLTimestampIT extends BaseTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(LastDDLTimestampIT.class);
+    private String verifyLastDDLTimestamp;
+
+    public LastDDLTimestampIT(String verifyLastDDLTimestamp) {
+        this.verifyLastDDLTimestamp = verifyLastDDLTimestamp;
+    }
+
+    @Parameterized.Parameters(name="feature_enabled={0}")
+    public static synchronized Collection<Object[]> data() {
+        return Arrays.asList(new Object[][] { { "true" }, { "false" } });
+    }
+
+    @BeforeClass
+    public static synchronized void doSetup() throws Exception {
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+                Integer.toString(60*60)); // An hour
+        props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+
+    @Before
+    public void resetConnectionCache() {
+        getDriver().clearConnectionCache();
+    }
 
     /**
      * Make sure that DDLTimestamp maintainer is generated for select queries on base table.
@@ -64,8 +105,14 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
     @Test
     public void testLastDDLTimestampInScanAttributeForQueryBaseTable() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.put(PHOENIX_VERIFY_LAST_DDL_TIMESTAMP, verifyLastDDLTimestamp);
         String tableNameStr =  generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+            assertEquals(Boolean.valueOf(verifyLastDDLTimestamp),
+                    pConn.getQueryServices().getConfiguration().getBoolean(
+                            PHOENIX_VERIFY_LAST_DDL_TIMESTAMP,
+                            DEFAULT_PHOENIX_VERIFY_LAST_DDL_TIMESTAMP));
             conn.setAutoCommit(false);
             String ddl = getCreateTableStmt(tableNameStr);
             // Create a test table.
@@ -93,17 +140,25 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
                 assertTrue(rs.next());
             }
 
+            if (Boolean.valueOf(verifyLastDDLTimestamp) == false) {
+                assertNull(regionObserver.getMaintainers());
+                return;
+            }
             // There will be only 1 table in the maintainer.
-            assertEquals(1, regionObserver.getMaintainers().getDDLTimestampMaintainersCount());
+            assertEquals(1,
+                    regionObserver.getMaintainers().getDDLTimestampMaintainersCount());
             DDLTimestampMaintainersProtos.DDLTimestampMaintainer maintainer =
                     regionObserver.getMaintainers().getDDLTimestampMaintainersList().get(0);
-            LOGGER.info("Maintainer within test tenantID: {}, table name: {}, last ddl timestamp: {}",
-                    maintainer.getTenantID().toStringUtf8(), maintainer.getTableName().toStringUtf8(),
+            LOGGER.info("Maintainer within test tenantID: {}, table name: {}, last ddl timestamp:" +
+                            " {}",
+                    maintainer.getTenantID().toStringUtf8(), maintainer.getTableName()
+                            .toStringUtf8(),
                     maintainer.getLastDDLTimestamp());
             assertNotNull("DDLTimestampMaintainer should not be null", maintainer);
             assertEquals(0, maintainer.getTenantID().size());
             assertEquals(tableNameStr, maintainer.getTableName().toStringUtf8());
-            assertEquals(pTable.getLastDDLTimestamp().longValue(), maintainer.getLastDDLTimestamp());
+            assertEquals(pTable.getLastDDLTimestamp().longValue(),
+                    maintainer.getLastDDLTimestamp());
         }
     }
 
@@ -114,8 +169,14 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
     @Test
     public void testLastDDLTimestampInScanAttributeForQueryIndexTable() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.put(PHOENIX_VERIFY_LAST_DDL_TIMESTAMP, verifyLastDDLTimestamp);
         String tableNameStr =  generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+            assertEquals(Boolean.valueOf(verifyLastDDLTimestamp),
+                    pConn.getQueryServices().getConfiguration().getBoolean(
+                            PHOENIX_VERIFY_LAST_DDL_TIMESTAMP,
+                            DEFAULT_PHOENIX_VERIFY_LAST_DDL_TIMESTAMP));
             conn.setAutoCommit(false);
             String ddl = getCreateTableStmt(tableNameStr);
             // Create a test table.
@@ -151,20 +212,28 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
                 indexRegionObserver.resetMaintainers();
                 assertTrue(rs.next());
             }
+            if (Boolean.valueOf(verifyLastDDLTimestamp) == false) {
+                assertNull(tableRegionObserver.getMaintainers());
+                assertNull(indexRegionObserver.getMaintainers());
+                return;
+            }
+
             // Request shouldn't have gone to base table.
             assertNull(tableRegionObserver.getMaintainers());
             assertNotNull(indexRegionObserver.getMaintainers());
             // There will be only 1 table in the maintainer.
-            assertEquals(1, indexRegionObserver.getMaintainers().getDDLTimestampMaintainersCount());
+            assertEquals(1,
+                    indexRegionObserver.getMaintainers().getDDLTimestampMaintainersCount());
             DDLTimestampMaintainersProtos.DDLTimestampMaintainer maintainer =
                     indexRegionObserver.getMaintainers().getDDLTimestampMaintainersList().get(0);
-            LOGGER.info("Maintainer within test tenantID: {}, table name: {}, last ddl timestamp: {}",
-                    maintainer.getTenantID().toStringUtf8(), maintainer.getTableName().toStringUtf8(),
-                    maintainer.getLastDDLTimestamp());
+            LOGGER.info("Maintainer within test tenantID: {}, table name: {}, last ddl timestamp:" +
+                            " {}", maintainer.getTenantID().toStringUtf8(), maintainer
+                            .getTableName().toStringUtf8(), maintainer.getLastDDLTimestamp());
             assertNotNull("DDLTimestampMaintainer should not be null", maintainer);
             assertEquals(0, maintainer.getTenantID().size());
             assertEquals(indexNameStr, maintainer.getTableName().toStringUtf8());
-            assertEquals(indexTable.getLastDDLTimestamp().longValue(), maintainer.getLastDDLTimestamp());
+            assertEquals(indexTable.getLastDDLTimestamp().longValue(),
+                    maintainer.getLastDDLTimestamp());
         }
     }
 
@@ -175,8 +244,14 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
     @Test
     public void testLastDDLTimestampInScanAttributeForQueryonView() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.put(PHOENIX_VERIFY_LAST_DDL_TIMESTAMP, verifyLastDDLTimestamp);
         String tableNameStr = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+            assertEquals(Boolean.valueOf(verifyLastDDLTimestamp),
+                    pConn.getQueryServices().getConfiguration().getBoolean(
+                            PHOENIX_VERIFY_LAST_DDL_TIMESTAMP,
+                            DEFAULT_PHOENIX_VERIFY_LAST_DDL_TIMESTAMP));
             conn.setAutoCommit(false);
             String ddl = getCreateTableStmt(tableNameStr);
             // Create a test table.
@@ -209,29 +284,41 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
                 assertTrue(rs.next());
             }
 
+            if (Boolean.valueOf(verifyLastDDLTimestamp) == false) {
+                assertNull(regionObserver.getMaintainers());
+                return;
+            }
+
             // There will be 2 tables in the maintainer, one for the view and other base table.
-            assertEquals(2, regionObserver.getMaintainers().getDDLTimestampMaintainersCount());
+            assertEquals(2,
+                    regionObserver.getMaintainers().getDDLTimestampMaintainersCount());
             boolean baseTableFound = false, viewFound = false;
 
             for (DDLTimestampMaintainersProtos.DDLTimestampMaintainer maintainer:
                     regionObserver.getMaintainers().getDDLTimestampMaintainersList()) {
-                LOGGER.info("Maintainer within test tenantID: {}, table name: {}, last ddl timestamp: {}",
-                        maintainer.getTenantID().toStringUtf8(), maintainer.getTableName().toStringUtf8(),
+                LOGGER.info("Maintainer within test tenantID: {}, table name: {}," +
+                                " last ddl timestamp: {}",
+                        maintainer.getTenantID().toStringUtf8(),
+                        maintainer.getTableName().toStringUtf8(),
                         maintainer.getLastDDLTimestamp());
                 assertNotNull("DDLTimestampMaintainer should not be null", maintainer);
                 if (maintainer.getTableName().toStringUtf8().equals(tableNameStr)) {
                     baseTableFound = true;
                     assertEquals(0, maintainer.getTenantID().size());
-                    assertEquals(pTable.getLastDDLTimestamp().longValue(), maintainer.getLastDDLTimestamp());
+                    assertEquals(pTable.getLastDDLTimestamp().longValue(),
+                            maintainer.getLastDDLTimestamp());
 
                 } else if (maintainer.getTableName().toStringUtf8().equals(viewName)) {
                     viewFound = true;
                     assertEquals(0, maintainer.getTenantID().size());
-                    assertEquals(viewTable.getLastDDLTimestamp().longValue(), maintainer.getLastDDLTimestamp());
+                    assertEquals(viewTable.getLastDDLTimestamp().longValue(),
+                            maintainer.getLastDDLTimestamp());
                 }
             }
-            assertTrue("There should be base table in the maintainers list", baseTableFound);
-            assertTrue("There should logical view table in the maintainers list", viewFound);
+            assertTrue("There should be base table in the maintainers list",
+                    baseTableFound);
+            assertTrue("There should logical view table in the maintainers list",
+                    viewFound);
         }
     }
 
@@ -244,7 +331,8 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
         HRegion region = regions.get(0);
         // Get DDLTimestampMaintainerRegionObserver from table's region.
         DDLTimestampMaintainerRegionObserver regionObserver =
-                region.getCoprocessorHost().findCoprocessor(DDLTimestampMaintainerRegionObserver.class);
+                region.getCoprocessorHost().findCoprocessor(
+                        DDLTimestampMaintainerRegionObserver.class);
         return regionObserver;
     }
 
@@ -255,16 +343,18 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
             implements RegionCoprocessor {
         private DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers;
         @Override
-        public void preScannerOpen(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
-                                   Scan scan) {
+        public void preScannerOpen(org.apache.hadoop.hbase.coprocessor.ObserverContext
+                                                   <RegionCoprocessorEnvironment> c, Scan scan) {
             byte[] maintainersBytes;
             maintainersBytes = scan.getAttribute(LAST_DDL_TIMESTAMP_MAINTAINERS);
             if (maintainersBytes != null) {
                 maintainers = LastDDLTimestampMaintainerUtil.deserialize(maintainersBytes);
                 for (DDLTimestampMaintainersProtos.DDLTimestampMaintainer maintainer:
                         maintainers.getDDLTimestampMaintainersList()) {
-                    LOGGER.info("Maintainer within corpoc tenantID: {}, table name: {}, last ddl timestamp: {}",
-                            maintainer.getTenantID().toStringUtf8(), maintainer.getTableName().toStringUtf8(),
+                    LOGGER.info("Maintainer within corpoc tenantID: {}, table name: {}," +
+                                    " last ddl timestamp: {}",
+                            maintainer.getTenantID().toStringUtf8(), maintainer.getTableName()
+                                    .toStringUtf8(),
                             maintainer.getLastDDLTimestamp());
                 }
             }
@@ -281,8 +371,8 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
         }
 
         @Override
-        protected RegionScanner doPostScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
-                                                  RegionScanner s) {
+        protected RegionScanner doPostScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
+                                                  Scan scan, RegionScanner s) {
             return s;
         }
 
@@ -306,7 +396,8 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
     }
 
     private String getCreateViewStmt(String viewName, String fullTableName, String whereClause) {
-        String viewStmt =  "CREATE VIEW " + viewName + " AS SELECT * FROM "+ fullTableName + whereClause;
+        String viewStmt =  "CREATE VIEW " + viewName +
+                " AS SELECT * FROM "+ fullTableName + whereClause;
         return  viewStmt;
     }
 
@@ -317,16 +408,24 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
     @Test
     public void testLastDDLTimestampForUpsertOnBaseTable() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.put(PHOENIX_VERIFY_LAST_DDL_TIMESTAMP, verifyLastDDLTimestamp);
         String tableNameStr =  generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+            assertEquals(Boolean.valueOf(verifyLastDDLTimestamp),
+                    pConn.getQueryServices().getConfiguration().getBoolean(
+                            PHOENIX_VERIFY_LAST_DDL_TIMESTAMP,
+                            DEFAULT_PHOENIX_VERIFY_LAST_DDL_TIMESTAMP));
             conn.setAutoCommit(false);
             String ddl = getCreateTableStmt(tableNameStr);
             // Create a test table.
             conn.createStatement().execute(ddl);
             // Add DDLTimestampMaintainerRegionObserver coproc.
-            TestUtil.addCoprocessor(conn, tableNameStr, DDLTimestampMaintainerRegionObserverForMutations.class);
+            TestUtil.addCoprocessor(conn, tableNameStr,
+                    DDLTimestampMaintainerRegionObserverForMutations.class);
             // Get DDLTimestampMaintainerRegionObserverForMutations from table's region.
-            DDLTimestampMaintainerRegionObserverForMutations regionObserver = getObserverForMutations(tableNameStr);
+            DDLTimestampMaintainerRegionObserverForMutations regionObserver =
+                    getObserverForMutations(tableNameStr);
             // Get a PTable object to compare last ddl timestamp from maintainer object.
             PTable pTable = PhoenixRuntime.getTable(conn, tableNameStr);
             // Reset the maintainers.
@@ -340,44 +439,64 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
             stmt.execute();
             conn.commit();
 
+            if (Boolean.valueOf(verifyLastDDLTimestamp) == false) {
+                assertNull(regionObserver.getMaintainersFromScanner());
+                assertNull(regionObserver.getMaintainersFromMutate());
+                return;
+            }
+
             // There will be only 1 table in the maintainer.
-            assertEquals(1, regionObserver.getMaintainersFromMutate().getDDLTimestampMaintainersCount());
+            assertEquals(1,
+                    regionObserver.getMaintainersFromMutate().getDDLTimestampMaintainersCount());
             DDLTimestampMaintainersProtos.DDLTimestampMaintainer maintainer =
-                    regionObserver.getMaintainersFromMutate().getDDLTimestampMaintainersList().get(0);
-            LOGGER.info("Maintainer within test tenantID: {}, table name: {}, last ddl timestamp: {}",
-                    maintainer.getTenantID().toStringUtf8(), maintainer.getTableName().toStringUtf8(),
-                    maintainer.getLastDDLTimestamp());
+                    regionObserver.getMaintainersFromMutate().getDDLTimestampMaintainersList()
+                            .get(0);
+            LOGGER.info("Maintainer within test tenantID: {}, table name: {}," +
+                            " last ddl timestamp: {}",
+                    maintainer.getTenantID().toStringUtf8(), maintainer.getTableName()
+                            .toStringUtf8(), maintainer.getLastDDLTimestamp());
             assertNotNull("DDLTimestampMaintainer should not be null", maintainer);
             assertEquals(0, maintainer.getTenantID().size());
             assertEquals(tableNameStr, maintainer.getTableName().toStringUtf8());
-            assertEquals(pTable.getLastDDLTimestamp().longValue(), maintainer.getLastDDLTimestamp());
+            assertEquals(pTable.getLastDDLTimestamp().longValue(),
+                    maintainer.getLastDDLTimestamp());
         }
     }
 
     /**
-     * Make sure that DDLTimestamp maintainer is generated for upsert queries on base table with index.
+     * Make sure that DDLTimestamp maintainer is generated for upsert queries
+     * on base table with index.
      * @throws Exception
      */
     @Test
     public void testLastDDLTimestampForUpsertOnBaseTableWithIndex() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.put(PHOENIX_VERIFY_LAST_DDL_TIMESTAMP, verifyLastDDLTimestamp);
         String tableNameStr =  generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+            assertEquals(Boolean.valueOf(verifyLastDDLTimestamp),
+                    pConn.getQueryServices().getConfiguration().getBoolean(
+                            PHOENIX_VERIFY_LAST_DDL_TIMESTAMP,
+                            DEFAULT_PHOENIX_VERIFY_LAST_DDL_TIMESTAMP));
             conn.setAutoCommit(false);
             String ddl = getCreateTableStmt(tableNameStr);
             // Create a test table.
             conn.createStatement().execute(ddl);
             // Add DDLTimestampMaintainerRegionObserver coproc.
-            TestUtil.addCoprocessor(conn, tableNameStr, DDLTimestampMaintainerRegionObserverForMutations.class);
+            TestUtil.addCoprocessor(conn, tableNameStr,
+                    DDLTimestampMaintainerRegionObserverForMutations.class);
 
             String indexNameStr = generateUniqueName();
             String indexDDLStmt = getCreateIndexStmt(indexNameStr, tableNameStr);
             conn.createStatement().execute(indexDDLStmt);
 
             // Add DDLTimestampMaintainerRegionObserver coproc.
-            TestUtil.addCoprocessor(conn, indexNameStr, DDLTimestampMaintainerRegionObserverForMutations.class);
+            TestUtil.addCoprocessor(conn, indexNameStr,
+                    DDLTimestampMaintainerRegionObserverForMutations.class);
 
-            // Get a PTable object of base table and index table to compare last ddl timestamp from maintainer object.
+            // Get a PTable object of base table and index table to compare last ddl timestamp
+            // from maintainer object.
             PTable baseTable = PhoenixRuntime.getTable(conn, tableNameStr);
             PTable indexTable = PhoenixRuntime.getTable(conn, indexNameStr);
 
@@ -396,51 +515,73 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
             stmt.execute();
             conn.commit();
 
+            if (Boolean.valueOf(verifyLastDDLTimestamp) == false) {
+                assertNull(tableRegionObserver.getMaintainersFromScanner());
+                assertNull(indexRegionObserver.getMaintainersFromMutate());
+                return;
+            }
+
             // Request shouldn't have gone to base table.
             assertNotNull(tableRegionObserver.getMaintainersFromMutate());
             assertNull(indexRegionObserver.getMaintainersFromMutate());
             // There will be only 1 table in the maintainer.
-            assertEquals(2, tableRegionObserver.getMaintainersFromMutate().getDDLTimestampMaintainersCount());
+            assertEquals(2, tableRegionObserver.getMaintainersFromMutate()
+                    .getDDLTimestampMaintainersCount());
             boolean baseTableFound = false, indexTableFound = false;
             for (DDLTimestampMaintainersProtos.DDLTimestampMaintainer maintainer:
-                    tableRegionObserver.getMaintainersFromMutate().getDDLTimestampMaintainersList()) {
-                LOGGER.info("Maintainer within test tenantID: {}, table name: {}, last ddl timestamp: {}",
-                        maintainer.getTenantID().toStringUtf8(), maintainer.getTableName().toStringUtf8(),
+                    tableRegionObserver.getMaintainersFromMutate().getDDLTimestampMaintainersList())
+            {
+                LOGGER.info("Maintainer within test tenantID: {}, table name: {}," +
+                                " last ddl timestamp: {}",
+                        maintainer.getTenantID().toStringUtf8(), maintainer.getTableName()
+                                .toStringUtf8(),
                         maintainer.getLastDDLTimestamp());
                 assertNotNull("DDLTimestampMaintainer should not be null", maintainer);
                 if (maintainer.getTableName().toStringUtf8().equals(tableNameStr)) {
                     baseTableFound = true;
                     assertEquals(0, maintainer.getTenantID().size());
-                    assertEquals(baseTable.getLastDDLTimestamp().longValue(), maintainer.getLastDDLTimestamp());
+                    assertEquals(baseTable.getLastDDLTimestamp().longValue(),
+                            maintainer.getLastDDLTimestamp());
                 } else if (maintainer.getTableName().toStringUtf8().equals(indexNameStr)) {
                     indexTableFound = true;
                     assertEquals(0, maintainer.getTenantID().size());
-                    assertEquals(indexTable.getLastDDLTimestamp().longValue(), maintainer.getLastDDLTimestamp());
+                    assertEquals(indexTable.getLastDDLTimestamp().longValue(),
+                            maintainer.getLastDDLTimestamp());
                 }
             }
-            assertTrue("There should be base table in the maintainers list", baseTableFound);
+            assertTrue("There should be base table in the maintainers list",
+                    baseTableFound);
             assertTrue("There should index table in the maintainers list", indexTableFound);
         }
     }
 
     /**
-     * Make sure that DDLTimestamp maintainer is generated for upsert queries on base table with view.
+     * Make sure that DDLTimestamp maintainer is generated for upsert queries
+     * on base table with view.
      * @throws Exception
      */
     @Test
     public void testLastDDLTimestampForUpsertOnBaseTableWithView() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.put(PHOENIX_VERIFY_LAST_DDL_TIMESTAMP, verifyLastDDLTimestamp);
         String tableNameStr = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+            assertEquals(Boolean.valueOf(verifyLastDDLTimestamp),
+                    pConn.getQueryServices().getConfiguration().getBoolean(
+                            PHOENIX_VERIFY_LAST_DDL_TIMESTAMP,
+                            DEFAULT_PHOENIX_VERIFY_LAST_DDL_TIMESTAMP));
             conn.setAutoCommit(false);
             String ddl = getCreateTableStmt(tableNameStr);
             // Create a test table.
             conn.createStatement().execute(ddl);
             // Add DDLTimestampMaintainerRegionObserver coproc.
-            TestUtil.addCoprocessor(conn, tableNameStr, DDLTimestampMaintainerRegionObserverForMutations.class);
+            TestUtil.addCoprocessor(conn, tableNameStr,
+                    DDLTimestampMaintainerRegionObserverForMutations.class);
 
             // Get DDLTimestampMaintainerRegionObserver from table's region.
-            DDLTimestampMaintainerRegionObserverForMutations regionObserver = getObserverForMutations(tableNameStr);
+            DDLTimestampMaintainerRegionObserverForMutations regionObserver =
+                    getObserverForMutations(tableNameStr);
             // Get a PTable object to compare last ddl timestamp from maintainer object.
             PTable baseTable = PhoenixRuntime.getTable(conn, tableNameStr);
 
@@ -459,28 +600,41 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
             stmt.execute();
             conn.commit();
 
+            if (Boolean.valueOf(verifyLastDDLTimestamp) == false) {
+                assertNull(regionObserver.getMaintainersFromMutate());
+                assertNull(regionObserver.getMaintainersFromScanner());
+                return;
+            }
+
             // There will be 2 tables in the maintainer, one for the view and other base table.
-            assertEquals(2, regionObserver.getMaintainersFromMutate().getDDLTimestampMaintainersCount());
+            assertEquals(2,
+                    regionObserver.getMaintainersFromMutate().getDDLTimestampMaintainersCount());
             boolean baseTableFound = false, viewFound = false;
 
             for (DDLTimestampMaintainersProtos.DDLTimestampMaintainer maintainer:
                     regionObserver.getMaintainersFromMutate().getDDLTimestampMaintainersList()) {
-                LOGGER.info("Maintainer within test tenantID: {}, table name: {}, last ddl timestamp: {}",
-                        maintainer.getTenantID().toStringUtf8(), maintainer.getTableName().toStringUtf8(),
+                LOGGER.info("Maintainer within test tenantID: {}, table name: {}," +
+                                " last ddl timestamp: {}",
+                        maintainer.getTenantID().toStringUtf8(), maintainer.getTableName()
+                                .toStringUtf8(),
                         maintainer.getLastDDLTimestamp());
                 assertNotNull("DDLTimestampMaintainer should not be null", maintainer);
                 if (maintainer.getTableName().toStringUtf8().equals(tableNameStr)) {
                     baseTableFound = true;
                     assertEquals(0, maintainer.getTenantID().size());
-                    assertEquals(baseTable.getLastDDLTimestamp().longValue(), maintainer.getLastDDLTimestamp());
+                    assertEquals(baseTable.getLastDDLTimestamp().longValue(),
+                            maintainer.getLastDDLTimestamp());
                 } else if (maintainer.getTableName().toStringUtf8().equals(viewName)) {
                     viewFound = true;
                     assertEquals(0, maintainer.getTenantID().size());
-                    assertEquals(viewTable.getLastDDLTimestamp().longValue(), maintainer.getLastDDLTimestamp());
+                    assertEquals(viewTable.getLastDDLTimestamp().longValue(),
+                            maintainer.getLastDDLTimestamp());
                 }
             }
-            assertTrue("There should be base table in the maintainers list", baseTableFound);
-            assertTrue("There should logical view table in the maintainers list", viewFound);
+            assertTrue("There should be base table in the maintainers list",
+                    baseTableFound);
+            assertTrue("There should logical view table in the maintainers list",
+                    viewFound);
         }
     }
 
@@ -492,8 +646,14 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
     @Test
     public void testLastDDLTimestampForUpsertSelectMutations() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.put(PHOENIX_VERIFY_LAST_DDL_TIMESTAMP, verifyLastDDLTimestamp);
         String tableNameStr = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+            assertEquals(Boolean.valueOf(verifyLastDDLTimestamp),
+                    pConn.getQueryServices().getConfiguration().getBoolean(
+                            PHOENIX_VERIFY_LAST_DDL_TIMESTAMP,
+                            DEFAULT_PHOENIX_VERIFY_LAST_DDL_TIMESTAMP));
             // Set autocommit to true to make sure that upsert select statements will create
             // ServerUpsertSelectMutationPlan
             conn.setAutoCommit(true);
@@ -501,7 +661,8 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
             // Create a test table.
             conn.createStatement().execute(ddl);
             // Add DDLTimestampMaintainerRegionObserver coproc.
-            TestUtil.addCoprocessor(conn, tableNameStr, DDLTimestampMaintainerRegionObserverForMutations.class);
+            TestUtil.addCoprocessor(conn, tableNameStr,
+                    DDLTimestampMaintainerRegionObserverForMutations.class);
 
             // Get DDLTimestampMaintainerRegionObserver from table's region.
             DDLTimestampMaintainerRegionObserverForMutations regionObserverForMutations
@@ -522,29 +683,42 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
             // Reset maintainers for the base table.
             regionObserverForMutations.resetMaintainers();
             String upsertSelectStmt =
-                    "UPSERT INTO " + tableNameStr + "(A_STRING, COL1) SELECT A_STRING, 2000 FROM " + tableNameStr + " WHERE COL1 = 1000";
+                    "UPSERT INTO " + tableNameStr + "(A_STRING, COL1)" +
+                            " SELECT A_STRING, 2000 FROM " + tableNameStr + " WHERE COL1 = 1000";
             // Reset maintainers for both base table.
             regionObserverForMutations.resetMaintainers();
             stmt = conn.prepareStatement(upsertSelectStmt);
             stmt.execute();
             conn.commit();
 
-            // For upsert select statements, since the auto commit is ON then upsert select happens on server side
+            if (Boolean.valueOf(verifyLastDDLTimestamp) == false) {
+                assertNull(regionObserverForMutations.getMaintainersFromScanner());
+                assertNull(regionObserverForMutations.getMaintainersFromMutate());
+                return;
+            }
+
+            // For upsert select statements, since the auto commit is ON then upsert
+            // select happens on server side
             // So there will LAST_DDL_TIMESTAMP maintainers only for the scanner request.
             assertNull(regionObserverForMutations.getMaintainersFromMutate());
             assertNotNull(regionObserverForMutations.getMaintainersFromScanner());
 
             // There will be 1 table in the scanner maintainer
-            assertEquals(1, regionObserverForMutations.getMaintainersFromScanner().getDDLTimestampMaintainersCount());
+            assertEquals(1, regionObserverForMutations.getMaintainersFromScanner()
+                    .getDDLTimestampMaintainersCount());
 
             for (DDLTimestampMaintainersProtos.DDLTimestampMaintainer maintainer:
-                    regionObserverForMutations.getMaintainersFromScanner().getDDLTimestampMaintainersList()) {
-                LOGGER.info("Maintainer within test tenantID: {}, table name: {}, last ddl timestamp: {}",
-                        maintainer.getTenantID().toStringUtf8(), maintainer.getTableName().toStringUtf8(),
+                    regionObserverForMutations.getMaintainersFromScanner()
+                            .getDDLTimestampMaintainersList()) {
+                LOGGER.info("Maintainer within test tenantID: {}, table name: {}," +
+                                " last ddl timestamp: {}",
+                        maintainer.getTenantID().toStringUtf8(), maintainer.getTableName()
+                                .toStringUtf8(),
                         maintainer.getLastDDLTimestamp());
                 assertNotNull("DDLTimestampMaintainer should not be null", maintainer);
                 assertEquals(0, maintainer.getTenantID().size());
-                assertEquals(baseTable.getLastDDLTimestamp().longValue(), maintainer.getLastDDLTimestamp());
+                assertEquals(baseTable.getLastDDLTimestamp().longValue(),
+                        maintainer.getLastDDLTimestamp());
             }
         }
     }
@@ -557,15 +731,22 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
     @Test
     public void testLastDDLTimestampForDeleteMutations() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.put(PHOENIX_VERIFY_LAST_DDL_TIMESTAMP, verifyLastDDLTimestamp);
         String tableNameStr = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+            assertEquals(Boolean.valueOf(verifyLastDDLTimestamp),
+                    pConn.getQueryServices().getConfiguration().getBoolean(
+                            PHOENIX_VERIFY_LAST_DDL_TIMESTAMP,
+                            DEFAULT_PHOENIX_VERIFY_LAST_DDL_TIMESTAMP));
             // Set autocommit to true to make sure that deletes happen on the server side.
             conn.setAutoCommit(true);
             String ddl = getCreateTableStmt(tableNameStr);
             // Create a test table.
             conn.createStatement().execute(ddl);
             // Add DDLTimestampMaintainerRegionObserverForMutations coproc.
-            TestUtil.addCoprocessor(conn, tableNameStr, DDLTimestampMaintainerRegionObserverForMutations.class);
+            TestUtil.addCoprocessor(conn, tableNameStr,
+                    DDLTimestampMaintainerRegionObserverForMutations.class);
 
             // Get DDLTimestampMaintainerRegionObserver from table's region.
             DDLTimestampMaintainerRegionObserverForMutations regionObserverForMutations
@@ -593,48 +774,66 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
             stmt.execute();
             conn.commit();
 
-            // For upsert select statements, since the auto commit is ON then upsert select happens on server side
+            if (Boolean.valueOf(verifyLastDDLTimestamp) == false) {
+                assertNull(regionObserverForMutations.getMaintainersFromScanner());
+                assertNull(regionObserverForMutations.getMaintainersFromMutate());
+                return;
+            }
+
+            // For upsert select statements, since the auto commit is ON then upsert select
+            // happens on server side
             // So there will LAST_DDL_TIMESTAMP maintainers only for the scanner request.
             assertNull(regionObserverForMutations.getMaintainersFromMutate());
             assertNotNull(regionObserverForMutations.getMaintainersFromScanner());
 
             // There will be 1 table in the scanner maintainer
-            assertEquals(1, regionObserverForMutations.getMaintainersFromScanner().getDDLTimestampMaintainersCount());
+            assertEquals(1, regionObserverForMutations.getMaintainersFromScanner()
+                    .getDDLTimestampMaintainersCount());
 
             for (DDLTimestampMaintainersProtos.DDLTimestampMaintainer maintainer:
-                    regionObserverForMutations.getMaintainersFromScanner().getDDLTimestampMaintainersList()) {
-                LOGGER.info("Maintainer within test tenantID: {}, table name: {}, last ddl timestamp: {}",
-                        maintainer.getTenantID().toStringUtf8(), maintainer.getTableName().toStringUtf8(),
+                    regionObserverForMutations.getMaintainersFromScanner()
+                            .getDDLTimestampMaintainersList()) {
+                LOGGER.info("Maintainer within test tenantID: {}, table name: {}," +
+                                " last ddl timestamp: {}",
+                        maintainer.getTenantID().toStringUtf8(),
+                        maintainer.getTableName().toStringUtf8(),
                         maintainer.getLastDDLTimestamp());
                 assertNotNull("DDLTimestampMaintainer should not be null", maintainer);
                 assertEquals(0, maintainer.getTenantID().size());
-                assertEquals(baseTable.getLastDDLTimestamp().longValue(), maintainer.getLastDDLTimestamp());
+                assertEquals(baseTable.getLastDDLTimestamp().longValue(),
+                        maintainer.getLastDDLTimestamp());
             }
         }
     }
 
 
     /**
-     * RegionObserver to intercept preScannerOpen and preBatchMutate calls and extract DDLTimestampMaintainers object.
+     * RegionObserver to intercept preScannerOpen and preBatchMutate calls and extract
+     * DDLTimestampMaintainers object.
      */
-    public static class DDLTimestampMaintainerRegionObserverForMutations implements RegionCoprocessor, RegionObserver {
+    public static class DDLTimestampMaintainerRegionObserverForMutations
+            implements RegionCoprocessor, RegionObserver {
         private DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainersFromScanner;
         private DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainersFromMutate;
         @Override
-        public void preScannerOpen(org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
-                                   Scan scan) {
+        public void preScannerOpen(org.apache.hadoop.hbase.coprocessor.ObserverContext<
+                RegionCoprocessorEnvironment> c, Scan scan) {
             byte[] maintainersBytes = scan.getAttribute(LAST_DDL_TIMESTAMP_MAINTAINERS);
             LOGGER.info("within preScannerOpen method, table name: {}",
-                    c.getEnvironment().getRegion().getTableDescriptor().getTableName().getNameAsString());
+                    c.getEnvironment().getRegion().getTableDescriptor().getTableName()
+                            .getNameAsString());
             populateDDLTimestampMaintainers(maintainersBytes, true);
         }
 
         @Override
         public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-                                   MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
-            byte[] maintainersBytes = miniBatchOp.getOperation(0).getAttribute(LAST_DDL_TIMESTAMP_MAINTAINERS);
+                                   MiniBatchOperationInProgress<Mutation> miniBatchOp)
+                throws IOException {
+            byte[] maintainersBytes = miniBatchOp.getOperation(0).getAttribute(
+                    LAST_DDL_TIMESTAMP_MAINTAINERS);
             LOGGER.info("Within preBatchMutate method: {}",
-                    c.getEnvironment().getRegion().getTableDescriptor().getTableName().getNameAsString());
+                    c.getEnvironment().getRegion().getTableDescriptor().getTableName()
+                            .getNameAsString());
             populateDDLTimestampMaintainers(maintainersBytes, false);
         }
 
@@ -643,19 +842,25 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
                 return;
             }
             if (fromScanner) {
-                maintainersFromScanner = LastDDLTimestampMaintainerUtil.deserialize(maintainersBytes);
+                maintainersFromScanner =
+                        LastDDLTimestampMaintainerUtil.deserialize(maintainersBytes);
                 for (DDLTimestampMaintainersProtos.DDLTimestampMaintainer maintainer:
                         maintainersFromScanner.getDDLTimestampMaintainersList()) {
-                    LOGGER.info("Maintainer from preScannerOpen tenantID: {}, table name: {}, last ddl timestamp: {}",
-                            maintainer.getTenantID().toStringUtf8(), maintainer.getTableName().toStringUtf8(),
+                    LOGGER.info("Maintainer from preScannerOpen tenantID: {}, table name: {}," +
+                                    " last ddl timestamp: {}",
+                            maintainer.getTenantID().toStringUtf8(),
+                            maintainer.getTableName().toStringUtf8(),
                             maintainer.getLastDDLTimestamp());
                 }
             } else {
-                maintainersFromMutate = LastDDLTimestampMaintainerUtil.deserialize(maintainersBytes);
+                maintainersFromMutate =
+                        LastDDLTimestampMaintainerUtil.deserialize(maintainersBytes);
                 for (DDLTimestampMaintainersProtos.DDLTimestampMaintainer maintainer:
                         maintainersFromMutate.getDDLTimestampMaintainersList()) {
-                    LOGGER.info("Maintainer from preBatchMutate tenantID: {}, table name: {}, last ddl timestamp: {}",
-                            maintainer.getTenantID().toStringUtf8(), maintainer.getTableName().toStringUtf8(),
+                    LOGGER.info("Maintainer from preBatchMutate tenantID: {}, table name: {}," +
+                                    " last ddl timestamp: {}",
+                            maintainer.getTenantID().toStringUtf8(),
+                            maintainer.getTableName().toStringUtf8(),
                             maintainer.getLastDDLTimestamp());
                 }
             }
@@ -683,13 +888,15 @@ public class LastDDLTimestampIT extends ParallelStatsDisabledIT {
     /*
         Get DDLTimestampMaintainerRegionObserverForMutations for the given table.
      */
-    private DDLTimestampMaintainerRegionObserverForMutations getObserverForMutations(String tableNameStr) {
+    private DDLTimestampMaintainerRegionObserverForMutations getObserverForMutations(
+            String tableNameStr) {
         TableName tableName = TableName.valueOf(tableNameStr);
         List<HRegion> regions = getUtility().getMiniHBaseCluster().getRegions(tableName);
         HRegion region = regions.get(0);
         // Get DDLTimestampMaintainerRegionObserver from table's region.
         DDLTimestampMaintainerRegionObserverForMutations regionObserver =
-                region.getCoprocessorHost().findCoprocessor(DDLTimestampMaintainerRegionObserverForMutations.class);
+                region.getCoprocessorHost().findCoprocessor(
+                        DDLTimestampMaintainerRegionObserverForMutations.class);
         return regionObserver;
     }
 }

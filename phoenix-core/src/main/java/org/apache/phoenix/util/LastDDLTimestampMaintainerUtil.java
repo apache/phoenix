@@ -15,6 +15,17 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LAST_DDL_TIMESTAMP_MAINTAINERS;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SKIP_LAST_DDL_TIMESTAMP_VERIFICATION;
+import static org.apache.phoenix.query.QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_VERIFY_LAST_DDL_TIMESTAMP;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VERIFY_LAST_DDL_TIMESTAMP;
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
+
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.List;
+
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.ByteStringer;
@@ -27,15 +38,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.sql.SQLException;
-import java.util.List;
-
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LAST_DDL_TIMESTAMP_MAINTAINERS;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SKIP_LAST_DDL_TIMESTAMP_VERIFICATION;
-import static org.apache.phoenix.query.QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR;
-import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 /**
  * Util for verifying LastDDLTimestamps.
@@ -88,7 +90,10 @@ public class LastDDLTimestampMaintainerUtil {
 
     /**
      * Constructs the LAST_DDL_TIMESTAMP maintainers for the given table.
-     * We skip if the table is a SYSTEM_CATALOG table.
+     * We return null in 3 conditions
+     * 1. the verifying last ddl timestamp feature is disabled.
+     * 2. table is a SYSTEM_CATALOG table.
+     * 3. if table is a view index table which is just physical hbase table.
      * @param table table
      * @param connection phoenix connection
      * @return maintainers object
@@ -97,8 +102,15 @@ public class LastDDLTimestampMaintainerUtil {
     public static byte[] createLastDDLTimestampMaintainers(PTable table,
                                                            PhoenixConnection connection)
         throws SQLException {
-        // TODO Skip setting last ddl timestamp attribute on SYSTEM tables for now.
-        //  Think how can we handle SYSTEM tables
+        // Check if verifying last ddl timestamp configuration is enabled. If not return null.
+        boolean verifyLastDDLTimestamp = connection.getQueryServices().getConfiguration()
+                        .getBoolean(PHOENIX_VERIFY_LAST_DDL_TIMESTAMP,
+                                DEFAULT_PHOENIX_VERIFY_LAST_DDL_TIMESTAMP);
+        if (!verifyLastDDLTimestamp) {
+            LOGGER.info("Not setting LAST_DDL_TIMESTAMP since feature is turned off.");
+            return null;
+        }
+        // Skip setting last ddl timestamp attribute on SYSTEM tables for now.
         // Skip setting LastDDLTimestampMaintainers for view index table.
         // Since this table is a physical table, we don't need to verify LastDDLTimestamps.
         if (PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(table.getSchemaName().getString())
@@ -173,7 +185,7 @@ public class LastDDLTimestampMaintainerUtil {
         if (index < 0) {
             return fullViewIndexName;
         }
-        return fullViewIndexName.substring(index+1);
+        return fullViewIndexName.substring(index + 1);
     }
 
     private static DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder
@@ -183,16 +195,16 @@ public class LastDDLTimestampMaintainerUtil {
         String schemaName = SchemaUtil.getSchemaNameFromFullName(tableFullName);
         String tableName = SchemaUtil.getTableNameFromFullName(tableFullName);
         DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder maintainerBuilder =
-                createLastDDLTimestampMaintainerBuilder(table.getTenantId() == null ? null:
-                                table.getTenantId().getString(), schemaName, tableName,
+                createLastDDLTimestampMaintainerBuilder(table.getTenantId() == null ? null
+                                : table.getTenantId().getString(), schemaName, tableName,
                         table.getLastDDLTimestamp());
         return maintainerBuilder;
     }
 
     // This table can be base table, index or view.
     private static DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder
-    createLastDDLTimestampMaintainerBuilder(String tenantID, String schemaName, String tableName,
-                                            long lastDDLTimestamp) {
+        createLastDDLTimestampMaintainerBuilder(String tenantID, String schemaName,
+                                                String tableName, long lastDDLTimestamp) {
         DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder maintainerBuilder =
                 DDLTimestampMaintainersProtos.DDLTimestampMaintainer.newBuilder();
         if (tenantID != null) {

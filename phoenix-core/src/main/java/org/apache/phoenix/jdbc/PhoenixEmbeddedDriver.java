@@ -650,11 +650,13 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         }
 
         public String toUrl() {
-            // Some tests like PhoenixConfigurationUtilTest add JDBC_PROTOCOL to zookeeper quorum config.
+            // Some tests like PhoenixConfigurationUtilTest add JDBC_PROTOCOL to zookeeper quorum
+            // config.
             if (toString().contains(JDBC_PROTOCOL)) {
                 return  toString();
             } else {
-                return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + toString();
+                return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
+                        + toString();
             }
         }
 

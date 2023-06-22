@@ -36,11 +36,13 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LAST_DDL_
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 /**
- * Client provides last DDL timestamp of tables/views/indexes included in read/write operation through scan or mutation
- * {@link BaseScannerRegionObserver#LAST_DDL_TIMESTAMP_MAINTAINERS} attribute.
- * This verifies that client has the latest version of LAST_DDL_TIMESTAMP version. If client's provided
- * LAST_DDL_TIMESTAMP is less than what is present in SYSTEM.CATALOG then it throws StaleMetadataCacheException
- * Once it verifies the request, it will set LAST_DDL_TIMESTAMP_MAINTAINERS_VERIFIED attribute to true so that
+ * Client provides last DDL timestamp of tables/views/indexes included in read/write operation
+ * through scan or mutation {@link BaseScannerRegionObserver#LAST_DDL_TIMESTAMP_MAINTAINERS}
+ * attribute.
+ * This verifies that client has the latest version of LAST_DDL_TIMESTAMP version.
+ * If client's provided LAST_DDL_TIMESTAMP is less than what is present in SYSTEM.CATALOG
+ * then it throws StaleMetadataCacheException. Once it verifies the request,
+ * it will set LAST_DDL_TIMESTAMP_MAINTAINERS_VERIFIED attribute to true so that
  * other co-processors within the same session don't validate the LAST_DDL_TIMESTAMP again.
  */
 public class VerifyLastDDLTimestamp {
@@ -49,10 +51,10 @@ public class VerifyLastDDLTimestamp {
     public static void verifyLastDDLTimestamp(MiniBatchOperationInProgress<Mutation> miniBatchOp,
                                               RegionCoprocessorEnvironment env) throws IOException {
 
-        byte[] maintainersBytes = miniBatchOp.getOperation(0).getAttribute(LAST_DDL_TIMESTAMP_MAINTAINERS);
+        byte[] maintainersBytes = miniBatchOp.getOperation(0).getAttribute(
+                LAST_DDL_TIMESTAMP_MAINTAINERS);
         if (maintainersBytes == null) {
-            // TODO Either the feature is disabled or client is old. Return for now but need to think how to
-            //  handle this situation.
+            // Client doesn't support sending LAST_DDL_TIMESTAMP_MAINTAINERS. Do nothing.
             return;
         }
         DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers =
@@ -61,11 +63,12 @@ public class VerifyLastDDLTimestamp {
     }
 
     /**
-     * Verify that LAST_DDL_TIMESTAMP provided by the client is upto date. If it is stale it will throw
-     * StaleMetadataCacheException.
-     * This method will be called by each coprocessor in the co-proc chain. The first co-proc in the chain will
-     * verify LAST_DDL_TIMESTAMP and set LAST_DDL_TIMESTAMP_MAINTAINERS_VERIFIED attribute to true in the scan.
-     * All the co-proc will check for the LAST_DDL_TIMESTAMP_MAINTAINERS_VERIFIED attribute's value and verify only if
+     * Verify that LAST_DDL_TIMESTAMP provided by the client is upto date. If it is stale it will
+     * throw StaleMetadataCacheException.
+     * This method will be called by each coprocessor in the co-proc chain. The first co-proc in
+     * the chain will verify LAST_DDL_TIMESTAMP and set LAST_DDL_TIMESTAMP_MAINTAINERS_VERIFIED
+     * attribute to true in the scan. All the co-proc will check for the
+     * LAST_DDL_TIMESTAMP_MAINTAINERS_VERIFIED attribute's value and verify only if
      * this attribute is set to false.
      * @param scan scan provided by the client.
      * @param env region coprocessor environment.
@@ -73,16 +76,17 @@ public class VerifyLastDDLTimestamp {
      */
     public static void verifyLastDDLTimestamp(Scan scan, RegionCoprocessorEnvironment env)
             throws IOException {
-        // Check whether any previous co-processor have already verified LAST_DDL_TIMESTAMP_MAINTAINERS
+        // Check whether any previous co-processor have already verified
+        // LAST_DDL_TIMESTAMP_MAINTAINERS
         if (Bytes.equals(scan.getAttribute(LAST_DDL_TIMESTAMP_MAINTAINERS_VERIFIED), TRUE_BYTES)) {
             // Already verified LAST_DDL_TIMESTAMP_MAINTAINERS
-            LOGGER.debug("Already verified LAST_DDL_TIMESTAMP_MAINTAINERS for this request");
+            LOGGER.trace("Already verified LAST_DDL_TIMESTAMP_MAINTAINERS for this request");
             return;
         }
         byte[] maintainersBytes = scan.getAttribute(LAST_DDL_TIMESTAMP_MAINTAINERS);
         if (maintainersBytes == null) {
-            // TODO Either the feature is disabled or client is old. Return for now but need to think how to
-            //  handle this situation.
+            // TODO Either the feature is disabled or client is old. Return for now
+            //  but need to think how to handle this situation.
             return;
         }
         DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers
@@ -97,25 +101,29 @@ public class VerifyLastDDLTimestamp {
      * @param env region coprocessor environment.
      * @throws IOException
      */
-    private static void verifyLastDDLTimestampInternal(DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers,
-                                                RegionCoprocessorEnvironment env) throws IOException {
+    private static void verifyLastDDLTimestampInternal(
+            DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers,
+            RegionCoprocessorEnvironment env) throws IOException {
         ServerMetadataCache cache = ServerMetadataCache.getInstance(env);
         List<DDLTimestampMaintainersProtos.DDLTimestampMaintainer> maintainerList =
                 maintainers.getDDLTimestampMaintainersList();
-        // For tables with no index, it will have just 1 DDLTimestampMaintainer for the table itself.
+        // For tables with no index, it will have just 1 DDLTimestampMaintainer for the table itself
         // For tables with index, it will 1 DDLTimestampMaintainer for base table
         // and 1 DDLTimestampMaintainer for index table.
-        // For table with views, it will 1 DDLTimestampMaintainer for the base table, 1 DDLTimestampMaintainer for the
-        // queried view and 1 DDLTimestampMaintainer each for the parent views.
+        // For table with views, it will 1 DDLTimestampMaintainer for the base table,
+        // 1 DDLTimestampMaintainer for the queried view and 1 DDLTimestampMaintainer
+        // each for the parent views.
         for (DDLTimestampMaintainersProtos.DDLTimestampMaintainer maintainer: maintainerList) {
             long lastDDLTimestamp = cache.getLastDDLTimestampForTable(maintainer);
             long clientLastDDLTimestamp = maintainer.getLastDDLTimestamp();
             if (clientLastDDLTimestamp < lastDDLTimestamp) {
-                // TODO Throw StaleMetadataCacheException in future.
+                // TODO Log and throw StaleMetadataCacheException in future.
                 LOGGER.info("Stale metadata for LAST_DDL_TIMESTAMP for tenantID: {}, schema: {}," +
                         " table: {}, client provided timestamp: {}, server timestamp: {}",
-                        maintainer.getTenantID().toStringUtf8(), maintainer.getSchemaName().toStringUtf8(),
-                        maintainer.getTableName().toStringUtf8(), maintainer.getLastDDLTimestamp(), lastDDLTimestamp);
+                        maintainer.getTenantID().toStringUtf8(),
+                        maintainer.getSchemaName().toStringUtf8(),
+                        maintainer.getTableName().toStringUtf8(),
+                        maintainer.getLastDDLTimestamp(), lastDDLTimestamp);
             }
         }
     }

@@ -1329,7 +1329,8 @@ public class MutationState implements SQLCloseable {
                         IndexMetaDataCacheClient.setMetaDataOnMutations(connection, table,
                                 mutationList, indexMetaDataPtr) : null;
                 // Set LAST_DDL_TIMESTAMP maintainers on mutation.
-                LastDDLTimestampMaintainerUtil.createLastDDLTimestampMaintainers(mutationList, connection, table);
+                LastDDLTimestampMaintainerUtil.createLastDDLTimestampMaintainers(mutationList,
+                        connection, table);
                 // If we haven't retried yet, retry for this case only, as it's possible that
                 // a split will occur after we send the index metadata cache to all known
                 // region servers.

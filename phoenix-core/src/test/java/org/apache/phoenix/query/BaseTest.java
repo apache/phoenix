@@ -2147,4 +2147,8 @@ public abstract class BaseTest {
         }
         return false;
     }
+
+    public PhoenixTestDriver getDriver() {
+        return driver;
+    }
 }
