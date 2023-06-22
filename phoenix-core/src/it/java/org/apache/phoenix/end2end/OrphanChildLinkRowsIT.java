@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.coprocessor.tasks.ChildLinkScanTask;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
@@ -37,54 +38,54 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 
-import static org.apache.phoenix.end2end.IndexRebuildTaskIT.waitForTaskState;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_TABLE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 
 @Category(NeedsOwnMiniClusterTest.class)
+@RunWith(Parameterized.class)
 public class OrphanChildLinkRowsIT extends BaseTest {
 
-    private static Map<String, String> expectedChildLinks = new HashMap<>();
+    private final boolean pagingEnabled;
+    private final String CREATE_TABLE_DDL = "CREATE TABLE %s (TENANT_ID VARCHAR NOT NULL, A INTEGER NOT NULL, B INTEGER CONSTRAINT PK PRIMARY KEY (TENANT_ID, A))";
+    private final String CREATE_VIEW_DDL = "CREATE VIEW %s (NEW_COL1 INTEGER, NEW_COL2 INTEGER) AS SELECT * FROM %s WHERE B > 10";
+
+    public OrphanChildLinkRowsIT(boolean pagingEnabled) {
+        this.pagingEnabled = pagingEnabled;
+    }
+
+    @Parameterized.Parameters(name="OrphanChildLinkRowsIT_pagingEnabled={0}")
+    public static synchronized Collection<Boolean> data() {
+        return Arrays.asList(false, true);
+    }
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.CHILD_LINK_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, "0");
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-
-        // Create 2 tables - T1 and T2. Create a view V1 on T1.
-        String t1 = "CREATE TABLE IF NOT EXISTS S1.T1 (TENANT_ID VARCHAR NOT NULL, A INTEGER NOT NULL, B INTEGER CONSTRAINT PK PRIMARY KEY (TENANT_ID, A))";
-        String t2 = "CREATE TABLE IF NOT EXISTS S2.T2 (TENANT_ID VARCHAR NOT NULL, A INTEGER NOT NULL, B INTEGER CONSTRAINT PK PRIMARY KEY (TENANT_ID, A))";
-        String v1 = "CREATE VIEW IF NOT EXISTS VS1.V1 (NEW_COL1 INTEGER, NEW_COL2 INTEGER) AS SELECT * FROM S1.T1 WHERE B > 10";
-
-        try (Connection connection = DriverManager.getConnection(getUrl())) {
-            connection.createStatement().execute(t1);
-            connection.createStatement().execute(t2);
-            connection.createStatement().execute(v1);
-        }
-
-        expectedChildLinks.put("S1.T1", "VS1.V1");
     }
 
     /**
-     * 1. Disable the child link scan task.
-     * 2. Create a view (same name as existing view on T1) on T2. This CREATE VIEW will fail, verify if there was no orphan child link because of that.
+     * Disable the child link scan task.
+     * Create tables T1 and T2. Create 3 views on T1.
+     * Create a view (same name as existing view on T1) on T2. This CREATE VIEW will fail.
+     * Verify if there was no orphan child link from T2.
      *
-     * 3. Instrument CQSI to fail phase three of CREATE VIEW. Create a new view V2 on T2 (passes) and V1 on T2 which will fail.
-     *    Both links T2->V2 and T2->V1 will be in UNVERIFIED state, repaired during read.
-     *    Check if only 2 child links are returned: T2->V2 and T1->V1.
+     * Instrument CQSI to fail phase three of CREATE VIEW. Create a new view V4 on T2 (passes) and V1 on T2 which will fail.
+     * Both links T2->V4 and T2->V1 will be in UNVERIFIED state, repaired during read.
+     * Check if T2 has only 1 child link.
      */
     @Test
     public void testNoOrphanChildLinkRow() throws Exception {
@@ -92,38 +93,51 @@ public class OrphanChildLinkRowsIT extends BaseTest {
         ConnectionQueryServicesTestImpl.setFailPhaseThreeChildLinkWriteForTesting(false);
         ChildLinkScanTask.disableChildLinkScanTask(true);
 
-        String v2 = "CREATE VIEW VS1.V1 (NEW_COL1 INTEGER, NEW_COL2 INTEGER) AS SELECT * FROM S2.T2 WHERE B > 10";
+        String tableName1 = "T_" + generateUniqueName();
+        String tableName2 = "T_" + generateUniqueName();
+        String sameViewName = "V_"+generateUniqueName();
 
         try (Connection connection = DriverManager.getConnection(getUrl())) {
-            connection.createStatement().execute(v2);
+            connection.createStatement().execute(String.format(CREATE_TABLE_DDL, tableName1));
+            connection.createStatement().execute(String.format(CREATE_TABLE_DDL, tableName2));
+
+            //create 3 views in the first table
+            connection.createStatement().execute(String.format(CREATE_VIEW_DDL, sameViewName, tableName1));
+            for (int i=0; i<2; i++) {
+                connection.createStatement().execute(String.format(CREATE_VIEW_DDL, "V_"+generateUniqueName(), tableName1));
+            }
+
+            connection.createStatement().execute(String.format(CREATE_VIEW_DDL, sameViewName, tableName2));
             Assert.fail("Exception should have been thrown when creating a view with same name on a different table.");
         }
         catch (TableAlreadyExistsException e) {
             //expected since we are creating a view with the same name as an existing view
         }
 
-        verifyNoOrphanChildLinkRow();
+        verifyNoOrphanChildLinkRow(tableName1, 3);
+        verifyNoOrphanChildLinkRow(tableName2, 0);
 
         // configure CQSI to fail the last write phase of CREATE VIEW
         // where child link mutations are set to VERIFIED or are deleted
         ConnectionQueryServicesTestImpl.setFailPhaseThreeChildLinkWriteForTesting(true);
-        String v3 = "CREATE VIEW IF NOT EXISTS VS2.V2 (NEW_COL1 INTEGER, NEW_COL2 INTEGER) AS SELECT * FROM S2.T2 WHERE B > 10";
 
         try (Connection connection = DriverManager.getConnection(getUrl())) {
-            connection.createStatement().execute(v3);
-            connection.createStatement().execute(v2);
+            connection.createStatement().execute(String.format(CREATE_VIEW_DDL, "V_"+generateUniqueName(), tableName2));
+
+            connection.createStatement().execute(String.format(CREATE_VIEW_DDL, sameViewName, tableName2));
             Assert.fail("Exception should have been thrown when creating a view with same name on a different table.");
         }
         catch (TableAlreadyExistsException e) {
             //expected since we are creating a view with the same name as an existing view
         }
-        expectedChildLinks.put("S2.T2", "VS2.V2");
-        verifyNoOrphanChildLinkRow();
+        verifyNoOrphanChildLinkRow(tableName1, 3);
+        verifyNoOrphanChildLinkRow(tableName2, 1);
     }
 
     /**
      * Enable child link scan task and configure CQSI to fail the last write phase of CREATE VIEW
-     * Create a view (same name as existing view on T1) on T2.
+     * Create 2 tables X and Y.
+     * Create a view (same name as existing view on table X) on table Y.
      * Verify if all rows in HBase table are VERIFIED after Task finishes.
      */
     @Test
@@ -132,18 +146,25 @@ public class OrphanChildLinkRowsIT extends BaseTest {
         ConnectionQueryServicesTestImpl.setFailPhaseThreeChildLinkWriteForTesting(true);
         ChildLinkScanTask.disableChildLinkScanTask(false);
 
-        String v2 = "CREATE VIEW VS1.V1 (NEW_COL1 INTEGER, NEW_COL2 INTEGER) AS SELECT * FROM S2.T2 WHERE B > 10";
+        String tableName1 = "T_" + generateUniqueName();
+        String tableName2 = "T_" + generateUniqueName();
+        String sameViewName = "V_"+generateUniqueName();
 
         try (Connection connection = DriverManager.getConnection(getUrl())) {
-            connection.createStatement().execute(v2);
+            connection.createStatement().execute(String.format(CREATE_TABLE_DDL, tableName1));
+            connection.createStatement().execute(String.format(CREATE_TABLE_DDL, tableName2));
+            connection.createStatement().execute(String.format(CREATE_VIEW_DDL, sameViewName, tableName1));
+
+            connection.createStatement().execute(String.format(CREATE_VIEW_DDL, sameViewName, tableName2));
             Assert.fail("Exception should have been thrown when creating a view with same name on a different table.");
         }
         catch (TableAlreadyExistsException e) {
+            //expected since we are creating a view with the same name as an existing view
         }
 
         try (Connection connection = DriverManager.getConnection(getUrl())) {
-            // wait for TASK to complete
-            waitForTaskState(connection, PTable.TaskType.CHILD_LINK_SCAN, SYSTEM_CHILD_LINK_TABLE, PTable.TaskStatus.COMPLETED);
+            // wait for TASKs to complete
+            waitForChildLinkScanTasks();
 
             // scan the physical table and check there are no UNVERIFIED rows
             PTable childLinkPTable = PhoenixRuntime.getTable(connection, SYSTEM_CHILD_LINK_NAME);
@@ -163,6 +184,7 @@ public class OrphanChildLinkRowsIT extends BaseTest {
     /**
      * Do 10 times: Create 2 tables and view with same name on both tables.
      * Check if LIMIT query on SYSTEM.CHILD_LINK returns the right number of rows
+     * Check if only one child link is returned for every table.
      */
     @Test
     public void testChildLinkQueryWithLimit() throws Exception {
@@ -170,11 +192,13 @@ public class OrphanChildLinkRowsIT extends BaseTest {
         ConnectionQueryServicesTestImpl.setFailPhaseThreeChildLinkWriteForTesting(true);
         ChildLinkScanTask.disableChildLinkScanTask(true);
 
-        String CREATE_TABLE_DDL = "CREATE TABLE %s (TENANT_ID VARCHAR NOT NULL, A INTEGER NOT NULL, B INTEGER CONSTRAINT PK PRIMARY KEY (TENANT_ID, A))";
-        String CREATE_VIEW_DDL = "CREATE VIEW %s (NEW_COL1 INTEGER, NEW_COL2 INTEGER) AS SELECT * FROM %s WHERE B > 10";
-
-        try (Connection connection = DriverManager.getConnection(getUrl())) {
-            for (int i=0; i<10; i++) {
+        Properties props = new Properties();
+        if (pagingEnabled) {
+            props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, "0");
+        }
+        Map<String, String> expectedChildLinks = new HashMap<>();
+        try (Connection connection = DriverManager.getConnection(getUrl(), props)) {
+            for (int i=0; i<7; i++) {
                 String table1 = "T_" + generateUniqueName();
                 String table2 = "T_" + generateUniqueName();
                 String view = "V_" + generateUniqueName();
@@ -191,32 +215,56 @@ public class OrphanChildLinkRowsIT extends BaseTest {
                 }
             }
 
-            String childLinkQuery = "SELECT * FROM SYSTEM.CHILD_LINK LIMIT 7";
+            String childLinkQuery = "SELECT * FROM SYSTEM.CHILD_LINK LIMIT 5";
             ResultSet rs = connection.createStatement().executeQuery(childLinkQuery);
             int count = 0;
             while (rs.next()) {
                 count++;
             }
-            Assert.assertEquals("Incorrect number of child link rows returned", 7, count);
+            Assert.assertEquals("Incorrect number of child link rows returned", 5, count);
+        }
+        for (String table : expectedChildLinks.keySet()) {
+            verifyNoOrphanChildLinkRow(table, 1);
         }
     }
 
-    private void verifyNoOrphanChildLinkRow() throws Exception {
+    private void verifyNoOrphanChildLinkRow(String table, int numExpectedChildLinks) throws Exception {
         String childLinkQuery = "SELECT * FROM SYSTEM.CHILD_LINK";
-        try (Connection connection = DriverManager.getConnection(getUrl())) {
+        if (table != null) {
+            childLinkQuery += (" WHERE TABLE_NAME=" + "'" + table + "'");
+        }
+
+        int count = 0;
+        Properties props = new Properties();
+        if (pagingEnabled) {
+            props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, "0");
+        }
+        try (Connection connection = DriverManager.getConnection(getUrl(), props)) {
             ResultSet rs = connection.createStatement().executeQuery(childLinkQuery);
-            int count = 0;
             while (rs.next()) {
-                String parentFullName = SchemaUtil.getTableName(rs.getString(TABLE_SCHEM), rs.getString(TABLE_NAME));
-                Assert.assertTrue("Found Orphan Child Link: " + parentFullName + "->" + rs.getString(COLUMN_FAMILY), expectedChildLinks.containsKey(parentFullName));
-                Assert.assertEquals(String.format("Child was not correct in Child Link. Expected : %s, Actual: %s", expectedChildLinks.get(parentFullName), rs.getString(COLUMN_FAMILY)),
-                        expectedChildLinks.get(parentFullName), rs.getString(COLUMN_FAMILY));
                 count++;
             }
-            Assert.assertTrue("Found Orphan Linking Row", count <= expectedChildLinks.size());
-            Assert.assertTrue("All expected Child Links not returned by query", count >= expectedChildLinks.size());
         }
+        Assert.assertTrue("Found Orphan Linking Row", count <= numExpectedChildLinks);
+        Assert.assertTrue("All expected Child Links not returned by query", count >= numExpectedChildLinks);
     }
 
-
+    /*
+    Wait for all child link scan tasks to finish.
+     */
+    public static void waitForChildLinkScanTasks() throws Exception {
+        int maxTries = 10, nTries=0;
+        int sleepIntervalMs = 2000;
+        try (Connection connection = DriverManager.getConnection(getUrl())) {
+            do {
+                Thread.sleep(sleepIntervalMs);
+                ResultSet rs = connection.createStatement().executeQuery("SELECT COUNT(*) FROM SYSTEM.TASK WHERE " +
+                        PhoenixDatabaseMetaData.TASK_TYPE + " = " + PTable.TaskType.CHILD_LINK_SCAN.getSerializedValue() +
+                        " AND " + PhoenixDatabaseMetaData.TASK_STATUS + " != 'COMPLETED'");
+                rs.next();
+                int numPendingTasks = rs.getInt(1);
+                if (numPendingTasks == 0) break;
+            } while(++nTries < maxTries);
+        }
+    }
 }
