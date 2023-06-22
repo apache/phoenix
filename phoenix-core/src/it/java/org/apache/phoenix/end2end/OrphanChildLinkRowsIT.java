@@ -182,7 +182,7 @@ public class OrphanChildLinkRowsIT extends BaseTest {
     }
 
     /**
-     * Do 10 times: Create 2 tables and view with same name on both tables.
+     * Do multiple times: Create 2 tables and view with same name on both tables.
      * Check if LIMIT query on SYSTEM.CHILD_LINK returns the right number of rows
      * Check if only one child link is returned for every table.
      */
