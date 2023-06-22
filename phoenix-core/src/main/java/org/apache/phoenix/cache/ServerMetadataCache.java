@@ -22,11 +22,10 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.generated.DDLTimestampMaintainersProtos;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
+import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalListener;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -36,7 +35,10 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 
 /**
  * This manages the cache for all the objects(data table, views, indexes) on each region server.
@@ -44,6 +46,9 @@ import java.util.concurrent.TimeUnit;
  */
 public class ServerMetadataCache {
     private static final Logger LOGGER = LoggerFactory.getLogger(ServerMetadataCache.class);
+    private static final String PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS = "phoenix.coprocessor.regionserver.cahe.ttl.ms";
+    // Keeping default cache expiry for 30 mins since we won't have stale entry for more than 30 mins.
+    private static final long DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS = 30 * 60 * 1000; // 30 mins
     private static volatile ServerMetadataCache INSTANCE;
     private Configuration conf;
     // key is the combination of <tenantID, schema name, table name>, value is the lastDDLTimestamp
@@ -57,9 +62,9 @@ public class ServerMetadataCache {
     public static ServerMetadataCache getInstance(RegionCoprocessorEnvironment env) {
         ServerMetadataCache result = INSTANCE;
         if (result == null) {
-            synchronized(ServerMetadataCache.class) {
+            synchronized (ServerMetadataCache.class) {
                 result = INSTANCE;
-                if(result == null) {
+                if (result == null) {
                     INSTANCE = result = new ServerMetadataCache(env.getConfiguration());
                 }
             }
@@ -69,13 +74,17 @@ public class ServerMetadataCache {
 
     private ServerMetadataCache(Configuration conf) {
         this.conf = conf;
-        // TODO Re-using GlobalCache TTL property for TTL
         long maxTTL = conf.getLong(
-                QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB,
-                QueryServicesOptions.DEFAULT_MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS);
+                PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS,
+                DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS);
         lastDDLTimestampMap = CacheBuilder.newBuilder()
-                // TODO: make it configurable
-                .maximumSize(10000l)
+                .removalListener((RemovalListener<ImmutableBytesPtr, Long>) notification -> {
+                    String key = notification.getKey().toString();
+                    LOGGER.debug("Expiring " + key + " because of "
+                            + notification.getCause().name());
+                })
+                // maximum number of entries this cache can handle.
+                .maximumSize(10000L)
                 .expireAfterAccess(maxTTL, TimeUnit.MILLISECONDS)
                 .build();
     }
@@ -92,31 +101,35 @@ public class ServerMetadataCache {
         byte[] tenantID = maintainer.getTenantID().toByteArray();
         byte[] schemaName = maintainer.getSchemaName().toByteArray();
         byte[] tableName = maintainer.getTableName().toByteArray();
+        String fullTableNameStr = SchemaUtil.getTableName(schemaName, tableName);
         byte[] tableKey = SchemaUtil.getTableKey(tenantID, schemaName, tableName);
         ImmutableBytesPtr tableKeyPtr = new ImmutableBytesPtr(tableKey);
         // Lookup in cache if present.
         Long lastDDLTimestamp = lastDDLTimestampMap.getIfPresent(tableKeyPtr);
         if (lastDDLTimestamp != null) {
+            LOGGER.trace("Retrieving last ddl timestamp value from cache for tableName: {}",
+                    fullTableNameStr);
             return lastDDLTimestamp;
         }
 
-        // TODO Should we use PhoenixConnection#getTable instead? In this method if table is not found in the metadata
-        // cache, it will return null instead of reading from SYSCAT.
         PTable table;
         String tenantIDStr = Bytes.toString(tenantID);
         if (tenantIDStr == null || tenantIDStr.isEmpty()) {
             tenantIDStr = null;
         }
-        String fullTableNameStr = SchemaUtil.getTableName(schemaName, tableName);
-        // LastDDLTimestamp not present in cache so query SYSCAT regionserver.
-        try(Connection connection = QueryUtil.getConnectionOnServer(this.conf)) {
-            table = PhoenixRuntime.getTable(connection, tenantIDStr, fullTableNameStr);
+        Properties properties = new Properties();
+        if (tenantIDStr != null) {
+            properties.setProperty(TENANT_ID_ATTRIB, tenantIDStr);
+        }
+        try (Connection connection = QueryUtil.getConnectionOnServer(properties, this.conf)) {
+            // Using PhoenixRuntime#getTableNoCache since se don't want to read cached value.
+            table = PhoenixRuntime.getTableNoCache(connection, fullTableNameStr);
             // Update cache with the latest DDL timestamp from SYSCAT server.
             lastDDLTimestampMap.put(tableKeyPtr, table.getLastDDLTimestamp());
         } catch (SQLException sqle) {
             // TODO Think what exception to throw in this case?
-            LOGGER.warn("Exception while calling PhoenixRuntime#getTable for tenant id: {}, tableName: {}",
-                    tenantIDStr, fullTableNameStr, sqle);
+            LOGGER.warn("Exception while calling calling getTableNoCache for tenant id: {}," +
+                            " tableName: {}", tenantIDStr, fullTableNameStr, sqle);
             throw new IOException(sqle);
         }
         return table.getLastDDLTimestamp();

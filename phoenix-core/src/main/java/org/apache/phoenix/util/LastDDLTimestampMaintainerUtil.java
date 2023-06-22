@@ -41,7 +41,8 @@ import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
  * Util for verifying LastDDLTimestamps.
  */
 public class LastDDLTimestampMaintainerUtil {
-    private static final Logger LOGGER = LoggerFactory.getLogger(LastDDLTimestampMaintainerUtil.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(LastDDLTimestampMaintainerUtil.class);
 
     /**
      * Sets the LAST_DDL_TIMESTAMP maintainers to each mutation attribute.
@@ -50,8 +51,8 @@ public class LastDDLTimestampMaintainerUtil {
      * @param table table
      * @throws SQLException
      */
-    public static void createLastDDLTimestampMaintainers(List<Mutation> mutationList, PhoenixConnection connection, PTable table)
-            throws SQLException {
+    public static void createLastDDLTimestampMaintainers(List<Mutation> mutationList,
+            PhoenixConnection connection, PTable table) throws SQLException {
         byte[] maintainers = createLastDDLTimestampMaintainers(table, connection);
         if (maintainers == null) {
             // This means it is a system table.
@@ -69,10 +70,10 @@ public class LastDDLTimestampMaintainerUtil {
      * @param connection
      * @throws SQLException
      */
-    public static void createLastDDLTimestampMaintainers(Scan scan, PTable table, PhoenixConnection connection)
-            throws SQLException {
-        // If SKIP_LAST_DDL_TIMESTAMP_VERIFICATION is set to true for this request, then we don't need to set
-        // LAST_DDL_TIMESTAMP maintainers for this scan.
+    public static void createLastDDLTimestampMaintainers(Scan scan, PTable table,
+            PhoenixConnection connection) throws SQLException {
+        // If SKIP_LAST_DDL_TIMESTAMP_VERIFICATION is set to true for this request,
+        // then we don't need to set LAST_DDL_TIMESTAMP maintainers for this scan.
         if (Bytes.equals(scan.getAttribute(SKIP_LAST_DDL_TIMESTAMP_VERIFICATION), TRUE_BYTES)) {
             LOGGER.debug("Skip setting LAST_DDL_TIMESTAMP for this request");
             return;
@@ -86,20 +87,22 @@ public class LastDDLTimestampMaintainerUtil {
     }
 
     /**
-     * Constructs the LAST_DDL_TIMESTAMP maintainers for the given table. We skip if the table is a SYSTEM_CATALOG
-     * table.
+     * Constructs the LAST_DDL_TIMESTAMP maintainers for the given table.
+     * We skip if the table is a SYSTEM_CATALOG table.
      * @param table table
      * @param connection phoenix connection
      * @return maintainers object
      * @throws SQLException
      */
-    public static byte[] createLastDDLTimestampMaintainers(PTable table, PhoenixConnection connection)
+    public static byte[] createLastDDLTimestampMaintainers(PTable table,
+                                                           PhoenixConnection connection)
         throws SQLException {
-        // TODO Skip setting last ddl timestamp attribute on SYSTEM tables for now. Think how can we handle SYSTEM tables
-        // Skip setting LastDDLTimestampMaintainers for view index table. Since this table is a physical table, we don't
-        // need to verify LastDDLTimestamps.
-        if (PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(table.getSchemaName().getString()) ||
-                MetaDataUtil.isViewIndex(table.getTableName().getString())) {
+        // TODO Skip setting last ddl timestamp attribute on SYSTEM tables for now.
+        //  Think how can we handle SYSTEM tables
+        // Skip setting LastDDLTimestampMaintainers for view index table.
+        // Since this table is a physical table, we don't need to verify LastDDLTimestamps.
+        if (PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(table.getSchemaName().getString())
+                || MetaDataUtil.isViewIndex(table.getTableName().getString())) {
             return null;
         }
         // TODO Think of better way to convert bytes to bytesString.
@@ -111,7 +114,8 @@ public class LastDDLTimestampMaintainerUtil {
                 createLastDDLTimestampMaintainerBuilder(table);
         builder.addDDLTimestampMaintainers(maintainerBuilder);
 
-        // TODO We don't have to add indexes if it is a read request and table scanned to base table.
+        // TODO We don't have to add indexes if it is a read request
+        //  and table scanned to base table.
         // TODO Only for upsert request on a base table, we have to add indexes.
         // For view or table with indexes, add them to the builder
         for (PTable index: table.getIndexes()) {
@@ -121,18 +125,22 @@ public class LastDDLTimestampMaintainerUtil {
         }
 
         // For view, resolve all the parent views all the way upto the base table.
-        // Skip traversing the hierarchy if the view type is MAPPED since parent table name will be same as view name
-        // and we don't assign LAST_DDL_TIMESTAMP to table created via hbase api.
+        // Skip traversing the hierarchy if the view type is MAPPED since parent table name
+        // will be same as view name and we don't assign LAST_DDL_TIMESTAMP to table created
+        // via hbase api.
         if (table.getType() == PTableType.VIEW && table.getViewType() != PTable.ViewType.MAPPED) {
             PName parentTableName = table.getParentTableName();
             PName parentSchemaName = table.getParentSchemaName();
 
             while (parentTableName != null) {
                 String parentTableNameStr = parentTableName.getString();
-                String parentSchemaNameStr = parentSchemaName == null ? null : parentSchemaName.getString();
-                String fullParentTableStr = SchemaUtil.getTableName(parentSchemaNameStr, parentTableNameStr);
+                String parentSchemaNameStr = parentSchemaName == null ? null :
+                        parentSchemaName.getString();
+                String fullParentTableStr = SchemaUtil.getTableName(parentSchemaNameStr,
+                        parentTableNameStr);
                 PTable parentTable = PhoenixRuntime.getTable(connection, fullParentTableStr);
-                builder.addDDLTimestampMaintainers(createLastDDLTimestampMaintainerBuilder(parentTable));
+                builder.addDDLTimestampMaintainers(createLastDDLTimestampMaintainerBuilder(
+                        parentTable));
                 parentTableName = parentTable.getParentTableName();
                 parentSchemaName = parentTable.getParentSchemaName();
             }
@@ -159,7 +167,8 @@ public class LastDDLTimestampMaintainerUtil {
         return maintainerBuilder;
     }
 
-    private static String getIndexNameFromFullViewIndexName(String fullViewIndexName, String separator) {
+    private static String getIndexNameFromFullViewIndexName(String fullViewIndexName,
+                                                            String separator) {
         int index = fullViewIndexName.lastIndexOf(separator);
         if (index < 0) {
             return fullViewIndexName;
@@ -167,7 +176,8 @@ public class LastDDLTimestampMaintainerUtil {
         return fullViewIndexName.substring(index+1);
     }
 
-    private static DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder getMaintainerForViewIndex(PTable table) {
+    private static DDLTimestampMaintainersProtos.DDLTimestampMaintainer.Builder
+            getMaintainerForViewIndex(PTable table) {
         String tableFullName = getIndexNameFromFullViewIndexName(table.getName().getString(),
                 CHILD_VIEW_INDEX_NAME_SEPARATOR);
         String schemaName = SchemaUtil.getSchemaNameFromFullName(tableFullName);
