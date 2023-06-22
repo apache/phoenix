@@ -50,8 +50,8 @@ public class ConnectionUtilIT {
         setUpConfigForMiniCluster(conf);
         conf.set(HConstants.ZOOKEEPER_ZNODE_PARENT, "/hbase-test");
         hbaseTestUtil.startMiniCluster();
-		Class.forName(PhoenixDriver.class.getName());
-		DriverManager.registerDriver(new PhoenixTestDriver());
+        Class.forName(PhoenixDriver.class.getName());
+        DriverManager.registerDriver(new PhoenixTestDriver());
     }
 
 	@Test
