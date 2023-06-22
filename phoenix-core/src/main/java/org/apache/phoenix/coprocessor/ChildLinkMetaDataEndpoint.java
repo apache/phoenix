@@ -334,6 +334,6 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService
         if (scan.getAttribute(CHECK_VERIFY_COLUMN) == null) {
             return s;
         }
-        return new ChildLinkMetaDataScanner(c.getEnvironment(), scan, s);
+        return new ChildLinkMetaDataScanner(c.getEnvironment(), scan, new PagingRegionScanner(c.getEnvironment().getRegion(), s, scan));
     }
 }
