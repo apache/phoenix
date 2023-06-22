@@ -390,7 +390,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan,
                                               final RegionScanner s) throws IOException, SQLException {
         final RegionCoprocessorEnvironment env = c.getEnvironment();
-        VerifyLastDDLTimestamp.verifyLastDDLTimestamp(scan, env);
         final Region region = env.getRegion();
         long ts = scan.getTimeRange().getMax();
         boolean localIndexScan = ScanUtil.isLocalIndex(scan);
