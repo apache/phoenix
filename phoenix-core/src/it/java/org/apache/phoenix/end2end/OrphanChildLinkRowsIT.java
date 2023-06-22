@@ -96,6 +96,7 @@ public class OrphanChildLinkRowsIT extends BaseTest {
 
         try (Connection connection = DriverManager.getConnection(getUrl())) {
             connection.createStatement().execute(v2);
+            Assert.fail("Exception should have been thrown when creating a view with same name on a different table.");
         }
         catch (TableAlreadyExistsException e) {
             //expected since we are creating a view with the same name as an existing view
@@ -111,6 +112,7 @@ public class OrphanChildLinkRowsIT extends BaseTest {
         try (Connection connection = DriverManager.getConnection(getUrl())) {
             connection.createStatement().execute(v3);
             connection.createStatement().execute(v2);
+            Assert.fail("Exception should have been thrown when creating a view with same name on a different table.");
         }
         catch (TableAlreadyExistsException e) {
             //expected since we are creating a view with the same name as an existing view
@@ -134,6 +136,7 @@ public class OrphanChildLinkRowsIT extends BaseTest {
 
         try (Connection connection = DriverManager.getConnection(getUrl())) {
             connection.createStatement().execute(v2);
+            Assert.fail("Exception should have been thrown when creating a view with same name on a different table.");
         }
         catch (TableAlreadyExistsException e) {
         }
@@ -181,6 +184,7 @@ public class OrphanChildLinkRowsIT extends BaseTest {
                 expectedChildLinks.put(table1, view);
                 try {
                     connection.createStatement().execute(String.format(CREATE_VIEW_DDL, view, table2));
+                    Assert.fail("Exception should have been thrown when creating a view with same name on a different table.");
                 }
                 catch (TableAlreadyExistsException e) {
 
