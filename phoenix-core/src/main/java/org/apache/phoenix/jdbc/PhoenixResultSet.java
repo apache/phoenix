@@ -49,6 +49,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Bytes;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -890,6 +891,8 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
             if (rowProjectorWithDynamicCols != null) {
                 rowProjectorWithDynamicCols.reset();
             }
+//        } catch (StaleMetadataCacheException smce) {
+//
         } catch (RuntimeException | SQLException e) {
             // FIXME: Expression.evaluate does not throw SQLException
             // so this will unwrap throws from that.

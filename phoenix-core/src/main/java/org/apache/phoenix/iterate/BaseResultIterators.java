@@ -72,6 +72,7 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.expression.OrderByExpression;
@@ -1397,6 +1398,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         concatIterators.add(iterator);
                         previousScan.setScan(scanPair.getFirst());
                     } catch (ExecutionException e) {
+                        LOGGER.info("RSS exception ", e);
                         try { // Rethrow as SQLException
                             throw ServerUtil.parseServerException(e);
                         } catch (StaleRegionBoundaryCacheException | HashJoinCacheNotFoundException e2){
@@ -1436,7 +1438,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             }
                             
                         }
-                    } catch (CancellationException ce) {
+                    }/* catch (StaleMetadataCacheException smce) {
+                        LOGGER.info("RSS SMCE", smce);
+                    }*/
+                    catch (CancellationException ce) {
                         LOGGER.warn("Iterator scheduled to be executed in Future was being cancelled", ce);
                     }
                 }

@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.coprocessor.generated.DDLTimestampMaintainersProtos;
+import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.util.LastDDLTimestampMaintainerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,6 +90,9 @@ public class VerifyLastDDLTimestamp {
             //  but need to think how to handle this situation.
             return;
         }
+        //throw new StaleMetadataCacheException("Stale MetadataException");
+
+        LOGGER.info("RSS Exception ", new Exception());
         DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers
                 = LastDDLTimestampMaintainerUtil.deserialize(maintainersBytes);
         verifyLastDDLTimestampInternal(maintainers, env);
