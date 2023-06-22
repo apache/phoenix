@@ -5,7 +5,6 @@ option java_generate_equals_and_hash = true;
 option optimize_for = SPEED;
 
 message DDLTimestampMaintainer {
-  // TODO Can we change tenantID and schemaName to optional?
   optional bytes tenantID = 1;
   optional bytes schemaName = 2;
   required bytes tableName = 3;
