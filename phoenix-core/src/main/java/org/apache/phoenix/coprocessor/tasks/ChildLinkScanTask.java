@@ -38,8 +38,9 @@ public class ChildLinkScanTask extends BaseTask {
             PhoenixConnection pconn = QueryUtil.getConnectionOnServer(
                     env.getConfiguration()).unwrap(PhoenixConnection.class);
             ResultSet rs = pconn.createStatement().executeQuery(CHILD_LINK_QUERY);
-            rs.next();
-            count = rs.getInt(1);
+            if (rs.next()) {
+                count = rs.getInt(1);
+            }
         }
         catch (Exception e) {
             LOGGER.error("Exception in Child Link Scan Task: " + e);
