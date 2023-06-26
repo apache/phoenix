@@ -264,7 +264,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
 
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable1
                     + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM "
-                    + tableName + " UPDATE_CACHE_FREQUENCY=7");
+                    + tableName + " UPDATE_CACHE_FREQUENCY=1");
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable2
                     + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM "
                     + tableName + " USE_STATS_FOR_PARALLELIZATION=true");
@@ -279,7 +279,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             PTable viewTable2 = viewConn.unwrap(PhoenixConnection.class)
                     .getTable(new PTableKey(tenantId, viewOfTable2));
             assertEquals(2, table.getUpdateCacheFrequency());
-            assertEquals(7, viewTable1.getUpdateCacheFrequency());
+            assertEquals(1, viewTable1.getUpdateCacheFrequency());
             assertEquals(2, viewTable2.getUpdateCacheFrequency());
             assertNull(table.useStatsForParallelization());
             assertNull(viewTable1.useStatsForParallelization());
@@ -301,7 +301,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             assertEquals(3, table.getUpdateCacheFrequency());
             // The updated property value is only propagated to the view in which we did not specify
             // a value for the property during view creation or alter its value later on
-            assertEquals(7, viewTable1.getUpdateCacheFrequency());
+            assertEquals(1, viewTable1.getUpdateCacheFrequency());
             assertEquals(3, viewTable2.getUpdateCacheFrequency());
             assertFalse(table.useStatsForParallelization());
             assertFalse(viewTable1.useStatsForParallelization());

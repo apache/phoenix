@@ -1966,19 +1966,28 @@ public class MetaDataClient {
 
     /**
      * Get TTL defined for the given View according to its hierarchy.
-     * @param table
+     * @param view
      * @return appropriate TTL from Views defined above for the entity calling.
      * @throws TableNotFoundException
      */
-    private Long getTTLFromViewsAbove(PTable table) throws TableNotFoundException {
+    private Long getTTLFromViewsAbove(PTable view) throws TableNotFoundException {
         try {
-            return table.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED ? Long.valueOf(table.getPhoenixTTL()) :
-                    (table.getParentName() == null ? connection.getTable(new PTableKey(connection.getTenantId(),
-                            table.getPhysicalNames().get(0).getString())).getPhoenixTTL() :
-                            getTTLFromViewsAbove(connection.getTable(new PTableKey(connection.getTenantId(), table.getParentName().getString()))));
+            return view.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED ? Long.valueOf(view.getPhoenixTTL()) :
+                    (checkIfParentIsViewOrTable(view) ? connection.getTable(new PTableKey(null ,
+                            view.getPhysicalNames().get(0).getString())).getPhoenixTTL() :
+                            getTTLFromViewsAbove(connection.getTable(new PTableKey(connection.getTenantId(), view.getParentName().getString()))));
         } catch (TableNotFoundException tne) {
-            throw new TableNotFoundException(table.getParentName().toString());
+            return getTTLFromViewsAbove(connection.getTable(new PTableKey(null, view.getParentName().getString())));
         }
+    }
+
+    private boolean checkIfParentIsViewOrTable(PTable view) {
+        PName parentName = view.getParentName();
+        if (parentName == null) {
+            //means this is a view on dataTable
+            return true;
+        }
+        return parentName.getString().equals(view.getPhysicalName().getString());
     }
 
     private PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
@@ -2273,7 +2282,7 @@ public class MetaDataClient {
                 .setSchemaName(schemaName).setTableName(tableName)
                 .build().buildException();
             }
-            if (phoenixTTLProp != null && TableProperty.TTL.getValue(commonFamilyProps) != null
+            if (TableProperty.TTL.getValue(commonFamilyProps) != null
                     && transactionProvider != null 
                     && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.SET_TTL)) {
                 throw new SQLExceptionInfo.Builder(PhoenixTransactionProvider.Feature.SET_TTL.getCode())

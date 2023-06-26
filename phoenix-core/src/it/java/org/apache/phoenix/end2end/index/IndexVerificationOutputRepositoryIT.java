@@ -132,7 +132,7 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
                     new IndexVerificationOutputRepository(mockStringBytes, conn);
 
             outputRepository.createOutputTable(conn);
-            TestUtil.assertTableHasTtl(conn, TableName.valueOf(OUTPUT_TABLE_NAME_BYTES), DEFAULT_LOG_TTL);
+            TestUtil.assertTableHasTtl(conn, TableName.valueOf(OUTPUT_TABLE_NAME_BYTES), DEFAULT_LOG_TTL, false);
             ManualEnvironmentEdge customClock = new ManualEnvironmentEdge();
             customClock.setValue(EnvironmentEdgeManager.currentTimeMillis());
             EnvironmentEdgeManager.injectEdge(customClock);

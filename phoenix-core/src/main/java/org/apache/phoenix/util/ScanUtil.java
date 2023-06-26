@@ -1067,7 +1067,7 @@ public class ScanUtil {
 
     public static boolean isTTLExpired(Cell cell, Scan scan, long nowTS) {
         long ts = cell.getTimestamp();
-        long ttl = ScanUtil.getPhoenixTTL(scan) * 1000;
+        long ttl = ScanUtil.getPhoenixTTL(scan);
         return ts + ttl < nowTS;
     }
 

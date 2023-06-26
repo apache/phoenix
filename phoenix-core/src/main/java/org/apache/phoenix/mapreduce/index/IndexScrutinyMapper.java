@@ -68,6 +68,9 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_PHOENIX_TTL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
+
 /**
  * Mapper that reads from the data table and checks the rows against the index table
  */
@@ -338,7 +341,8 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                 SchemaUtil.isNamespaceMappingEnabled(null, cqsi.getProps()));
         if (configuration.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED)) {
-            return pSourceTable.getPhoenixTTL();
+            return pSourceTable.getPhoenixTTL() == PHOENIX_TTL_NOT_DEFINED ? DEFAULT_PHOENIX_TTL :
+                    pSourceTable.getPhoenixTTL();
         } else {
             TableDescriptor tableDesc;
             try (Admin admin = cqsi.getAdmin()) {

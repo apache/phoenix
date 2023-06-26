@@ -1,9 +1,11 @@
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -161,6 +163,19 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
         }
     }
 
+    @Test
+    public void testDeletes() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, false);
+            for (int i = 0; i<5 ; i++) {
+                conn.createStatement().execute(String.format("UPSERT INTO " + tableName + "(ID, COL1, COL2) VALUES(%s,%s,%s)", i, i*1, i*2));
+            }
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+            conn.createStatement().execute("DROP FROM " + tableName + " WHERE ID = 1");
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+        }
+    }
+
     private void assertTTLValueOfTableOrView(Connection conn, long expected, String name) throws SQLException {
         assertEquals("TTL value did not match :-", expected,
                 conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, name)).getPhoenixTTL());
@@ -214,7 +229,4 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
         return viewName;
     }
 
-//    private void createTableWithTTLAsItsProperty(Connection conn, String ddl) throws SQLException {
-//        conn.createStatement().execute(ddl);
-//    }
 }

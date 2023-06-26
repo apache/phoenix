@@ -42,6 +42,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -90,6 +91,9 @@ public class ConnectionQueryServicesImplTest {
     private ReadOnlyProps readOnlyProps;
 
     @Mock
+    private Configuration mockConfig;
+
+    @Mock
     private Connection mockConn;
 
     @Mock
@@ -113,6 +117,9 @@ public class ConnectionQueryServicesImplTest {
         props = ConnectionQueryServicesImpl.class.getDeclaredField("connection");
         props.setAccessible(true);
         props.set(mockCqs, mockConn);
+        props = ConnectionQueryServicesImpl.class.getDeclaredField("config");
+        props.setAccessible(true);
+        props.set(mockCqs, mockConfig);
         when(mockCqs.checkIfSysMutexExistsAndModifyTTLIfRequired(mockAdmin))
             .thenCallRealMethod();
         when(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_TDB))

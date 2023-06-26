@@ -1041,8 +1041,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     private boolean isPhoenixTTLEnabled() {
-        return config.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
+        boolean ttl = config.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
+        return ttl;
     }
 
 
@@ -3660,7 +3661,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
 
         // The SYSTEM MUTEX table already exists so check its TTL
-        if (checkIfDescriptorLevelTTLChangeIsRequired(htd)) {
+        if (checkIfDescriptorLevelTTLChangeIsRequired(admin, htd)) {
             LOGGER.debug("SYSTEM MUTEX already appears to exist, but has the wrong TTL. " +
                     "Will modify the TTL");
             ColumnFamilyDescriptor hColFamDesc = ColumnFamilyDescriptorBuilder
@@ -3679,12 +3680,22 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return true;
     }
 
-    private boolean checkIfDescriptorLevelTTLChangeIsRequired(TableDescriptor htd) {
+    private boolean checkIfDescriptorLevelTTLChangeIsRequired(Admin admin, TableDescriptor htd) {
         if (isPhoenixTTLEnabled()) {
             //TODO: We have enabled Phoenix level TTL for SYSTEM tables but How can we update here if TTL doesn't match?
+            try {
+                PTableRef mutexRef = latestMetaData.getTableRef(new PTableKey(null, SYSTEM_MUTEX_NAME));
+                return mutexRef.getTable().getPhoenixTTL() != TTL_FOR_MUTEX && changeTTLForMutexAtPhoenixLevel(mutexRef);
+            } catch (TableNotFoundException tne) {
+
+            }
         } else {
             return htd.getColumnFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES).getTimeToLive() != TTL_FOR_MUTEX;
         }
+        return false;
+    }
+
+    private boolean changeTTLForMutexAtPhoenixLevel(PTableRef mutexRef) {
         return false;
     }
 
