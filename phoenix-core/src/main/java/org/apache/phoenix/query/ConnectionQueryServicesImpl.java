@@ -1282,8 +1282,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // The priority for this co-processor should be set higher than the GlobalIndexChecker so that the read repair scans
             // are intercepted by the TTLAwareRegionObserver and only the rows that are not ttl-expired are returned.
             if (!SchemaUtil.isSystemTable(tableName)) {
-                if (!newDesc.hasCoprocessor(PhoenixTTLRegionObserver.class.getName()) && isServerSideMaskingEnabled) {
-                    builder.setCoprocessor(
+                if (!newDesc.hasCoprocessor(PhoenixTTLRegionObserver.class.getName()) &&
+                        isServerSideMaskingEnabled) {
+                        builder.setCoprocessor(
                             CoprocessorDescriptorBuilder
                                     .newBuilder(PhoenixTTLRegionObserver.class.getName())
                                     .setPriority(priority - 2)

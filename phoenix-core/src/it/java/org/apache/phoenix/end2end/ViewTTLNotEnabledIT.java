@@ -92,7 +92,7 @@ public class ViewTTLNotEnabledIT extends ParallelStatsDisabledIT {
             PhoenixResultSet
                     rs = pstmt.newResultSet(queryPlan.iterator(), queryPlan.getProjector(), queryPlan.getContext());
             Assert.assertFalse("Should not have any rows", rs.next());
-            Assert.assertEquals("Should have atleast one element", 1, queryPlan.getScans().size());
+            Assert.assertEquals("Should have at least one element", 1, queryPlan.getScans().size());
             Assert.assertEquals("PhoenixTTL should not be set",
                     0, ScanUtil.getPhoenixTTL(queryPlan.getScans().get(0).get(0)));
             Assert.assertFalse("Masking attribute should not be set",
