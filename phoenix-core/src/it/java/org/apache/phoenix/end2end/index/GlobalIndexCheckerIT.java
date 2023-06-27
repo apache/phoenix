@@ -1203,8 +1203,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
             try (ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql)) {
                 String actualExplainPlan = QueryUtil.getExplainPlan(rs);
                 String expectedExplainPlan = String.format("RANGE SCAN OVER %s", indexName);
-                String filter = String.format("SERVER FILTER BY %s ONLY AND",
-                        encoded ? "FIRST KEY" : "EMPTY COLUMN");
+                String filter = "SERVER FILTER BY FIRST KEY ONLY AND";
                 assertTrue(String.format("actual=%s", actualExplainPlan),
                         actualExplainPlan.contains(expectedExplainPlan));
                 assertTrue(String.format("actual=%s", actualExplainPlan),
