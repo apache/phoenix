@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.exception.SQLExceptionCode.IO_EXCEPTION;
 import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
@@ -33,7 +34,6 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -119,7 +119,11 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
             fail("Expected query to timeout with a 1 ms timeout");
         } catch (SQLException e) {
             //OPERATION_TIMED_OUT Exception expected
-            assertEquals(OPERATION_TIMED_OUT.getErrorCode(), e.getErrorCode());
+            if (e.getErrorCode() == IO_EXCEPTION.getErrorCode() && e.getCause() instanceof SQLException) {
+                assertEquals(OPERATION_TIMED_OUT.getErrorCode(), ((SQLException) e.getCause()).getErrorCode());
+            } else {
+                assertEquals(OPERATION_TIMED_OUT.getErrorCode(), e.getErrorCode());
+            }
         } finally {
             BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(false);
         }
