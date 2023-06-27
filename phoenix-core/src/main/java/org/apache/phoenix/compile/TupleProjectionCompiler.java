@@ -160,7 +160,7 @@ public class TupleProjectionCompiler {
             }
         }
         // add IndexDataColumnRef
-        position = projectedColumns.size();
+        position = projectedColumns.size() + (hasSaltingColumn ? 1 : 0);
         for (IndexDataColumnRef sourceColumnRef : visitor.indexColumnRefSet) {
             PColumn column = new ProjectedColumn(sourceColumnRef.getColumn().getName(), 
                     sourceColumnRef.getColumn().getFamilyName(), position++, 
