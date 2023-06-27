@@ -1398,9 +1398,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         concatIterators.add(iterator);
                         previousScan.setScan(scanPair.getFirst());
                     } catch (ExecutionException e) {
-                        LOGGER.info("RSS exception ", e);
                         try { // Rethrow as SQLException
-                            throw ServerUtil.parseServerException(e);
+                            SQLException se = ServerUtil.parseServerException(e);
+                            LOGGER.info("RSS se", se);
+                            throw  se;
                         } catch (StaleRegionBoundaryCacheException | HashJoinCacheNotFoundException e2){
                             // Catch only to try to recover from region boundary cache being out of date
                             if (!clearedCache) { // Clear cache once so that we rejigger job based on new boundaries
@@ -1437,11 +1438,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                                             clearedCache, concatIterators, scanPairItr, scanPair, retryCount);
                             }
                             
+                        } catch (StaleMetadataCacheException smce) {
+                            throw smce;
                         }
-                    }/* catch (StaleMetadataCacheException smce) {
-                        LOGGER.info("RSS SMCE", smce);
-                    }*/
-                    catch (CancellationException ce) {
+                    } catch (CancellationException ce) {
                         LOGGER.warn("Iterator scheduled to be executed in Future was being cancelled", ce);
                     }
                 }

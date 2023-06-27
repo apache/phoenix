@@ -17,15 +17,19 @@
  */
 package org.apache.phoenix.exception;
 
+import org.apache.phoenix.iterate.BaseResultIterators;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.sql.SQLException;
 
 
 public class PhoenixIOException extends SQLException {
     private static final long serialVersionUID = 1L;
     private static SQLExceptionCode code = SQLExceptionCode.IO_EXCEPTION;
+    public static final Logger LOGGER = LoggerFactory.getLogger(PhoenixIOException.class);
 
     public PhoenixIOException(Throwable e) {
         super(e.getMessage(), code.getSQLState(), code.getErrorCode(), e);
     }
-
 }

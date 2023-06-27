@@ -104,6 +104,7 @@ import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
@@ -404,7 +405,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 success = true;
                             }
                             //Force update cache and retry if meta not found error occurs
-                            catch (MetaDataEntityNotFoundException e) {
+                            catch (MetaDataEntityNotFoundException | StaleMetadataCacheException smce) {
                                 if (doRetryOnMetaNotFoundError && e.getTableName() != null) {
                                     if (LOGGER.isDebugEnabled()) {
                                         LOGGER.debug("Reloading table {} data from server",
@@ -589,7 +590,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                     }
                                 }
                                 throw e;
-                            }catch (RuntimeException e) {
+                            } catch (RuntimeException e) {
                                 // FIXME: Expression.evaluate does not throw SQLException
                                 // so this will unwrap throws from that.
                                 if (e.getCause() instanceof SQLException) {

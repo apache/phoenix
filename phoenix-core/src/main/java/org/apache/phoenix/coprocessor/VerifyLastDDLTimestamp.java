@@ -24,13 +24,13 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.coprocessor.generated.DDLTimestampMaintainersProtos;
-import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.util.LastDDLTimestampMaintainerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LAST_DDL_TIMESTAMP_MAINTAINERS;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LAST_DDL_TIMESTAMP_MAINTAINERS_VERIFIED;
@@ -48,10 +48,12 @@ import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
  */
 public class VerifyLastDDLTimestamp {
     private static final Logger LOGGER = LoggerFactory.getLogger(VerifyLastDDLTimestamp.class);
-
+    private  static AtomicInteger count = new AtomicInteger();
     public static void verifyLastDDLTimestamp(MiniBatchOperationInProgress<Mutation> miniBatchOp,
                                               RegionCoprocessorEnvironment env) throws IOException {
 
+        // TODO Do we need to set LAST_DDL_TIMESTAMP_MAINTAINERS_VERIFIED in mutation attribute also
+        // so that if one co proc verifies the last ddl timestamp other co proc don't verify again.
         byte[] maintainersBytes = miniBatchOp.getOperation(0).getAttribute(
                 LAST_DDL_TIMESTAMP_MAINTAINERS);
         if (maintainersBytes == null) {
@@ -90,9 +92,7 @@ public class VerifyLastDDLTimestamp {
             //  but need to think how to handle this situation.
             return;
         }
-        //throw new StaleMetadataCacheException("Stale MetadataException");
 
-        LOGGER.info("RSS Exception ", new Exception());
         DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers
                 = LastDDLTimestampMaintainerUtil.deserialize(maintainersBytes);
         verifyLastDDLTimestampInternal(maintainers, env);

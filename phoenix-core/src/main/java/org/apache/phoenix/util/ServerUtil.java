@@ -138,6 +138,9 @@ public class ServerUtil {
         if (e != null) {
             return e;
         }
+        if (t instanceof  PhoenixIOException) {
+            return   (PhoenixIOException)t;
+        }
         return new PhoenixIOException(t);
     }
 

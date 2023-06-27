@@ -596,6 +596,10 @@ public enum SQLExceptionCode {
 
     CANNOT_TRANSFORM_TRANSACTIONAL_TABLE(914, "43M25", "Cannot transform a transactional table."),
 
+    // TODO How do we generate error code and sql state for new Exceptions?
+    STALE_METADATA_CACHE_EXCEPTION(915, "43M26", "Stale metadata cache exception",
+            info -> new StaleMetadataCacheException(info.getMessage())),
+
     //SQLCode for testing exceptions
     FAILED_KNOWINGLY_FOR_TEST(7777, "TEST", "Exception was thrown to test something");
 

@@ -18,6 +18,7 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;

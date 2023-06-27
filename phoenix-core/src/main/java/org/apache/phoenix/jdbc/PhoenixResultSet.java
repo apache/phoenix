@@ -891,9 +891,11 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
             if (rowProjectorWithDynamicCols != null) {
                 rowProjectorWithDynamicCols.reset();
             }
-//        } catch (StaleMetadataCacheException smce) {
-//
         } catch (RuntimeException | SQLException e) {
+            LOGGER.info("RSS SQLException in RS " , e);
+            if (e instanceof  StaleMetadataCacheException) {
+                handleStaleMetadataCacheException();
+            }
             // FIXME: Expression.evaluate does not throw SQLException
             // so this will unwrap throws from that.
             queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.FAILED.toString());
@@ -930,6 +932,12 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         }
         return currentRow != null;
     }
+
+    private void handleStaleMetadataCacheException() {
+        // Invalidate cache for all the objects involved in the operation
+        //
+    }
+
 
     private void updateTableLevelReadMetrics(String tableName, boolean isPointLookup) {
         Map<String, Map<MetricType, Long>> readMetrics = getReadMetrics();

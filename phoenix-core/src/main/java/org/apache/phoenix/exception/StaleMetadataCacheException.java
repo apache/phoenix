@@ -5,11 +5,10 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import java.sql.SQLException;
 
 public class StaleMetadataCacheException extends SQLException {
+    private static final long serialVersionUID = 1L;
+    private static SQLExceptionCode code = SQLExceptionCode.STALE_METADATA_CACHE_EXCEPTION;
 
-    public StaleMetadataCacheException(Throwable e) {
-        super(e);
-    }
     public StaleMetadataCacheException(String  message) {
-        super(message);
+        super(message, code.getSQLState(), code.getErrorCode());
     }
 }
