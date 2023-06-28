@@ -1058,6 +1058,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED);
             boolean isViewIndex = TRUE_BYTES_AS_STRING
                     .equals(tableProps.get(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME));
+            boolean isServerSideMaskingEnabled = config.getBoolean(
+                    QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED,
+                    QueryServicesOptions.DEFAULT_SERVER_SIDE_MASKING_ENABLED);
 
             boolean isViewBaseTransactional = false;
             if (!isTransactional && isViewIndex) {
@@ -1279,8 +1282,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // The priority for this co-processor should be set higher than the GlobalIndexChecker so that the read repair scans
             // are intercepted by the TTLAwareRegionObserver and only the rows that are not ttl-expired are returned.
             if (!SchemaUtil.isSystemTable(tableName)) {
-                if (!newDesc.hasCoprocessor(PhoenixTTLRegionObserver.class.getName())) {
-                    builder.setCoprocessor(
+                if (!newDesc.hasCoprocessor(PhoenixTTLRegionObserver.class.getName()) &&
+                        isServerSideMaskingEnabled) {
+                        builder.setCoprocessor(
                             CoprocessorDescriptorBuilder
                                     .newBuilder(PhoenixTTLRegionObserver.class.getName())
                                     .setPriority(priority - 2)
