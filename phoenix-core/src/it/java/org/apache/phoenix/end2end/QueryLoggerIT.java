@@ -116,10 +116,7 @@ public class QueryLoggerIT extends BaseTest {
         String queryId = context.getQueryLogger().getQueryId();
 
         String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
-        int delay = 5000;
 
-        // sleep for sometime to let query log committed
-        Thread.sleep(delay);
         try (ResultSet explainRS = conn.createStatement().executeQuery("Explain " + query);
              ResultSet rs = conn.createStatement().executeQuery(logQuery)) {
             boolean foundQueryLog = false;
@@ -167,11 +164,7 @@ public class QueryLoggerIT extends BaseTest {
             }
         }
         String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
-        
-        int delay = 5000;
 
-        // sleep for sometime to let query log committed
-        Thread.sleep(delay);
         ResultSet rs = conn.createStatement().executeQuery(logQuery);
         int logCount=0;
         while (rs.next()) {
@@ -203,10 +196,7 @@ public class QueryLoggerIT extends BaseTest {
         String queryId = context.getQueryLogger().getQueryId();
 
         String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
-        int delay = 5000;
 
-        // sleep for sometime to let query log committed
-        Thread.sleep(delay);
         try (ResultSet rs = conn.createStatement().executeQuery(logQuery)) {
             boolean foundQueryLog = false;
             while (rs.next()) {
@@ -250,10 +240,7 @@ public class QueryLoggerIT extends BaseTest {
         }
 
         String logQuery = "SELECT count(*) FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
-        int delay = 5000;
 
-        // sleep for sometime to let query log committed
-        Thread.sleep(delay);
         rs = conn.createStatement().executeQuery(logQuery);
         assertTrue(rs.next());
         assertEquals(rs.getInt(1), 0);
@@ -296,10 +283,7 @@ public class QueryLoggerIT extends BaseTest {
             String queryId = context.getQueryLogger().getQueryId();
 
             String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
-            int delay = 5000;
 
-            // sleep for sometime to let query log committed
-            Thread.sleep(delay);
             String explainQuery = "Explain " + "SELECT * FROM " + tableName + " where V = 'value5'";
             try (ResultSet explainRS = conn.createStatement()
                     .executeQuery(explainQuery);
@@ -349,10 +333,7 @@ public class QueryLoggerIT extends BaseTest {
             assertEquals(e.getErrorCode(), SQLExceptionCode.TABLE_UNDEFINED.getErrorCode());
         }
         String logQuery = "SELECT * FROM " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_LOG_TABLE + "\"";
-        int delay = 5000;
 
-        // sleep for sometime to let query log committed
-        Thread.sleep(delay);
         ResultSet rs = conn.createStatement().executeQuery(logQuery);
         boolean foundQueryLog = false;
         while (rs.next()) {
