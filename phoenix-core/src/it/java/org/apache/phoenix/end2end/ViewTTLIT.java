@@ -61,10 +61,12 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
@@ -77,6 +79,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -119,6 +122,20 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     private static final String COL7_FMT = "g%05d";
     private static final String COL8_FMT = "h%05d";
     private static final String COL9_FMT = "i%05d";
+
+    protected static void setUpTestDriver(ReadOnlyProps props) throws Exception {
+        setUpTestDriver(props, props);
+    }
+
+    @BeforeClass
+    public static final void doSetup() throws Exception {
+        // Turn on the PHOENIX_TTL feature
+        Map<String, String> DEFAULT_PROPERTIES = new HashMap<String, String>() {{
+            put(QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, String.valueOf(true));
+        }};
+
+        setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS, DEFAULT_PROPERTIES.entrySet().iterator()));
+    }
 
     // Scans the HBase rows directly and asserts
     private void assertUsingHBaseRows(byte[] hbaseTableName,
