@@ -181,6 +181,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
+import org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
@@ -1280,6 +1281,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
 
+            // The priority for this co-processor should be set higher than the GlobalIndexChecker so that the read repair scans
+            // are intercepted by the TTLAwareRegionObserver and only the rows that are not ttl-expired are returned.
+            if (!SchemaUtil.isSystemTable(tableName)) {
+                if (!newDesc.hasCoprocessor(PhoenixTTLRegionObserver.class.getName())) {
+                    builder.setCoprocessor(
+                            CoprocessorDescriptorBuilder
+                                    .newBuilder(PhoenixTTLRegionObserver.class.getName())
+                                    .setPriority(priority - 2)
+                                    .setProperties(Collections.emptyMap())
+                                    .build());
+                }
+            }
 
             if (Arrays.equals(tableName, SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, props).getName())) {
                 if (!newDesc.hasCoprocessor(SystemCatalogRegionObserver.class.getName())) {
@@ -2765,6 +2778,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         boolean willBeTransactional = false;
         boolean isOrWillBeTransactional = isTransactional;
         Integer newTTL = null;
+        Integer newPhoenixTTL = null;
         Integer newReplicationScope = null;
         KeepDeletedCells newKeepDeletedCells = null;
         TransactionFactory.Provider txProvider = null;
@@ -2822,6 +2836,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     // We enforce that all column families have the same TTL.
                                     commonFamilyProps.put(propName, propValue);
                                     LOGGER.debug("------ Setting new TTL for tables :- " + propName + " " + propValue);
+                                } else {
+                                    newPhoenixTTL = ((Number)propValue).intValue();
                                 }
                             } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTIONAL) && Boolean.TRUE.equals(propValue)) {
                                 willBeTransactional = isOrWillBeTransactional = true;
@@ -2873,7 +2889,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                     }
                 }
-                if (isOrWillBeTransactional && newTTL != null) {
+                if (isOrWillBeTransactional && (newTTL != null || newPhoenixTTL != null)) {
                     TransactionFactory.Provider isOrWillBeTransactionProvider = txProvider == null ? table.getTransactionProvider() : txProvider;
                     if (isOrWillBeTransactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.SET_TTL)) {
                         throw new SQLExceptionInfo.Builder(PhoenixTransactionProvider.Feature.SET_TTL.getCode())
@@ -3687,7 +3703,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 PTableRef mutexRef = latestMetaData.getTableRef(new PTableKey(null, SYSTEM_MUTEX_NAME));
                 return mutexRef.getTable().getPhoenixTTL() != TTL_FOR_MUTEX && changeTTLForMutexAtPhoenixLevel(mutexRef);
             } catch (TableNotFoundException tne) {
-
+                //This should not be the case as we have already checked table's existence
             }
         } else {
             return htd.getColumnFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES).getTimeToLive() != TTL_FOR_MUTEX;

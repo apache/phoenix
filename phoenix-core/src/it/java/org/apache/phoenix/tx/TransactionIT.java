@@ -104,9 +104,6 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
-        //Disabling PhoenixTTL for these tests to check Setting properties to different ColumnFamilies work for
-        //HBase level TTL.
-        props.put(QueryServices.PHOENIX_TABLE_TTL_ENABLED, Boolean.toString(false));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 

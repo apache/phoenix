@@ -23,6 +23,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_AN
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.isPhoenixTableTTLEnabled;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_PHOENIX_TTL;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
@@ -1244,7 +1245,7 @@ public class ScanUtil {
             PhoenixConnection phoenixConnection) throws SQLException {
 
         // If server side masking for PHOENIX_TTL is not enabled then return.
-        if (!ScanUtil.isServerSideMaskingEnabled(phoenixConnection) /*|| SchemaUtil.isSystemTable(
+        if (!isPhoenixTableTTLEnabled(phoenixConnection.getQueryServices().getConfiguration()) /*|| SchemaUtil.isSystemTable(
                 SchemaUtil.getTableNameAsBytes(table.getSchemaName().getString(),
                         table.getTableName().getString()))*/ ) {
             return;

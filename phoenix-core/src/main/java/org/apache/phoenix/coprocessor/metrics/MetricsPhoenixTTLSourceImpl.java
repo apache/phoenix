@@ -24,7 +24,6 @@ import org.apache.hadoop.metrics2.lib.MutableFastCounter;
 /**
  * Implementation for tracking {@link org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver} metrics.
  */
-@Deprecated
 public class MetricsPhoenixTTLSourceImpl extends BaseSourceImpl implements MetricsPhoenixTTLSource {
     private final MutableFastCounter maskExpiredRequests;
     private final MutableFastCounter deleteExpiredRequests;
