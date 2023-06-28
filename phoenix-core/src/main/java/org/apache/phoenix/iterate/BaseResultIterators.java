@@ -1537,7 +1537,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     @Override
     public void close() throws SQLException {
-        this.closeExecutorService();
         // Don't call cancel on already started work, as it causes the HConnection
         // to get into a funk. Instead, just cancel queued work.
         boolean cancelledWork = false;

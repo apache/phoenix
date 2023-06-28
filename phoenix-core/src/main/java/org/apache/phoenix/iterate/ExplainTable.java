@@ -18,6 +18,7 @@
 package org.apache.phoenix.iterate;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.text.Format;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -26,18 +27,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
@@ -69,7 +61,6 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -91,8 +82,7 @@ public abstract class ExplainTable {
     protected final HintNode hint;
     protected final Integer limit;
     protected final Integer offset;
-    private final ExecutorService executorService;
-   
+
     public ExplainTable(StatementContext context, TableRef table) {
         this(context, table, GroupBy.EMPTY_GROUP_BY, OrderBy.EMPTY_ORDER_BY, HintNode.EMPTY_HINT_NODE, null, null);
     }
@@ -106,10 +96,6 @@ public abstract class ExplainTable {
         this.hint = hintNode;
         this.limit = limit;
         this.offset = offset;
-        this.executorService = Executors.newFixedThreadPool(5, new ThreadFactoryBuilder()
-                .setDaemon(true)
-                .setNameFormat("explain-region-info-%d")
-                .build());
     }
 
     private String explainSkipScan() {
@@ -153,27 +139,27 @@ public abstract class ExplainTable {
      * @param regionLocations the list of region locations as output.
      * @throws IOException if something goes wrong while creating connection or querying region locations.
      */
-    private void getRegionsInRange(final String tableName,
+    private void getRegionsInRange(final byte[] tableName,
                                    final byte[] startKey,
                                    final byte[] endKey,
                                    final boolean includeEndKey,
                                    final boolean reload,
                                    Set<RegionBoundary> regionBoundaries,
                                    List<HRegionLocation> regionLocations)
-            throws IOException {
+            throws IOException, SQLException {
         final boolean endKeyIsEndOfTable = Bytes.equals(endKey, HConstants.EMPTY_END_ROW);
         if ((Bytes.compareTo(startKey, endKey) > 0) && !endKeyIsEndOfTable) {
             throw new IllegalArgumentException(
                     "Invalid range: " + Bytes.toStringBinary(startKey) + " > " + Bytes.toStringBinary(endKey));
         }
         byte[] currentKey = startKey;
-        try (Connection connection = ConnectionFactory.createConnection(
-                context.getConnection().getQueryServices().getConfiguration());
-             Table table = connection.getTable(TableName.valueOf(tableName))) {
+        try (Table table = context.getConnection().getQueryServices().getTable(tableName)) {
             do {
-                HRegionLocation regionLocation = table.getRegionLocator().getRegionLocation(currentKey, reload);
-                RegionBoundary regionBoundary = new RegionBoundary(regionLocation.getRegion().getStartKey(),
-                        regionLocation.getRegion().getEndKey());
+                HRegionLocation regionLocation =
+                        table.getRegionLocator().getRegionLocation(currentKey, reload);
+                RegionBoundary regionBoundary =
+                        new RegionBoundary(regionLocation.getRegion().getStartKey(),
+                                regionLocation.getRegion().getEndKey());
                 if(!regionBoundaries.contains(regionBoundary)) {
                     regionLocations.add(regionLocation);
                     regionBoundaries.add(regionBoundary);
@@ -377,34 +363,29 @@ public abstract class ExplainTable {
     private void getRegionLocations(List<String> planSteps,
                                     ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
                                     List<List<Scan>> scansList) {
-        Future<String> task = executorService.submit(
-                () -> getRegionLocationsForExplainPlan(explainPlanAttributesBuilder, scansList));
-        try {
-            String regionLocations = task.get(5, TimeUnit.SECONDS);
-            planSteps.add(regionLocations);
-        } catch (InterruptedException | ExecutionException | TimeoutException e) {
-            LOGGER.error("Unable to retrieve region locations task result in 5s", e);
-            task.cancel(true);
-        }
+        planSteps.add(
+                getRegionLocationsForExplainPlan(explainPlanAttributesBuilder, scansList));
     }
 
     /**
-     * Retrieve region locations from hbase client and set the values for the explain plan output. If the list
-     * of region locations exceed max limit, print only list with the max limit and print num of total list size.
+     * Retrieve region locations from hbase client and set the values for the explain plan output.
+     * If the list of region locations exceed max limit, print only list with the max limit and
+     * print num of total list size.
      *
      * @param explainPlanAttributesBuilder explain plan v2 attributes builder instance.
      * @param scansList list of the list of scans, to be used for parallel scans.
      * @return region locations to be added to the explain plan output.
      */
-    private String getRegionLocationsForExplainPlan(ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
-                                                  List<List<Scan>> scansList) {
+    private String getRegionLocationsForExplainPlan(
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
+            List<List<Scan>> scansList) {
         try {
             StringBuilder buf = new StringBuilder().append(REGION_LOCATIONS);
             Set<RegionBoundary> regionBoundaries = new HashSet<>();
             List<HRegionLocation> regionLocations = new ArrayList<>();
             for (List<Scan> scans : scansList) {
                 for (Scan eachScan : scans) {
-                    getRegionsInRange(tableRef.getTable().getPhysicalName().getString(),
+                    getRegionsInRange(tableRef.getTable().getPhysicalName().getBytes(),
                             eachScan.getStartRow(),
                             eachScan.getStopRow(),
                             true,
@@ -417,11 +398,13 @@ public abstract class ExplainTable {
                     .getInt(QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN,
                             QueryServicesOptions.DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN);
             if (explainPlanAttributesBuilder != null) {
-                explainPlanAttributesBuilder.setRegionLocations(Collections.unmodifiableList(regionLocations));
+                explainPlanAttributesBuilder.setRegionLocations(
+                        Collections.unmodifiableList(regionLocations));
             }
             if (regionLocations.size() > maxLimitRegionLoc) {
                 int originalSize = regionLocations.size();
-                List<HRegionLocation> trimmedRegionLocations = regionLocations.subList(0, maxLimitRegionLoc);
+                List<HRegionLocation> trimmedRegionLocations =
+                        regionLocations.subList(0, maxLimitRegionLoc);
                 buf.append(trimmedRegionLocations);
                 buf.append("...total size = ");
                 buf.append(originalSize);
@@ -430,7 +413,7 @@ public abstract class ExplainTable {
             }
             buf.append(") ");
             return buf.toString();
-        } catch (IOException e) {
+        } catch (IOException | SQLException e) {
             LOGGER.error("Explain table unable to add region locations.", e);
             return "";
         }
@@ -454,7 +437,8 @@ public abstract class ExplainTable {
                 return false;
             }
             RegionBoundary that = (RegionBoundary) o;
-            return Bytes.compareTo(startKey, that.startKey) == 0 && Bytes.compareTo(endKey, that.endKey) == 0;
+            return Bytes.compareTo(startKey, that.startKey) == 0 &&
+                    Bytes.compareTo(endKey, that.endKey) == 0;
         }
 
         @Override
@@ -594,15 +578,4 @@ public abstract class ExplainTable {
         return buf.toString();
     }
 
-    /**
-     * shutdown executor service, should be called by result iterator close.
-     */
-    protected void closeExecutorService() {
-        this.executorService.shutdown();
-        try {
-            this.executorService.awaitTermination(2, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            LOGGER.error("Interrupted while waiting for executor service shutdown.", e);
-        }
-    }
 }
