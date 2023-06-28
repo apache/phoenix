@@ -2839,8 +2839,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     // Even though TTL is really a HColumnProperty we treat it specially.
                                     // We enforce that all column families have the same TTL.
                                     commonFamilyProps.put(propName, propValue);
-                                    LOGGER.debug("------ Setting new TTL for tables :- " + propName + " " + propValue);
                                 } else {
+                                    //Setting this here just to check if we need to throw Exception for
+                                    //Transaction's SET_TTL Feature.
                                     newPhoenixTTL = ((Number)propValue).intValue();
                                 }
                             } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTIONAL) && Boolean.TRUE.equals(propValue)) {
