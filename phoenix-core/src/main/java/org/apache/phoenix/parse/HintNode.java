@@ -118,6 +118,10 @@ public class HintNode {
          * Issue https://issues.apache.org/jira/browse/PHOENIX-4751.
          */
         HASH_AGGREGATE,
+        /**
+         * Do not use server merge for hinted uncovered indexes
+         */
+        NO_INDEX_SERVER_MERGE
     };
 
     private final Map<Hint,String> hints;
