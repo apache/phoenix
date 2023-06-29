@@ -6981,4 +6981,66 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertEquals(explainExpected, explainPlan);
         }
     }
+
+    @Test
+    public void testUncoveredPhoenix6969() throws Exception {
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+
+            stmt.execute(
+                "create table dd (k1 integer not null, k2 integer not null, k3 integer not null,"
+                + " k4 integer not null, v1 integer, v2 integer, v3 integer, v4 integer"
+                + " constraint pk primary key (k1,k2,k3,k4))");
+            stmt.execute("create index ii on dd (k4, k1, k2, k3)");
+            String query =
+                    "select /*+ index(dd ii) */ k1, k2, k3, k4, v1, v2, v3, v4 from dd"
+                    + " where k4=1 and k2=1 order by k1 asc, v1 asc limit  1";
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            //We are more interested in the query compiling than the exact result
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER II [1]\n"
+                    + "    SERVER MERGE [0.V1, 0.V2, 0.V3, 0.V4]\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY AND \"K2\" = 1\n"
+                    + "    SERVER TOP 1 ROW SORTED BY [\"K1\", \"V1\"]\n"
+                    + "CLIENT MERGE SORT\n"
+                    + "CLIENT LIMIT 1", explainPlan);
+        }
+    }
+
+    @Test
+    public void testUncoveredPhoenix6984() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE D (\n" + "K1 CHAR(6) NOT NULL,\n"
+                    + "K2 VARCHAR(22) NOT NULL,\n"
+                    + "K3 CHAR(2) NOT NULL,\n"
+                    + "K4 VARCHAR(36) NOT NULL,\n"
+                    + "V1 TIMESTAMP,\n"
+                    + "V2 TIMESTAMP,\n"
+                    + "CONSTRAINT PK_BILLING_ORDER PRIMARY KEY (K1,K2,K3,K4))");
+
+            stmt.execute("CREATE INDEX I ON D(K2, K1, K3, K4)");
+            String query =
+                    "SELECT /*+ INDEX(D I), NO_INDEX_SERVER_MERGE */ * "
+                            + "FROM D "
+                            + "WHERE K2 = 'XXX' AND "
+                            + "V2 >= TIMESTAMP '2023-05-31 23:59:59.000' AND "
+                            + "V1 <= TIMESTAMP '2023-04-01 00:00:00.000' "
+                            + "ORDER BY V2 asc";
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER D\n"
+                    + "    SERVER FILTER BY (V2 >= TIMESTAMP '2023-05-31 23:59:59.000'"
+                    + " AND V1 <= TIMESTAMP '2023-04-01 00:00:00.000')\n"
+                    + "    SERVER SORTED BY [D.V2]\n"
+                    + "CLIENT MERGE SORT\n"
+                    + "    SKIP-SCAN-JOIN TABLE 0\n"
+                    + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER I ['XXX']\n"
+                    + "            SERVER FILTER BY FIRST KEY ONLY\n"
+                    + "    DYNAMIC SERVER FILTER BY (\"D.K1\", \"D.K2\", \"D.K3\", \"D.K4\")"
+                    + " IN (($2.$4, $2.$5, $2.$6, $2.$7))",
+                explainPlan);
+        }
+    }
 }

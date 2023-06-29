@@ -17,19 +17,34 @@
  */
 package org.apache.phoenix.schema;
 
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.SizedUtil;
+
 
 /**
- * 
- * Base class for PColumn implementors of type Integer.
+ * Base class for PColumn implementors that provides
+ * some reasonable default implementations.
  *
- * 
  * @since 0.1
  */
-public abstract class PIntegerColumn extends PBaseColumn {
+public abstract class PBaseColumn implements PColumn {
+
     @Override
-    public final PDataType getDataType() {
-        return PInteger.INSTANCE;
+    public final Integer getMaxLength() {
+        return null;
+    }
+
+    @Override
+    public final Integer getScale() {
+        return null;
+    }
+
+    @Override
+    public boolean isNullable() {
+        return false;
+    }
+
+    @Override
+    public int getEstimatedSize() {
+        return SizedUtil.OBJECT_SIZE; // Not really interested in sized of these
     }
 }

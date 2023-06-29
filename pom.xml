@@ -92,7 +92,7 @@
     <top.dir>${project.basedir}/..</top.dir>
 
     <!-- Dependency versions -->
-    <jackson-bom.version>2.12.6.20220326</jackson-bom.version>
+    <jackson-bom.version>2.14.1</jackson-bom.version>
     <antlr.version>3.5.2</antlr.version>
     <!-- Only used for tests with HBase 2.1-2.4 -->
     <reload4j.version>1.2.19</reload4j.version>
@@ -142,7 +142,7 @@
     <maven-antlr-eclipse-plugin.version>${antlr.version}</maven-antlr-eclipse-plugin.version>
     <maven-project-info-reports-plugin.version>3.1.1</maven-project-info-reports-plugin.version>
     <!-- Override property in ASF parent -->
-    <surefire.version>3.0.0-M6</surefire.version>
+    <surefire.version>3.0.0</surefire.version>
     <spotbugs-maven-plugin.version>4.4.1</spotbugs-maven-plugin.version>
     <spotbugs.version>4.4.1</spotbugs.version>
     <jacoco-maven-plugin.version>0.8.8</jacoco-maven-plugin.version>
@@ -321,6 +321,7 @@
             <trimStackTrace>false</trimStackTrace>
             <!-- https://www.orpiske.net/2021/04/test-woes-with-maven-failsafe-3-0-0-m5 -->
             <useModulePath>false</useModulePath>
+            <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
           </configuration>
           <executions>
             <execution>
@@ -578,6 +579,7 @@
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
           <shutdown>exit</shutdown>
           <trimStackTrace>false</trimStackTrace>
+          <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
         </configuration>
       </plugin>
       <!-- All projects create a test jar -->

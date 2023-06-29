@@ -60,4 +60,19 @@ public class WALAnnotationUtil {
             }
         }
     }
+
+    public static void annotateMutation(Mutation m, byte[] tenantId, byte[] schemaName,
+                                        byte[] logicalTableName, byte[] tableType, byte[] ddlTimestamp) {
+        if (!m.getDurability().equals(Durability.SKIP_WAL)) {
+            if (tenantId != null) {
+                m.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(), tenantId);
+            }
+            m.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(), schemaName);
+            m.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
+                    logicalTableName);
+            m.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(), tableType);
+            m.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(), ddlTimestamp);
+        }
+    }
+
 }

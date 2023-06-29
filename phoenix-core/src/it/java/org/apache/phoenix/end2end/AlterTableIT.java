@@ -1509,35 +1509,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test
-    public void testSetPropertyDoesntUpdateDDLTimestamp() throws Exception {
-        Properties props = new Properties();
-        String tableDDL = "CREATE TABLE IF NOT EXISTS " + dataTableFullName + " ("
-            + " ENTITY_ID integer NOT NULL,"
-            + " COL1 integer NOT NULL,"
-            + " COL2 bigint NOT NULL,"
-            + " CONSTRAINT NAME_PK PRIMARY KEY (ENTITY_ID, COL1, COL2)"
-            + " ) " + generateDDLOptions("");
-
-        String setPropertyDDL = "ALTER TABLE " + dataTableFullName +
-            " SET UPDATE_CACHE_FREQUENCY=300000 ";
-        long startTS = EnvironmentEdgeManager.currentTimeMillis();
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.createStatement().execute(tableDDL);
-            //first get the original DDL timestamp when we created the table
-            long tableDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
-                dataTableFullName, startTS,
-                conn);
-            Thread.sleep(1);
-            //now change a property and make sure the timestamp DOES NOT update
-            conn.createStatement().execute(setPropertyDDL);
-            PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
-            assertNotNull(table);
-            assertNotNull(table.getLastDDLTimestamp());
-            assertEquals(tableDDLTimestamp, table.getLastDDLTimestamp().longValue());
-        }
-    }
-
 	private void assertEncodedCQValue(String columnFamily, String columnName, String schemaName, String tableName, int expectedValue) throws Exception {
         String query = "SELECT " + COLUMN_QUALIFIER + " FROM \"SYSTEM\".CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
                 + " = ? " + " AND " + COLUMN_FAMILY + " = ?" + " AND " + COLUMN_NAME  + " = ?" + " AND " + COLUMN_QUALIFIER  + " IS NOT NULL";

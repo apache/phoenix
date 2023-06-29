@@ -151,6 +151,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
     private byte[] deleteCQ = null;
     private byte[] deleteCF = null;
     private byte[] emptyCF = null;
+    private byte[] emptyCQ = null;
     private final byte[] indexUUID;
     private final byte[] txState;
     private final byte[] clientVersionBytes;
@@ -241,6 +242,13 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                 deleteCQ = scan.getAttribute(BaseScannerRegionObserver.DELETE_CQ);
             }
             emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_CF);
+            emptyCQ = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER);
+            if (emptyCF != null && emptyCQ == null) {
+                // In case some old version sets EMPTY_CF but not EMPTY_COLUMN_QUALIFIER
+                // Not sure if it's really needed, but better safe than sorry
+                emptyCQ = QueryConstants.EMPTY_COLUMN_BYTES;
+            }
+
         }
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
         useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan));
@@ -541,12 +549,15 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
             if (!timeStamps.contains(kvts)) {
                 Put put = new Put(kv.getRowArray(), kv.getRowOffset(),
                         kv.getRowLength());
-                put.addColumn(emptyCF, QueryConstants.EMPTY_COLUMN_BYTES, kvts,
-                        ByteUtil.EMPTY_BYTE_ARRAY);
+                // The value is not dependent on encoding ("x")
+                put.addColumn(emptyCF, emptyCQ, kvts,
+                    QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
                 mutations.add(put);
+                timeStamps.add(kvts);
             }
         }
     }
+
     @Override
     public boolean next(List<Cell> resultsToReturn) throws IOException {
         boolean hasMore;
@@ -677,6 +688,22 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
 
     private void annotateDataMutations(UngroupedAggregateRegionObserver.MutationList mutationsList,
                                        Scan scan) {
+
+        byte[] tenantId =
+                scan.getAttribute(MutationState.MutationMetadataType.TENANT_ID.toString());
+        byte[] schemaName =
+                scan.getAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString());
+        byte[] logicalTableName =
+                scan.getAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString());
+        byte[] tableType =
+                scan.getAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString());
+        byte[] ddlTimestamp =
+                scan.getAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString());
+
+        for (Mutation m : mutationsList) {
+            annotateMutation(m, tenantId, schemaName, logicalTableName, tableType, ddlTimestamp);
+        }
+
         byte[] externalSchemaRegistryId = scan.getAttribute(
             MutationState.MutationMetadataType.EXTERNAL_SCHEMA_ID.toString());
         for (Mutation m : mutationsList) {
