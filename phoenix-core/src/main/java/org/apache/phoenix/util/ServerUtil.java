@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_TABLE_TIMESTAMP;
 import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.DEFAULT_INDEX_WRITER_RPC_PAUSE;
 import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.DEFAULT_INDEX_WRITER_RPC_RETRIES_NUMBER;
 import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER_RPC_PAUSE;
@@ -50,15 +51,20 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Region.RowLock;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compat.hbase.CompatUtil;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
+import org.apache.phoenix.coprocessor.generated.DDLTimestampMaintainersProtos;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -434,5 +440,31 @@ public class ServerUtil {
     public static boolean isHBaseNamespaceAvailable(Admin admin, String schemaName) throws IOException{
         String[] hbaseNamespaces = admin.listNamespaces();
         return Arrays.asList(hbaseNamespaces).contains(schemaName);
+    }
+
+    public static void handleStaleMetadataCacheException(
+            DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers,
+            PhoenixConnection connection) {
+        if (maintainers != null) {
+            // Invalidate cache for all the objects involved in the operation
+            for (int i = 0; i < maintainers.getDDLTimestampMaintainersCount(); i++) {
+                DDLTimestampMaintainersProtos.DDLTimestampMaintainer maintainer =
+                        maintainers.getDDLTimestampMaintainersList().get(i);
+                String tenantID = maintainer.getTenantID().toStringUtf8();
+                String schemaName = maintainer.getSchemaName().toStringUtf8();
+                String tableName = maintainer.getTableName().toStringUtf8();
+                PName tenantIDPName = tenantID.isEmpty() ? null : PNameFactory.newName(tenantID);
+                String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+                try {
+                    connection.getQueryServices().removeTable(tenantIDPName, fullTableName,
+                            null, MIN_TABLE_TIMESTAMP);
+                } catch (SQLException se) {
+                    // CQSI#removeTable throws SQLException only if parentTable is not null.
+                    // So ideally we should never encounter SQLException here.
+                    // Log and ignore the exception
+                    LOGGER.warn("Exception while clearing cache", se);
+                }
+            }
+        }
     }
 }

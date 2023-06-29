@@ -1304,7 +1304,8 @@ public class ScanUtil {
     }
 
     public static void setScanAttributesForClient(Scan scan, PTable table,
-                                                  PhoenixConnection phoenixConnection) throws SQLException {
+            StatementContext context) throws SQLException {
+        PhoenixConnection phoenixConnection = context.getConnection();
         setScanAttributesForIndexReadRepair(scan, table, phoenixConnection);
         setScanAttributesForPhoenixTTL(scan, table, phoenixConnection);
         byte[] emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME);
@@ -1333,8 +1334,7 @@ public class ScanUtil {
             }
             scan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS, Bytes.toBytes(Long.valueOf(pageSizeMs)));
         }
-        LastDDLTimestampMaintainerUtil.createLastDDLTimestampMaintainers(scan, table,
-                phoenixConnection);
+        LastDDLTimestampMaintainerUtil.createLastDDLTimestampMaintainers(scan, table, context);
     }
 
     public static void getDummyResult(byte[] rowKey, List<Cell> result) {

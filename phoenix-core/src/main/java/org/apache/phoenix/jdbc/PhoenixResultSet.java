@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_TABLE_TIMESTAMP;
 import static org.apache.phoenix.coprocessor.ScanRegionObserver.DYN_COLS_METADATA_CELL_QUALIFIER;
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
@@ -49,8 +50,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.phoenix.coprocessor.generated.DDLTimestampMaintainersProtos;
 import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.monitoring.TableMetricsManager;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Bytes;
 import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.commons.lang3.ArrayUtils;
@@ -99,6 +103,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
+import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -894,7 +899,9 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         } catch (RuntimeException | SQLException e) {
             LOGGER.info("RSS SQLException in RS " , e);
             if (e instanceof  StaleMetadataCacheException) {
-                handleStaleMetadataCacheException();
+                ServerUtil.handleStaleMetadataCacheException(context.getDDLTimestampMaintainers(),
+                        getContext().getConnection());
+                throw  e;
             }
             // FIXME: Expression.evaluate does not throw SQLException
             // so this will unwrap throws from that.
@@ -932,12 +939,6 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         }
         return currentRow != null;
     }
-
-    private void handleStaleMetadataCacheException() {
-        // Invalidate cache for all the objects involved in the operation
-        //
-    }
-
 
     private void updateTableLevelReadMetrics(String tableName, boolean isPointLookup) {
         Map<String, Map<MetricType, Long>> readMetrics = getReadMetrics();

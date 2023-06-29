@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.execute;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LAST_DDL_TIMESTAMP_MAINTAINERS;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_SUCCESS_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_FAILURE_SQL_COUNTER;
@@ -66,8 +67,10 @@ import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
+import org.apache.phoenix.coprocessor.generated.DDLTimestampMaintainersProtos;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -1329,8 +1332,9 @@ public class MutationState implements SQLCloseable {
                         IndexMetaDataCacheClient.setMetaDataOnMutations(connection, table,
                                 mutationList, indexMetaDataPtr) : null;
                 // Set LAST_DDL_TIMESTAMP maintainers on mutation.
-                LastDDLTimestampMaintainerUtil.createLastDDLTimestampMaintainers(mutationList,
-                        connection, table);
+                DDLTimestampMaintainersProtos.DDLTimestampMaintainers ddlTimestampMaintainers =
+                        LastDDLTimestampMaintainerUtil.createLastDDLTimestampMaintainers(
+                                mutationList, connection, table);
                 // If we haven't retried yet, retry for this case only, as it's possible that
                 // a split will occur after we send the index metadata cache to all known
                 // region servers.
@@ -1482,6 +1486,9 @@ public class MutationState implements SQLCloseable {
                                 shouldRetryIndexedMutation = true;
                                 continue;
                             }
+                        } else if (inferredE instanceof StaleMetadataCacheException) {
+                            ServerUtil.handleStaleMetadataCacheException(ddlTimestampMaintainers,
+                                    connection);
                         }
                         e = inferredE;
                     }

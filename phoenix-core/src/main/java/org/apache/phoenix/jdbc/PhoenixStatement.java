@@ -405,7 +405,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 success = true;
                             }
                             //Force update cache and retry if meta not found error occurs
-                            catch (MetaDataEntityNotFoundException | StaleMetadataCacheException smce) {
+                            catch (MetaDataEntityNotFoundException e) {
                                 if (doRetryOnMetaNotFoundError && e.getTableName() != null) {
                                     if (LOGGER.isDebugEnabled()) {
                                         LOGGER.debug("Reloading table {} data from server",
@@ -577,6 +577,12 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
                                 success = true;
                                 return lastUpdateCount;
+                            } catch (StaleMetadataCacheException smce) {
+                                // Handle Stale metadata cache exception
+                                ServerUtil.handleStaleMetadataCacheException(
+                                        plan.getContext().getDDLTimestampMaintainers(),
+                                        getConnection());
+                                throw smce;
                             }
                             //Force update cache and retry if meta not found error occurs
                             catch (MetaDataEntityNotFoundException e) {

@@ -1400,7 +1400,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     } catch (ExecutionException e) {
                         try { // Rethrow as SQLException
                             SQLException se = ServerUtil.parseServerException(e);
-                            LOGGER.info("RSS se", se);
                             throw  se;
                         } catch (StaleRegionBoundaryCacheException | HashJoinCacheNotFoundException e2){
                             // Catch only to try to recover from region boundary cache being out of date

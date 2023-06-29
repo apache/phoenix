@@ -29,6 +29,7 @@ import java.util.TimeZone;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.coprocessor.generated.DDLTimestampMaintainersProtos;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.log.QueryLogger;
@@ -84,6 +85,7 @@ public class StatementContext {
     private QueryLogger queryLogger;
     private boolean isClientSideUpsertSelect;
     private boolean isUncoveredIndex;
+    private DDLTimestampMaintainersProtos.DDLTimestampMaintainers ddlTimestampMaintainers;
     
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
@@ -354,5 +356,14 @@ public class StatementContext {
         } else {
             return retrying;
         }
+    }
+
+    public void  setDDLTimestampMaintainers (
+            DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers) {
+        this.ddlTimestampMaintainers = maintainers;
+    }
+
+    public DDLTimestampMaintainersProtos.DDLTimestampMaintainers getDDLTimestampMaintainers() {
+        return ddlTimestampMaintainers;
     }
 }

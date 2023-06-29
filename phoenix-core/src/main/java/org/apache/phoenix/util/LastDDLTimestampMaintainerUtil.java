@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.DDLTimestampMaintainersProtos;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -53,39 +54,44 @@ public class LastDDLTimestampMaintainerUtil {
      * @param table table
      * @throws SQLException
      */
-    public static void createLastDDLTimestampMaintainers(List<Mutation> mutationList,
+    public static DDLTimestampMaintainersProtos.DDLTimestampMaintainers
+            createLastDDLTimestampMaintainers(List<Mutation> mutationList,
             PhoenixConnection connection, PTable table) throws SQLException {
-        byte[] maintainers = createLastDDLTimestampMaintainers(table, connection);
+        DDLTimestampMaintainersProtos.DDLTimestampMaintainers  maintainers =
+                createLastDDLTimestampMaintainers(table, connection);
         if (maintainers == null) {
             // This means it is a system table.
-            return;
+            return null;
         }
         for (Mutation mutation: mutationList) {
-            mutation.setAttribute(LAST_DDL_TIMESTAMP_MAINTAINERS, maintainers);
+            mutation.setAttribute(LAST_DDL_TIMESTAMP_MAINTAINERS, maintainers.toByteArray());
         }
+        return maintainers;
     }
 
     /**
      * Sets the LAST_DDL_TIMESTAMP maintainers to the scan attribute
      * @param scan
      * @param table
-     * @param connection
+     * @param context
      * @throws SQLException
      */
     public static void createLastDDLTimestampMaintainers(Scan scan, PTable table,
-            PhoenixConnection connection) throws SQLException {
+            StatementContext context) throws SQLException {
         // If SKIP_LAST_DDL_TIMESTAMP_VERIFICATION is set to true for this request,
         // then we don't need to set LAST_DDL_TIMESTAMP maintainers for this scan.
         if (Bytes.equals(scan.getAttribute(SKIP_LAST_DDL_TIMESTAMP_VERIFICATION), TRUE_BYTES)) {
             LOGGER.debug("Skip setting LAST_DDL_TIMESTAMP for this request");
             return;
         }
-        byte[] maintainers = createLastDDLTimestampMaintainers(table, connection);
+        DDLTimestampMaintainersProtos.DDLTimestampMaintainers maintainers =
+                createLastDDLTimestampMaintainers(table, context.getConnection());
         if (maintainers == null) {
             // This means it is a system table.
             return;
         }
-        scan.setAttribute(LAST_DDL_TIMESTAMP_MAINTAINERS, maintainers);
+        scan.setAttribute(LAST_DDL_TIMESTAMP_MAINTAINERS, maintainers.toByteArray());
+        context.setDDLTimestampMaintainers(maintainers);
     }
 
     /**
@@ -99,9 +105,9 @@ public class LastDDLTimestampMaintainerUtil {
      * @return maintainers object
      * @throws SQLException
      */
-    public static byte[] createLastDDLTimestampMaintainers(PTable table,
-                                                           PhoenixConnection connection)
-        throws SQLException {
+    public static DDLTimestampMaintainersProtos.DDLTimestampMaintainers
+            createLastDDLTimestampMaintainers(PTable table, PhoenixConnection connection)
+            throws SQLException {
         // Check if verifying last ddl timestamp configuration is enabled. If not return null.
         boolean verifyLastDDLTimestamp = connection.getQueryServices().getConfiguration()
                         .getBoolean(PHOENIX_VERIFY_LAST_DDL_TIMESTAMP,
@@ -157,7 +163,7 @@ public class LastDDLTimestampMaintainerUtil {
                 parentSchemaName = parentTable.getParentSchemaName();
             }
         }
-        return builder.build().toByteArray();
+        return builder.build();
     }
 
     // This table can be base table, index or view.
