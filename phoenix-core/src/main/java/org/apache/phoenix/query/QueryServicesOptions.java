@@ -492,7 +492,8 @@ public class QueryServicesOptions {
             .setIfUnset(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK,
                 DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK)
             .setIfUnset(MAX_IN_LIST_SKIP_SCAN_SIZE, DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE)
-            .setIfUnset(MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN, DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN);
+            .setIfUnset(MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN,
+                    DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN);
 
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set

@@ -127,8 +127,8 @@ public abstract class ExplainTable {
     }
 
     /**
-     * Get regions that represent the given range of start and end key for the given table, and all the regions
-     * to the regionLocations list.
+     * Get regions that represent the given range of start and end key for the given table, and
+     * all the regions to the regionLocations list.
      *
      * @param tableName the table name.
      * @param startKey the start rowkey.
@@ -137,7 +137,8 @@ public abstract class ExplainTable {
      * @param reload true if reload from meta is necessary.
      * @param regionBoundaries set of region boundaries to get the unique list of region locations.
      * @param regionLocations the list of region locations as output.
-     * @throws IOException if something goes wrong while creating connection or querying region locations.
+     * @throws IOException if something goes wrong while creating connection or querying region
+     * locations.
      */
     private void getRegionsInRange(final byte[] tableName,
                                    final byte[] startKey,
@@ -150,7 +151,8 @@ public abstract class ExplainTable {
         final boolean endKeyIsEndOfTable = Bytes.equals(endKey, HConstants.EMPTY_END_ROW);
         if ((Bytes.compareTo(startKey, endKey) > 0) && !endKeyIsEndOfTable) {
             throw new IllegalArgumentException(
-                    "Invalid range: " + Bytes.toStringBinary(startKey) + " > " + Bytes.toStringBinary(endKey));
+                    "Invalid range: " + Bytes.toStringBinary(startKey) + " > " +
+                            Bytes.toStringBinary(endKey));
         }
         byte[] currentKey = startKey;
         try (Table table = context.getConnection().getQueryServices().getTable(tableName)) {
@@ -160,7 +162,7 @@ public abstract class ExplainTable {
                 RegionBoundary regionBoundary =
                         new RegionBoundary(regionLocation.getRegion().getStartKey(),
                                 regionLocation.getRegion().getEndKey());
-                if(!regionBoundaries.contains(regionBoundary)) {
+                if (!regionBoundaries.contains(regionBoundary)) {
                     regionLocations.add(regionLocation);
                     regionBoundaries.add(regionBoundary);
                 }
@@ -171,9 +173,9 @@ public abstract class ExplainTable {
                 // condition4 = includeEndKey == true
                 // condition5 = currentKey == endKey
                 // while (condition1 && (condition2 || condition3 || (condition4 && condition5)))
-            } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW) &&
-                    (endKeyIsEndOfTable || Bytes.compareTo(currentKey, endKey) < 0 ||
-                            (includeEndKey && Bytes.compareTo(currentKey, endKey) == 0)));
+            } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW)
+                    && (endKeyIsEndOfTable || Bytes.compareTo(currentKey, endKey) < 0
+                    || (includeEndKey && Bytes.compareTo(currentKey, endKey) == 0)));
         }
     }
 
@@ -363,8 +365,11 @@ public abstract class ExplainTable {
     private void getRegionLocations(List<String> planSteps,
                                     ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
                                     List<List<Scan>> scansList) {
-        planSteps.add(
-                getRegionLocationsForExplainPlan(explainPlanAttributesBuilder, scansList));
+        String regionLocationPlan = getRegionLocationsForExplainPlan(explainPlanAttributesBuilder,
+                scansList);
+        if (regionLocationPlan.length() > 0) {
+            planSteps.add(regionLocationPlan);
+        }
     }
 
     /**
@@ -413,17 +418,20 @@ public abstract class ExplainTable {
             }
             buf.append(") ");
             return buf.toString();
-        } catch (IOException | SQLException e) {
+        } catch (IOException | SQLException | UnsupportedOperationException e) {
             LOGGER.error("Explain table unable to add region locations.", e);
             return "";
         }
     }
 
+    /**
+     * Region boundary class with start and end key of the region.
+     */
     private static class RegionBoundary {
         private final byte[] startKey;
         private final byte[] endKey;
 
-        public RegionBoundary(byte[] startKey, byte[] endKey) {
+        RegionBoundary(byte[] startKey, byte[] endKey) {
             this.startKey = startKey;
             this.endKey = endKey;
         }
@@ -437,8 +445,8 @@ public abstract class ExplainTable {
                 return false;
             }
             RegionBoundary that = (RegionBoundary) o;
-            return Bytes.compareTo(startKey, that.startKey) == 0 &&
-                    Bytes.compareTo(endKey, that.endKey) == 0;
+            return Bytes.compareTo(startKey, that.startKey) == 0
+                    && Bytes.compareTo(endKey, that.endKey) == 0;
         }
 
         @Override

@@ -791,7 +791,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     private static class ExecutableExplainStatement extends ExplainStatement implements CompilableStatement {
 
-        public ExecutableExplainStatement(BindableStatement statement, ExplainType explainType) {
+        ExecutableExplainStatement(BindableStatement statement, ExplainType explainType) {
             super(statement, explainType);
         }
 
@@ -821,8 +821,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             ExplainType explainType = getExplainType();
             if (explainType == ExplainType.DEFAULT) {
                 List<String> updatedExplainPlanSteps = new ArrayList<>(planSteps);
-                updatedExplainPlanSteps.removeIf(
-                        planStep -> planStep != null && planStep.contains(ExplainTable.REGION_LOCATIONS));
+                updatedExplainPlanSteps.removeIf(planStep -> planStep != null
+                        && planStep.contains(ExplainTable.REGION_LOCATIONS));
                 planSteps = Collections.unmodifiableList(updatedExplainPlanSteps);
             }
             List<Tuple> tuples = Lists.newArrayListWithExpectedSize(planSteps.size());

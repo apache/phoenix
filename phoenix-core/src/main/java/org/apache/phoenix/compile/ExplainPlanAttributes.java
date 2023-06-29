@@ -610,7 +610,8 @@ public class ExplainPlanAttributes {
             return this;
         }
 
-        public ExplainPlanAttributesBuilder setRegionLocations(List<HRegionLocation> regionLocations) {
+        public ExplainPlanAttributesBuilder setRegionLocations(
+                List<HRegionLocation> regionLocations) {
             this.regionLocations = regionLocations;
             return this;
         }
