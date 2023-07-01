@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.text.Format;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -156,6 +157,8 @@ public abstract class ExplainTable {
         }
         byte[] currentKey = startKey;
         try (Table table = context.getConnection().getQueryServices().getTable(tableName)) {
+            // include all regions that include key range from the given start key
+            // and end key
             do {
                 HRegionLocation regionLocation =
                         table.getRegionLocator().getRegionLocation(currentKey, reload);
@@ -451,7 +454,9 @@ public abstract class ExplainTable {
 
         @Override
         public int hashCode() {
-            return 0;
+            int result = Arrays.hashCode(startKey);
+            result = 31 * result + Arrays.hashCode(endKey);
+            return result;
         }
     }
 
