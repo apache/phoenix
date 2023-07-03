@@ -46,9 +46,12 @@ import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
  */
 public class ServerMetadataCache {
     private static final Logger LOGGER = LoggerFactory.getLogger(ServerMetadataCache.class);
-    private static final String PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS = "phoenix.coprocessor.regionserver.cahe.ttl.ms";
+    private static final String PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS = "phoenix.coprocessor.regionserver.cache.ttl.ms";
     // Keeping default cache expiry for 30 mins since we won't have stale entry for more than 30 mins.
-    private static final long DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS = 30 * 60 * 1000; // 30 mins
+    private static final long DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS = 30 * 60 * 1000L; // 30 mins
+    private static final String PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE = "phoenix.coprocessor.regionserver.cache.size";
+    private static final long DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE = 10000L;
+
     private static volatile ServerMetadataCache INSTANCE;
     private Configuration conf;
     // key is the combination of <tenantID, schema name, table name>, value is the lastDDLTimestamp
@@ -74,9 +77,10 @@ public class ServerMetadataCache {
 
     private ServerMetadataCache(Configuration conf) {
         this.conf = conf;
-        long maxTTL = conf.getLong(
-                PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS,
+        long maxTTL = conf.getLong(PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS,
                 DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS);
+        long maxSize = conf.getLong(PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE,
+                DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE);
         lastDDLTimestampMap = CacheBuilder.newBuilder()
                 .removalListener((RemovalListener<ImmutableBytesPtr, Long>) notification -> {
                     String key = notification.getKey().toString();
@@ -84,7 +88,7 @@ public class ServerMetadataCache {
                             + notification.getCause().name());
                 })
                 // maximum number of entries this cache can handle.
-                .maximumSize(10000L)
+                .maximumSize(maxSize)
                 .expireAfterAccess(maxTTL, TimeUnit.MILLISECONDS)
                 .build();
     }
