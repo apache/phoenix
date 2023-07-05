@@ -61,6 +61,7 @@ public abstract class BaseLocalIndexIT extends BaseTest {
         // setting update frequency to a large value to test out that we are
         // generating stats for local indexes
         clientProps.put(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB, "120000");
+        clientProps.put(QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN, "2");
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 

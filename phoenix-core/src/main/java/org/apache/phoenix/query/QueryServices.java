@@ -403,6 +403,14 @@ public interface QueryServices extends SQLCloseable {
      * Region server holding the SYSTEM.CATALOG table in batch oriented jobs.
      */
     String SKIP_SYSTEM_TABLES_EXISTENCE_CHECK = "phoenix.skip.system.tables.existence.check";
+
+    /**
+     * Config key to represent max region locations to be displayed as part of the Explain plan
+     * output.
+     */
+    String MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN =
+            "phoenix.max.region.locations.size.explain.plan";
+
     /**
      * Get executor service used for parallel scans
      */
