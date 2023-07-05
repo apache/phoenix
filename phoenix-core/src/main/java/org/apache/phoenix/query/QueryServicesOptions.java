@@ -55,6 +55,7 @@ import static org.apache.phoenix.query.QueryServices.MASTER_INFO_PORT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_PERC_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_MUTATION_SIZE_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN;
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB;
@@ -380,6 +381,7 @@ public class QueryServicesOptions {
 
     public static final boolean DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK = false;
     public static final boolean DEFAULT_APPLY_TIME_ZONE_DISPLACMENT = false;
+    public static final int DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN = 5;
 
     private final Configuration config;
 
@@ -469,7 +471,8 @@ public class QueryServicesOptions {
             .setIfUnset(MAX_IN_LIST_SKIP_SCAN_SIZE, DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE)
             .setIfUnset(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK,
                 DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK)
-            ;
+            .setIfUnset(MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN,
+                DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN);
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
         // it to 1, so we'll change it.

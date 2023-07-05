@@ -48,11 +48,16 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class FlappingLocalIndexIT extends BaseLocalIndexIT {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(FlappingLocalIndexIT.class);
 
     public FlappingLocalIndexIT(boolean isNamespaceMapped) {
         super(isNamespaceMapped);
@@ -157,6 +162,13 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
             
             String query = "SELECT * FROM " + tableName +" where v1 like 'a%'";
 
+            String explainPlanOutput =
+                    QueryUtil.getExplainPlan(conn1.createStatement().executeQuery("EXPLAIN WITH REGIONS " + query));
+            LOGGER.info("Explain plan output: {}", explainPlanOutput);
+            // MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN is set as 2
+            assertTrue("Expected total " + numRegions + " regions",
+                    explainPlanOutput.contains("...total size = " + numRegions));
+
             ExplainPlan plan = conn1.prepareStatement(query)
                 .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
                 .getExplainPlan();
@@ -207,6 +219,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
                 explainPlanAttributes.getServerWhereFilter());
             assertEquals("CLIENT MERGE SORT",
                 explainPlanAttributes.getClientSortAlgo());
+            assertEquals(numRegions, explainPlanAttributes.getRegionLocations().size());
 
             rs = conn1.createStatement().executeQuery(query);
             assertTrue(rs.next());

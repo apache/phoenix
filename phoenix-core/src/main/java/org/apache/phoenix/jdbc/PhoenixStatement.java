@@ -86,6 +86,7 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -116,6 +117,7 @@ import org.apache.phoenix.parse.DMLStatement;
 import org.apache.phoenix.parse.DeclareCursorStatement;
 import org.apache.phoenix.parse.DeleteJarStatement;
 import org.apache.phoenix.parse.DeleteStatement;
+import org.apache.phoenix.parse.ExplainType;
 import org.apache.phoenix.parse.ShowCreateTableStatement;
 import org.apache.phoenix.parse.ShowCreateTable;
 import org.apache.phoenix.parse.DropColumnStatement;
@@ -629,8 +631,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
     private static class ExecutableExplainStatement extends ExplainStatement implements CompilableStatement {
 
-        public ExecutableExplainStatement(BindableStatement statement) {
-            super(statement);
+        ExecutableExplainStatement(BindableStatement statement, ExplainType explainType) {
+            super(statement, explainType);
         }
 
         @Override
@@ -656,6 +658,13 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             }
             final StatementPlan plan = compilePlan;
             List<String> planSteps = plan.getExplainPlan().getPlanSteps();
+            ExplainType explainType = getExplainType();
+            if (explainType == ExplainType.DEFAULT) {
+                List<String> updatedExplainPlanSteps = new ArrayList<>(planSteps);
+                updatedExplainPlanSteps.removeIf(planStep -> planStep != null
+                        && planStep.contains(ExplainTable.REGION_LOCATIONS));
+                planSteps = Collections.unmodifiableList(updatedExplainPlanSteps);
+            }
             List<Tuple> tuples = Lists.newArrayListWithExpectedSize(planSteps.size());
             Long estimatedBytesToScan = plan.getEstimatedBytesToScan();
             Long estimatedRowsToScan = plan.getEstimatedRowsToScan();
@@ -1754,8 +1763,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
 
         @Override
-        public ExplainStatement explain(BindableStatement statement) {
-            return new ExecutableExplainStatement(statement);
+        public ExplainStatement explain(BindableStatement statement, ExplainType explainType) {
+            return new ExecutableExplainStatement(statement, explainType);
         }
 
         @Override
