@@ -1503,7 +1503,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     @Override
     public void close() throws SQLException {
-       
         // Don't call cancel on already started work, as it causes the HConnection
         // to get into a funk. Instead, just cancel queued work.
         boolean cancelledWork = false;
@@ -1690,7 +1689,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
         }
 
-        explain(buf.toString(), planSteps, explainPlanAttributesBuilder);
+        explain(buf.toString(), planSteps, explainPlanAttributesBuilder, scans);
     }
 
     @Override

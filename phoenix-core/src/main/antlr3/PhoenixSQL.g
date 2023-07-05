@@ -151,6 +151,7 @@ tokens
     GRANT = 'grant';
     REVOKE = 'revoke';
     SHOW = 'show';
+    REGIONS = 'regions';
 }
 
 
@@ -211,6 +212,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.parse.AddJarsStatement;
+import org.apache.phoenix.parse.ExplainType;
 }
 
 @lexer::header {
@@ -451,7 +453,14 @@ oneStatement returns [BindableStatement ret]
 finally{ contextStack.pop(); }
     
 explain_node returns [BindableStatement ret]
-    :   EXPLAIN q=oneStatement {$ret=factory.explain(q);}
+    :   EXPLAIN (w=WITH)? (r=REGIONS)? q=oneStatement
+     {
+        if ((w==null && r!=null) || (w!=null && r==null)) {
+            throw new RuntimeException("Valid usage: EXPLAIN {query} OR EXPLAIN WITH REGIONS {query}");
+        }
+        ret = (w==null && r==null) ? factory.explain(q, ExplainType.DEFAULT)
+         : factory.explain(q, ExplainType.WITH_REGIONS);
+     }
     ;
 
 // Parse a create table statement.

@@ -214,8 +214,8 @@ public class ParseNodeFactory {
         return "$" + tempAliasCounter.incrementAndGet();
     }
 
-    public ExplainStatement explain(BindableStatement statement) {
-        return new ExplainStatement(statement);
+    public ExplainStatement explain(BindableStatement statement, ExplainType explainType) {
+        return new ExplainStatement(statement, explainType);
     }
 
     public AliasedNode aliasedNode(String alias, ParseNode expression) {
