@@ -403,6 +403,8 @@ public class QueryServicesOptions {
     public static final int DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN = 5;
 
 
+    public static final long DEFAULT_CHILD_LINK_ROW_AGE_THRESHOLD_TO_DELETE_MS = 1 * 60 * 60 * 1000; // 1 hour
+
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
