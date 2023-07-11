@@ -18,10 +18,8 @@
 package org.apache.phoenix.cache;
 
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -53,7 +51,7 @@ public class ServerMetadataCacheTest extends BaseTest {
     }
 
     @After
-    public void resetConnectionCache() {
+    public void resetMetadataCache() {
         ServerMetadataCache.resetCache();
     }
 
