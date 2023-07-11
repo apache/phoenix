@@ -17,6 +17,12 @@
  */
 package org.apache.phoenix.cache;
 
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.Properties;
+import java.util.concurrent.TimeUnit;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -31,12 +37,6 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.util.Properties;
-import java.util.concurrent.TimeUnit;
-
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 /**
  * This manages the cache for all the objects(data table, views, indexes) on each region server.
@@ -49,7 +49,7 @@ public class ServerMetadataCache {
     // Keeping default cache expiry for 30 mins since we won't have stale entry
     // for more than 30 mins.
     private static final long DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS
-            = 30 * 60 * 1000L;// 30 mins
+            = 30 * 60 * 1000L; // 30 mins
     private static final String PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE
             = "phoenix.coprocessor.regionserver.cache.size";
     private static final long DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE = 10000L;
@@ -136,8 +136,8 @@ public class ServerMetadataCache {
         } catch (SQLException sqle) {
             // Throw IOException back to the client and let the client retry depending on
             // the configured retry policies.
-            LOGGER.warn("Exception while calling calling getTableNoCache for tenant id: {}," +
-                    " tableName: {}", tenantIDStr, fullTableNameStr, sqle);
+            LOGGER.warn("Exception while calling getTableNoCache for tenant id: {},"
+                    + " tableName: {}", tenantIDStr, fullTableNameStr, sqle);
             throw new IOException(sqle);
         }
         return table.getLastDDLTimestamp();
@@ -145,8 +145,8 @@ public class ServerMetadataCache {
 
     // This is used by tests to override specific connection to use.
     private Connection getConnection(Properties properties) throws SQLException {
-        return connectionForTesting != null ? connectionForTesting :
-                QueryUtil.getConnectionOnServer(properties, this.conf);
+        return connectionForTesting != null ? connectionForTesting
+                : QueryUtil.getConnectionOnServer(properties, this.conf);
     }
 
     @VisibleForTesting
