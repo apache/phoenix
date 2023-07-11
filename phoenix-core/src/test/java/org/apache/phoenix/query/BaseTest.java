@@ -493,9 +493,9 @@ public abstract class BaseTest {
             LOGGER.error("Exception caught when shutting down mini map reduce cluster", t);
         } finally {
             try {
-                utility.shutdownMiniCluster();
                 // Clear ServerMetadataCache.
                 ServerMetadataCache.resetCache();
+                utility.shutdownMiniCluster();
             } catch (Throwable t) {
                 LOGGER.error("Exception caught when shutting down mini cluster", t);
             } finally {
