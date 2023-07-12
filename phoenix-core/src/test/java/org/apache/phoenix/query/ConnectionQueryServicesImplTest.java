@@ -57,6 +57,7 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.SystemExitRule;
 import org.apache.phoenix.exception.PhoenixIOException;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -97,6 +98,9 @@ public class ConnectionQueryServicesImplTest {
     private Connection mockConn;
 
     @Mock
+    private PhoenixConnection mockPConn;
+
+    @Mock
     private Table mockTable;
 
     public static final TableDescriptorBuilder SYS_TASK_TDB = TableDescriptorBuilder
@@ -120,7 +124,7 @@ public class ConnectionQueryServicesImplTest {
         props = ConnectionQueryServicesImpl.class.getDeclaredField("config");
         props.setAccessible(true);
         props.set(mockCqs, mockConfig);
-        when(mockCqs.checkIfSysMutexExistsAndModifyTTLIfRequired(mockAdmin))
+        when(mockCqs.checkIfSysMutexExistsAndModifyTTLIfRequired(mockAdmin, mockPConn))
             .thenCallRealMethod();
         when(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_TDB))
             .thenCallRealMethod();
@@ -138,8 +142,6 @@ public class ConnectionQueryServicesImplTest {
         // Invoke the real methods for these two calls
         when(mockCqs.createSchema(any(List.class), anyString())).thenCallRealMethod();
         doCallRealMethod().when(mockCqs).ensureSystemTablesMigratedToSystemNamespace();
-        // Do nothing for this method, just check that it was invoked later
-        doNothing().when(mockCqs).createSysMutexTableIfNotExists(any(Admin.class));
 
         // Spoof out this call so that ensureSystemTablesUpgrade() will return-fast.
         when(mockCqs.getSystemTableNamesInDefaultNamespace(any(Admin.class)))
@@ -242,7 +244,7 @@ public class ConnectionQueryServicesImplTest {
         doThrow(new TableNotFoundException())
                 .when(mockAdmin)
                 .getDescriptor(TableName.valueOf(SYSTEM_SCHEMA_NAME, SYSTEM_MUTEX_TABLE_NAME));
-        assertFalse(mockCqs.checkIfSysMutexExistsAndModifyTTLIfRequired(mockAdmin));
+        assertFalse(mockCqs.checkIfSysMutexExistsAndModifyTTLIfRequired(mockAdmin, mockPConn));
     }
 
     @Test
@@ -258,7 +260,7 @@ public class ConnectionQueryServicesImplTest {
         when(mockAdmin.getDescriptor(TableName.valueOf(SYSTEM_MUTEX_NAME)))
                 .thenReturn(sysMutexTableDescWrongTTL);
 
-        assertTrue(mockCqs.checkIfSysMutexExistsAndModifyTTLIfRequired(mockAdmin));
+        assertTrue(mockCqs.checkIfSysMutexExistsAndModifyTTLIfRequired(mockAdmin, mockPConn));
         verify(mockAdmin, Mockito.times(1)).modifyTable(sysMutexTableDescCorrectTTL);
     }
 
@@ -267,7 +269,7 @@ public class ConnectionQueryServicesImplTest {
         when(mockAdmin.getDescriptor(TableName.valueOf(SYSTEM_MUTEX_NAME)))
                 .thenReturn(sysMutexTableDescCorrectTTL);
 
-        assertTrue(mockCqs.checkIfSysMutexExistsAndModifyTTLIfRequired(mockAdmin));
+        assertTrue(mockCqs.checkIfSysMutexExistsAndModifyTTLIfRequired(mockAdmin, mockPConn));
         verify(mockAdmin, Mockito.times(0)).modifyTable(any(TableDescriptor.class));
     }
 

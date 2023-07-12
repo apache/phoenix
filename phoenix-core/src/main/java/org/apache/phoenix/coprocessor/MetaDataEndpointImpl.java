@@ -86,7 +86,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.VIEW_MODIFIED_PROPERTY_TAG_TYPE;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.INDEX;
-import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
@@ -621,7 +620,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
         this.maxIndexesPerTable = config.getInt(QueryServices.MAX_INDEXES_PER_TABLE,
                 QueryServicesOptions.DEFAULT_MAX_INDEXES_PER_TABLE);
-        this.isTablesMappingEnabled = SchemaUtil.isNamespaceMappingEnabled(TABLE,
+        this.isTablesMappingEnabled = SchemaUtil.isNamespaceMappingEnabled(PTableType.TABLE,
                 new ReadOnlyProps(config.iterator()));
         this.allowSplittableSystemCatalogRollback = config.getBoolean(QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK,
                 QueryServicesOptions.DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
@@ -708,7 +707,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             }
             // the PTable of views and indexes on views might get updated because a column is added to one of
             // their parents (this won't change the timestamp)
-            if (table.getType() != TABLE || table.getTimeStamp() != tableTimeStamp) {
+            if (table.getType() != PTableType.TABLE || table.getTimeStamp() != tableTimeStamp) {
                 builder.setTable(PTableImpl.toProto(table));
             }
             done.run(builder.build());
@@ -1864,7 +1863,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private static PTable newDeletedTableMarker(long timestamp) {
         try {
             return new PTableImpl.Builder()
-                    .setType(TABLE)
+                    .setType(PTableType.TABLE)
                     .setTimeStamp(timestamp)
                     .setPkColumns(Collections.<PColumn>emptyList())
                     .setAllColumns(Collections.<PColumn>emptyList())
@@ -2657,7 +2656,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     TableName.valueOf(loadedTable.getPhysicalName().getBytes()),
                     getParentPhysicalTableName(loadedTable), pTableType, loadedTable.getIndexes());
 
-            if (pTableType == TABLE || pTableType == PTableType.VIEW) {
+            if (pTableType == PTableType.TABLE || pTableType == PTableType.VIEW) {
                 // check to see if the table has any child views
                 try (Table hTable = ServerUtil.getHTableForCoprocessorScan(env,
                         getSystemTableForChildLinks(clientVersion, env.getConfiguration()))) {
@@ -3054,7 +3053,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             final int clientVersion) throws IOException, SQLException {
         boolean isMutationAllowed = true;
         boolean isSchemaMutationAllowed = true;
-        if (expectedType == TABLE || expectedType == PTableType.VIEW) {
+        if (expectedType == PTableType.TABLE || expectedType == PTableType.VIEW) {
             try (Table hTable = ServerUtil.getHTableForCoprocessorScan(env,
                     getSystemTableForChildLinks(clientVersion, env.getConfiguration()))) {
                 childViews.addAll(findAllDescendantViews(hTable, env.getConfiguration(),

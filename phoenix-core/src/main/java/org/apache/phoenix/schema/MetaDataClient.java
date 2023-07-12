@@ -19,7 +19,6 @@ package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_PHOENIX_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
@@ -47,7 +46,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_ENCODED_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER_COUNTER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
@@ -67,7 +65,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ARRAY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ROW_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.JAR_PATH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
@@ -124,7 +121,6 @@ import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_P
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
-import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.schema.PTableType.VIEW;
@@ -292,8 +288,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Ints;
-
-import edu.umd.cs.findbugs.annotations.SuppressWarnings;
 
 public class MetaDataClient {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataClient.class);
@@ -1959,9 +1953,9 @@ public class MetaDataClient {
      * @return appropriate TTL for the entity calling the function.
      * @throws TableNotFoundException
      */
-    private Long getTTLFromHierarchy(PTable parent) throws TableNotFoundException {
+    private Long getTTLFromParent(PTable parent) throws TableNotFoundException {
         return (parent.getType() == TABLE || parent.getType() == SYSTEM) ? Long.valueOf(parent.getPhoenixTTL()) :
-                (parent.getType() == VIEW ? getTTLFromViewsAbove(parent) : null);
+                (parent.getType() == VIEW ? getTTLFromAncestor(parent) : null);
     }
 
     /**
@@ -1970,14 +1964,14 @@ public class MetaDataClient {
      * @return appropriate TTL from Views defined above for the entity calling.
      * @throws TableNotFoundException
      */
-    private Long getTTLFromViewsAbove(PTable view) throws TableNotFoundException {
+    private Long getTTLFromAncestor(PTable view) throws TableNotFoundException {
         try {
             return view.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED ? Long.valueOf(view.getPhoenixTTL()) :
                     (checkIfParentIsViewOrTable(view) ? connection.getTable(new PTableKey(null ,
                             view.getPhysicalNames().get(0).getString())).getPhoenixTTL() :
-                            getTTLFromViewsAbove(connection.getTable(new PTableKey(connection.getTenantId(), view.getParentName().getString()))));
+                            getTTLFromAncestor(connection.getTable(new PTableKey(connection.getTenantId(), view.getParentName().getString()))));
         } catch (TableNotFoundException tne) {
-            return getTTLFromViewsAbove(connection.getTable(new PTableKey(null, view.getParentName().getString())));
+            return getTTLFromAncestor(connection.getTable(new PTableKey(null, view.getParentName().getString())));
         }
     }
 
@@ -2080,7 +2074,7 @@ public class MetaDataClient {
                 isImmutableRows = parent.isImmutableRows();
                 isAppendOnlySchema = parent.isAppendOnlySchema();
                 //Check up hierarchy and get appropriate TTL
-                phoenixTTL = getTTLFromHierarchy(parent);
+                phoenixTTL = getTTLFromParent(parent);
 
                 // Index on view
                 // TODO: Can we support a multi-tenant index directly on a multi-tenant
@@ -2398,7 +2392,7 @@ public class MetaDataClient {
                         updateCacheFrequency = parent.getUpdateCacheFrequency();
                     }
 
-                    phoenixTTL = getTTLFromHierarchy(parent);
+                    phoenixTTL = getTTLFromParent(parent);
 
                     disableWAL = (disableWALProp == null ? parent.isWALDisabled() : disableWALProp);
                     defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
