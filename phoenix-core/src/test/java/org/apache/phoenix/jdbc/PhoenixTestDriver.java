@@ -86,7 +86,9 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     @Override // public for testing
     public synchronized ConnectionQueryServices getConnectionQueryServices(String url, Properties info) throws SQLException {
         checkClosed();
-        if (connectionQueryServices != null) { return connectionQueryServices; }
+        if (connectionQueryServices != null) {
+            return connectionQueryServices;
+        }
         ConnectionInfo connInfo = ConnectionInfo.create(url);
         if (connInfo.isConnectionless()) {
             connectionQueryServices = new ConnectionlessQueryServicesImpl(queryServices, connInfo, info);
