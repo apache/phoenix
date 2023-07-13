@@ -2494,6 +2494,15 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 }
 
                 done.run(builder.build());
+
+                if (tableType == PTableType.TABLE) {
+                    metricsSource.incrementCreateTableCount();
+                } else if (tableType == PTableType.VIEW) {
+                    metricsSource.incrementCreateViewCount();
+                } else if (tableType == PTableType.INDEX) {
+                    metricsSource.incrementCreateIndexCount();
+                }
+                LOGGER.info("{} created successfully, tableName: {}", tableType, fullTableName);
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
@@ -2795,6 +2804,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
                 done.run(MetaDataMutationResult.toProto(result));
                 dropTableStats = true;
+
+                if (pTableType == PTableType.TABLE) {
+                    metricsSource.incrementDropTableCount();
+                } else if (pTableType == PTableType.VIEW) {
+                    metricsSource.incrementDropViewCount();
+                } else if (pTableType == PTableType.INDEX) {
+                    metricsSource.incrementDropIndexCount();
+                }
+                LOGGER.info("{} dropped successfully, tableName: {}", pTableType,
+                        SchemaUtil.getTableName(schemaName, tableOrViewName));
             } finally {
                 ServerUtil.releaseRowLocks(locks);
                 if (dropTableStats) {
@@ -3497,6 +3516,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     request.getClientVersion(), parentTable, transformingNewTable, addingColumns);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
+
+                metricsSource.incrementAlterAddColumnCount();
+                LOGGER.info("Column(s) added successfully, tableName: {}",
+                        result.getTable().getTableName());
             }
         } catch (Throwable e) {
             LOGGER.error("Add column failed: ", e);
@@ -3635,6 +3658,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     request.getClientVersion(), parentTable,null, true);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
+
+                metricsSource.incrementAlterDropColumnCount();
+                LOGGER.info("Column(s) dropped successfully, tableName: {}",
+                        result.getTable().getTableName());
             }
         } catch (Throwable e) {
             LOGGER.error("Drop column failed: ", e);
@@ -4368,7 +4395,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 builder.setReturnCode(MetaDataProtos.MutationCode.FUNCTION_NOT_FOUND);
                 builder.setMutationTime(currentTimeStamp);
                 done.run(builder.build());
-                return;
+
+                metricsSource.incrementCreateFunctionCount();
+                LOGGER.info("FUNCTION created successfully, functionName: {}",
+                        Bytes.toString(functionName));
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
@@ -4421,7 +4451,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 }
 
                 done.run(MetaDataMutationResult.toProto(result));
-                return;
+
+                metricsSource.incrementDropFunctionCount();
+                LOGGER.info("FUNCTION dropped successfully, functionName: {}",
+                        Bytes.toString(functionName));
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
@@ -4542,7 +4575,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 builder.setReturnCode(MetaDataProtos.MutationCode.SCHEMA_NOT_FOUND);
                 builder.setMutationTime(currentTimeStamp);
                 done.run(builder.build());
-                return;
+
+                metricsSource.incrementCreateSchemaCount();
+                LOGGER.info("SCHEMA created successfully, schemaName: {}", schemaName);
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
@@ -4586,7 +4621,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     metaDataCache.put(ptr, newDeletedSchemaMarker(currentTime));
                 }
                 done.run(MetaDataMutationResult.toProto(result));
-                return;
+
+                metricsSource.incrementDropSchemaCount();
+                LOGGER.info("SCHEMA dropped successfully, schemaName: {}", schemaName);
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
