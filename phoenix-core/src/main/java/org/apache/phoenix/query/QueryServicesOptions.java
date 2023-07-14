@@ -78,6 +78,7 @@ import static org.apache.phoenix.query.QueryServices.SCAN_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SCAN_RESULT_CHUNK_SIZE;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SERVER_MERGE_FOR_UNCOVERED_INDEX;
 import static org.apache.phoenix.query.QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK;
 import static org.apache.phoenix.query.QueryServices.SPOOL_DIRECTORY;
@@ -382,6 +383,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK = false;
     public static final boolean DEFAULT_APPLY_TIME_ZONE_DISPLACMENT = false;
     public static final int DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN = 5;
+    public static final boolean DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX = true;
 
     private final Configuration config;
 
@@ -472,7 +474,10 @@ public class QueryServicesOptions {
             .setIfUnset(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK,
                 DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK)
             .setIfUnset(MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN,
-                DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN);
+                    DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN)
+            .setIfUnset(SERVER_MERGE_FOR_UNCOVERED_INDEX,
+                DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX);
+
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
         // it to 1, so we'll change it.
