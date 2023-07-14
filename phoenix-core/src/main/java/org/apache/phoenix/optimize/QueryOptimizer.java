@@ -336,14 +336,14 @@ public class QueryOptimizer {
         Map<TableRef, QueryPlan> dataPlans = Collections.singletonMap(indexTableRef, dataPlan);
         PTable indexTable = indexTableRef.getTable();
         PIndexState indexState = indexTable.getIndexState();
-        boolean isServerMergeFoeUncoveredIndexEnabled = statement.getConnection().
-            getQueryServices().getProps().getBoolean(
+        boolean isServerMergeForUncoveredIndexEnabled = statement.getConnection()
+                .getQueryServices().getProps().getBoolean(
                 QueryServices.SERVER_MERGE_FOR_UNCOVERED_INDEX,
                 QueryServicesOptions.DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX);
         if (indexState == PIndexState.ACTIVE || indexState == PIndexState.PENDING_ACTIVE
                 || (indexState == PIndexState.PENDING_DISABLE && isUnderPendingDisableThreshold(indexTableRef.getCurrentTime(), indexTable.getIndexDisableTimestamp()))) {
             try {
-                if (!isServerMergeFoeUncoveredIndexEnabled
+                if (!isServerMergeForUncoveredIndexEnabled
                     || select.getHint().hasHint(HintNode.Hint.NO_INDEX_SERVER_MERGE)) {
                     String schemaNameStr = index.getSchemaName() == null ? null
                             : index.getSchemaName().getString();
