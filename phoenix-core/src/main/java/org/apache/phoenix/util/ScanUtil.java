@@ -1244,8 +1244,13 @@ public class ScanUtil {
     public static void setScanAttributesForPhoenixTTL(Scan scan, PTable table,
             PhoenixConnection phoenixConnection) throws SQLException {
 
-        // If server side masking for PHOENIX_TTL is not enabled then return.
+        // If Phoenix level TTL is not enabled OR is a system table then return.
         if (!isPhoenixTableTTLEnabled(phoenixConnection.getQueryServices().getConfiguration())) {
+            if(SchemaUtil.isSystemTable(
+                    SchemaUtil.getTableNameAsBytes(table.getSchemaName().getString(),
+                            table.getTableName().getString()))) {
+                scan.setAttribute(BaseScannerRegionObserver.IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM, Bytes.toBytes(true));
+            }
             return;
         }
 

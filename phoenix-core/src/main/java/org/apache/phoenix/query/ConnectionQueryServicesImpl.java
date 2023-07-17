@@ -3630,17 +3630,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
-    PhoenixConnection createSysMutexTableIfNotExists(Admin admin, PhoenixConnection oldMetaConnection) throws IOException, SQLException {
-        SQLException sqlE = null;
-        PhoenixConnection metaConnection = null;
+    void createSysMutexTableIfNotExists(Admin admin) throws IOException {
         try {
-            Properties connProps = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
-            // Cannot go through DriverManager or you end up in an infinite loop because it'll call init again
-            metaConnection = new PhoenixConnection(oldMetaConnection, this, connProps);
-
-            if (checkIfSysMutexExistsAndModifyTTLIfRequired(admin, metaConnection)) {
-                return metaConnection;
-            }
             final TableName mutexTableName = SchemaUtil.getPhysicalTableName(
                     SYSTEM_MUTEX_NAME, props);
             TableDescriptor tableDesc = TableDescriptorBuilder.newBuilder(mutexTableName)
@@ -3649,8 +3640,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             .setTimeToLive(TTL_FOR_MUTEX).build())
                     .build();
             admin.createTable(tableDesc);
-        } catch (SQLException e) {
-            sqlE = e;
         } catch (IOException e) {
             if (inspectIfAnyExceptionInChain(e, Arrays.<Class<? extends Exception>> asList(
                     AccessDeniedException.class, org.apache.hadoop.hbase.TableExistsException.class))) {
@@ -3663,23 +3652,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } else {
                 throw e;
             }
-        } finally {
-            try {
-                oldMetaConnection.close();
-            } catch (SQLException e) {
-                if (sqlE != null) {
-                    sqlE.setNextException(e);
-                } else {
-                    sqlE = e;
-                }
-            }
-            if (sqlE != null) {
-                throw sqlE;
-            }
         }
-        return metaConnection;
     }
-
     /**
      * Check if the SYSTEM MUTEX table exists. If it does, ensure that its TTL is correct and if
      * not, modify its table descriptor
@@ -3688,7 +3662,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @throws IOException thrown if there is an error getting the table descriptor
      */
     @VisibleForTesting
-    boolean checkIfSysMutexExistsAndModifyTTLIfRequired(Admin admin, PhoenixConnection metaConnection) throws IOException, SQLException {
+    boolean checkIfSysMutexExistsAndModifyTTLIfRequired(Admin admin) throws IOException {
         TableDescriptor htd;
         try {
             htd = admin.getDescriptor(TableName.valueOf(SYSTEM_MUTEX_NAME));
@@ -3703,7 +3677,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
 
         // The SYSTEM MUTEX table already exists so check its TTL
-        if (checkIfDescriptorLevelTTLChangeIsRequired(htd, metaConnection)) {
+        if (htd.getColumnFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES).getTimeToLive() != TTL_FOR_MUTEX) {
             LOGGER.debug("SYSTEM MUTEX already appears to exist, but has the wrong TTL. " +
                     "Will modify the TTL");
             ColumnFamilyDescriptor hColFamDesc = ColumnFamilyDescriptorBuilder
@@ -3720,56 +3694,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     "not creating it");
         }
         return true;
-    }
-
-    /**
-     * Check whether TTL for MUTEX table is set correctly
-     * - if PhoenixTTL is Enabled then check at PTable level
-     * - if not then check at tableDescriptor level if TTL value is correct
-     * @param htd
-     * @param metaConnection
-     * @return whether we need TTL change at descriptor level.
-     * @throws SQLException
-     */
-    @VisibleForTesting
-    public boolean checkIfDescriptorLevelTTLChangeIsRequired(TableDescriptor htd, PhoenixConnection metaConnection) throws SQLException {
-        if (isPhoenixTTLEnabled()) {
-            try {
-                long ttl = metaConnection.getTable(new PTableKey(null, SYSTEM_MUTEX_NAME))
-                        .getPhoenixTTL();
-                return ttl != TTL_FOR_MUTEX ? changeTTLForMutexInSysCat(metaConnection) : false;
-            } catch (TableNotFoundException tnfe) {
-                //This should not be the case as we have already checked table's existence
-            }
-        } else {
-            return htd.getColumnFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES).getTimeToLive() != TTL_FOR_MUTEX;
-        }
-        return false;
-    }
-
-    /**
-     * Sets correct TTL value for SYSTEM.MUTEX in SYSCAT
-     * @param metaConnection
-     * @return false as this value is returned back for whether descriptor level change required or not.
-     * @throws SQLException
-     */
-    private boolean changeTTLForMutexInSysCat(PhoenixConnection metaConnection) throws SQLException {
-        try {
-            String dml = "UPSERT INTO " + SYSTEM_CATALOG_NAME + " (" + PhoenixDatabaseMetaData.TENANT_ID + ","
-                    + PhoenixDatabaseMetaData.TABLE_SCHEM + "," + PhoenixDatabaseMetaData.TABLE_NAME + ","
-                    + PhoenixDatabaseMetaData.COLUMN_NAME + ","
-                    + PhoenixDatabaseMetaData.PHOENIX_TTL + ") VALUES (null, ?, ?, null, ?)";
-            PreparedStatement stmt = metaConnection.prepareStatement(dml);
-            stmt.setString(1, SYSTEM_CATALOG_SCHEMA);
-            stmt.setString(2, SYSTEM_MUTEX_TABLE_NAME);
-            stmt.setLong(3, TTL_FOR_MUTEX);
-            stmt.executeUpdate();
-            metaConnection.commit();
-        } catch (SQLException e) {
-            LOGGER.warn("Changing TTL Value for mutex failed:" + e);
-            throw e;
-        }
-        return false;
     }
 
     private boolean inspectIfAnyExceptionInChain(Throwable io, List<Class<? extends Exception>> ioList) {
@@ -4245,7 +4169,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Always try to create SYSTEM.MUTEX table first since we need it to acquire the
             // upgrade mutex. Upgrade or migration is not possible without the upgrade mutex
             try (Admin admin = getAdmin()) {
-                metaConnection = createSysMutexTableIfNotExists(admin, metaConnection);
+                createSysMutexTableIfNotExists(admin);
             }
             UpgradeRequiredException caughtUpgradeRequiredException = null;
             TableAlreadyExistsException caughtTableAlreadyExistsException = null;

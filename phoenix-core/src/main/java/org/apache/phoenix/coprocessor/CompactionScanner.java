@@ -86,7 +86,8 @@ public class CompactionScanner implements InternalScanner {
             long maxLookbackInMillis,
             byte[] emptyCF,
             byte[] emptyCQ,
-            long phoenixTTL) {
+            long phoenixTTL,
+            boolean isSystemTable) {
         this.storeScanner = storeScanner;
         this.region = env.getRegion();
         this.store = store;
@@ -109,7 +110,7 @@ public class CompactionScanner implements InternalScanner {
         this.maxLookbackWindowStart = maxLookbackInMillis == 0 ?
                 compactionTime : compactionTime - (maxLookbackInMillis + 1);
         ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
-        this.ttl = phoenixTTL;
+        this.ttl = isSystemTable ? cfd.getTimeToLive() : phoenixTTL;
         this.ttlWindowStart = ttl == HConstants.FOREVER ? 1 : compactionTime - ttl * 1000;
         ttl *= 1000;
         this.maxLookbackWindowStart = Math.max(ttlWindowStart, maxLookbackWindowStart);

@@ -558,10 +558,12 @@ public class SystemTablesCreationOnConnectionIT {
         // Register the vanilla PhoenixDriver
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
         startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
-        try (Connection ignored = DriverManager.getConnection(getJdbcUrl())) {
-             PhoenixConnection pConn = ignored.unwrap(PhoenixConnection.class);
-             assertEquals("Did not find correct TTL for SYSTEM.MUTEX", TTL_FOR_MUTEX,
-                     pConn.getTable(new PTableKey(null, SYSTEM_MUTEX_NAME)).getPhoenixTTL());
+        try (Connection ignored = DriverManager.getConnection(getJdbcUrl());
+             Admin admin = testUtil.getAdmin()) {
+            TableDescriptor htd = admin.getDescriptor(SYSTEM_MUTEX_HBASE_TABLE_NAME);
+            ColumnFamilyDescriptor hColDesc = htd.getColumnFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES);
+            assertEquals("Did not find the correct TTL for SYSTEM.MUTEX", TTL_FOR_MUTEX,
+                    hColDesc.getTimeToLive());
         }
     }
 

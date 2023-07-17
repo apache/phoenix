@@ -1059,7 +1059,7 @@ public class MetaDataClient {
                             .buildException();
                 }
                 //If Phoenix Level TTL is enabled use TTL as Phoenix Table Property as skip at HTableDescriptor level.
-                if (isPhoenixTTLEnabled() && prop.getFirst().equalsIgnoreCase(TTL)) {
+                if (isPhoenixTTLEnabled() && prop.getFirst().equalsIgnoreCase(TTL) && tableType != PTableType.SYSTEM) {
                     tableProps.put(prop.getFirst(), prop.getSecond());
                     continue;
                 }
@@ -1954,7 +1954,7 @@ public class MetaDataClient {
      * @throws TableNotFoundException
      */
     private Long getTTLFromParent(PTable parent) throws TableNotFoundException {
-        return (parent.getType() == TABLE || parent.getType() == SYSTEM) ? Long.valueOf(parent.getPhoenixTTL()) :
+        return (parent.getType() == TABLE) ? Long.valueOf(parent.getPhoenixTTL()) :
                 (parent.getType() == VIEW ? getTTLFromAncestor(parent) : null);
     }
 
@@ -1967,7 +1967,7 @@ public class MetaDataClient {
     private Long getTTLFromAncestor(PTable view) throws TableNotFoundException {
         try {
             return view.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED ? Long.valueOf(view.getPhoenixTTL()) :
-                    (checkIfParentIsViewOrTable(view) ? connection.getTable(new PTableKey(null ,
+                    (checkIfParentIsTable(view) ? connection.getTable(new PTableKey(null ,
                             view.getPhysicalNames().get(0).getString())).getPhoenixTTL() :
                             getTTLFromAncestor(connection.getTable(new PTableKey(connection.getTenantId(), view.getParentName().getString()))));
         } catch (TableNotFoundException tne) {
@@ -1975,7 +1975,7 @@ public class MetaDataClient {
         }
     }
 
-    private boolean checkIfParentIsViewOrTable(PTable view) {
+    private boolean checkIfParentIsTable(PTable view) {
         PName parentName = view.getParentName();
         if (parentName == null) {
             //means this is a view on dataTable
@@ -2051,7 +2051,7 @@ public class MetaDataClient {
                             .buildException();
                 }
 
-                if (tableType != TABLE && tableType != SYSTEM) {
+                if (tableType != TABLE) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.PHOENIX_TTL_SUPPORTED_FOR_TABLES_ONLY)
                             .setSchemaName(schemaName)
                             .setTableName(tableName)

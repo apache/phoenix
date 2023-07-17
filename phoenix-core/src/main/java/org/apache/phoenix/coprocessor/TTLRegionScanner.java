@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -70,7 +71,9 @@ public class TTLRegionScanner extends BaseRegionScanner {
         emptyCF = scan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
         long currentTime = scan.getTimeRange().getMax() == HConstants.LATEST_TIMESTAMP ?
                 EnvironmentEdgeManager.currentTimeMillis() : scan.getTimeRange().getMax();
-        if (isPhoenixTableTTLEnabled(env.getConfiguration())) {
+        byte[] isSystemTable = scan.getAttribute(BaseScannerRegionObserver.IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM);
+        if (isPhoenixTableTTLEnabled(env.getConfiguration()) && (isSystemTable == null ||
+                !Bytes.toBoolean(isSystemTable))) {
             ttl = ScanUtil.getPhoenixTTL(this.scan);
         } else {
             ttl = env.getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();

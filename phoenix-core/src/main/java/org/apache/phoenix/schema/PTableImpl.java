@@ -1935,7 +1935,7 @@ public class PTableImpl implements PTable {
         if (table.hasUseStatsForParallelization()) {
             useStatsForParallelization = table.getUseStatsForParallelization();
         }
-        long phoenixTTL =  PHOENIX_TTL_NOT_DEFINED;
+        long phoenixTTL = PHOENIX_TTL_NOT_DEFINED;
         if (table.hasPhoenixTTL()) {
             phoenixTTL = table.getPhoenixTTL();
         }
