@@ -78,7 +78,6 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ProjectedColumn;
@@ -201,7 +200,7 @@ public class ProjectionCompiler {
                 dataTable = conn.getTable(new PTableKey(null, dataTableName));
             }
             else {
-            	throw e;
+                throw e;
             }
         }
         int tableOffset = dataTable.getBucketNum() == null ? 0 : 1;
@@ -220,8 +219,8 @@ public class ProjectionCompiler {
         // The easy thing would be to just call projectAllTableColumns on the projected table,
         // but its columns are not in the same order as the data column, so we have to map them to
         // the data column order
-        TableRef projectedTableRef = new TableRef(resolver.getTables().get(0), tableRef.getTableAlias());
-        PTable projectedIndex = projectedTableRef.getTable();
+        TableRef projectedTableRef =
+                new TableRef(resolver.getTables().get(0), tableRef.getTableAlias());
         for (int i = tableOffset, j = tableOffset; i < dataTable.getColumns().size(); i++) {
             PColumn column = dataTable.getColumns().get(i);
             // Skip tenant ID column (which may not be the first column, but is the first PK column)
@@ -239,12 +238,16 @@ public class ProjectionCompiler {
             } catch (ColumnNotFoundException e) {
                 if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(tableRef)) {
                     //Projected columns have the same name as in the data table
-                    String colName = dataTableColumn.getName().getString();
                     String familyName = dataTableColumn.getFamilyName() == null ? null : dataTableColumn.getFamilyName().getString();
-                    //TODO resolveColumn parameters are all over the place, this works for the 
+                    //TODO resolveColumn parameters are all over the place, this works for the
                     //test cases. May have problems with table/family wildcards, but those
                     //haven't worked anyway
-                    ref = resolver.resolveColumn(familyName, tableRef.getTableAlias() == null ? tableRef.getTable().getName().getString() : tableRef.getTableAlias(), indexColName);
+                    ref =
+                            resolver.resolveColumn(familyName,
+                                tableRef.getTableAlias() == null
+                                        ? tableRef.getTable().getName().getString()
+                                        : tableRef.getTableAlias(),
+                                indexColName);
                     indexColumn = ref.getColumn();
                 } else {
                     throw e;
@@ -253,7 +256,7 @@ public class ProjectionCompiler {
             ref = new ColumnRef(projectedTableRef, indexColumn.getPosition());
             String colName = dataTableColumn.getName().getString();
             String tableAlias = tableRef.getTableAlias();
-            if (resolveColumn && !(ref instanceof IndexDataColumnRef)) {
+            if (resolveColumn) {
                 try {
                     if (tableAlias != null) {
                         ref = resolver.resolveColumn(null, tableAlias, indexColName);
@@ -304,7 +307,8 @@ public class ProjectionCompiler {
         String dataTableName = index.getParentName().getString();
         PTable dataTable = conn.getTable(new PTableKey(conn.getTenantId(), dataTableName));
         PColumnFamily pfamily = dataTable.getColumnFamily(cfName);
-        TableRef projectedTableRef = new TableRef(resolver.getTables().get(0), tableRef.getTableAlias());
+        TableRef projectedTableRef =
+                new TableRef(resolver.getTables().get(0), tableRef.getTableAlias());
         PTable projectedIndex = projectedTableRef.getTable();
         for (PColumn column : pfamily.getColumns()) {
             String indexColName = IndexUtil.getIndexColumnName(column);
@@ -314,17 +318,25 @@ public class ProjectionCompiler {
             try {
                 indexColumn = index.getColumnForColumnName(indexColName);
                 ref = new ColumnRef(projectedTableRef, indexColumn.getPosition());
-                indexColumnFamily = indexColumn.getFamilyName() == null ? null : indexColumn.getFamilyName().getString();
+                indexColumnFamily =
+                        indexColumn.getFamilyName() == null ? null
+                                : indexColumn.getFamilyName().getString();
             } catch (ColumnNotFoundException e) {
                 if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(tableRef)) {
                     try {
                         //Projected columns have the same name as in the data table
                         String colName = column.getName().getString();
-                        String familyName = column.getFamilyName() == null ? null : column.getFamilyName().getString();
+                        String familyName =
+                                column.getFamilyName() == null ? null
+                                        : column.getFamilyName().getString();
                         //TODO resolveColumn parameters are all over the place, this works for the 
                         //test cases. May have problems with table/family wildcards, but those
                         //haven't worked anyway
-                        resolver.resolveColumn(familyName, tableRef.getTableAlias() == null ? tableRef.getTable().getName().getString() : tableRef.getTableAlias(), indexColName);
+                        resolver.resolveColumn(familyName,
+                            tableRef.getTableAlias() == null
+                                    ? tableRef.getTable().getName().getString()
+                                    : tableRef.getTableAlias(),
+                            indexColName);
                         indexColumn = projectedIndex.getColumnForColumnName(colName);
                     } catch (ColumnFamilyNotFoundException c) {
                         throw e;
@@ -334,14 +346,18 @@ public class ProjectionCompiler {
                 }
             }
             if (resolveColumn) {
-                ref = context.getResolver().resolveColumn(index.getTableName().getString(), indexColumnFamily, indexColName);
+                ref =
+                        resolver.resolveColumn(index.getTableName().getString(), indexColumnFamily,
+                            indexColName);
             }
             Expression expression = ref.newColumnExpression();
             projectedExpressions.add(expression);
             String colName = column.getName().toString();
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);
-            projectedColumns.add(new ExpressionProjector(colName, 
-                    tableRef.getTableAlias() == null ? dataTable.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive));
+            projectedColumns.add(new ExpressionProjector(colName,
+                    tableRef.getTableAlias() == null ? dataTable.getName().getString()
+                            : tableRef.getTableAlias(),
+                    expression, isCaseSensitive));
         }
     }
     
