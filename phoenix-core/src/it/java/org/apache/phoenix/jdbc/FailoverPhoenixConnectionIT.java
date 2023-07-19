@@ -63,7 +63,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.TestName;
-import org.junit.rules.Timeout;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -109,8 +108,8 @@ public class FailoverPhoenixConnectionIT {
         // Make first cluster ACTIVE
         CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
 
-        haGroup = getHighAvailibilityGroup(CLUSTERS.getJdbcUrl(), clientProperties);
-        LOG.info("Initialized haGroup {} with URL {}", haGroup, CLUSTERS.getJdbcUrl());
+        haGroup = getHighAvailibilityGroup(CLUSTERS.getJdbcHAUrl(), clientProperties);
+        LOG.info("Initialized haGroup {} with URL {}", haGroup, CLUSTERS.getJdbcHAUrl());
         tableName = testName.getMethodName().toUpperCase();
         CLUSTERS.createTableOnClusterPair(tableName);
     }
@@ -120,10 +119,10 @@ public class FailoverPhoenixConnectionIT {
         try {
             haGroup.close();
             PhoenixDriver.INSTANCE
-                    .getConnectionQueryServices(CLUSTERS.getUrl1(), haGroup.getProperties())
+                    .getConnectionQueryServices(CLUSTERS.getJdbcUrl1(), haGroup.getProperties())
                     .close();
             PhoenixDriver.INSTANCE
-                    .getConnectionQueryServices(CLUSTERS.getUrl2(), haGroup.getProperties())
+                    .getConnectionQueryServices(CLUSTERS.getJdbcUrl2(), haGroup.getProperties())
                     .close();
         } catch (Exception e) {
             LOG.error("Fail to tear down the HA group and the CQS. Will ignore", e);
@@ -253,9 +252,18 @@ public class FailoverPhoenixConnectionIT {
      */
     @Test(timeout = 300000)
     public void testConnectionWhenActiveZKRestarts() throws Exception {
+        // This creates the cqsi for the active cluster upfront.
+        // If we don't do that then later when we try to transition
+        // the cluster role it tries to create cqsi for the cluster
+        // which is down and that takes forever causing timeouts
+        try (Connection conn = createFailoverConnection()) {
+            doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
+        }
         doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
             try {
-                createFailoverConnection();
+                try (Connection conn = createFailoverConnection()) {
+                    doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
+                }
                 fail("Should have failed since ACTIVE ZK cluster was shutdown");
             } catch (SQLException e) {
                 LOG.info("Got expected exception when ACTIVE ZK cluster is down", e);
@@ -450,7 +458,7 @@ public class FailoverPhoenixConnectionIT {
         CLUSTERS.initClusterRole(haGroupName2, HighAvailabilityPolicy.FAILOVER);
         Properties clientProperties2 = new Properties(clientProperties);
         clientProperties2.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
-        Connection conn2 = DriverManager.getConnection(CLUSTERS.getJdbcUrl(), clientProperties2);
+        Connection conn2 = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProperties2);
         PhoenixConnection wrappedConn2 = ((FailoverPhoenixConnection) conn2).getWrappedConnection();
 
         assertFalse(wrappedConn.isClosed());
@@ -491,7 +499,7 @@ public class FailoverPhoenixConnectionIT {
             return null;
         }).when(spy).close();
         ConnectionQueryServices cqs = PhoenixDriver.INSTANCE
-                .getConnectionQueryServices(CLUSTERS.getUrl1(), clientProperties);
+                .getConnectionQueryServices(CLUSTERS.getJdbcUrl1(), clientProperties);
         // replace the wrapped connection with the spied connection in CQS
         cqs.removeConnection(wrapped.unwrap(PhoenixConnection.class));
         cqs.addConnection(spy.unwrap(PhoenixConnection.class));
@@ -836,7 +844,7 @@ public class FailoverPhoenixConnectionIT {
      * Create a failover connection using {@link #clientProperties}.
      */
     private Connection createFailoverConnection() throws SQLException {
-        return DriverManager.getConnection(CLUSTERS.getJdbcUrl(), clientProperties);
+        return DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProperties);
     }
 
     @FunctionalInterface

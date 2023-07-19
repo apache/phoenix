@@ -66,7 +66,7 @@ enum HighAvailabilityPolicy {
                     zkUrl, haGroup.getGroupInfo());
             ConnectionQueryServices cqs = null;
             try {
-                cqs = PhoenixDriver.INSTANCE.getConnectionQueryServices(zkUrl,
+                cqs = PhoenixDriver.INSTANCE.getConnectionQueryServices(haGroup.getGroupInfo().getJDBCUrl(zkUrl),
                          haGroup.getProperties());
                 cqs.closeAllConnections(new SQLExceptionInfo
                         .Builder(SQLExceptionCode.HA_CLOSED_AFTER_FAILOVER)
@@ -88,7 +88,8 @@ enum HighAvailabilityPolicy {
                 throws SQLException {
             // Invalidate CQS cache if any that has been closed but has not been cleared
             LOG.info("invalidating cqs cache for zkUrl: " + zkUrl);
-            PhoenixDriver.INSTANCE.invalidateCache(zkUrl, haGroup.getProperties());
+            PhoenixDriver.INSTANCE.invalidateCache(haGroup.getGroupInfo().getJDBCUrl(zkUrl),
+                    haGroup.getProperties());
         }
     },
 

@@ -131,7 +131,7 @@ public class HighAvailabilityTestingUtilityIT {
                 Properties properties = HighAvailabilityTestingUtility.getHATestProperties();
                 properties.setProperty(PHOENIX_HA_GROUP_ATTR, testName.getMethodName());
                 ConnectionQueryServices cqs = PhoenixDriver.INSTANCE.getConnectionQueryServices(
-                        CLUSTERS.getUrl1(), properties);
+                        CLUSTERS.getJdbcUrl1(), properties);
                 fail("Should have failed since the target cluster is down, but got a CQS: " + cqs);
             } catch (Exception e) {
                 LOG.info("Got expected exception since target cluster is down:", e);

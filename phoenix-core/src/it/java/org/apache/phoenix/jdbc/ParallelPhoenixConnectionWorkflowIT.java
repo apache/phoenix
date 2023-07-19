@@ -200,8 +200,7 @@ public class ParallelPhoenixConnectionWorkflowIT {
         // Make first cluster ACTIVE
         CLUSTERS.initClusterRole(haGroupName, PARALLEL);
 
-        jdbcUrl = String.format("jdbc:phoenix:[%s|%s]",
-                CLUSTERS.getUrl1(), CLUSTERS.getUrl2());
+        jdbcUrl = CLUSTERS.getJdbcHAUrl();
         haGroup = HighAvailabilityTestingUtility.getHighAvailibilityGroup(jdbcUrl, clientProperties);
         LOG.info("Initialized haGroup {} with URL {}", haGroup.getGroupInfo().getName(), jdbcUrl);
     }
