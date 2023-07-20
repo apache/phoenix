@@ -138,9 +138,7 @@ import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
 import org.apache.hadoop.hbase.coprocessor.CoreCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
-import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcCall;
 import org.apache.hadoop.hbase.ipc.RpcUtil;
@@ -2495,13 +2493,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
                 done.run(builder.build());
 
-                if (tableType == PTableType.TABLE) {
-                    metricsSource.incrementCreateTableCount();
-                } else if (tableType == PTableType.VIEW) {
-                    metricsSource.incrementCreateViewCount();
-                } else if (tableType == PTableType.INDEX) {
-                    metricsSource.incrementCreateIndexCount();
-                }
+                updateCreateTableDdlSuccessMetrics(tableType);
                 LOGGER.info("{} created successfully, tableName: {}", tableType, fullTableName);
             } finally {
                 ServerUtil.releaseRowLocks(locks);
@@ -2510,6 +2502,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             LOGGER.error("createTable failed", t);
             ProtobufUtil.setControllerException(controller,
                     ServerUtil.createIOException(fullTableName, t));
+        }
+    }
+
+    private void updateCreateTableDdlSuccessMetrics(PTableType tableType) {
+        if (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) {
+            metricsSource.incrementCreateTableCount();
+        } else if (tableType == PTableType.VIEW) {
+            metricsSource.incrementCreateViewCount();
+        } else if (tableType == PTableType.INDEX) {
+            metricsSource.incrementCreateIndexCount();
         }
     }
 
@@ -2620,6 +2622,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
             schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
             tableOrViewName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+            String fullTableName = SchemaUtil.getTableName(schemaName, tableOrViewName);
             PTableType pTableType = PTableType.fromSerializedValue(tableType);
             // Disallow deletion of a system table
             if (pTableType == PTableType.SYSTEM) {
@@ -2805,15 +2808,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 done.run(MetaDataMutationResult.toProto(result));
                 dropTableStats = true;
 
-                if (pTableType == PTableType.TABLE) {
-                    metricsSource.incrementDropTableCount();
-                } else if (pTableType == PTableType.VIEW) {
-                    metricsSource.incrementDropViewCount();
-                } else if (pTableType == PTableType.INDEX) {
-                    metricsSource.incrementDropIndexCount();
-                }
-                LOGGER.info("{} dropped successfully, tableName: {}", pTableType,
-                        SchemaUtil.getTableName(schemaName, tableOrViewName));
+                updateDropTableDdlSuccessMetrics(pTableType);
+                LOGGER.info("{} dropped successfully, tableName: {}", pTableType, fullTableName);
             } finally {
                 ServerUtil.releaseRowLocks(locks);
                 if (dropTableStats) {
@@ -2828,6 +2824,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
           LOGGER.error("dropTable failed", t);
           ProtobufUtil.setControllerException(controller, ServerUtil.createIOException(
                   SchemaUtil.getTableName(schemaName, tableOrViewName), t));
+        }
+    }
+
+    private void updateDropTableDdlSuccessMetrics(PTableType pTableType) {
+        if (pTableType == PTableType.TABLE || pTableType == PTableType.SYSTEM) {
+            metricsSource.incrementDropTableCount();
+        } else if (pTableType == PTableType.VIEW) {
+            metricsSource.incrementDropViewCount();
+        } else if (pTableType == PTableType.INDEX) {
+            metricsSource.incrementDropIndexCount();
         }
     }
 
@@ -3741,6 +3747,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     LOGGER.error("Found unexpected child link mutations while dropping an index "
                             + childLinksMutations);
                 }
+
+                metricsSource.incrementDropIndexCount();
+                LOGGER.info("INDEX dropped successfully, tableName: {}",
+                        result.getTable().getTableName());
+
                 invalidateList.add(new ImmutableBytesPtr(indexKey));
             }
             // If the dropped column is a covered index column, invalidate the index
