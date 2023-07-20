@@ -238,10 +238,9 @@ public class ProjectionCompiler {
             } catch (ColumnNotFoundException e) {
                 if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(tableRef)) {
                     //Projected columns have the same name as in the data table
-                    String familyName = dataTableColumn.getFamilyName() == null ? null : dataTableColumn.getFamilyName().getString();
-                    //TODO resolveColumn parameters are all over the place, this works for the
-                    //test cases. May have problems with table/family wildcards, but those
-                    //haven't worked anyway
+                    String familyName =
+                            dataTableColumn.getFamilyName() == null ? null
+                                    : dataTableColumn.getFamilyName().getString();
                     ref =
                             resolver.resolveColumn(familyName,
                                 tableRef.getTableAlias() == null
@@ -329,9 +328,6 @@ public class ProjectionCompiler {
                         String familyName =
                                 column.getFamilyName() == null ? null
                                         : column.getFamilyName().getString();
-                        //TODO resolveColumn parameters are all over the place, this works for the 
-                        //test cases. May have problems with table/family wildcards, but those
-                        //haven't worked anyway
                         resolver.resolveColumn(familyName,
                             tableRef.getTableAlias() == null
                                     ? tableRef.getTable().getName().getString()
@@ -424,7 +420,7 @@ public class ProjectionCompiler {
                 }
                 isWildcard = true;
                 if (tableRef.getTable().getType() == PTableType.INDEX && ((WildcardParseNode)node).isRewrite()) {
-                	projectAllIndexColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
+                    projectAllIndexColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
                 } else {
                     projectAllTableColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
                 }
@@ -438,7 +434,7 @@ public class ProjectionCompiler {
                     projectAllIndexColumns(context, tRef, true, projectedExpressions, projectedColumns, targetColumns);
                 } else {
                     projectAllTableColumns(context, tRef, true, projectedExpressions, projectedColumns, targetColumns);
-                }                
+                }
             } else if (node instanceof  FamilyWildcardParseNode) {
                 if (tableRef == TableRef.EMPTY_TABLE_REF) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT).build().buildException();
