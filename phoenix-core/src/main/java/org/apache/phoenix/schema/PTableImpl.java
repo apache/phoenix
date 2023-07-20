@@ -752,7 +752,7 @@ public class PTableImpl implements PTable {
             //TODO should we just pass the global indexref columns separately instead ?
             for (PColumn column : sortedColumns) {
                 if (!(column instanceof ProjectedColumn && ((ProjectedColumn) column)
-                        .getSourceColumnRef() instanceof IndexDataColumnRef)) {
+                        .getSourceColumnRef() instanceof IndexUncoveredDataColumnRef)) {
                     localColumns.add(column);
                 }
             }

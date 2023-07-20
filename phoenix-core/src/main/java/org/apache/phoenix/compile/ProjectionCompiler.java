@@ -69,7 +69,7 @@ import org.apache.phoenix.schema.ArgumentTypeMismatchException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.IndexDataColumnRef;
+import org.apache.phoenix.schema.IndexUncoveredDataColumnRef;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
@@ -735,7 +735,7 @@ public class ProjectionCompiler {
                              PColumn col = expression.getColumn();
                              // hack'ish... For covered columns with local indexes we defer to the server.
                              if (col instanceof ProjectedColumn && ((ProjectedColumn) col)
-                                     .getSourceColumnRef() instanceof IndexDataColumnRef) {
+                                     .getSourceColumnRef() instanceof IndexUncoveredDataColumnRef) {
                                  return null;
                              }
                              PTable table = context.getCurrentTable().getTable();
