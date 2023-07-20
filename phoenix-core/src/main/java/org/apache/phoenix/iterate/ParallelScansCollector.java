@@ -28,9 +28,9 @@ import org.apache.phoenix.compile.QueryPlan;
  */
 public class ParallelScansCollector {
 
-    private ParallelScanGrouper grouper;
+    private final ParallelScanGrouper grouper;
     private boolean lastScanCrossedRegionBoundary = false;
-    private List<List<Scan>> parallelScans = new ArrayList<>();
+    private final List<List<Scan>> parallelScans = new ArrayList<>();
     private List<Scan> lastBatch = new ArrayList<>();
     private Scan lastScan = null;
 
