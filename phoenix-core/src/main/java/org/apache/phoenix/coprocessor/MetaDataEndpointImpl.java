@@ -3523,7 +3523,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
 
-                if (result.getMutationCode() != MetaDataProtocol.MutationCode.UNALLOWED_TABLE_MUTATION
+                if (result.getMutationCode() != MutationCode.UNALLOWED_TABLE_MUTATION
                         && result.getMutationCode() != MutationCode.UNALLOWED_SCHEMA_MUTATION) {
                     metricsSource.incrementAlterAddColumnCount();
                     LOGGER.info("Column(s) added successfully, tableName: {}",
@@ -3668,7 +3668,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
 
-                if (result.getMutationCode() != MetaDataProtocol.MutationCode.UNALLOWED_TABLE_MUTATION
+                if (result.getMutationCode() != MutationCode.UNALLOWED_TABLE_MUTATION
                         && result.getMutationCode() != MutationCode.UNALLOWED_SCHEMA_MUTATION) {
                     metricsSource.incrementAlterDropColumnCount();
                     LOGGER.info("Column(s) dropped successfully, tableName: {}",
