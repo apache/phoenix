@@ -161,6 +161,7 @@ import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -749,6 +750,12 @@ public abstract class BaseTest {
         }
         createSchema(url,tableName, ts);
         createTestTable(url, ddl, splits, ts);
+    }
+
+    public static ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder) throws SQLException {
+        PreparedStatement statement = conn.prepareStatement(queryBuilder.build());
+        ResultSet rs = statement.executeQuery();
+        return rs;
     }
 
     private static AtomicInteger NAME_SUFFIX = new AtomicInteger(0);
@@ -1769,25 +1776,26 @@ public abstract class BaseTest {
         String upsert = "UPSERT INTO " + fullTableName
                 + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         PreparedStatement stmt = conn.prepareStatement(upsert);
+        //varchar_pk
         stmt.setString(1, firstRowInBatch ? "firstRowInBatch_" : "" + "varchar"+index);
-        stmt.setString(2, "char"+index);
-        stmt.setInt(3, index);
-        stmt.setLong(4, index);
-        stmt.setBigDecimal(5, new BigDecimal(index));
+        stmt.setString(2, "char"+index); // char_pk
+        stmt.setInt(3, index); // int_pk
+        stmt.setLong(4, index); // long_pk
+        stmt.setBigDecimal(5, new BigDecimal(index)); // decimal_pk
         Date date = DateUtil.parseDate("2015-01-01 00:00:00");
-        stmt.setDate(6, date);
-        stmt.setString(7, "varchar_a");
-        stmt.setString(8, "chara");
-        stmt.setInt(9, index+1);
-        stmt.setLong(10, index+1);
-        stmt.setBigDecimal(11, new BigDecimal(index+1));
-        stmt.setDate(12, date);
-        stmt.setString(13, "varchar_b");
-        stmt.setString(14, "charb");
-        stmt.setInt(15, index+2);
-        stmt.setLong(16, index+2);
-        stmt.setBigDecimal(17, new BigDecimal(index+2));
-        stmt.setDate(18, date);
+        stmt.setDate(6, date); // date_pk
+        stmt.setString(7, "varchar_a"); // a.varchar_col1
+        stmt.setString(8, "chara"); // a.char_col1
+        stmt.setInt(9, index+1); // a.int_col1
+        stmt.setLong(10, index+1); // a.long_col1
+        stmt.setBigDecimal(11, new BigDecimal(index+1)); // a.decimal_col1
+        stmt.setDate(12, date); // a.date1
+        stmt.setString(13, "varchar_b"); // b.varchar_col2
+        stmt.setString(14, "charb"); // b.char_col2
+        stmt.setInt(15, index+2); // b.int_col2
+        stmt.setLong(16, index+2); // b.long_col2
+        stmt.setBigDecimal(17, new BigDecimal(index+2)); // b.decimal_col2
+        stmt.setDate(18, date); // b.date2
         stmt.executeUpdate();
     }
 

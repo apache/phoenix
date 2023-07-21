@@ -414,6 +414,11 @@ public interface QueryServices extends SQLCloseable {
             "phoenix.max.region.locations.size.explain.plan";
 
     /**
+     *  Parameter to disable the server merges for hinted uncovered indexes
+     */
+    String SERVER_MERGE_FOR_UNCOVERED_INDEX = "phoenix.query.global.server.merge.enable";
+
+    /**
      * Get executor service used for parallel scans
      */
     public ThreadPoolExecutor getExecutor();

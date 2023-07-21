@@ -7043,4 +7043,60 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                 explainPlan);
         }
     }
+
+    @Test
+    public void testUncoveredPhoenix6986() throws Exception {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.SERVER_MERGE_FOR_UNCOVERED_INDEX,
+            Boolean.toString(false));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+            Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE TAB_PHOENIX_6986 (\n" + "K1 CHAR(6) NOT NULL,\n"
+                + "K2 VARCHAR(22) NOT NULL,\n"
+                + "K3 CHAR(2) NOT NULL,\n"
+                + "K4 VARCHAR(36) NOT NULL,\n"
+                + "V1 TIMESTAMP,\n"
+                + "V2 TIMESTAMP,\n"
+                + "CONSTRAINT PK_PHOENIX_6986 PRIMARY KEY (K1,K2,K3,K4))");
+
+            stmt.execute("CREATE INDEX IDX_PHOENIX_6986 ON TAB_PHOENIX_6986(K2, K1, K3, K4)");
+            String query =
+                "SELECT /*+ INDEX(TAB_PHOENIX_6986 IDX_PHOENIX_6986) */ * "
+                    + "FROM TAB_PHOENIX_6986 "
+                    + "WHERE K2 = 'XXX' AND "
+                    + "V2 >= TIMESTAMP '2023-05-31 23:59:59.000' AND "
+                    + "V1 <= TIMESTAMP '2023-04-01 00:00:00.000' "
+                    + "ORDER BY V2 asc";
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER TAB_PHOENIX_6986\n"
+                    + "    SERVER FILTER BY (V2 >= TIMESTAMP '2023-05-31 23:59:59.000'"
+                    + " AND V1 <= TIMESTAMP '2023-04-01 00:00:00.000')\n"
+                    + "    SERVER SORTED BY [TAB_PHOENIX_6986.V2]\n"
+                    + "CLIENT MERGE SORT\n"
+                    + "    SKIP-SCAN-JOIN TABLE 0\n"
+                    + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX_PHOENIX_6986 ['XXX']\n"
+                    + "            SERVER FILTER BY FIRST KEY ONLY\n"
+                    + "    DYNAMIC SERVER FILTER BY (\"TAB_PHOENIX_6986.K1\", \"TAB_PHOENIX_6986.K2\", \"TAB_PHOENIX_6986.K3\", \"TAB_PHOENIX_6986.K4\")"
+                    + " IN (($2.$4, $2.$5, $2.$6, $2.$7))",
+                explainPlan);
+        }
+    }
+
+    @Test
+    public void testUncoveredPhoenix6961() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement();) {
+            stmt.execute(
+                "create table d (k integer primary key, v1 integer, v2 integer, v3 integer, v4 integer)");
+            stmt.execute("create index i on d(v2) include (v3)");
+            String query = "select /*+ index(d i) */ * from d where v2=1 and v3=1";
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER I [1]\n"
+                    + "    SERVER MERGE [0.V1, 0.V4]\n"
+                    + "    SERVER FILTER BY \"V3\" = 1",
+                    explainPlan);
+        }
+    }
 }

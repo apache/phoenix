@@ -33,13 +33,13 @@ import org.apache.phoenix.util.IndexUtil;
  * use index in the query plan and fetch the missing columns from the data table rows on the
  * server side. This class is used to keep track of such data columns.
  */
-public class IndexDataColumnRef extends ColumnRef {
+public class IndexUncoveredDataColumnRef extends ColumnRef {
     final private int position;
     // Despite the final keyword, columns IS mutable, and must not be used for equality/hashCode
     final private Set<PColumn> columns;
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
 
-    public IndexDataColumnRef(StatementContext context, TableRef tRef, String indexColumnName)
+    public IndexUncoveredDataColumnRef(StatementContext context, TableRef tRef, String indexColumnName)
             throws MetaDataEntityNotFoundException, SQLException {
         super(FromCompiler.getResolver(
             FACTORY.namedTable(
@@ -54,7 +54,7 @@ public class IndexDataColumnRef extends ColumnRef {
         columns = context.getDataColumns();
     }
 
-    protected IndexDataColumnRef(IndexDataColumnRef indexDataColumnRef, long timestamp) {
+    protected IndexUncoveredDataColumnRef(IndexUncoveredDataColumnRef indexDataColumnRef, long timestamp) {
         super(indexDataColumnRef, timestamp);
         this.position = indexDataColumnRef.position;
         this.columns = indexDataColumnRef.columns;
@@ -62,7 +62,7 @@ public class IndexDataColumnRef extends ColumnRef {
 
     @Override
     public ColumnRef cloneAtTimestamp(long timestamp) {
-        return new IndexDataColumnRef(this, timestamp);
+        return new IndexUncoveredDataColumnRef(this, timestamp);
     }
 
     @Override
@@ -84,7 +84,7 @@ public class IndexDataColumnRef extends ColumnRef {
         if (!super.equals(o)) {
             return false;
         }
-        IndexDataColumnRef that = (IndexDataColumnRef) o;
+        IndexUncoveredDataColumnRef that = (IndexUncoveredDataColumnRef) o;
         return position == that.position;
     }
 }

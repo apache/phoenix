@@ -41,7 +41,7 @@ import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.IndexDataColumnRef;
+import org.apache.phoenix.schema.IndexUncoveredDataColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
@@ -159,9 +159,9 @@ public class TupleProjectionCompiler {
             	EncodedColumnsUtil.setColumns(column, table, context.getScan());
             }
         }
-        // add IndexDataColumnRef
+        // add IndexUncoveredDataColumnRef
         position = projectedColumns.size() + (hasSaltingColumn ? 1 : 0);
-        for (IndexDataColumnRef sourceColumnRef : visitor.indexColumnRefSet) {
+        for (IndexUncoveredDataColumnRef sourceColumnRef : visitor.indexColumnRefSet) {
             PColumn column = new ProjectedColumn(sourceColumnRef.getColumn().getName(), 
                     sourceColumnRef.getColumn().getFamilyName(), position++, 
                     sourceColumnRef.getColumn().isNullable(), sourceColumnRef, sourceColumnRef.getColumn().getColumnQualifierBytes());
@@ -239,12 +239,12 @@ public class TupleProjectionCompiler {
     private static class ColumnRefVisitor extends StatelessTraverseAllParseNodeVisitor {
         private final StatementContext context;
         private final LinkedHashSet<ColumnRef> nonPkColumnRefSet;
-        private final LinkedHashSet<IndexDataColumnRef> indexColumnRefSet;
+        private final LinkedHashSet<IndexUncoveredDataColumnRef> indexColumnRefSet;
         
         private ColumnRefVisitor(StatementContext context) {
             this.context = context;
             this.nonPkColumnRefSet = new LinkedHashSet<ColumnRef>();
-            this.indexColumnRefSet = new LinkedHashSet<IndexDataColumnRef>();
+            this.indexColumnRefSet = new LinkedHashSet<IndexUncoveredDataColumnRef>();
         }
 
         @Override
@@ -259,7 +259,7 @@ public class TupleProjectionCompiler {
                 if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(context.getCurrentTable())) {
                     try {
                         context.setUncoveredIndex(true);
-                        indexColumnRefSet.add(new IndexDataColumnRef(context,
+                        indexColumnRefSet.add(new IndexUncoveredDataColumnRef(context,
                                 context.getCurrentTable(), node.getName()));
                     } catch (ColumnFamilyNotFoundException c) {
                         throw e;
