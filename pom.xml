@@ -73,7 +73,7 @@
     <!-- Hadoop and Hbase-thirdparty version -->
     <!-- These are expected to be overridden to conform to cluster versions
     along with hbase.version (defined in profiles) -->
-    <hadoop.version>3.1.4</hadoop.version>
+    <hadoop.version>3.3.3</hadoop.version>
 
     <phoenix.thirdparty.version>2.0.0</phoenix.thirdparty.version>
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
