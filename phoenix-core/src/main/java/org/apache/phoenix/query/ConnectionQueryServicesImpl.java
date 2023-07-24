@@ -3632,6 +3632,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     void createSysMutexTableIfNotExists(Admin admin) throws IOException {
         try {
+            if (checkIfSysMutexExistsAndModifyTTLIfRequired(admin)) {
+                return;
+            }
             final TableName mutexTableName = SchemaUtil.getPhysicalTableName(
                     SYSTEM_MUTEX_NAME, props);
             TableDescriptor tableDesc = TableDescriptorBuilder.newBuilder(mutexTableName)
@@ -3640,7 +3643,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             .setTimeToLive(TTL_FOR_MUTEX).build())
                     .build();
             admin.createTable(tableDesc);
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             if (inspectIfAnyExceptionInChain(e, Arrays.<Class<? extends Exception>> asList(
                     AccessDeniedException.class, org.apache.hadoop.hbase.TableExistsException.class))) {
                 // Ignore TableExistsException as another client might beat us during upgrade.

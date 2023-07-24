@@ -1971,6 +1971,8 @@ public class MetaDataClient {
                             view.getPhysicalNames().get(0).getString())).getPhoenixTTL() :
                             getTTLFromAncestor(connection.getTable(new PTableKey(connection.getTenantId(), view.getParentName().getString()))));
         } catch (TableNotFoundException tne) {
+            //Check again for TTL from ancestors, what if view here is tenant view on top of Global View
+            //without any tenant id.
             return getTTLFromAncestor(connection.getTable(new PTableKey(null, view.getParentName().getString())));
         }
     }
