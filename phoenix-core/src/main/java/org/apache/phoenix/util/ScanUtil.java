@@ -685,35 +685,13 @@ public class ScanUtil {
         scan.setLoadColumnFamiliesOnDemand(true);
     }
 
-    private static byte[] getReversedRow(byte[] startRow) {
-        /*
-         * Must get previous key because this is going from an inclusive start key to an exclusive stop key, and we need
-         * the start key to be included. We get the previous key by decrementing the last byte by one. However, with
-         * variable length data types, we need to fill with the max byte value, otherwise, if the start key is 'ab', we
-         * lower it to 'aa' which would cause 'aab' to be included (which isn't correct). So we fill with a 0xFF byte to
-         * prevent this. A single 0xFF would be enough for our primitive types (as that byte wouldn't occur), but for an
-         * arbitrary VARBINARY key we can't know how many bytes to tack on. It's lame of HBase to force us to do this.
-         */
-        byte[] newStartRow = startRow;
-        if (startRow.length != 0) {
-            newStartRow = Arrays.copyOf(startRow, startRow.length + MAX_FILL_LENGTH_FOR_PREVIOUS_KEY.length);
-            if (ByteUtil.previousKey(newStartRow, startRow.length)) {
-                System.arraycopy(MAX_FILL_LENGTH_FOR_PREVIOUS_KEY, 0, newStartRow, startRow.length,
-                        MAX_FILL_LENGTH_FOR_PREVIOUS_KEY.length);
-            } else {
-                newStartRow = HConstants.EMPTY_START_ROW;
-            }
-        }
-        return newStartRow;
-    }
-
     // Start/stop row must be swapped if scan is being done in reverse
     public static void setupReverseScan(Scan scan) {
         if (isReversed(scan) && !scan.isReversed()) {
-            byte[] newStartRow = getReversedRow(scan.getStartRow());
-            byte[] newStopRow = getReversedRow(scan.getStopRow());
-            scan.withStartRow(newStopRow);
-            scan.withStopRow(newStartRow);
+            byte[] tmpStartRow = scan.getStartRow();
+            boolean tmpIncludeStartRow = scan.includeStartRow();
+            scan.withStartRow(scan.getStopRow(), scan.includeStopRow());
+            scan.withStopRow(tmpStartRow, tmpIncludeStartRow);
             scan.setReversed(true);
         }
     }
