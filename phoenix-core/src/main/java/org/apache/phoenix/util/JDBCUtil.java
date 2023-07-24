@@ -189,7 +189,7 @@ public class JDBCUtil {
     public static Consistency getConsistencyLevel(String url, Properties info, String defaultValue) {
         String consistency = findProperty(url, info, PhoenixRuntime.CONSISTENCY_ATTRIB);
 
-        if(consistency != null && consistency.equalsIgnoreCase(Consistency.TIMELINE.toString())){
+        if (consistency != null && consistency.equalsIgnoreCase(Consistency.TIMELINE.toString())){
             return Consistency.TIMELINE;
         }
 
@@ -209,6 +209,8 @@ public class JDBCUtil {
     /**
      * Formats a zkUrl which includes the zkQuroum of the jdbc url and the rest to sort the zk quorum hosts.
      * Example input zkUrl "zk1.net,zk2.net,zk3.net:2181:/hbase"
+     * Example input zkUrl "zk1.net,zk2.net,zk3.net:2181:/hbase:user_foo"
+     * Returns: zk1.net,zk2.net,zk3.net:2181:/hbase
      */
     //TODO: Adjust for non-zkurl
     public static String formatZookeeperUrl(String zkUrl){
@@ -219,7 +221,10 @@ public class JDBCUtil {
         Preconditions.checkArgument(hosts.length > 0,"Unexpected zk url format no hosts found.");
         String hostsStrings = Arrays.stream(hosts).sorted().collect(Collectors.joining(","));
         components[0] = hostsStrings;
-        return Arrays.stream(components).collect(Collectors.joining(":"));
+        // host:port:path:principal
+        // additional arguments passed in url, strip them out
+        int endIdx = Integer.min(components.length, 3);
+        return Arrays.stream(components, 0, endIdx).collect(Collectors.joining(":"));
     }
 
 }
