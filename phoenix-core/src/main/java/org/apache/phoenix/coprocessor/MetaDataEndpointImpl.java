@@ -57,7 +57,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_ARGS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_PHOENIX_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME_BYTES;
@@ -3425,7 +3424,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     long newPhoenixTTL = (long) PLong.INSTANCE.toObject(cell.getValueArray(),
                             cell.getValueOffset(), cell.getValueLength());
                     hasNewPhoenixTTLAttribute =  newPhoenixTTL != PHOENIX_TTL_NOT_DEFINED ;
-                    //TODO:- Reenable when we have ViewTTL
+                    //TODO:- Re-enable when we have ViewTTL
                     return false;
                 }
             }

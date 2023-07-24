@@ -340,15 +340,16 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                 SchemaUtil.isNamespaceMappingEnabled(null, cqsi.getProps()));
         if (configuration.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED)) {
-            return pSourceTable.getPhoenixTTL() == PHOENIX_TTL_NOT_DEFINED ? DEFAULT_PHOENIX_TTL :
-                    pSourceTable.getPhoenixTTL();
+            return pSourceTable.getPhoenixTTL() == PHOENIX_TTL_NOT_DEFINED ? DEFAULT_PHOENIX_TTL
+                    : pSourceTable.getPhoenixTTL();
         } else {
             TableDescriptor tableDesc;
             try (Admin admin = cqsi.getAdmin()) {
                 tableDesc = admin.getDescriptor(TableName
                         .valueOf(physicalTable));
             }
-            return tableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(pSourceTable)).getTimeToLive();
+            return tableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(pSourceTable)).
+                    getTimeToLive();
         }
     }
 

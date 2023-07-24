@@ -2910,16 +2910,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             .setMessage("Property: " + propName).build()
                                             .buildException();
                                 }
-                                //If PhoenixTTL is enabled we are using it as a Phoenix Table level property.
+                                //If Phoenix level TTL is enabled we are using TTL as phoenix
+                                //Table level property.
                                 if (!isPhoenixTTLEnabled()) {
-                                    newTTL = ((Number)propValue).intValue();
-                                    // Even though TTL is really a HColumnProperty we treat it specially.
-                                    // We enforce that all column families have the same TTL.
+                                    newTTL = ((Number) propValue).intValue();
+                                    //Even though TTL is really a HColumnProperty we treat it
+                                    //specially. We enforce that all CFs have the same TTL.
                                     commonFamilyProps.put(propName, propValue);
                                 } else {
-                                    //Setting this here just to check if we need to throw Exception for
-                                    //Transaction's SET_TTL Feature.
-                                    newPhoenixTTL = ((Number)propValue).intValue();
+                                    //Setting this here just to check if we need to throw Exception
+                                    //for Transaction's SET_TTL Feature.
+                                    newPhoenixTTL = ((Number) propValue).intValue();
                                 }
                             } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTIONAL) && Boolean.TRUE.equals(propValue)) {
                                 willBeTransactional = isOrWillBeTransactional = true;

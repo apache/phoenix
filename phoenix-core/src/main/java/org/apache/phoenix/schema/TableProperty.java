@@ -30,7 +30,6 @@ import java.sql.SQLException;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -268,8 +267,8 @@ public enum TableProperty {
                     return PHOENIX_TTL_NOT_DEFINED;
                 }
             } else if (value != null) {
-                //Not converting to seconds for better understanding at compaction and masking stage.
-                //As HBase Descriptor level gives this value in seconds.
+                //Not converting to seconds for better understanding at compaction and masking
+                //stage.As HBase Descriptor level gives this value in seconds.
                 return ((Number) value).longValue();
             }
             return value;

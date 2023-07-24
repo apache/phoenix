@@ -1058,8 +1058,10 @@ public class MetaDataClient {
                             .setMessage("Property: " + prop.getFirst()).build()
                             .buildException();
                 }
-                //If Phoenix Level TTL is enabled use TTL as Phoenix Table Property as skip at HTableDescriptor level.
-                if (isPhoenixTTLEnabled() && prop.getFirst().equalsIgnoreCase(TTL) && tableType != PTableType.SYSTEM) {
+                //If Phoenix Level TTL is enabled use TTL as Phoenix Table Property as skip
+                //TTL at HTableDescriptor level.
+                if (isPhoenixTTLEnabled() && prop.getFirst().equalsIgnoreCase(TTL)
+                        && tableType != PTableType.SYSTEM) {
                     tableProps.put(prop.getFirst(), prop.getSecond());
                     continue;
                 }
@@ -1082,7 +1084,8 @@ public class MetaDataClient {
     }
 
     private boolean isPhoenixTTLEnabled() {
-        return connection.getQueryServices().getConfiguration().getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
+        return connection.getQueryServices().getConfiguration().
+                getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
     }
 
@@ -1947,15 +1950,16 @@ public class MetaDataClient {
     }
 
     /**
-     * Get TTL defined for Index or View in its parent hierarchy as defining TTL directly on index or view is
-     * not allowed. View on SYSTEM table is not allowed and already handled during plan compilation.
+     * Get TTL defined for Index or View in its parent hierarchy as defining TTL directly on index
+     * or view is not allowed. View on SYSTEM table is not allowed and already handled during
+     * plan compilation.
      * @param parent
      * @return appropriate TTL for the entity calling the function.
      * @throws TableNotFoundException
      */
     private Long getTTLFromParent(PTable parent) throws TableNotFoundException {
-        return (parent.getType() == TABLE) ? Long.valueOf(parent.getPhoenixTTL()) :
-                (parent.getType() == VIEW ? getTTLFromAncestor(parent) : null);
+        return (parent.getType() == TABLE) ? Long.valueOf(parent.getPhoenixTTL())
+                : (parent.getType() == VIEW ? getTTLFromAncestor(parent) : null);
     }
 
     /**
@@ -1966,14 +1970,17 @@ public class MetaDataClient {
      */
     private Long getTTLFromAncestor(PTable view) throws TableNotFoundException {
         try {
-            return view.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED ? Long.valueOf(view.getPhoenixTTL()) :
-                    (checkIfParentIsTable(view) ? connection.getTable(new PTableKey(null ,
+            return view.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED
+                    ? Long.valueOf(view.getPhoenixTTL()) : (checkIfParentIsTable(view)
+                    ? connection.getTable(new PTableKey(null ,
                             view.getPhysicalNames().get(0).getString())).getPhoenixTTL() :
-                            getTTLFromAncestor(connection.getTable(new PTableKey(connection.getTenantId(), view.getParentName().getString()))));
+                            getTTLFromAncestor(connection.getTable(new PTableKey(
+                                    connection.getTenantId(), view.getParentName().getString()))));
         } catch (TableNotFoundException tne) {
-            //Check again for TTL from ancestors, what if view here is tenant view on top of Global View
-            //without any tenant id.
-            return getTTLFromAncestor(connection.getTable(new PTableKey(null, view.getParentName().getString())));
+            //Check again for TTL from ancestors, what if view here is tenant view on top of
+            //Global View without any tenant id.
+            return getTTLFromAncestor(connection.getTable(new PTableKey(null,
+                    view.getParentName().getString())));
         }
     }
 
@@ -2048,13 +2055,15 @@ public class MetaDataClient {
             if (phoenixTTLProp != null) {
                 if (phoenixTTLProp < 0) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
-                            .setMessage(String.format("entity = %s, TTL value should be > 0", tableName ))
+                            .setMessage(String.format("entity = %s, TTL value should be > 0",
+                                    tableName))
                             .build()
                             .buildException();
                 }
 
                 if (tableType != TABLE) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.PHOENIX_TTL_SUPPORTED_FOR_TABLES_ONLY)
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.
+                            PHOENIX_TTL_SUPPORTED_FOR_TABLES_ONLY)
                             .setSchemaName(schemaName)
                             .setTableName(tableName)
                             .build()
@@ -2278,7 +2287,8 @@ public class MetaDataClient {
                 .setSchemaName(schemaName).setTableName(tableName)
                 .build().buildException();
             }
-            if ( (isPhoenixTTLEnabled() ? phoenixTTLProp != null : TableProperty.TTL.getValue(commonFamilyProps) != null)
+            if ((isPhoenixTTLEnabled() ? phoenixTTLProp != null
+                    : TableProperty.TTL.getValue(commonFamilyProps) != null)
                     && transactionProvider != null 
                     && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.SET_TTL)) {
                 throw new SQLExceptionInfo.Builder(PhoenixTransactionProvider.Feature.SET_TTL.getCode())

@@ -1247,10 +1247,11 @@ public class ScanUtil {
 
         // If Phoenix level TTL is not enabled OR is a system table then return.
         if (!isPhoenixTableTTLEnabled(phoenixConnection.getQueryServices().getConfiguration())) {
-            if(SchemaUtil.isSystemTable(
+            if (SchemaUtil.isSystemTable(
                     SchemaUtil.getTableNameAsBytes(table.getSchemaName().getString(),
                             table.getTableName().getString()))) {
-                scan.setAttribute(BaseScannerRegionObserver.IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM, Bytes.toBytes(true));
+                scan.setAttribute(BaseScannerRegionObserver.IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM,
+                        Bytes.toBytes(true));
             }
             return;
         }
@@ -1342,8 +1343,9 @@ public class ScanUtil {
             long pageSizeMs = phoenixConnection.getQueryServices().getProps()
                     .getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
             if (pageSizeMs == -1) {
-                // Use the half of the HBase RPC timeout value as the server page size to make sure that the HBase
-                // region server will be able to send a heartbeat message to the client before the client times out
+                // Use the half of the HBase RPC timeout value as the server page size to make sure
+                // that the HBase region server will be able to send a heartbeat message to the
+                // client before the client times out.
                 pageSizeMs = (long) (phoenixConnection.getQueryServices().getProps()
                         .getLong(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT) * 0.5);
             }
