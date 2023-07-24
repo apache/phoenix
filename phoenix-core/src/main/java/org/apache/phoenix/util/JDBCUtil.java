@@ -189,7 +189,7 @@ public class JDBCUtil {
     public static Consistency getConsistencyLevel(String url, Properties info, String defaultValue) {
         String consistency = findProperty(url, info, PhoenixRuntime.CONSISTENCY_ATTRIB);
 
-        if(consistency != null && consistency.equalsIgnoreCase(Consistency.TIMELINE.toString())){
+        if (consistency != null && consistency.equalsIgnoreCase(Consistency.TIMELINE.toString())){
             return Consistency.TIMELINE;
         }
 

@@ -801,11 +801,11 @@ public class HighAvailabilityGroup {
         }
 
         public String getJDBCUrl1() {
-            return getJDBCUrl(urls.getFirst());
+            return getJDBCUrl(getUrl1());
         }
 
         public String getJDBCUrl2() {
-            return getJDBCUrl(urls.getSecond());
+            return getJDBCUrl(getUrl2());
         }
 
         /**

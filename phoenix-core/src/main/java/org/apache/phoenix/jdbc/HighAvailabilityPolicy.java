@@ -66,8 +66,8 @@ enum HighAvailabilityPolicy {
                     zkUrl, haGroup.getGroupInfo());
             ConnectionQueryServices cqs = null;
             try {
-                cqs = PhoenixDriver.INSTANCE.getConnectionQueryServices(haGroup.getGroupInfo().getJDBCUrl(zkUrl),
-                         haGroup.getProperties());
+                cqs = PhoenixDriver.INSTANCE.getConnectionQueryServices(
+                        haGroup.getGroupInfo().getJDBCUrl(zkUrl), haGroup.getProperties());
                 cqs.closeAllConnections(new SQLExceptionInfo
                         .Builder(SQLExceptionCode.HA_CLOSED_AFTER_FAILOVER)
                         .setMessage("Phoenix connection got closed due to failover")
