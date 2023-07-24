@@ -57,6 +57,7 @@ import static org.apache.phoenix.query.QueryServices.MASTER_INFO_PORT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_PERC_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_MUTATION_SIZE_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN;
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB;
@@ -81,6 +82,7 @@ import static org.apache.phoenix.query.QueryServices.SCAN_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SCAN_RESULT_CHUNK_SIZE;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SERVER_MERGE_FOR_UNCOVERED_INDEX;
 import static org.apache.phoenix.query.QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK;
 import static org.apache.phoenix.query.QueryServices.SPOOL_DIRECTORY;
@@ -399,7 +401,11 @@ public class QueryServicesOptions {
     public static final int DEFAULT_SCAN_PAGE_SIZE = 32768;
     public static final boolean DEFAULT_APPLY_TIME_ZONE_DISPLACMENT = false;
     public static final boolean DEFAULT_PHOENIX_TABLE_TTL_ENABLED = true;
+    public static final int DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN = 5;
+    public static final boolean DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX = true;
 
+
+    public static final long DEFAULT_CHILD_LINK_ROW_AGE_THRESHOLD_TO_DELETE_MS = 1 * 60 * 60 * 1000; // 1 hour
 
     private final Configuration config;
 
@@ -489,7 +495,11 @@ public class QueryServicesOptions {
             .setIfUnset(INDEX_CREATE_DEFAULT_STATE, DEFAULT_CREATE_INDEX_STATE)
             .setIfUnset(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK,
                 DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK)
-            .setIfUnset(MAX_IN_LIST_SKIP_SCAN_SIZE, DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE);
+            .setIfUnset(MAX_IN_LIST_SKIP_SCAN_SIZE, DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE)
+            .setIfUnset(MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN,
+                    DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN)
+            .setIfUnset(SERVER_MERGE_FOR_UNCOVERED_INDEX,
+                DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX);
 
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set

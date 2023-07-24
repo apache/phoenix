@@ -112,7 +112,7 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.DelegateDatum;
-import org.apache.phoenix.schema.IndexDataColumnRef;
+import org.apache.phoenix.schema.IndexUncoveredDataColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
@@ -373,7 +373,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(context.getCurrentTable())) {
                 try {
                     context.setUncoveredIndex(true);
-                    return new IndexDataColumnRef(context, context.getCurrentTable(),
+                    return new IndexUncoveredDataColumnRef(context, context.getCurrentTable(),
                             node.getName());
                 } catch (ColumnFamilyNotFoundException c) {
                     throw e;

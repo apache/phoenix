@@ -56,9 +56,9 @@ public class MapReduceParallelScanGrouper implements ParallelScanGrouper {
     MapReduceParallelScanGrouper() {}
 
 	@Override
-	public boolean shouldStartNewScan(QueryPlan plan, List<Scan> scans,
-			byte[] startKey, boolean crossedRegionBoundary) {
-		return !plan.isRowKeyOrdered() || crossedRegionBoundary;
+	public boolean shouldStartNewScan(QueryPlan plan, Scan lastScan,
+			byte[] startKey, boolean crossesRegionBoundary) {
+		return (!plan.isRowKeyOrdered() || crossesRegionBoundary) && lastScan != null;
 	}
 
 	@Override

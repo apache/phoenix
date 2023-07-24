@@ -81,6 +81,7 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
@@ -1195,10 +1196,10 @@ public class ScanUtil {
             scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
             scan.setAttribute(BaseScannerRegionObserver.READ_REPAIR_TRANSFORMING_TABLE, TRUE_BYTES);
         } else {
-            if (table.isTransactional() || table.getType() != PTableType.INDEX) {
+            if (table.getType() != PTableType.INDEX || !IndexUtil.isGlobalIndex(indexTable)) {
                 return;
             }
-            if (!IndexUtil.isGlobalIndex(indexTable)) {
+            if (table.isTransactional() && table.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
                 return;
             }
             PTable dataTable = ScanUtil.getDataTable(indexTable, phoenixConnection);
@@ -1306,10 +1307,22 @@ public class ScanUtil {
         }
     }
 
+    private static void setScanAtrributesForChildLinkRepair(Scan scan, PTable table, PhoenixConnection phoenixConnection) {
+        if (table.getName().getString().equals(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME)) {
+            scan.setAttribute(BaseScannerRegionObserver.CHECK_VERIFY_COLUMN, TRUE_BYTES);
+            byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
+            byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst();
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
+            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
+            addEmptyColumnToScan(scan, emptyCF, emptyCQ);
+        }
+    }
+
     public static void setScanAttributesForClient(Scan scan, PTable table,
                                                   PhoenixConnection phoenixConnection) throws SQLException {
         setScanAttributesForIndexReadRepair(scan, table, phoenixConnection);
         setScanAttributesForPhoenixTTL(scan, table, phoenixConnection);
+        setScanAtrributesForChildLinkRepair(scan, table, phoenixConnection);
         byte[] emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME);
         byte[] emptyCQ = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME);
         if (emptyCF != null && emptyCQ != null) {

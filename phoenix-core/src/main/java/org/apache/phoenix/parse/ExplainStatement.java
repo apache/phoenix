@@ -21,9 +21,11 @@ import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 
 public class ExplainStatement implements BindableStatement {
     private final BindableStatement statement;
-    
-    public ExplainStatement(BindableStatement statement) {
+    private final ExplainType explainType;
+
+    public ExplainStatement(BindableStatement statement, ExplainType explainType) {
         this.statement = statement;
+        this.explainType = explainType;
     }
 
     public BindableStatement getStatement() {
@@ -38,5 +40,9 @@ public class ExplainStatement implements BindableStatement {
     @Override
     public Operation getOperation() {
         return Operation.QUERY;
+    }
+
+    public ExplainType getExplainType() {
+        return explainType;
     }
 }

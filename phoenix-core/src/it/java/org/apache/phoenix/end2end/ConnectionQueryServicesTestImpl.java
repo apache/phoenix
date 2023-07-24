@@ -24,11 +24,13 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.google.protobuf.RpcController;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
@@ -62,7 +64,22 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     // Use Provider.values() instead of Provider.available() here because array accesses will be
     // indexed by ordinal.
     private final PhoenixTransactionService[] txServices = new PhoenixTransactionService[TransactionFactory.Provider.values().length];
-    
+
+    private static boolean failPhaseThreeChildLinkWriteForTesting = false;
+    public static void setFailPhaseThreeChildLinkWriteForTesting(boolean fail) {
+        failPhaseThreeChildLinkWriteForTesting = fail;
+    }
+
+    @Override
+    public void sendChildLinkMutations(List<Mutation> mutations, boolean isVerified, boolean isDelete,
+                                       byte[] physicalTableNameBytes, byte[] schemaBytes) throws SQLException {
+
+        if ((isDelete || isVerified) && failPhaseThreeChildLinkWriteForTesting) {
+            throw new SQLException("Simulating phase-3 write failure");
+        }
+        super.sendChildLinkMutations(mutations, isVerified, isDelete, physicalTableNameBytes, schemaBytes);
+    }
+
     public ConnectionQueryServicesTestImpl(QueryServices services, ConnectionInfo info, Properties props) throws SQLException {
         super(services, info, props);
     }

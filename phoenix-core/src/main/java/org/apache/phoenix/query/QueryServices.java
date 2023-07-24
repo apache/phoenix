@@ -350,6 +350,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED = "phoenix.ttl.server_side.masking.enabled";
     // The time limit on the amount of work to be done in one RPC call
     public static final String PHOENIX_SERVER_PAGE_SIZE_MS = "phoenix.server.page.size.ms";
+    // The minimum age of an unverified child link row to be eligible for deletion
+    public static final String CHILD_LINK_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB = "phoenix.child.link.row.age.threshold.to.delete.ms";
     // Phoenix TTL implemented by CompactionScanner and TTLRegionScanner is enabled
     public static final String PHOENIX_TABLE_TTL_ENABLED = "phoenix.table.ttl.enabled";
 
@@ -403,6 +405,19 @@ public interface QueryServices extends SQLCloseable {
      * Region server holding the SYSTEM.CATALOG table in batch oriented jobs.
      */
     String SKIP_SYSTEM_TABLES_EXISTENCE_CHECK = "phoenix.skip.system.tables.existence.check";
+
+    /**
+     * Config key to represent max region locations to be displayed as part of the Explain plan
+     * output.
+     */
+    String MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN =
+            "phoenix.max.region.locations.size.explain.plan";
+
+    /**
+     *  Parameter to disable the server merges for hinted uncovered indexes
+     */
+    String SERVER_MERGE_FOR_UNCOVERED_INDEX = "phoenix.query.global.server.merge.enable";
+
     /**
      * Get executor service used for parallel scans
      */
