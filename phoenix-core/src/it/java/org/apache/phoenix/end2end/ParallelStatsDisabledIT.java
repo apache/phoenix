@@ -67,7 +67,7 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
         BaseTest.freeResourcesIfBeyondThreshold();
     }
 
-    public static ResultSet executeQueryThrowsException(Connection conn, QueryBuilder queryBuilder,
+    protected ResultSet executeQueryThrowsException(Connection conn, QueryBuilder queryBuilder,
             String expectedPhoenixExceptionMsg, String expectedSparkExceptionMsg) {
         ResultSet rs = null;
         try {
