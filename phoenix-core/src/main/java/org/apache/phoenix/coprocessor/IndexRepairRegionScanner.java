@@ -62,6 +62,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,7 +87,11 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
 
         byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
         dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
-        indexTableTTL = region.getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
+        if (BaseScannerRegionObserver.isPhoenixTableTTLEnabled(env.getConfiguration())) {
+            indexTableTTL = ScanUtil.getPhoenixTTL(scan);
+        } else {
+            indexTableTTL = indexHTable.getDescriptor().getColumnFamilies()[0].getTimeToLive();
+        }
         try (org.apache.hadoop.hbase.client.Connection connection =
                      HBaseFactoryProvider.getHConnectionFactory().createConnection(env.getConfiguration())) {
             regionEndKeys = connection.getRegionLocator(dataHTable.getName()).getEndKeys();

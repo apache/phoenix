@@ -954,7 +954,9 @@ public class ViewUtil {
             PTable parent, ExtendedCellBuilder extendedCellBuilder) {
         byte[] parentUpdateCacheFreqBytes = null;
         byte[] parentUseStatsForParallelizationBytes = null;
-        byte[] parentPhoenixTTLBytes = null;
+        //Commenting out phoenixTTL property to exclude.
+        //TODO:- re-enable after introducing TTL for views.
+        //byte[] parentPhoenixTTLBytes = null;
         if (parent != null) {
             parentUpdateCacheFreqBytes = new byte[PLong.INSTANCE.getByteSize()];
             PLong.INSTANCE.getCodec().encodeLong(parent.getUpdateCacheFrequency(),
@@ -963,9 +965,9 @@ public class ViewUtil {
                 parentUseStatsForParallelizationBytes =
                         PBoolean.INSTANCE.toBytes(parent.useStatsForParallelization());
             }
-            parentPhoenixTTLBytes = new byte[PLong.INSTANCE.getByteSize()];
-            PLong.INSTANCE.getCodec().encodeLong(parent.getPhoenixTTL(),
-                    parentPhoenixTTLBytes, 0);
+            //parentPhoenixTTLBytes = new byte[PLong.INSTANCE.getByteSize()];
+            //PLong.INSTANCE.getCodec().encodeLong(parent.getPhoenixTTL(),
+            //        parentPhoenixTTLBytes, 0);
         }
         for (Mutation m: tableMetaData) {
             if (m instanceof Put) {
@@ -981,12 +983,12 @@ public class ViewUtil {
                         extendedCellBuilder,
                         parentUseStatsForParallelizationBytes,
                         MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
-                MetaDataUtil.conditionallyAddTagsToPutCells((Put)m,
-                        PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                        PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES,
-                        extendedCellBuilder,
-                        parentPhoenixTTLBytes,
-                        MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
+                //MetaDataUtil.conditionallyAddTagsToPutCells((Put)m,
+                //        PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                //        PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES,
+                //        extendedCellBuilder,
+                //        parentPhoenixTTLBytes,
+                //        MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
             }
 
         }

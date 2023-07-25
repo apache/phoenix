@@ -31,6 +31,8 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
@@ -52,7 +54,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.stream.Collectors;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.util.MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES;
@@ -73,6 +77,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
     private String ddl = null;
     private String tenantId;
     private boolean shouldGenerateWithDefaults = false;
+    private boolean isPhoenixTTLEnabled = true;
 
     public SchemaExtractionProcessor(String tenantId, Configuration conf,
             String pSchemaName, String pTableName)
@@ -80,6 +85,8 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         this.tenantId = tenantId;
         this.conf = conf;
         this.table = getPTable(pSchemaName, pTableName);
+        this.isPhoenixTTLEnabled = conf.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
+                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
     }
 
     public SchemaExtractionProcessor(String tenantId, Configuration conf,
@@ -89,6 +96,8 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         this.conf = conf;
         this.table = pTable;
         this.shouldGenerateWithDefaults = shouldGenerateWithDefaults;
+        this.isPhoenixTTLEnabled = conf.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
+                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
     }
 
     @Override
@@ -360,6 +369,9 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         for (Map.Entry<Bytes, Bytes> entry : propsMap.entrySet()) {
             Bytes key = entry.getKey();
             Bytes globalValue = entry.getValue();
+            if (Bytes.toString(key.get()).equalsIgnoreCase(TTL) && isPhoenixTTLEnabled) {
+                continue;
+            }
             Map<String, String> cfToPropertyValueMap = new HashMap<String, String>();
             Set<Bytes> cfPropertyValueSet = new HashSet<>();
             for (ColumnFamilyDescriptor columnDescriptor: columnDescriptors) {
@@ -389,7 +401,13 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             String key = entry.getKey();
             String value = entry.getValue();
             if (value != null) {
-                definedProps.put(key, value);
+                if (!key.equalsIgnoreCase(TTL)) {
+                    definedProps.put(key, value);
+                } else {
+                    if (isPhoenixTTLEnabled && Long.parseLong(value) != PHOENIX_TTL_NOT_DEFINED) {
+                        definedProps.put(key, value);
+                    }
+                }
             }
         }
     }

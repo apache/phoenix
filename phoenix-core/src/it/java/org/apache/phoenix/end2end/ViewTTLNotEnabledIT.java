@@ -29,6 +29,7 @@ import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.ScanUtil;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -38,7 +39,7 @@ import java.sql.Statement;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
-
+@Ignore
 @Category(NeedsOwnMiniClusterTest.class)
 public class ViewTTLNotEnabledIT extends ParallelStatsDisabledIT {
 

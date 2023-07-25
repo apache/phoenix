@@ -23,6 +23,7 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMultiInputUtil;
 import org.apache.phoenix.mapreduce.util.ViewInfoWritable;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -34,6 +35,11 @@ import static org.apache.phoenix.mapreduce.PhoenixTTLTool.DELETE_ALL_VIEWS;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_QUERY_BATCH_SIZE;
 import static org.junit.Assert.assertEquals;
 
+/**
+ * Disabling this test as this works on TTL being set on View which is removed and will be added in future.
+ * TODO:- To enable this test after re-enabling TTL for view for more info check :- PHOENIX-6978
+ */
+@Ignore
 @Category(NeedsOwnMiniClusterTest.class)
 public class DefaultPhoenixMultiViewListProviderIT extends ParallelStatsDisabledIT {
     private final String BASE_TABLE_DDL = "CREATE TABLE %s (TENANT_ID CHAR(10) NOT NULL, " +
@@ -43,11 +49,11 @@ public class DefaultPhoenixMultiViewListProviderIT extends ParallelStatsDisabled
             "PK1 BIGINT PRIMARY KEY,A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
             " AS SELECT * FROM %s ";
     private final String VIEW_DDL_WITH_ID_PREFIX_AND_TTL =
-            VIEW_DDL + " PHOENIX_TTL = 1000";
+            VIEW_DDL + " TTL = 1000";
     private final String VIEW_INDEX_DDL = "CREATE INDEX %s ON %s(%s)";
     private final String TENANT_VIEW_DDL =
             "CREATE VIEW %s (E BIGINT, F BIGINT) AS SELECT * FROM %s";
-    private final String TENANT_VIEW_DDL_WITH_TTL = TENANT_VIEW_DDL + " PHOENIX_TTL = 1000";;
+    private final String TENANT_VIEW_DDL_WITH_TTL = TENANT_VIEW_DDL + " TTL = 1000";;
 
     @Test
     public void testGetPhoenixMultiViewList() throws Exception {

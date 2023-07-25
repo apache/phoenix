@@ -132,6 +132,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String MASK_PHOENIX_TTL_EXPIRED = "_MASK_TTL_EXPIRED";
     public static final String DELETE_PHOENIX_TTL_EXPIRED = "_DELETE_TTL_EXPIRED";
     public static final String PHOENIX_TTL_SCAN_TABLE_NAME = "_PhoenixTTLScanTableName";
+    public static final String IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM = "_IsPhoenixScanTableSystem";
     public static final String SCAN_ACTUAL_START_ROW = "_ScanActualStartRow";
     public static final String REPLAY_WRITES = "_IGNORE_NEWER_MUTATIONS";
     public final static String SCAN_OFFSET = "_RowOffset";

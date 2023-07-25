@@ -185,10 +185,10 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
+import org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
 import org.apache.phoenix.coprocessor.SequenceRegionObserver;
 import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
-import org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver;
 import org.apache.phoenix.coprocessor.SystemCatalogRegionObserver;
 import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
@@ -1050,6 +1050,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return false;
     }
 
+    private boolean isPhoenixTTLEnabled() {
+        boolean ttl = config.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
+                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
+        return ttl;
+    }
+
 
     private void addCoprocessors(byte[] tableName, TableDescriptorBuilder builder,
             PTableType tableType, Map<String, Object> tableProps, TableDescriptor existingDesc,
@@ -1300,6 +1306,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     .build());
                 }
             }
+
             if (Arrays.equals(tableName, SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, props).getName())) {
                 if (!newDesc.hasCoprocessor(SystemCatalogRegionObserver.class.getName())) {
                     builder.setCoprocessor(
@@ -2852,6 +2859,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         boolean willBeTransactional = false;
         boolean isOrWillBeTransactional = isTransactional;
         Integer newTTL = null;
+        Integer newPhoenixTTL = null;
         Integer newReplicationScope = null;
         KeepDeletedCells newKeepDeletedCells = null;
         TransactionFactory.Provider txProvider = null;
@@ -2902,10 +2910,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             .setMessage("Property: " + propName).build()
                                             .buildException();
                                 }
-                                newTTL = ((Number)propValue).intValue();
-                                // Even though TTL is really a HColumnProperty we treat it specially.
-                                // We enforce that all column families have the same TTL.
-                                commonFamilyProps.put(propName, propValue);
+                                //If Phoenix level TTL is enabled we are using TTL as phoenix
+                                //Table level property.
+                                if (!isPhoenixTTLEnabled()) {
+                                    newTTL = ((Number) propValue).intValue();
+                                    //Even though TTL is really a HColumnProperty we treat it
+                                    //specially. We enforce that all CFs have the same TTL.
+                                    commonFamilyProps.put(propName, propValue);
+                                } else {
+                                    //Setting this here just to check if we need to throw Exception
+                                    //for Transaction's SET_TTL Feature.
+                                    newPhoenixTTL = ((Number) propValue).intValue();
+                                }
                             } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTIONAL) && Boolean.TRUE.equals(propValue)) {
                                 willBeTransactional = isOrWillBeTransactional = true;
                                 tableProps.put(PhoenixTransactionContext.READ_NON_TX_DATA, propValue);
@@ -2956,7 +2972,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                     }
                 }
-                if (isOrWillBeTransactional && newTTL != null) {
+                if (isOrWillBeTransactional && (newTTL != null || newPhoenixTTL != null)) {
                     TransactionFactory.Provider isOrWillBeTransactionProvider = txProvider == null ? table.getTransactionProvider() : txProvider;
                     if (isOrWillBeTransactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.SET_TTL)) {
                         throw new SQLExceptionInfo.Builder(PhoenixTransactionProvider.Feature.SET_TTL.getCode())
@@ -3720,7 +3736,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
     }
-
     /**
      * Check if the SYSTEM MUTEX table exists. If it does, ensure that its TTL is correct and if
      * not, modify its table descriptor

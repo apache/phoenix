@@ -23,7 +23,7 @@ import java.util.Collection;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
 public class SetPropertyOnNonEncodedTableIT extends SetPropertyIT {
     public SetPropertyOnNonEncodedTableIT(boolean columnEncoded) {
         super(columnEncoded);

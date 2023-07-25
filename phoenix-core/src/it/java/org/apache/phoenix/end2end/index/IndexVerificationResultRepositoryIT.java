@@ -109,7 +109,7 @@ public class IndexVerificationResultRepositoryIT extends ParallelStatsDisabledIT
         IndexVerificationResultRepository resultRepository =
                 new IndexVerificationResultRepository(conn, indexNameBytes);
         resultRepository.createResultTable(conn);
-        TestUtil.assertTableHasTtl(conn, TableName.valueOf(RESULT_TABLE_NAME_BYTES), DEFAULT_LOG_TTL);
+        TestUtil.assertTableHasTtl(conn, TableName.valueOf(RESULT_TABLE_NAME_BYTES), DEFAULT_LOG_TTL, false);
         byte[] regionOne = Bytes.toBytes("a.1.00000000000000000000");
         byte[] regionTwo = Bytes.toBytes("a.2.00000000000000000000");
         resultRepository.logToIndexToolResultTable(expectedResult, IndexTool.IndexVerifyType.BOTH,

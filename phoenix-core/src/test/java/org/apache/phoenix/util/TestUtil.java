@@ -1333,10 +1333,16 @@ public class TestUtil {
         assertEquals(code.getSQLState(), se.getSQLState());
     }
 
-    public static void assertTableHasTtl(Connection conn, TableName tableName, int ttl)
+    public static void assertTableHasTtl(Connection conn, TableName tableName, int ttl, boolean phoenixTTLEnabled)
         throws SQLException, IOException {
-        ColumnFamilyDescriptor cd = getColumnDescriptor(conn, tableName);
-        Assert.assertEquals(ttl, cd.getTimeToLive());
+        long tableTTL = -1;
+        if (phoenixTTLEnabled) {
+            tableTTL = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,
+                    tableName.getNameAsString())).getPhoenixTTL();
+        } else {
+            tableTTL = getColumnDescriptor(conn, tableName).getTimeToLive();
+        }
+        Assert.assertEquals(ttl, tableTTL);
     }
 
     public static void assertTableHasVersions(Connection conn, TableName tableName, int versions)

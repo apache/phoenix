@@ -36,6 +36,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -48,6 +49,11 @@ import java.util.Map;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+/**
+ * Disabling this test as this works on TTL being set on View which is removed and will be added in future.
+ * TODO:- To enable this test after re-enabling TTL for view for more info check :- PHOENIX-6978
+ */
+@Ignore
 @Category(NeedsOwnMiniClusterTest.class)
 public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
 
@@ -72,7 +78,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
             "UPSERT INTO %s (PK1,A,B,C,D,E,F) VALUES(1,1,1,1,1,1,1)";
     private final String VIEW_DDL_WITH_ID_PREFIX_AND_TTL = "CREATE VIEW %s (" +
             "PK1 BIGINT PRIMARY KEY,A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
-            " AS SELECT * FROM %s WHERE ID = '%s' PHOENIX_TTL = %d";
+            " AS SELECT * FROM %s WHERE ID = '%s' TTL = %d";
     private final String VIEW_INDEX_DDL = "CREATE INDEX %s ON %s(%s)";
     private final String TENANT_VIEW_DDL =
             "CREATE VIEW %s (E BIGINT, F BIGINT) AS SELECT * FROM %s";
@@ -314,7 +320,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
             createMultiTenantTable(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
                     "A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
-                    " AS SELECT * FROM " + baseTableFullName + " WHERE ID ='%s' PHOENIX_TTL = %d";
+                    " AS SELECT * FROM " + baseTableFullName + " WHERE ID ='%s' TTL = %d";
 
             globalConn.createStatement().execute(
                     String.format(ddl, globalViewName1, VIEW_PREFIX1,
@@ -404,7 +410,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
             createMultiTenantTable(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
                     "A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
-                    " AS SELECT * FROM " + baseTableFullName + " WHERE ID ='%s' PHOENIX_TTL = %d";
+                    " AS SELECT * FROM " + baseTableFullName + " WHERE ID ='%s' TTL = %d";
 
             globalConn.createStatement().execute(
                     String.format(ddl, globalViewName1, VIEW_PREFIX1,
@@ -463,7 +469,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
 
             ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
                     "A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
-                    " AS SELECT * FROM " + baseTableFullName + " WHERE ID ='%s' PHOENIX_TTL = %d";
+                    " AS SELECT * FROM " + baseTableFullName + " WHERE ID ='%s' TTL = %d";
 
             globalConn.createStatement().execute(
                     String.format(ddl, globalViewName1, VIEW_PREFIX1,
@@ -523,7 +529,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
 
             ddl = "CREATE VIEW %s (PK2 BIGINT PRIMARY KEY, " +
                     "A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
-                    " AS SELECT * FROM " + baseTableFullName + " WHERE PK1=%d PHOENIX_TTL = %d";
+                    " AS SELECT * FROM " + baseTableFullName + " WHERE PK1=%d TTL = %d";
 
             globalConn.createStatement().execute(
                     String.format(ddl, globalViewName1, 1, PHOENIX_TTL_EXPIRE_IN_A_SECOND));
@@ -595,7 +601,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
             globalConn.createStatement().execute(String.format(ddl, globalViewName1));
 
             ddl = "CREATE VIEW %s (E BIGINT, F BIGINT) AS SELECT * FROM %s " +
-                    "WHERE ID = '%s' PHOENIX_TTL = %d";
+                    "WHERE ID = '%s' TTL = %d";
             tenant1Connection.createStatement().execute(
                     String.format(ddl, tenantViewName1, globalViewName1, VIEW_PREFIX1,
                             PHOENIX_TTL_EXPIRE_IN_A_SECOND));
@@ -662,7 +668,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
             globalConn.createStatement().execute(String.format(ddl, globalViewName2, 2));
 
             ddl = "CREATE VIEW %s (E BIGINT, F BIGINT) AS SELECT * FROM %s " +
-                    "WHERE ID = '%s' PHOENIX_TTL = %d";
+                    "WHERE ID = '%s' TTL = %d";
             tenant1Connection.createStatement().execute(
                     String.format(ddl, tenantViewName1, globalViewName1, VIEW_PREFIX1,
                             PHOENIX_TTL_EXPIRE_IN_A_SECOND));
@@ -734,7 +740,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
             createMultiTenantTable(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
                     "A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
-                    " AS SELECT * FROM " + baseTableFullName + " WHERE NUM = %d PHOENIX_TTL = %d";
+                    " AS SELECT * FROM " + baseTableFullName + " WHERE NUM = %d TTL = %d";
 
             globalConn.createStatement().execute(
                     String.format(ddl, globalViewName1, 1, PHOENIX_TTL_EXPIRE_IN_A_SECOND));
@@ -812,7 +818,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
             globalConn.createStatement().execute(String.format(globalViewDdl, globalViewName));
 
             String middleLevelViewDdl = "CREATE VIEW %s (C BIGINT, D BIGINT)" +
-                    " AS SELECT * FROM %s WHERE ID ='%s' PHOENIX_TTL = %d";
+                    " AS SELECT * FROM %s WHERE ID ='%s' TTL = %d";
 
             globalConn.createStatement().execute(String.format(middleLevelViewDdl,
                     middleLevelViewName1, globalViewName,
