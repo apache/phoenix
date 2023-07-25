@@ -105,7 +105,7 @@ public class HighAvailabilityGroupIT {
 
         // Make first cluster ACTIVE
         CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
-        jdbcUrl = CLUSTERS.getJdbcUrl();
+        jdbcUrl = CLUSTERS.getJdbcHAUrl();
         haGroup = getHighAvailibilityGroup(jdbcUrl,clientProperties);
     }
 
@@ -114,10 +114,10 @@ public class HighAvailabilityGroupIT {
         haGroup.close();
         try {
             PhoenixDriver.INSTANCE
-                    .getConnectionQueryServices(CLUSTERS.getUrl1(), haGroup.getProperties())
+                    .getConnectionQueryServices(CLUSTERS.getJdbcUrl1(), haGroup.getProperties())
                     .close();
             PhoenixDriver.INSTANCE
-                    .getConnectionQueryServices(CLUSTERS.getUrl2(), haGroup.getProperties())
+                    .getConnectionQueryServices(CLUSTERS.getJdbcUrl2(), haGroup.getProperties())
                     .close();
         } catch (Exception e) {
             LOG.error("Fail to tear down the HA group and the CQS. Will ignore", e);
@@ -302,7 +302,7 @@ public class HighAvailabilityGroupIT {
      */
     @Test
     public void testGetShouldFailWithNonHAJdbcString() {
-        final String oldJdbcString = String.format("jdbc:phoenix:%s", CLUSTERS.getUrl1());
+        final String oldJdbcString = CLUSTERS.getJdbcUrl1();
         try {
             HighAvailabilityGroup.get(oldJdbcString, clientProperties);
             fail("Should have failed with invalid connection string '" + oldJdbcString + "'");
@@ -362,7 +362,7 @@ public class HighAvailabilityGroupIT {
         CLUSTERS.createTableOnClusterPair(tableName);
 
         final String url1 = CLUSTERS.getUrl1();
-        final String jdbcUrlToCluster1 = "jdbc:phoenix:" + url1;
+        final String jdbcUrlToCluster1 = CLUSTERS.getJdbcUrl1();
         doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
             try {
                 DriverManager.getConnection(jdbcUrlToCluster1);
