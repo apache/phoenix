@@ -644,9 +644,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                                     == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
                                                     QueryConstants.EMPTY_COLUMN_BYTES :
                                                     table.getEncodingScheme().
-                                                            encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME),
-                                            table.getPhoenixTTL() == PHOENIX_TTL_NOT_DEFINED ?
-                                                    DEFAULT_PHOENIX_TTL : table.getPhoenixTTL(),
+                                                            encode(QueryConstants.
+                                                                    ENCODED_EMPTY_COLUMN_NAME),
+                                            table.getPhoenixTTL() == PHOENIX_TTL_NOT_DEFINED
+                                                    ? DEFAULT_PHOENIX_TTL : table.getPhoenixTTL(),
                                             table.getType() == PTableType.SYSTEM
                                             );
                         }

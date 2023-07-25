@@ -1972,9 +1972,9 @@ public class MetaDataClient {
         try {
             return view.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED
                     ? Long.valueOf(view.getPhoenixTTL()) : (checkIfParentIsTable(view)
-                    ? connection.getTable(new PTableKey(null ,
-                            view.getPhysicalNames().get(0).getString())).getPhoenixTTL() :
-                            getTTLFromAncestor(connection.getTable(new PTableKey(
+                    ? connection.getTable(new PTableKey(null,
+                            view.getPhysicalNames().get(0).getString())).getPhoenixTTL()
+                    : getTTLFromAncestor(connection.getTable(new PTableKey(
                                     connection.getTenantId(), view.getParentName().getString()))));
         } catch (TableNotFoundException tne) {
             //Check again for TTL from ancestors, what if view here is tenant view on top of
