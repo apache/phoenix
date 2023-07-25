@@ -121,14 +121,6 @@ public class ScanUtil {
     public static final int[] SINGLE_COLUMN_SLOT_SPAN = new int[1];
     public static final int UNKNOWN_CLIENT_VERSION = VersionUtil.encodeVersion(4, 4, 0);
 
-    /*
-     * Max length that we fill our key when we turn an inclusive key
-     * into a exclusive key.
-     */
-    private static final byte[] MAX_FILL_LENGTH_FOR_PREVIOUS_KEY = new byte[16];
-    static {
-        Arrays.fill(MAX_FILL_LENGTH_FOR_PREVIOUS_KEY, (byte)-1);
-    }
     private static final byte[] ZERO_BYTE_ARRAY = new byte[1024];
 
     private ScanUtil() {
