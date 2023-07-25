@@ -24,6 +24,7 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.CDC_DATA_TABLE_DEF;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_PHOENIX_TTL;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
@@ -41,6 +42,7 @@ import java.util.Map;
 import java.util.NavigableSet;
 import java.util.TreeMap;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
@@ -1081,9 +1083,14 @@ public class ScanUtil {
     public static long getPhoenixTTL(Scan scan) {
         byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL);
         if (phoenixTTL == null) {
-            return 0L;
+            return DEFAULT_PHOENIX_TTL;
         }
         return Bytes.toLong(phoenixTTL);
+    }
+
+    public static boolean isPhoenixTableTTLEnabled(Configuration conf) {
+        return conf.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
+                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
     }
 
     public static boolean isMaskTTLExpiredRows(Scan scan) {
@@ -1306,10 +1313,14 @@ public class ScanUtil {
     public static void setScanAttributesForPhoenixTTL(Scan scan, PTable table,
             PhoenixConnection phoenixConnection) throws SQLException {
 
-        // If server side masking for PHOENIX_TTL is not enabled OR is a SYSTEM table then return.
-        if (!ScanUtil.isServerSideMaskingEnabled(phoenixConnection) || SchemaUtil.isSystemTable(
-                SchemaUtil.getTableNameAsBytes(table.getSchemaName().getString(),
-                        table.getTableName().getString()))) {
+        // If Phoenix level TTL is not enabled OR is a system table then return.
+        if (!isPhoenixTableTTLEnabled(phoenixConnection.getQueryServices().getConfiguration())) {
+            if (SchemaUtil.isSystemTable(
+                    SchemaUtil.getTableNameAsBytes(table.getSchemaName().getString(),
+                            table.getTableName().getString()))) {
+                scan.setAttribute(BaseScannerRegionObserverConstants.IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM,
+                        Bytes.toBytes(true));
+            }
             return;
         }
 
@@ -1338,7 +1349,6 @@ public class ScanUtil {
                 return;
             }
         }
-
         if (dataTable.getPhoenixTTL() != 0) {
             byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
             byte[] emptyColumnName =
@@ -1403,8 +1413,9 @@ public class ScanUtil {
             long pageSizeMs = phoenixConnection.getQueryServices().getProps()
                     .getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
             if (pageSizeMs == -1) {
-                // Use the half of the HBase RPC timeout value as the server page size to make sure that the HBase
-                // region server will be able to send a heartbeat message to the client before the client times out
+                // Use the half of the HBase RPC timeout value as the server page size to make sure
+                // that the HBase region server will be able to send a heartbeat message to the
+                // client before the client times out.
                 pageSizeMs = (long) (phoenixConnection.getQueryServices().getProps()
                         .getLong(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT) * 0.5);
             }

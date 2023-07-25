@@ -56,6 +56,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 
 
 /**
@@ -366,6 +367,8 @@ public enum SQLExceptionCode {
             + " only if none of the parents have indexes in the parent hierarchy"),
     MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY(10957, "44A39", "Max lookback age can only be set for tables"),
     UNKNOWN_INCLUDE_CHANGE_SCOPE(10958, "44A40", "Unknown change scope for CDC INCLUDE"),
+    PHOENIX_TTL_SUPPORTED_FOR_TABLES_ONLY(10959, "44A41", TTL
+            + "property can only be set for tables"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

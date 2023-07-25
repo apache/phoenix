@@ -3655,6 +3655,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     long newPhoenixTTL = (long) PLong.INSTANCE.toObject(cell.getValueArray(),
                             cell.getValueOffset(), cell.getValueLength());
                     hasNewPhoenixTTLAttribute =  newPhoenixTTL != PHOENIX_TTL_NOT_DEFINED ;
+                    //TODO:- Re-enable when we have ViewTTL
+                    return false;
                 }
             }
         }

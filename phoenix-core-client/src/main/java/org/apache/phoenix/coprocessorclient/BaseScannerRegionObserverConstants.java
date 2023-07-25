@@ -140,6 +140,7 @@ public class BaseScannerRegionObserverConstants {
     public static final String INDEX_ROW_KEY = "_IndexRowKey";
     public static final String READ_REPAIR_TRANSFORMING_TABLE = "_ReadRepairTransformingTable";
     public static final String CDC_DATA_TABLE_DEF = "_CdcDataTableDef";
+    public static final String IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM = "_IsPhoenixScanTableSystem";
 
     public static final String MAX_LOOKBACK_AGE = "MAX_LOOKBACK_AGE";
     /**

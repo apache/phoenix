@@ -30,7 +30,6 @@ import java.sql.SQLException;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -74,13 +73,6 @@ public enum TableProperty {
         @Override
         public Object getPTableValue(PTable table) {
             return table.getDefaultFamilyName();
-        }
-    },
-
-    TTL(ColumnFamilyDescriptorBuilder.TTL, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY, true, CANNOT_ALTER_PROPERTY, false, false) {
-        @Override
-        public Object getPTableValue(PTable table) {
-            return null;
         }
     },
 
@@ -256,7 +248,7 @@ public enum TableProperty {
         }
     },
 
-    PHOENIX_TTL(PhoenixDatabaseMetaData.PHOENIX_TTL, true, true, true) {
+    TTL(PhoenixDatabaseMetaData.TTL, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY, true, false, false) {
         /**
          * PHOENIX_TTL can take any values ranging between 0 < PHOENIX_TTL <= HConstants.LATEST_TIMESTAMP.
          * special values :-
@@ -276,9 +268,9 @@ public enum TableProperty {
                     return PHOENIX_TTL_NOT_DEFINED;
                 }
             } else if (value != null) {
-                long valueInSeconds = ((Number) value).longValue();
-                // Value is specified in seconds, so convert it to ms.
-                return valueInSeconds * 1000;
+                //Not converting to seconds for better understanding at compaction and masking
+                //stage.As HBase Descriptor level gives this value in seconds.
+                return ((Number) value).longValue();
             }
             return value;
         }

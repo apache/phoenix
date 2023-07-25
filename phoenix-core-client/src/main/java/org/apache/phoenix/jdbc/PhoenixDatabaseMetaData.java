@@ -390,8 +390,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String USE_STATS_FOR_PARALLELIZATION = "USE_STATS_FOR_PARALLELIZATION";
     public static final byte[] USE_STATS_FOR_PARALLELIZATION_BYTES = Bytes.toBytes(USE_STATS_FOR_PARALLELIZATION);
 
-    // The PHOENIX_TTL property will hold the duration after which rows will be marked as expired.
+    // The TTL property will hold the duration after which rows will be marked as expired and
+    // is stored in column PHOENIX_TTL in SYSCAT. TODO:- Rename PHOENIX_TTL to TTL in SYSCAT!?
+    public static final String TTL = "TTL";
     public static final long PHOENIX_TTL_NOT_DEFINED = 0L;
+    public static final long DEFAULT_PHOENIX_TTL = HConstants.FOREVER;
     public static final String PHOENIX_TTL = "PHOENIX_TTL";
     public static final byte[] PHOENIX_TTL_BYTES = Bytes.toBytes(PHOENIX_TTL);
     // The phoenix ttl high watermark if set indicates the timestamp used for determining the expired rows.

@@ -49,6 +49,7 @@ import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
 import static org.apache.phoenix.util.TestUtil.assertRawCellCount;
 import static org.apache.phoenix.util.TestUtil.assertRawRowCount;
 import static org.apache.phoenix.util.TestUtil.assertRowExistsAtSCN;
@@ -72,7 +73,7 @@ public class MaxLookbackIT extends BaseTest {
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
-        props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
+        props.put(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
         props.put(QueryServices.PHOENIX_TABLE_TTL_ENABLED, Boolean.toString(Boolean.FALSE));
         props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
@@ -321,8 +322,8 @@ public class MaxLookbackIT extends BaseTest {
             long afterFirstInsertSCN = EnvironmentEdgeManager.currentTimeMillis();
             TableName dataTable = TableName.valueOf(dataTableName);
             TableName indexTable = TableName.valueOf(indexName);
-            assertTableHasTtl(conn, dataTable, ttl);
-            assertTableHasTtl(conn, indexTable, ttl);
+            assertTableHasTtl(conn, dataTable, ttl, false);
+            assertTableHasTtl(conn, indexTable, ttl, false);
             //first make sure we inserted correctly
             String sql = String.format("SELECT val2 FROM %s WHERE id = 'a'", dataTableName);
             String indexSql = String.format("SELECT val2 FROM %s WHERE val1 = 'ab'", dataTableName);
@@ -395,8 +396,8 @@ public class MaxLookbackIT extends BaseTest {
             long afterFirstInsertSCN = EnvironmentEdgeManager.currentTimeMillis();
             TableName dataTable = TableName.valueOf(dataTableName);
             TableName indexTable = TableName.valueOf(indexName);
-            assertTableHasTtl(conn, dataTable, ttl);
-            assertTableHasTtl(conn, indexTable, ttl);
+            assertTableHasTtl(conn, dataTable, ttl, false);
+            assertTableHasTtl(conn, indexTable, ttl, false);
             //first make sure we inserted correctly
             String sql = String.format("SELECT val2 FROM %s WHERE id = 'a'", dataTableName);
             String indexSql = String.format("SELECT val2 FROM %s WHERE val1 = 'ab'", dataTableName);
@@ -469,8 +470,8 @@ public class MaxLookbackIT extends BaseTest {
             createIndex(dataTableName, indexName, 1);
             TableName dataTable = TableName.valueOf(dataTableName);
             TableName indexTable = TableName.valueOf(indexName);
-            assertTableHasTtl(conn, dataTable, ttl);
-            assertTableHasTtl(conn, indexTable, ttl);
+            assertTableHasTtl(conn, dataTable, ttl, false);
+            assertTableHasTtl(conn, indexTable, ttl, false);
             injectEdge.setValue(System.currentTimeMillis());
             EnvironmentEdgeManager.injectEdge(injectEdge);
             injectEdge.incrementValue(delta);
