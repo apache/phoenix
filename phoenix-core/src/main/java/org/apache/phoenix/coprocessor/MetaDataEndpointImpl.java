@@ -3523,8 +3523,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
 
-                if (result.getMutationCode() != MutationCode.UNALLOWED_TABLE_MUTATION
-                        && result.getMutationCode() != MutationCode.UNALLOWED_SCHEMA_MUTATION) {
+                if (result.getMutationCode() == MutationCode.TABLE_ALREADY_EXISTS) {
                     metricsSource.incrementAlterAddColumnCount();
                     LOGGER.info("Column(s) added successfully, tableName: {}",
                             result.getTable().getTableName());
@@ -3668,8 +3667,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
 
-                if (result.getMutationCode() != MutationCode.UNALLOWED_TABLE_MUTATION
-                        && result.getMutationCode() != MutationCode.UNALLOWED_SCHEMA_MUTATION) {
+                if (result.getMutationCode() == MutationCode.TABLE_ALREADY_EXISTS) {
                     metricsSource.incrementAlterDropColumnCount();
                     LOGGER.info("Column(s) dropped successfully, tableName: {}",
                             result.getTable().getTableName());
@@ -3742,16 +3740,15 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     return result;
                 }
+                metricsSource.incrementDropIndexCount();
+                LOGGER.info("INDEX dropped successfully, tableName: {}",
+                        result.getTable().getTableName());
+
                 // there should be no child links to delete since we are just dropping an index
                 if (!childLinksMutations.isEmpty()) {
                     LOGGER.error("Found unexpected child link mutations while dropping an index "
                             + childLinksMutations);
                 }
-
-                metricsSource.incrementDropIndexCount();
-                LOGGER.info("INDEX dropped successfully, tableName: {}",
-                        result.getTable().getTableName());
-
                 invalidateList.add(new ImmutableBytesPtr(indexKey));
             }
             // If the dropped column is a covered index column, invalidate the index
