@@ -1442,16 +1442,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         PBoolean.INSTANCE.toObject(newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
                     newDesc.setRegionSplitPolicyClassName(IndexRegionSplitPolicy.class.getName());
                 }
-                if (props.get(PhoenixDatabaseMetaData.SALT_BUCKETS) != null
-                        && (Integer) (props.get(PhoenixDatabaseMetaData.SALT_BUCKETS)) > 0) {
-                    if (props.get(TableDescriptorBuilder.NORMALIZATION_ENABLED) != null
-                            && (Boolean)(props.get(TableDescriptorBuilder.NORMALIZATION_ENABLED))) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_NORMALIZER_ON_SALTED_TABLE)
-                        .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
-                        .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
-                    }
-                    newDesc.setNormalizationEnabled(false);
-                }
                 try {
                     if (splits == null) {
                         admin.createTable(newDesc.build());
@@ -2351,8 +2341,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Special case for call during drop table to ensure that the empty column family exists.
             // In this, case we only include the table header row, as until we add schemaBytes and tableBytes
             // as args to this function, we have no way of getting them in this case.
-            // Also used to update table descriptor property values on ALTER TABLE t SET prop=xxx
             // TODO: change to  if (tableMetaData.isEmpty()) once we pass through schemaBytes and tableBytes
+            // Also, could be used to update table descriptor property values on ALTER TABLE t SET prop=xxx
             if ((tableMetaData.isEmpty()) || (tableMetaData.size() == 1 && tableMetaData.get(0).isEmpty())) {
                 if (modifyHTable) {
                     sendHBaseMetaData(tableDescriptors, pollingNeeded);
@@ -2618,16 +2608,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         if (!family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY)
                             .setMessage("Column Family: " + family + ", Property: " + propName)
-                            .setSchemaName(table.getSchemaName().getString())
-                            .setTableName(table.getTableName().getString())
-                            .build()
-                            .buildException();
-                        }
-                        if (propName.equals(TableDescriptorBuilder.NORMALIZATION_ENABLED)
-                                && (Boolean)propValue == true
-                                && table.getPropertyValues().containsKey(PhoenixDatabaseMetaData.SALT_BUCKETS)
-                                && Integer.parseInt(table.getPropertyValues().get(PhoenixDatabaseMetaData.SALT_BUCKETS)) > 0) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_NORMALIZER_ON_SALTED_TABLE)
                             .setSchemaName(table.getSchemaName().getString())
                             .setTableName(table.getTableName().getString())
                             .build()
