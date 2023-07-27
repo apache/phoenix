@@ -38,6 +38,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Properties;
 
 import org.apache.phoenix.compile.ExplainPlan;
@@ -46,6 +47,8 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryBuilder;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -85,7 +88,6 @@ public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
         }
     }
-
 
     @Test
     public void testDescMultiOrderByExpr() throws Exception {
@@ -993,6 +995,57 @@ public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
                 linesCount += 1;
             }
             assertEquals(expected, linesCount);
+        }
+    }
+
+    @Test
+    public void testPhoenix6999() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateUniqueName();
+        String descTableName = "TBL_" + generateUniqueName();
+
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullDescTableName =
+                SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, descTableName);
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+                Statement stmt = conn.createStatement()) {
+            conn.setAutoCommit(false);
+            String ddl =
+                    "CREATE TABLE " + fullTableName
+                            + "(k1 varchar primary key, v1 varchar, v2 varchar)";
+            stmt.execute(ddl);
+            ddl =
+                    "CREATE TABLE " + fullDescTableName
+                            + "(k1 varchar primary key desc, v1 varchar, v2 varchar)";
+            stmt.execute(ddl);
+            stmt.execute("upsert into " + fullTableName + " values ('a','a','a')");
+            stmt.execute("upsert into " + fullTableName + " values ('b','b','b')");
+            stmt.execute("upsert into " + fullTableName + " values ('c','c','c')");
+            stmt.execute("upsert into " + fullDescTableName + " values ('a','a','a')");
+            stmt.execute("upsert into " + fullDescTableName + " values ('b','b','b')");
+            stmt.execute("upsert into " + fullDescTableName + " values ('c','c','c')");
+            conn.commit();
+
+            String query = "SELECT  *  from " + fullTableName + " where k1='b' order by k1 asc";
+            ResultSet rs = stmt.executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+
+            query = "SELECT  *  from " + fullTableName + " where k1='b' order by k1 desc";
+            rs = stmt.executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+
+            query = "SELECT  *  from " + fullDescTableName + " where k1='b' order by k1 asc";
+            rs = stmt.executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+
+            query = "SELECT  *  from " + fullDescTableName + " where k1='b' order by k1 desc";
+            rs = stmt.executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
         }
     }
 
