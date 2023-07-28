@@ -220,6 +220,8 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.metrics.MetricsMetadataSource;
+import org.apache.phoenix.schema.metrics.MetricsMetadataSourceFactory;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.schema.types.PBinary;
@@ -556,6 +558,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     // before 4.15, so that we can rollback the upgrade to 4.15 if required
     private boolean allowSplittableSystemCatalogRollback;
 
+    private MetricsMetadataSource metricsSource;
+
     public static void setFailConcurrentMutateAddColumnOneTimeForTesting(boolean fail) {
         failConcurrentMutateAddColumnOneTimeForTesting = fail;
     }
@@ -596,6 +600,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
         Metrics.ensureConfigured();
+        metricsSource = MetricsMetadataSourceFactory.getMetadataMetricsSource();
     }
 
     @Override

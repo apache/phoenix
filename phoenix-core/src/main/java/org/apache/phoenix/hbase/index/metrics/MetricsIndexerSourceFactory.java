@@ -21,7 +21,7 @@ package org.apache.phoenix.hbase.index.metrics;
  */
 public class MetricsIndexerSourceFactory {
   private static final MetricsIndexerSourceFactory INSTANCE = new MetricsIndexerSourceFactory();
-  private MetricsIndexerSource indexerSource;
+  private volatile MetricsIndexerSource indexerSource;
   private GlobalIndexCheckerSource globalIndexCheckerSource;
 
   private MetricsIndexerSourceFactory() {}
