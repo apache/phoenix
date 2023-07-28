@@ -49,6 +49,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -58,6 +59,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseRegionScanner;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.filter.PagedFilter;
+import org.apache.phoenix.filter.UnverifiedRowFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
@@ -142,12 +144,12 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         private GlobalIndexCheckerSource metricsSource;
         private long rowCount = 0;
         private long pageSize = Long.MAX_VALUE;
-        private boolean restartScanDueToPageFilterRemoval = false;
         private boolean hasMore;
         private double loggingPercent;
         private Random random;
         private String indexName;
         private long pageSizeMs;
+        private boolean initialized = false;
 
         public GlobalIndexScanner(RegionCoprocessorEnvironment env,
                                   Scan scan,
@@ -193,8 +195,62 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
             return scanner.getMaxResultSize();
         }
 
+        private void init() throws IOException {
+            PageFilter pageFilter = removePageFilter(scan);
+            if (pageFilter != null) {
+                pageSize = pageFilter.getPageSize();
+                scanner.close();
+                scanner = ((BaseRegionScanner)delegate).getNewRegionScanner(scan);
+            }
+            else {
+                pageSize = Long.MAX_VALUE;
+            }
+
+            Filter filter = scan.getFilter();
+            Filter delegateFilter = filter;
+            if (filter instanceof PagedFilter) {
+                delegateFilter = ((PagedFilter) filter).getDelegateFilter();
+            }
+            if (shouldCreateUnverifiedRowFilter(delegateFilter)) {
+                // we need to ensure that the PagingFilter remains the
+                // topmost (or outermost) filter so wrap the UnverifiedRowFilter
+                // around the original delegate and then set the UnverifiedRowFilter
+                // as the delegate of the PagingFilter
+                UnverifiedRowFilter unverifiedRowFilter =
+                        new UnverifiedRowFilter(delegateFilter, emptyCF, emptyCQ);
+                if (filter instanceof PagedFilter) {
+                    ((PagedFilter) filter).setDelegateFilter(unverifiedRowFilter);
+                } else {
+                    scan.setFilter(unverifiedRowFilter);
+                }
+                scanner.close();
+                scanner = ((BaseRegionScanner) delegate).getNewRegionScanner(scan);
+            }
+        }
+
+        private boolean shouldCreateUnverifiedRowFilter(Filter delegateFilter) {
+            if (delegateFilter == null) {
+                return false;
+            }
+            Filter wrappedFilter = delegateFilter;
+            if (delegateFilter instanceof FilterList) {
+                List<Filter> filters = ((FilterList) delegateFilter).getFilters();
+                wrappedFilter = filters.get(0);
+            }
+            // Optimization since FirstKeyOnlyFilter and EmptyColumnOnlyFilter
+            // always include the empty column in the scan result
+            if (wrappedFilter instanceof FirstKeyOnlyFilter) {
+                return false;
+            }
+            return true;
+        }
+
         public boolean next(List<Cell> result, boolean raw) throws IOException {
             try {
+                if (!initialized) {
+                    init();
+                    initialized = true;
+                }
                 long startTime = EnvironmentEdgeManager.currentTimeMillis();
                 do {
                     if (raw) {
@@ -331,11 +387,6 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
 
         private void repairIndexRows(byte[] indexRowKey, long ts, List<Cell> row) throws IOException {
             if (buildIndexScan == null) {
-                PageFilter pageFilter = removePageFilter(scan);
-                if (pageFilter != null) {
-                    pageSize = pageFilter.getPageSize();
-                    restartScanDueToPageFilterRemoval = true;
-                }
                 buildIndexScan = new Scan();
                 indexScan = new Scan(scan);
                 singleRowIndexScan = new Scan(scan);
@@ -384,20 +435,10 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
                 // Skip this unverified row (i.e., do not return it to the client). Just retuning empty row is
                 // sufficient to do that
                 row.clear();
-                if (restartScanDueToPageFilterRemoval) {
-                    scanner.close();
-                    indexScan.withStartRow(indexRowKey, false);
-                    scanner = ((BaseRegionScanner)delegate).getNewRegionScanner(indexScan);
-                    hasMore = true;
-                    // Set restartScanDueToPageFilterRemoval to false as we do not restart the scan unnecessarily next time
-                    restartScanDueToPageFilterRemoval = false;
-                }
                 return;
             }
             // An index row has been built. Close the current scanner as the newly built row will not be visible to it
             scanner.close();
-            // Set restartScanDueToPageFilterRemoval to false as we do not restart the scan unnecessarily next time
-            restartScanDueToPageFilterRemoval = false;
             if (code == RebuildReturnCode.NO_INDEX_ROW.getValue()) {
                 // This means there exists a data table row for the data row key derived from this unverified index row
                 // but the data table row does not point back to the index row.
@@ -465,11 +506,8 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
                 singleRowScanner.next(row);
                 singleRowScanner.close();
                 if (row.isEmpty()) {
-                    LOG.error("Could not find the newly rebuilt index row with row key " +
-                            Bytes.toStringBinary(indexRowKey) + " for table " +
-                            region.getRegionInfo().getTable().getNameAsString());
-                    // This was not expected. The new build index row must be deleted before opening the new scanner
-                    // possibly by compaction
+                    // This can happen if the unverified row matches the filter
+                    // but after repair the verified row doesn't match the filter
                     return;
                 }
                 if (isDummy(row)) {
