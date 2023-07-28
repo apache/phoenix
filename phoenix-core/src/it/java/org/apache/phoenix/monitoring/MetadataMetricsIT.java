@@ -43,4 +43,112 @@ public class MetadataMetricsIT extends ParallelStatsDisabledIT {
         props.put(QueryServices.RENEW_LEASE_ENABLED, String.valueOf(false));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
+
+    @Test
+    public void testCreateTableMetrics() {
+        MetricsMetadataSourceImpl metadataSource = new MetricsMetadataSourceImpl();
+        DynamicMetricsRegistry registry = metadataSource.getMetricsRegistry();
+
+        metadataSource.incrementCreateTableCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.CREATE_TABLE_COUNT, registry);
+    }
+
+    @Test
+    public void testCreateViewMetrics() {
+        MetricsMetadataSourceImpl metadataSource = new MetricsMetadataSourceImpl();
+        DynamicMetricsRegistry registry = metadataSource.getMetricsRegistry();
+
+        metadataSource.incrementCreateViewCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.CREATE_VIEW_COUNT, registry);
+    }
+
+    @Test
+    public void testCreateIndexMetrics() {
+        MetricsMetadataSourceImpl metadataSource = new MetricsMetadataSourceImpl();
+        DynamicMetricsRegistry registry = metadataSource.getMetricsRegistry();
+
+        metadataSource.incrementCreateIndexCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.CREATE_INDEX_COUNT, registry);
+    }
+
+    @Test
+    public void testCreateSchemaMetrics() {
+        MetricsMetadataSourceImpl metadataSource = new MetricsMetadataSourceImpl();
+        DynamicMetricsRegistry registry = metadataSource.getMetricsRegistry();
+
+        metadataSource.incrementCreateSchemaCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.CREATE_SCHEMA_COUNT, registry);
+    }
+
+    @Test
+    public void testCreateFunctionMetrics() {
+        MetricsMetadataSourceImpl metadataSource = new MetricsMetadataSourceImpl();
+        DynamicMetricsRegistry registry = metadataSource.getMetricsRegistry();
+
+        metadataSource.incrementCreateFunctionCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.CREATE_FUNCTION_COUNT, registry);
+    }
+
+    @Test
+    public void testAlterAddColumnsMetrics() {
+        MetricsMetadataSourceImpl metadataSource = new MetricsMetadataSourceImpl();
+        DynamicMetricsRegistry registry = metadataSource.getMetricsRegistry();
+
+        metadataSource.incrementAlterAddColumnCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.ALTER_ADD_COLUMN_COUNT, registry);
+    }
+
+    @Test
+    public void testAlterDropColumnsMetrics() {
+        MetricsMetadataSourceImpl metadataSource = new MetricsMetadataSourceImpl();
+        DynamicMetricsRegistry registry = metadataSource.getMetricsRegistry();
+
+        metadataSource.incrementAlterDropColumnCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.ALTER_DROP_COLUMN_COUNT, registry);
+    }
+
+    @Test
+    public void testDropTableMetrics() {
+        MetricsMetadataSourceImpl metadataSource = new MetricsMetadataSourceImpl();
+        DynamicMetricsRegistry registry = metadataSource.getMetricsRegistry();
+
+        metadataSource.incrementDropTableCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.DROP_TABLE_COUNT, registry);
+    }
+
+    @Test
+    public void testDropViewMetrics() {
+        MetricsMetadataSourceImpl metadataSource = new MetricsMetadataSourceImpl();
+        DynamicMetricsRegistry registry = metadataSource.getMetricsRegistry();
+
+        metadataSource.incrementDropViewCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.DROP_VIEW_COUNT, registry);
+    }
+
+    @Test
+    public void testDropIndexMetrics() {
+        MetricsMetadataSourceImpl metadataSource = new MetricsMetadataSourceImpl();
+        DynamicMetricsRegistry registry = metadataSource.getMetricsRegistry();
+
+        metadataSource.incrementDropIndexCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.DROP_INDEX_COUNT, registry);
+    }
+
+    @Test
+    public void testDropSchemaMetrics() {
+        MetricsMetadataSourceImpl metadataSource = new MetricsMetadataSourceImpl();
+        DynamicMetricsRegistry registry = metadataSource.getMetricsRegistry();
+
+        metadataSource.incrementDropSchemaCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.DROP_SCHEMA_COUNT, registry);
+    }
+
+    @Test
+    public void testDropFunctionMetrics() {
+        MetricsMetadataSourceImpl metadataSource = new MetricsMetadataSourceImpl();
+        DynamicMetricsRegistry registry = metadataSource.getMetricsRegistry();
+
+        metadataSource.incrementDropFunctionCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.DROP_FUNCTION_COUNT, registry);
+    }
 }
