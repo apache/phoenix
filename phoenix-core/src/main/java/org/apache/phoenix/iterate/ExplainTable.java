@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.iterate;
 
-import java.io.IOException;
-import java.sql.SQLException;
 import java.text.Format;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -29,11 +27,9 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
