@@ -23,15 +23,16 @@ import org.apache.hadoop.hbase.client.Scan;
 import java.util.List;
 
 /**
- * Parallel scan list with the list of region locations the scans would be served from.
+ * Scan list to be retrieved for the BaseResultIterator with the list of region locations the scans
+ * would be served from.
  */
-public class ParallelScansWithRegionLocations {
+public class ScansWithRegionLocations {
 
     private final List<List<Scan>> scans;
     private final List<HRegionLocation> regionLocations;
 
-    public ParallelScansWithRegionLocations(List<List<Scan>> scans,
-                                            List<HRegionLocation> regionLocations) {
+    public ScansWithRegionLocations(List<List<Scan>> scans,
+                                    List<HRegionLocation> regionLocations) {
         this.scans = scans;
         this.regionLocations = regionLocations;
     }

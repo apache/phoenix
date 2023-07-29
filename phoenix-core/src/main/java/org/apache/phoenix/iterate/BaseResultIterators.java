@@ -568,9 +568,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         
         initializeScan(plan, perScanLimit, offset, scan);
         this.useStatsForParallelization = PhoenixConfigurationUtil.getStatsForParallelizationProp(context.getConnection(), table);
-        ParallelScansWithRegionLocations parallelScansWithRegionLocations = getParallelScans();
-        this.scans = parallelScansWithRegionLocations.getScans();
-        this.regionLocations = parallelScansWithRegionLocations.getRegionLocations();
+        ScansWithRegionLocations scansWithRegionLocations = getParallelScans();
+        this.scans = scansWithRegionLocations.getScans();
+        this.regionLocations = scansWithRegionLocations.getRegionLocations();
         List<KeyRange> splitRanges = Lists.newArrayListWithExpectedSize(scans.size() * ESTIMATED_GUIDEPOSTS_PER_REGION);
         for (List<Scan> scanList : scans) {
             for (Scan aScan : scanList) {
@@ -676,7 +676,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     gps.getGuidePostTimestamps()[guideIndex]);
     }
 
-    private ParallelScansWithRegionLocations getParallelScans() throws SQLException {
+    private ScansWithRegionLocations getParallelScans() throws SQLException {
         // If the scan boundaries are not matching with scan in context that means we need to get
         // parallel scans for the chunk after split/merge.
         if (!ScanUtil.isContextScan(scan, context)) {
@@ -693,7 +693,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
      * @return
      * @throws SQLException
      */
-    private ParallelScansWithRegionLocations getParallelScans(Scan scan) throws SQLException {
+    private ScansWithRegionLocations getParallelScans(Scan scan) throws SQLException {
         List<HRegionLocation> regionLocations = getRegionBoundaries(scanGrouper);
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         int regionIndex = 0;
@@ -730,7 +730,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             parallelScans.addNewScan(plan, newScan, true, regionLocation);
             regionIndex++;
         }
-        return new ParallelScansWithRegionLocations(parallelScans.getParallelScans(),
+        return new ScansWithRegionLocations(parallelScans.getParallelScans(),
                 parallelScans.getRegionLocations());
     }
 
@@ -928,7 +928,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
      * @return list of parallel scans to run for a given query.
      * @throws SQLException
      */
-    private ParallelScansWithRegionLocations getParallelScans(byte[] startKey, byte[] stopKey)
+    private ScansWithRegionLocations getParallelScans(byte[] startKey, byte[] stopKey)
             throws SQLException {
         ScanRanges scanRanges = context.getScanRanges();
         PTable table = getTable();
@@ -943,7 +943,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     GuidePostsInfo.NO_GUIDEPOST.isEmptyGuidePost(), parallelScans, estimates,
                     Long.MAX_VALUE, false);
             // we don't retrieve region location for the given scan range
-            return new ParallelScansWithRegionLocations(parallelScans, null);
+            return new ScansWithRegionLocations(parallelScans, null);
         }
         byte[] sampleProcessedSaltByte =
                 SchemaUtil.processSplit(new byte[] { 0 }, table.getPKColumns());
@@ -1207,7 +1207,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             if (stream != null) Closeables.closeQuietly(stream);
         }
         sampleScans(parallelScanCollector.getParallelScans(),this.plan.getStatement().getTableSamplingRate());
-        return new ParallelScansWithRegionLocations(parallelScanCollector.getParallelScans(),
+        return new ScansWithRegionLocations(parallelScanCollector.getParallelScans(),
                 parallelScanCollector.getRegionLocations());
     }
 
