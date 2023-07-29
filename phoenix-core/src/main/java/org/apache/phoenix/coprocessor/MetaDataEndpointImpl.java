@@ -220,6 +220,8 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.metrics.MetricsMetadataSource;
+import org.apache.phoenix.schema.metrics.MetricsMetadataSourceFactory;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.schema.types.PBinary;
@@ -556,6 +558,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     // before 4.15, so that we can rollback the upgrade to 4.15 if required
     private boolean allowSplittableSystemCatalogRollback;
 
+    private MetricsMetadataSource metricsSource;
+
     public static void setFailConcurrentMutateAddColumnOneTimeForTesting(boolean fail) {
         failConcurrentMutateAddColumnOneTimeForTesting = fail;
     }
@@ -596,6 +600,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
         Metrics.ensureConfigured();
+        metricsSource = MetricsMetadataSourceFactory.getMetadataMetricsSource();
     }
 
     @Override
@@ -2181,6 +2186,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     builder.setTable(PTableImpl.toProto(newTable));
                 }
                 done.run(builder.build());
+
+                updateCreateTableDdlSuccessMetrics(tableType);
+                LOGGER.info("{} created successfully, tableName: {}", tableType, fullTableName);
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
@@ -2188,6 +2196,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             LOGGER.error("createTable failed", t);
             ProtobufUtil.setControllerException(controller,
                     ServerUtil.createIOException(fullTableName, t));
+        }
+    }
+
+    private void updateCreateTableDdlSuccessMetrics(PTableType tableType) {
+        if (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) {
+            metricsSource.incrementCreateTableCount();
+        } else if (tableType == PTableType.VIEW) {
+            metricsSource.incrementCreateViewCount();
+        } else if (tableType == PTableType.INDEX) {
+            metricsSource.incrementCreateIndexCount();
         }
     }
 
@@ -2252,6 +2270,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
             schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
             tableOrViewName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+            String fullTableName = SchemaUtil.getTableName(schemaName, tableOrViewName);
             PTableType pTableType = PTableType.fromSerializedValue(tableType);
             // Disallow deletion of a system table
             if (pTableType == PTableType.SYSTEM) {
@@ -2436,6 +2455,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
                 done.run(MetaDataMutationResult.toProto(result));
                 dropTableStats = true;
+
+                updateDropTableDdlSuccessMetrics(pTableType);
+                LOGGER.info("{} dropped successfully, tableName: {}", pTableType, fullTableName);
             } finally {
                 ServerUtil.releaseRowLocks(locks);
                 if (dropTableStats) {
@@ -2450,6 +2472,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
           LOGGER.error("dropTable failed", t);
           ProtobufUtil.setControllerException(controller, ServerUtil.createIOException(
                   SchemaUtil.getTableName(schemaName, tableOrViewName), t));
+        }
+    }
+
+    private void updateDropTableDdlSuccessMetrics(PTableType pTableType) {
+        if (pTableType == PTableType.TABLE || pTableType == PTableType.SYSTEM) {
+            metricsSource.incrementDropTableCount();
+        } else if (pTableType == PTableType.VIEW) {
+            metricsSource.incrementDropViewCount();
+        } else if (pTableType == PTableType.INDEX) {
+            metricsSource.incrementDropIndexCount();
         }
     }
 
@@ -3118,6 +3150,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     request.getClientVersion(), parentTable, addingColumns);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
+
+                if (result.getMutationCode() == MutationCode.TABLE_ALREADY_EXISTS) {
+                    metricsSource.incrementAlterAddColumnCount();
+                    LOGGER.info("Column(s) added successfully, tableName: {}",
+                            result.getTable().getTableName());
+                }
             }
         } catch (Throwable e) {
             LOGGER.error("Add column failed: ", e);
@@ -3256,6 +3294,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     request.getClientVersion(), parentTable, true);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
+
+                if (result.getMutationCode() == MutationCode.TABLE_ALREADY_EXISTS) {
+                    metricsSource.incrementAlterDropColumnCount();
+                    LOGGER.info("Column(s) dropped successfully, tableName: {}",
+                            result.getTable().getTableName());
+                }
             }
         } catch (Throwable e) {
             LOGGER.error("Drop column failed: ", e);
@@ -3324,6 +3368,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     return result;
                 }
+                metricsSource.incrementDropIndexCount();
+                LOGGER.info("INDEX dropped successfully, tableName: {}",
+                        result.getTable().getTableName());
+
                 // there should be no child links to delete since we are just dropping an index
                 if (!childLinksMutations.isEmpty()) {
                     LOGGER.error("Found unexpected child link mutations while dropping an index "
@@ -3985,7 +4033,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 builder.setReturnCode(MetaDataProtos.MutationCode.FUNCTION_NOT_FOUND);
                 builder.setMutationTime(currentTimeStamp);
                 done.run(builder.build());
-                return;
+
+                metricsSource.incrementCreateFunctionCount();
+                LOGGER.info("FUNCTION created successfully, functionName: {}",
+                        Bytes.toString(functionName));
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
@@ -4038,7 +4089,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 }
 
                 done.run(MetaDataMutationResult.toProto(result));
-                return;
+
+                metricsSource.incrementDropFunctionCount();
+                LOGGER.info("FUNCTION dropped successfully, functionName: {}",
+                        Bytes.toString(functionName));
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
@@ -4153,7 +4207,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 builder.setReturnCode(MetaDataProtos.MutationCode.SCHEMA_NOT_FOUND);
                 builder.setMutationTime(currentTimeStamp);
                 done.run(builder.build());
-                return;
+
+                metricsSource.incrementCreateSchemaCount();
+                LOGGER.info("SCHEMA created successfully, schemaName: {}", schemaName);
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
@@ -4197,7 +4253,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     metaDataCache.put(ptr, newDeletedSchemaMarker(currentTime));
                 }
                 done.run(MetaDataMutationResult.toProto(result));
-                return;
+
+                metricsSource.incrementDropSchemaCount();
+                LOGGER.info("SCHEMA dropped successfully, schemaName: {}", schemaName);
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
