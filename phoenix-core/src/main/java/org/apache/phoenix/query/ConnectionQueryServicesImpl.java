@@ -3626,7 +3626,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             + "before any other command");
                                 }
                             }
-                            scheduleRenewLeaseTasks();
                             success = true;
                         } catch (RetriableUpgradeException e) {
                             // Set success to true and don't set the exception as an initializationException,
@@ -3641,6 +3640,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 initializationException = new SQLException(e);
                             }
                         } finally {
+                            if (success) {
+                                scheduleRenewLeaseTasks();
+                            }
                             try {
                                 if (!success && hConnectionEstablished) {
                                     closeConnection();
