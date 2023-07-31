@@ -113,7 +113,7 @@
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jsr305.version>2.0.1</jsr305.version>
     <snappy.version>0.3</snappy.version>
-    <commons-codec.version>1.7</commons-codec.version>
+    <commons-codec.version>1.16.0</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
     <collections.version>3.2.2</collections.version>
     <jodatime.version>2.10.5</jodatime.version>
