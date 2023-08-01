@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.iterate;
 
-import java.io.IOException;
-import java.sql.SQLException;
 import java.text.Format;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -29,11 +27,9 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
@@ -126,65 +122,10 @@ public abstract class ExplainTable {
         return buf.toString();
     }
 
-    /**
-     * Get regions that represent the given range of start and end key for the given table, and
-     * all the regions to the regionLocations list.
-     *
-     * @param tableName the table name.
-     * @param startKey the start rowkey.
-     * @param endKey the end rowkey.
-     * @param includeEndKey true if end key needs to be included.
-     * @param reload true if reload from meta is necessary.
-     * @param regionBoundaries set of region boundaries to get the unique list of region locations.
-     * @param regionLocations the list of region locations as output.
-     * @throws IOException if something goes wrong while creating connection or querying region
-     * locations.
-     */
-    private void getRegionsInRange(final byte[] tableName,
-                                   final byte[] startKey,
-                                   final byte[] endKey,
-                                   final boolean includeEndKey,
-                                   final boolean reload,
-                                   Set<RegionBoundary> regionBoundaries,
-                                   List<HRegionLocation> regionLocations)
-            throws IOException, SQLException {
-        final boolean endKeyIsEndOfTable = Bytes.equals(endKey, HConstants.EMPTY_END_ROW);
-        if ((Bytes.compareTo(startKey, endKey) > 0) && !endKeyIsEndOfTable) {
-            throw new IllegalArgumentException(
-                    "Invalid range: " + Bytes.toStringBinary(startKey) + " > " +
-                            Bytes.toStringBinary(endKey));
-        }
-        byte[] currentKey = startKey;
-        try (Table table = context.getConnection().getQueryServices().getTable(tableName)) {
-            // include all regions that include key range from the given start key
-            // and end key
-            do {
-                HRegionLocation regionLocation =
-                        table.getRegionLocator().getRegionLocation(currentKey, reload);
-                RegionBoundary regionBoundary =
-                        new RegionBoundary(regionLocation.getRegion().getStartKey(),
-                                regionLocation.getRegion().getEndKey());
-                if (!regionBoundaries.contains(regionBoundary)) {
-                    regionLocations.add(regionLocation);
-                    regionBoundaries.add(regionBoundary);
-                }
-                currentKey = regionLocation.getRegion().getEndKey();
-                // condition1 = currentKey != END_ROW_KEY
-                // condition2 = endKeyIsEndOfTable == true
-                // condition3 = currentKey < endKey
-                // condition4 = includeEndKey == true
-                // condition5 = currentKey == endKey
-                // while (condition1 && (condition2 || condition3 || (condition4 && condition5)))
-            } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW)
-                    && (endKeyIsEndOfTable || Bytes.compareTo(currentKey, endKey) < 0
-                    || (includeEndKey && Bytes.compareTo(currentKey, endKey) == 0)));
-        }
-    }
-
     protected void explain(String prefix,
                            List<String> planSteps,
                            ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
-                           List<List<Scan>> scansList) {
+                           List<HRegionLocation> regionLocations) {
         StringBuilder buf = new StringBuilder(prefix);
         ScanRanges scanRanges = context.getScanRanges();
         Scan scan = context.getScan();
@@ -337,7 +278,7 @@ public abstract class ExplainTable {
         if (groupByLimitBytes != null) {
             groupByLimit = (Integer) PInteger.INSTANCE.toObject(groupByLimitBytes);
         }
-        getRegionLocations(planSteps, explainPlanAttributesBuilder, scansList);
+        getRegionLocations(planSteps, explainPlanAttributesBuilder, regionLocations);
         groupBy.explain(planSteps, groupByLimit, explainPlanAttributesBuilder);
         if (scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX) != null) {
             planSteps.add("    SERVER ARRAY ELEMENT PROJECTION");
@@ -352,13 +293,13 @@ public abstract class ExplainTable {
      *
      * @param planSteps list of plan steps to add explain plan output to.
      * @param explainPlanAttributesBuilder explain plan v2 attributes builder instance.
-     * @param scansList list of the list of scans, to be used for parallel scans.
+     * @param regionLocations region locations.
      */
     private void getRegionLocations(List<String> planSteps,
                                     ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
-                                    List<List<Scan>> scansList) {
+                                    List<HRegionLocation> regionLocations) {
         String regionLocationPlan = getRegionLocationsForExplainPlan(explainPlanAttributesBuilder,
-                scansList);
+                regionLocations);
         if (regionLocationPlan.length() > 0) {
             planSteps.add(regionLocationPlan);
         }
@@ -370,25 +311,26 @@ public abstract class ExplainTable {
      * print num of total list size.
      *
      * @param explainPlanAttributesBuilder explain plan v2 attributes builder instance.
-     * @param scansList list of the list of scans, to be used for parallel scans.
+     * @param regionLocationsFromResultIterator region locations.
      * @return region locations to be added to the explain plan output.
      */
     private String getRegionLocationsForExplainPlan(
             ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
-            List<List<Scan>> scansList) {
+            List<HRegionLocation> regionLocationsFromResultIterator) {
+        if (regionLocationsFromResultIterator == null) {
+            return "";
+        }
         try {
             StringBuilder buf = new StringBuilder().append(REGION_LOCATIONS);
             Set<RegionBoundary> regionBoundaries = new HashSet<>();
             List<HRegionLocation> regionLocations = new ArrayList<>();
-            for (List<Scan> scans : scansList) {
-                for (Scan eachScan : scans) {
-                    getRegionsInRange(tableRef.getTable().getPhysicalName().getBytes(),
-                            eachScan.getStartRow(),
-                            eachScan.getStopRow(),
-                            true,
-                            false,
-                            regionBoundaries,
-                            regionLocations);
+            for (HRegionLocation regionLocation : regionLocationsFromResultIterator) {
+                RegionBoundary regionBoundary =
+                        new RegionBoundary(regionLocation.getRegion().getStartKey(),
+                                regionLocation.getRegion().getEndKey());
+                if (!regionBoundaries.contains(regionBoundary)) {
+                    regionLocations.add(regionLocation);
+                    regionBoundaries.add(regionBoundary);
                 }
             }
             int maxLimitRegionLoc = context.getConnection().getQueryServices().getConfiguration()
@@ -410,7 +352,7 @@ public abstract class ExplainTable {
             }
             buf.append(") ");
             return buf.toString();
-        } catch (IOException | SQLException | UnsupportedOperationException e) {
+        } catch (Exception e) {
             LOGGER.error("Explain table unable to add region locations.", e);
             return "";
         }

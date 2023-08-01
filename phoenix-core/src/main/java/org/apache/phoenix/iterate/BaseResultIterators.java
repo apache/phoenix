@@ -154,6 +154,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private static final int ESTIMATED_GUIDEPOSTS_PER_REGION = 20;
     private static final int MIN_SEEK_TO_COLUMN_VERSION = VersionUtil.encodeVersion("0", "98", "12");
     private final List<List<Scan>> scans;
+    private final List<HRegionLocation> regionLocations;
     private final List<KeyRange> splits;
     private final byte[] physicalTableName;
     protected final QueryPlan plan;
@@ -550,7 +551,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         
         initializeScan(plan, perScanLimit, offset, scan);
         this.useStatsForParallelization = PhoenixConfigurationUtil.getStatsForParallelizationProp(context.getConnection(), table);
-        this.scans = getParallelScans();
+        ScansWithRegionLocations scansWithRegionLocations = getParallelScans();
+        this.scans = scansWithRegionLocations.getScans();
+        this.regionLocations = scansWithRegionLocations.getRegionLocations();
         List<KeyRange> splitRanges = Lists.newArrayListWithExpectedSize(scans.size() * ESTIMATED_GUIDEPOSTS_PER_REGION);
         for (List<Scan> scanList : scans) {
             for (Scan aScan : scanList) {
@@ -656,7 +659,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     gps.getGuidePostTimestamps()[guideIndex]);
     }
 
-    private List<List<Scan>> getParallelScans() throws SQLException {
+    private ScansWithRegionLocations getParallelScans() throws SQLException {
         // If the scan boundaries are not matching with scan in context that means we need to get
         // parallel scans for the chunk after split/merge.
         if (!ScanUtil.isContextScan(scan, context)) {
@@ -673,7 +676,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
      * @return
      * @throws SQLException
      */
-    private List<List<Scan>> getParallelScans(Scan scan) throws SQLException {
+    private ScansWithRegionLocations getParallelScans(Scan scan) throws SQLException {
         List<HRegionLocation> regionLocations = getRegionBoundaries(scanGrouper);
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         int regionIndex = 0;
@@ -707,10 +710,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 newScan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER,
                     regionLocation.getServerName().getVersionedBytes());
             }
-            parallelScans.addNewScan(plan, newScan, true);
+            parallelScans.addNewScan(plan, newScan, true, regionLocation);
             regionIndex++;
         }
-        return parallelScans.getParallelScans();
+        return new ScansWithRegionLocations(parallelScans.getParallelScans(),
+                parallelScans.getRegionLocations());
     }
 
     private static class GuidePostEstimate {
@@ -907,7 +911,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
      * @return list of parallel scans to run for a given query.
      * @throws SQLException
      */
-    private List<List<Scan>> getParallelScans(byte[] startKey, byte[] stopKey) throws SQLException {
+    private ScansWithRegionLocations getParallelScans(byte[] startKey, byte[] stopKey)
+            throws SQLException {
         ScanRanges scanRanges = context.getScanRanges();
         PTable table = getTable();
         boolean isLocalIndex = table.getIndexType() == IndexType.LOCAL;
@@ -920,7 +925,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             generateEstimates(scanRanges, table, GuidePostsInfo.NO_GUIDEPOST,
                     GuidePostsInfo.NO_GUIDEPOST.isEmptyGuidePost(), parallelScans, estimates,
                     Long.MAX_VALUE, false);
-            return parallelScans;
+            // we don't retrieve region location for the given scan range
+            return new ScansWithRegionLocations(parallelScans, null);
         }
         byte[] sampleProcessedSaltByte =
                 SchemaUtil.processSplit(new byte[] { 0 }, table.getPKColumns());
@@ -1098,7 +1104,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             }
                             boolean lastOfNew = newScanIdx == newScans.size() - 1;
                             parallelScanCollector.addNewScan(plan, newScan,
-                                gpsComparedToEndKey == 0 && lastOfNew);
+                                gpsComparedToEndKey == 0 && lastOfNew, regionLocation);
                         }
                     }
                     if (newScans.size() > 0) {
@@ -1146,7 +1152,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             regionLocation.getServerName().getVersionedBytes());
                     }
                     boolean lastOfNew = newScanIdx == newScans.size() - 1;
-                    parallelScanCollector.addNewScan(plan, newScan, lastOfNew);
+                    parallelScanCollector.addNewScan(plan, newScan, lastOfNew, regionLocation);
                 }
                 if (newScans.size() > 0) {
                     // Boundary case of no GP in region after delaying adding of estimates
@@ -1184,7 +1190,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             if (stream != null) Closeables.closeQuietly(stream);
         }
         sampleScans(parallelScanCollector.getParallelScans(),this.plan.getStatement().getTableSamplingRate());
-        return parallelScanCollector.getParallelScans();
+        return new ScansWithRegionLocations(parallelScanCollector.getParallelScans(),
+                parallelScanCollector.getRegionLocations());
     }
 
     private void generateEstimates(ScanRanges scanRanges, PTable table, GuidePostsInfo gps,
@@ -1489,7 +1496,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         byte[] startKey = oldScan.getAttribute(SCAN_ACTUAL_START_ROW);
         byte[] endKey = oldScan.getStopRow();
 
-        List<List<Scan>> newNestedScans = this.getParallelScans(startKey, endKey);
+        List<List<Scan>> newNestedScans = this.getParallelScans(startKey, endKey).getScans();
         // Add any concatIterators that were successful so far
         // as we need these to be in order
         addIterator(iterators, concatIterators);
@@ -1688,7 +1695,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
         }
 
-        explain(buf.toString(), planSteps, explainPlanAttributesBuilder, scans);
+        explain(buf.toString(), planSteps, explainPlanAttributesBuilder, regionLocations);
     }
 
     @Override
