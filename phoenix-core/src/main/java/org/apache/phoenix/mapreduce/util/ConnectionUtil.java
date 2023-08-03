@@ -25,92 +25,117 @@ import java.util.Properties;
 import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * Utility class to return a {@link Connection} .
  */
 public class ConnectionUtil {
 
+    private static String TEST_PARAM =
+            PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 
     /**
      * Retrieve the configured input Connection.
-     *
      * @param conf configuration containing connection information
      * @return the configured input connection
      */
     public static Connection getInputConnection(final Configuration conf) throws SQLException {
         return getInputConnection(conf, new Properties());
     }
-    
+
     /**
      * Retrieve the configured input Connection.
-     *
      * @param conf configuration containing connection information
      * @param props custom connection properties
      * @return the configured input connection
      */
-    public static Connection getInputConnection(final Configuration conf , final Properties props) throws SQLException {
+    public static Connection getInputConnection(final Configuration conf, final Properties props)
+            throws SQLException {
         Preconditions.checkNotNull(conf);
-		return getConnection(PhoenixConfigurationUtil.getInputCluster(conf),
-				PhoenixConfigurationUtil.getClientPort(conf),
-				PhoenixConfigurationUtil.getZNodeParent(conf),
-				PropertiesUtil.combineProperties(props, conf));
+        String zkQuorumOverride = PhoenixConfigurationUtil.getInputClusterZkQuorum(conf);
+        if (zkQuorumOverride != null) {
+            return DriverManager.getConnection("jdbc:phoenix+zk:" + zkQuorumOverride,
+                PropertiesUtil.combineProperties(props, conf));
+        } else {
+            // FIXME find some better way to get tests working
+            String zkQuorumForTest = PhoenixConfigurationUtil.getZKQuorum(conf);
+            if (zkQuorumForTest != null && (zkQuorumForTest.contains(TEST_PARAM)
+                    || zkQuorumForTest.equals(PhoenixRuntime.CONNECTIONLESS))) {
+                return DriverManager.getConnection("jdbc:phoenix+zk:" + zkQuorumForTest,
+                    PropertiesUtil.combineProperties(props, conf));
+            }
+            return DriverManager.getConnection("jdbc:phoenix",
+                PropertiesUtil.combineProperties(props, conf));
+        }
     }
 
     /**
      * Create the configured output Connection.
-     *
      * @param conf configuration containing the connection information
      * @return the configured output connection
      */
     public static Connection getOutputConnection(final Configuration conf) throws SQLException {
         return getOutputConnection(conf, new Properties());
     }
-    
+
     /**
      * Create the configured output Connection.
-     *
      * @param conf configuration containing the connection information
      * @return the configured output connection
      */
-    public static Connection getOutputConnectionWithoutTheseProps(final Configuration conf, Set<String> ignoreTheseProps) throws SQLException {
+    public static Connection getOutputConnectionWithoutTheseProps(final Configuration conf,
+            Set<String> ignoreTheseProps) throws SQLException {
         return getOutputConnection(conf, new Properties(), ignoreTheseProps);
     }
-    
+
     /**
      * Create the configured output Connection.
-     *
      * @param conf configuration containing the connection information
      * @param props custom connection properties
      * @return the configured output connection
      */
-    public static Connection getOutputConnection(final Configuration conf, Properties props) throws SQLException {
-        return getOutputConnection(conf, props, Collections.<String>emptySet());
+    public static Connection getOutputConnection(final Configuration conf, Properties props)
+            throws SQLException {
+        return getOutputConnection(conf, props, Collections.<String> emptySet());
     }
-    
-    public static Connection getOutputConnection(final Configuration conf, Properties props, Set<String> withoutTheseProps) throws SQLException {
+
+    public static Connection getOutputConnection(final Configuration conf, Properties props,
+            Set<String> withoutTheseProps) throws SQLException {
         Preconditions.checkNotNull(conf);
-		return getConnection(PhoenixConfigurationUtil.getOutputCluster(conf),
-				PhoenixConfigurationUtil.getClientPort(conf),
-				PhoenixConfigurationUtil.getZNodeParent(conf),
-				PropertiesUtil.combineProperties(props, conf, withoutTheseProps));
+        String zkQuorumOverride = PhoenixConfigurationUtil.getOutputClusterZkQuorum(conf);
+        if (zkQuorumOverride != null) {
+            return DriverManager.getConnection("jdbc:phoenix+zk:" + zkQuorumOverride,
+                PropertiesUtil.combineProperties(props, conf));
+        } else {
+            // FIXME find some better way to get tests working
+            String zkQuorumForTest = PhoenixConfigurationUtil.getZKQuorum(conf);
+            if (zkQuorumForTest != null && (zkQuorumForTest.contains(TEST_PARAM)
+                    || zkQuorumForTest.equals(PhoenixRuntime.CONNECTIONLESS))) {
+                return DriverManager.getConnection("jdbc:phoenix:" + zkQuorumForTest,
+                    PropertiesUtil.combineProperties(props, conf));
+            }
+            return DriverManager.getConnection("jdbc:phoenix",
+                PropertiesUtil.combineProperties(props, conf));
+        }
     }
 
     /**
      * Returns the {@link Connection} from a ZooKeeper cluster string.
-     *
      * @param quorum a ZooKeeper quorum connection string
      * @param clientPort a ZooKeeper client port
      * @param znodeParent a zookeeper znode parent
      * @return a Phoenix connection to the given connection string
      */
-    private static Connection getConnection(final String quorum, final Integer clientPort, final String znodeParent, Properties props) throws SQLException {
+    @Deprecated
+    private static Connection getConnection(final String quorum, final Integer clientPort,
+            final String znodeParent, Properties props) throws SQLException {
         Preconditions.checkNotNull(quorum);
-        return DriverManager.getConnection(QueryUtil.getUrl(quorum, clientPort, znodeParent), props);
+        return DriverManager.getConnection(QueryUtil.getUrl(quorum, clientPort, znodeParent),
+            props);
     }
 
 }

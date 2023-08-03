@@ -575,12 +575,15 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         return configuration.get(OUTPUT_TABLE_NAME);
     }
-    
+
     /**
-     * Returns the ZooKeeper quorum string for the HBase cluster a Phoenix MapReduce job will read from
+     * Returns the ZooKeeper quorum string for the HBase cluster a Phoenix MapReduce job will read
+     * from. If MAPREDUCE_OUTPUT_CLUSTER_QUORUM is not set, then it returns the value of 
+     * HConstants.ZOOKEEPER_QUORUM
      * @param configuration
      * @return ZooKeeper quorum string
      */
+    @Deprecated
     public static String getInputCluster(final Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         String quorum = configuration.get(MAPREDUCE_INPUT_CLUSTER_QUORUM);
@@ -591,10 +594,35 @@ public final class PhoenixConfigurationUtil {
     }
 
     /**
-     * Returns the ZooKeeper quorum string for the HBase cluster a Phoenix MapReduce job will write to
+     * Returns the ZooKeeper quorum string for the HBase cluster a Phoenix MapReduce job will 
+     * read from
+     * @param configuration
+     * @return ZooKeeper quorum string if defined, null otherwise
+     */
+    public static String getInputClusterZkQuorum(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(MAPREDUCE_INPUT_CLUSTER_QUORUM);
+    }
+
+    /**
+     * Returns the value of HConstants.ZOOKEEPER_QUORUM.
+     * For tests only
+     * @param configuration
+     * @return ZooKeeper quorum string if defined, null otherwise
+     */
+    public static String getZKQuorum(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(HConstants.ZOOKEEPER_QUORUM);
+    }
+    
+    /**
+     * Returns the ZooKeeper quorum string for the HBase cluster a Phoenix MapReduce job will write
+     * to. If MAPREDUCE_OUTPUT_CLUSTER_QUORUM is not set, then it returns the value of 
+     * HConstants.ZOOKEEPER_QUORUM
      * @param configuration
      * @return ZooKeeper quorum string
      */
+    @Deprecated
     public static String getOutputCluster(final Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         String quorum = configuration.get(MAPREDUCE_OUTPUT_CLUSTER_QUORUM);
@@ -603,12 +631,23 @@ public final class PhoenixConfigurationUtil {
         }
         return quorum;
     }
-    
+
+    /**
+     * Returns the ZooKeeper quorum override MAPREDUCE_OUTPUT_CLUSTER_QUORUM for mapreduce jobs 
+     * @param configuration
+     * @return ZooKeeper quorum string if defined, null otherwise
+     */
+    public static String getOutputClusterZkQuorum(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(MAPREDUCE_OUTPUT_CLUSTER_QUORUM);
+    }
+
     /**
      * Returns the HBase Client Port
      * @param configuration
      * @return
      */
+    @Deprecated
     public static Integer getClientPort(final Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         String clientPortString = configuration.get(HConstants.ZOOKEEPER_CLIENT_PORT);
@@ -620,6 +659,7 @@ public final class PhoenixConfigurationUtil {
      * @param configuration
      * @return
      */
+    @Deprecated
     public static String getZNodeParent(final Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(HConstants.ZOOKEEPER_ZNODE_PARENT);

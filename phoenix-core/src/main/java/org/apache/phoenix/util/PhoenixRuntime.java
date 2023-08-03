@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.util;
 
-import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
-import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.schema.types.PDataType.ARRAY_TYPE_SUFFIX;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -46,14 +46,6 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import javax.annotation.Nullable;
-
-import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
-import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
-import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
-import org.apache.phoenix.thirdparty.org.apache.commons.cli.HelpFormatter;
-import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
-import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
-import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
 
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.hadoop.hbase.Cell;
@@ -95,13 +87,19 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
-
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.base.Splitter;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.HelpFormatter;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
+import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
 
 /**
  *
@@ -111,20 +109,71 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * @since 0.1
  */
 public class PhoenixRuntime {
+
+    //TODO use strings, char needs a lot of error-prone conversions
+    public static final char JDBC_PROTOCOL_TERMINATOR = ';';
+    public static final char JDBC_PROTOCOL_SEPARATOR = ':';
+
     /**
-     * Root for the JDBC URL that the Phoenix accepts accepts.
+     * JDBC URL jdbc protocol identifier
      */
-    public final static String JDBC_PROTOCOL = "jdbc:phoenix";
+    public static final String JDBC_PROTOCOL_IDENTIFIER = "jdbc";
+
+    /**
+     * JDBC URL phoenix protocol identifier (protocol determined from Configuration)
+     */
+    public static final String JDBC_PHOENIX_PROTOCOL_IDENTIFIER = "phoenix";
+
+    /**
+     * JDBC URL phoenix protocol identifier for ZK HBase connection
+     */
+    public static final String JDBC_PHOENIX_PROTOCOL_IDENTIFIER_ZK = "phoenix+zk";
+
+    /**
+     * JDBC URL phoenix protocol identifier for the deprecated Master based HBase connection
+     */
+    public static final String JDBC_PHOENIX_PROTOCOL_IDENTIFIER_MASTER = "phoenix+master";
+
+    /**
+     * JDBC URL phoenix protocol identifier for RPC based HBase connection
+     */
+    public static final String JDBC_PHOENIX_PROTOCOL_IDENTIFIER_RPC = "phoenix+rpc";
+
+    /**
+     * JDBC URL phoenix protocol identifier
+     */
+    public static final String JDBC_PHOENIX_THIN_IDENTIFIER = "thin";
+
+    /**
+     * Root for the generic JDBC URL that the Phoenix accepts.
+     */
+    public static final String JDBC_PROTOCOL = JDBC_PROTOCOL_IDENTIFIER + JDBC_PROTOCOL_SEPARATOR + JDBC_PHOENIX_PROTOCOL_IDENTIFIER;
+
+    /**
+     * Root for the explicit ZK JDBC URL that the Phoenix accepts.
+     */
+    public static final String JDBC_PROTOCOL_ZK = JDBC_PROTOCOL_IDENTIFIER + JDBC_PROTOCOL_SEPARATOR + JDBC_PHOENIX_PROTOCOL_IDENTIFIER_ZK;
+
+    /**
+     * Root for the explicit Master (HRPC) JDBC URL that the Phoenix accepts.
+     */
+    public static final String JDBC_PROTOCOL_MASTER = JDBC_PROTOCOL_IDENTIFIER + JDBC_PROTOCOL_SEPARATOR + JDBC_PHOENIX_PROTOCOL_IDENTIFIER_MASTER;
+
+    /**
+     * Root for the explicit Master (HRPC) JDBC URL that the Phoenix accepts.
+     */
+    public static final String JDBC_PROTOCOL_RPC = JDBC_PROTOCOL_IDENTIFIER + JDBC_PROTOCOL_SEPARATOR + JDBC_PHOENIX_PROTOCOL_IDENTIFIER_RPC;
+
     /**
      * Root for the JDBC URL used by the thin driver. Duplicated here to avoid dependencies
      * between modules.
      */
-    public final static String JDBC_THIN_PROTOCOL = "jdbc:phoenix:thin";
-    public final static char JDBC_PROTOCOL_TERMINATOR = ';';
-    public final static char JDBC_PROTOCOL_SEPARATOR = ':';
+
+    public static final String JDBC_THIN_PROTOCOL = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + JDBC_PHOENIX_THIN_IDENTIFIER;
+
 
     @Deprecated
-    public final static String EMBEDDED_JDBC_PROTOCOL = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+    public static final String EMBEDDED_JDBC_PROTOCOL = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 
     /**
      * Use this connection property to control HBase timestamps

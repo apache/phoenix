@@ -27,6 +27,8 @@ import java.util.Properties;
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.client.Consistency;
+import org.apache.phoenix.jdbc.ConnectionInfo;
+import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PName;
@@ -202,4 +204,5 @@ public class JDBCUtil {
         String schema = findProperty(url, info, PhoenixRuntime.SCHEMA_ATTRIB);
         return (schema == null || schema.equals("")) ? defaultValue : schema;
     }
+
 }
