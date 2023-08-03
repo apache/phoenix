@@ -204,7 +204,7 @@ public class FailoverPhoenixConnectionIT {
 
             try (Connection conn = createFailoverConnection()) {
                 FailoverPhoenixConnection failoverConn = (FailoverPhoenixConnection) conn;
-                assertEquals(CLUSTERS.getUrl2(), failoverConn.getWrappedConnection().getURL());
+                assertEquals(CLUSTERS.getJdbcUrl2(), failoverConn.getWrappedConnection().getURL());
                 doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
             }
         });
@@ -237,7 +237,7 @@ public class FailoverPhoenixConnectionIT {
 
             try (Connection conn = createFailoverConnection()) {
                 FailoverPhoenixConnection failoverConn = (FailoverPhoenixConnection) conn;
-                assertEquals(CLUSTERS.getUrl2(), failoverConn.getWrappedConnection().getURL());
+                assertEquals(CLUSTERS.getJdbcUrl2(), failoverConn.getWrappedConnection().getURL());
                 doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
             }
         });
@@ -286,7 +286,7 @@ public class FailoverPhoenixConnectionIT {
         LOG.info("Testing failover connection when both clusters are up and running");
         try (Connection conn = createFailoverConnection()) {
             FailoverPhoenixConnection failoverConn = conn.unwrap(FailoverPhoenixConnection.class);
-            assertEquals(CLUSTERS.getUrl2(), failoverConn.getWrappedConnection().getURL());
+            assertEquals(CLUSTERS.getJdbcUrl2(), failoverConn.getWrappedConnection().getURL());
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
         }
 
@@ -398,7 +398,7 @@ public class FailoverPhoenixConnectionIT {
         // The wrapped connection is still against the first cluster, and is closed
         PhoenixConnection pc = ((FailoverPhoenixConnection)conn).getWrappedConnection();
         assertNotNull(pc);
-        assertEquals(CLUSTERS.getUrl1(), pc.getURL());
+        assertEquals(CLUSTERS.getJdbcUrl1(), pc.getURL());
         assertTrue(pc.isClosed());
         doTestActionShouldFailBecauseOfFailover(conn::createStatement);
     }
@@ -485,7 +485,7 @@ public class FailoverPhoenixConnectionIT {
     public void testFailoverCanFinishWhenOneConnectionGotStuckClosing() throws Exception {
         Connection conn = createFailoverConnection();
         doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
-        assertEquals(CLUSTERS.getUrl1(),  // active connection is against the first cluster
+        assertEquals(CLUSTERS.getJdbcUrl1(),  // active connection is against the first cluster
                 conn.unwrap(FailoverPhoenixConnection.class).getWrappedConnection().getURL());
 
         // Spy the wrapped connection
@@ -518,7 +518,7 @@ public class FailoverPhoenixConnectionIT {
 
         try (Connection conn2 = createFailoverConnection()) {
             doTestBasicOperationsWithConnection(conn2, tableName, haGroupName);
-            assertEquals(CLUSTERS.getUrl2(), // active connection is against the second cluster
+            assertEquals(CLUSTERS.getJdbcUrl2(), // active connection is against the second cluster
                     conn2.unwrap(FailoverPhoenixConnection.class).getWrappedConnection().getURL());
         }
 
@@ -682,7 +682,7 @@ public class FailoverPhoenixConnectionIT {
     public void testFailoverTwice() throws Exception {
         try (Connection conn = createFailoverConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
-            assertEquals(CLUSTERS.getUrl1(), // active connection is against the first cluster
+            assertEquals(CLUSTERS.getJdbcUrl1(), // active connection is against the first cluster
                     conn.unwrap(FailoverPhoenixConnection.class).getWrappedConnection().getURL());
         }
 
@@ -691,7 +691,7 @@ public class FailoverPhoenixConnectionIT {
 
         try (Connection conn = createFailoverConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
-            assertEquals(CLUSTERS.getUrl2(), // active connection is against the second cluster
+            assertEquals(CLUSTERS.getJdbcUrl2(), // active connection is against the second cluster
                     conn.unwrap(FailoverPhoenixConnection.class).getWrappedConnection().getURL());
         }
 
@@ -700,7 +700,7 @@ public class FailoverPhoenixConnectionIT {
 
         try (Connection conn = createFailoverConnection()) {
             doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
-            assertEquals(CLUSTERS.getUrl1(), // active connection is against the first cluster
+            assertEquals(CLUSTERS.getJdbcUrl1(), // active connection is against the first cluster
                     conn.unwrap(FailoverPhoenixConnection.class).getWrappedConnection().getURL());
         }
     }
