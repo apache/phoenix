@@ -86,7 +86,8 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 /**
@@ -100,6 +101,9 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class MutableIndexFailureIT extends BaseTest {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(MutableIndexFailureIT.class);
+
     public static volatile boolean FAIL_WRITE = false;
     public static volatile String fullTableName;
     
@@ -475,6 +479,7 @@ public class MutableIndexFailureIT extends BaseTest {
                         }
                         conn.commit();
                     } catch (SQLException e) {
+                        LOGGER.warn("Error while adding row", e);
                         return false;
                     }
                     return true;
