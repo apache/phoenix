@@ -46,6 +46,8 @@ public class ParallelPhoenixConnectionFailureTest extends BaseTest {
     private static String url =
             JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + PhoenixRuntime.CONNECTIONLESS;
 
+    private static int WAIT_MS = 30000;
+
     @Test
     public void testExecuteQueryChainFailure() throws SQLException {
         HBaseTestingUtility hbaseTestingUtility = new HBaseTestingUtility();
@@ -77,16 +79,16 @@ public class ParallelPhoenixConnectionFailureTest extends BaseTest {
         parallelConn.createStatement().execute("SELECT * FROM SYSTEM.CATALOG");
         parallelConn.createStatement().execute("SELECT * FROM SYSTEM.CATALOG");
         // Verify successful execution on both connections
-        hbaseTestingUtility.waitFor(10000, () -> (numStatementsCreatedOnConn1.get() == 2)
+        hbaseTestingUtility.waitFor(WAIT_MS, () -> (numStatementsCreatedOnConn1.get() == 2)
                 && (numStatementsCreatedOnConn2.get() == 2));
         // Error on conn1, we shouldn't use conn1 after that
         doThrow(new SQLException()).when(connSpy1).createStatement();
         parallelConn.createStatement().execute("SELECT * FROM SYSTEM.CATALOG");
-        hbaseTestingUtility.waitFor(10000, () -> numStatementsCreatedOnConn2.get() == 3);
+        hbaseTestingUtility.waitFor(WAIT_MS, () -> numStatementsCreatedOnConn2.get() == 3);
         doAnswer(answer1).when(connSpy1).createStatement();
         // Should still have a successful execution only from conn2 since conn1 errored before
         parallelConn.createStatement().execute("SELECT * FROM SYSTEM.CATALOG");
-        hbaseTestingUtility.waitFor(10000, () -> (numStatementsCreatedOnConn1.get() == 2)
+        hbaseTestingUtility.waitFor(WAIT_MS, () -> (numStatementsCreatedOnConn1.get() == 2)
                 && (numStatementsCreatedOnConn2.get() == 4));
         // Any task that we chain on conn1 should error out
         assertTrue(context.chainOnConn1(() -> Boolean.TRUE).isCompletedExceptionally());

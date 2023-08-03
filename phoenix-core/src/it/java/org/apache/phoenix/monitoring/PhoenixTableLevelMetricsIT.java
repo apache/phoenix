@@ -29,8 +29,8 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.CommitException;
+import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConfigurationFactory;
@@ -1478,7 +1478,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
     private static class PhoenixMetricsTestingQueryServices extends ConnectionQueryServicesImpl {
 
         PhoenixMetricsTestingQueryServices(QueryServices services,
-                PhoenixEmbeddedDriver.ConnectionInfo connectionInfo, Properties info) {
+                ConnectionInfo connectionInfo, Properties info) {
             super(services, connectionInfo, info);
         }
 
@@ -1516,10 +1516,12 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         @Override public synchronized ConnectionQueryServices getConnectionQueryServices(String url,
                 Properties info) throws SQLException {
             if (cqs == null) {
+                QueryServicesTestImpl qsti =
+                        new QueryServicesTestImpl(getDefaultProps(), overrideProps);
                 cqs =
                         new PhoenixMetricsTestingQueryServices(
-                                new QueryServicesTestImpl(getDefaultProps(), overrideProps),
-                                ConnectionInfo.create(url), info);
+                            qsti,
+                                ConnectionInfo.create(url, qsti.getProps(), info), info);
                 cqs.init(url, info);
             }
             return cqs;

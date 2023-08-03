@@ -29,7 +29,6 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import org.apache.htrace.Span;
-import org.apache.htrace.Trace;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.query.QueryServices;
