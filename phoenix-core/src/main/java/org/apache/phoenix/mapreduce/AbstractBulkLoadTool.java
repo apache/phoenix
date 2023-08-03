@@ -49,9 +49,9 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
+import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRef;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
@@ -197,7 +197,9 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         if (cmdLine.hasOption(ZK_QUORUM_OPT.getOpt())) {
             // ZK_QUORUM_OPT is optional, but if it's there, use it for both the conn and the job.
             String zkQuorum = cmdLine.getOptionValue(ZK_QUORUM_OPT.getOpt());
-            PhoenixDriver.ConnectionInfo info = PhoenixDriver.ConnectionInfo.create(zkQuorum);
+            ConnectionInfo info =
+                    ConnectionInfo.create(PhoenixRuntime.JDBC_PROTOCOL_ZK + ":" + zkQuorum, conf,
+                        null, null);
             LOGGER.info("Configuring HBase connection to {}", info);
             for (Map.Entry<String,String> entry : info.asProps()) {
                 if (LOGGER.isDebugEnabled()) {

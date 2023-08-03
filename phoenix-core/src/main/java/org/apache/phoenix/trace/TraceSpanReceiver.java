@@ -21,10 +21,8 @@ import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.htrace.Span;
 import org.apache.htrace.SpanReceiver;
-import org.apache.htrace.impl.MilliSpan;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.slf4j.Logger;

@@ -141,4 +141,5 @@ public class JDBCUtilTest {
         ReadOnlyProps readOnlyProps = new ReadOnlyProps(propMap);
         assertEquals(3000L, JDBCUtil.getMutateBatchSizeBytes("localhost", new Properties(), readOnlyProps));
     }
+
 }

@@ -20,7 +20,7 @@ package org.apache.phoenix.transaction;
 import java.sql.SQLException;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
+import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
 
 public class TransactionServiceManager {
