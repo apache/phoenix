@@ -18,13 +18,7 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.hadoop.conf.Configuration;
@@ -34,6 +28,7 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
@@ -42,12 +37,19 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.compile.*;
+import org.apache.phoenix.prefix.search.PrefixIndex;
+import org.apache.phoenix.prefix.table.TableTTLInfoCache;
+import org.apache.phoenix.prefix.table.TableTTLInfo;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.*;
+import org.apache.phoenix.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.*;
 import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
+import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 /**
  * The store scanner that implements Phoenix TTL and Max Lookback. Phoenix overrides the
@@ -63,8 +65,8 @@ public class CompactionScanner implements InternalScanner {
     private final Configuration config;
     private final RegionCoprocessorEnvironment env;
     private long maxLookbackWindowStart;
-    private long ttlWindowStart;
-    private long ttl;
+    //private long ttlWindowStart;
+    //private long ttl;
     private final long maxLookbackInMillis;
     private int minVersion;
     private int maxVersion;
@@ -84,19 +86,16 @@ public class CompactionScanner implements InternalScanner {
             Store store,
             InternalScanner storeScanner,
             long maxLookbackInMillis,
-            byte[] emptyCF,
-            byte[] emptyCQ,
-            int phoenixTTL,
-            boolean isSystemTable) {
+            PTable table) {
         this.storeScanner = storeScanner;
         this.region = env.getRegion();
         this.store = store;
         this.env = env;
-        this.emptyCF = emptyCF;
-        this.emptyCQ = emptyCQ;
+        this.emptyCF = SchemaUtil.getEmptyColumnFamily(table);
+        this.emptyCQ = table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
+                QueryConstants.EMPTY_COLUMN_BYTES : table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
         this.config = env.getConfiguration();
         compactionTime = EnvironmentEdgeManager.currentTimeMillis();
-        this.maxLookbackInMillis = maxLookbackInMillis;
         String columnFamilyName = store.getColumnFamilyName();
         storeColumnFamily = columnFamilyName.getBytes();
         String tableName = region.getRegionInfo().getTable().getNameAsString();
@@ -104,25 +103,33 @@ public class CompactionScanner implements InternalScanner {
                 maxLookbackMap.remove(tableName + SEPARATOR + columnFamilyName);
         maxLookbackInMillis = overriddenMaxLookback == null ?
                 maxLookbackInMillis : Math.max(maxLookbackInMillis, overriddenMaxLookback);
+
+        this.maxLookbackInMillis = maxLookbackInMillis;
         // The oldest scn is current time - maxLookbackInMillis. Phoenix sets the scan time range
         // for scn queries [0, scn). This means that the maxlookback size should be
         // maxLookbackInMillis + 1 so that the oldest scn does not return empty row
-        this.maxLookbackWindowStart = maxLookbackInMillis == 0 ?
-                compactionTime : compactionTime - (maxLookbackInMillis + 1);
+        this.maxLookbackWindowStart = maxLookbackInMillis == 0 ? compactionTime : compactionTime - (maxLookbackInMillis + 1);
         ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
-        this.ttl = isSystemTable ? cfd.getTimeToLive() : phoenixTTL;
-        this.ttlWindowStart = ttl == HConstants.FOREVER ? 1 : compactionTime - ttl * 1000;
-        ttl *= 1000;
-        this.maxLookbackWindowStart = Math.max(ttlWindowStart, maxLookbackWindowStart);
+        long ttl = table.getType() == PTableType.SYSTEM ?
+                cfd.getTimeToLive() :
+                table.getTTL() == TTL_NOT_DEFINED ? DEFAULT_TTL : table.getTTL();
+        long ttlWindowStart = ttl == HConstants.FOREVER ? 1 : compactionTime - ttl * 1000;
+        long compactionWindowStart = ttl == HConstants.FOREVER ? 1  : compactionTime - (ttl * 1000) - maxLookbackInMillis;
+//        ttl *= 1000;
+//        this.maxLookbackWindowStart = Math.max(ttlWindowStart, maxLookbackWindowStart);
         this.minVersion = cfd.getMinVersions();
         this.maxVersion = cfd.getMaxVersions();
         this.keepDeletedCells = cfd.getKeepDeletedCells();
         familyCount = region.getTableDescriptor().getColumnFamilies().length;
         localIndex = columnFamilyName.startsWith(LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
-        emptyCFStore = familyCount == 1 || columnFamilyName.equals(Bytes.toString(emptyCF))
-                        || localIndex;
-        phoenixLevelRowCompactor = new PhoenixLevelRowCompactor();
-        hBaseLevelRowCompactor = new HBaseLevelRowCompactor();
+        emptyCFStore = familyCount == 1 || columnFamilyName.equals(Bytes.toString(emptyCF)) || localIndex;
+        PhoenixRowTracker rowTracker = new PhoenixRowTracker(tableName, cfd);
+        phoenixLevelRowCompactor = new PhoenixLevelRowCompactor(rowTracker);
+        hBaseLevelRowCompactor = new HBaseLevelRowCompactor(rowTracker);
+        LOGGER.info(String.format("Compaction params:- (table=%s, ttl=%d, mlb=%d, max=%d, min=%d, ct=%d, csw=%d, mlbw=%d, ttlw=%d)",
+                tableName, ttl*1000,this.maxLookbackInMillis, this.maxVersion, this.minVersion,
+                this.compactionTime, compactionWindowStart, this.maxLookbackWindowStart, ttlWindowStart));
+
     }
 
     /**
@@ -164,13 +171,36 @@ public class CompactionScanner implements InternalScanner {
      * The context for a given row during compaction. A row may have multiple compaction row
      * versions. CompactionScanner uses the same row context for these versions.
      */
-    static class RowContext {
+    class RowContext {
         Cell familyDeleteMarker = null;
         Cell familyVersionDeleteMarker = null;
         List<Cell> columnDeleteMarkers = null;
         int version = 0;
         long maxTimestamp;
         long minTimestamp;
+
+
+        // PHOENIX-6878
+        long ttl;
+        long ttlWindowStart;
+        long maxLookbackWindowStartForRow;
+
+        public void setTtl(long ttlInSecs) {
+            this.ttl = ttlInSecs*1000;
+            this.ttlWindowStart = ttlInSecs == HConstants.FOREVER ? 1 : compactionTime - ttl;
+            this.maxLookbackWindowStartForRow = Math.max(ttlWindowStart, maxLookbackWindowStart);
+        }
+        public long getTtl() {
+            return ttl;
+        }
+        public long getTtlWindowStart() {
+            return ttlWindowStart;
+        }
+        public long getMaxLookbackWindowStart() {
+            return maxLookbackWindowStartForRow;
+        }
+
+
         private void addColumnDeleteMarker(Cell deleteMarker) {
             if (columnDeleteMarkers == null) {
                 columnDeleteMarkers = new ArrayList<>();
@@ -284,6 +314,13 @@ public class CompactionScanner implements InternalScanner {
      *
      */
     class HBaseLevelRowCompactor {
+
+        private PhoenixRowTracker rowTracker;
+
+        HBaseLevelRowCompactor(PhoenixRowTracker rowTracker) {
+            this.rowTracker = rowTracker;
+        }
+
         /**
          * A compaction row version includes the latest put cell versions from each column such that
          * the cell versions do not cross delete family markers. In other words, the compaction row
@@ -372,9 +409,9 @@ public class CompactionScanner implements InternalScanner {
                 // Deleted compaction row version
                 if (keepDeletedCells == KeepDeletedCells.TTL && (
                         (rowContext.familyVersionDeleteMarker != null &&
-                                rowContext.familyVersionDeleteMarker.getTimestamp() > ttlWindowStart) ||
+                                rowContext.familyVersionDeleteMarker.getTimestamp() > rowContext.getTtlWindowStart()) ||
                                 (rowContext.familyDeleteMarker != null &&
-                                        rowContext.familyDeleteMarker.getTimestamp() > ttlWindowStart)
+                                        rowContext.familyDeleteMarker.getTimestamp() > rowContext.getTtlWindowStart())
                 )) {
                     // Rule 2
                     retainCells(rowVersion, rowContext, retainedCells);
@@ -390,7 +427,7 @@ public class CompactionScanner implements InternalScanner {
                 return;
             }
             for (Cell cell : rowVersion.cells) {
-                rowContext.retainCell(cell, retainedCells, keepDeletedCells, ttlWindowStart);
+                rowContext.retainCell(cell, retainedCells, keepDeletedCells, rowContext.getTtlWindowStart());
             }
         }
 
@@ -436,7 +473,7 @@ public class CompactionScanner implements InternalScanner {
             if (rowVersion.cells.isEmpty()) {
                 return;
             }
-            if (rowVersion.ts >= ttlWindowStart) {
+            if (rowVersion.ts >= rowContext.getTtlWindowStart()) {
                 retainInsideTTLWindow(rowVersion, rowContext, retainedCells);
             } else {
                 retainOutsideTTLWindow(rowVersion, rowContext, retainedCells);
@@ -445,7 +482,7 @@ public class CompactionScanner implements InternalScanner {
 
         private void formCompactionRowVersions(LinkedList<LinkedList<Cell>> columns,
                 List<Cell> result) {
-            RowContext rowContext = new RowContext();
+            RowContext rowContext = rowTracker.getRowContext();
             while (!columns.isEmpty()) {
                 formNextCompactionRowVersion(columns, rowContext, result);
                 // Remove the columns that are empty
@@ -516,6 +553,11 @@ public class CompactionScanner implements InternalScanner {
      *
      */
     class PhoenixLevelRowCompactor {
+        private PhoenixRowTracker rowTracker;
+
+        PhoenixLevelRowCompactor(PhoenixRowTracker rowTracker) {
+            this.rowTracker = rowTracker;
+        }
 
         /**
          * The cells of the row (i.e., result) read from HBase store are lexicographically ordered
@@ -560,7 +602,7 @@ public class CompactionScanner implements InternalScanner {
          * not more than ttl. The cells that are used to close the gap are added to the output
          * list.
          */
-        private void closeGap(long max, long min, List<Cell> input, List<Cell> output) {
+        private void closeGap(long max, long min, long ttl, List<Cell> input, List<Cell> output) {
             int  previous = -1;
             long ts;
             for (Cell cell : input) {
@@ -576,7 +618,7 @@ public class CompactionScanner implements InternalScanner {
                     max = input.get(previous).getTimestamp();
                     output.add(input.remove(previous));
                     if (max - min > ttl) {
-                        closeGap(max, min, input, output);
+                        closeGap(max, min, ttl, input, output);
                     }
                     return;
                 }
@@ -592,7 +634,8 @@ public class CompactionScanner implements InternalScanner {
             if (columns.isEmpty()) {
                 return;
             }
-            RowContext rowContext = new RowContext();
+            RowContext rowContext = rowTracker.getRowContext();
+            long ttl = rowContext.getTtl();
             rowContext.getNextRowVersionTimestamps(columns, storeColumnFamily);
             List<Cell> retainedPutCells = new ArrayList<>();
             for (LinkedList<Cell> column : columns) {
@@ -651,13 +694,15 @@ public class CompactionScanner implements InternalScanner {
             Arrays.sort(tsArray);
             for (i = size - 1; i > 0; i--) {
                 if (tsArray[i] - tsArray[i - 1] > ttl) {
-                    closeGap(tsArray[i], tsArray[i - 1], emptyCellColumn, retainedCells);
+                    closeGap(tsArray[i], tsArray[i - 1], ttl, emptyCellColumn, retainedCells);
                 }
             }
         }
 
         private boolean retainCellsForMaxLookback(List<Cell> result, boolean regionLevel,
                 List<Cell> retainedCells) {
+
+            long ttl = rowTracker.getRowContext().getTtl();
             LinkedList<LinkedList<Cell>> columns = new LinkedList<>();
             getColumns(result, columns, retainedCells);
             long maxTimestamp = 0;
@@ -735,6 +780,7 @@ public class CompactionScanner implements InternalScanner {
             if (result.isEmpty()) {
                 return;
             }
+            rowTracker.visit(result);
             List<Cell> phoenixResult = new ArrayList<>(result.size());
             if (!retainCellsForMaxLookback(result, regionLevel, phoenixResult)) {
                 if (familyCount == 1 || regionLevel) {
@@ -878,5 +924,70 @@ public class CompactionScanner implements InternalScanner {
             result.clear();
             trimRegionResult(regionResult, input, result);
         }
+    }
+
+    class PhoenixRowTracker {
+        boolean isMultiTenant = true;
+        String fullTableName;
+        String columnFamilyName;
+        ColumnFamilyDescriptor cfd;
+        RowContext rowContext;
+        TableTTLInfoCache ttlCache;
+        PrefixIndex index;
+
+
+        PhoenixRowTracker(String fullTableName, ColumnFamilyDescriptor cfd) {
+            this.fullTableName = fullTableName;
+            this.columnFamilyName = cfd.getNameAsString();
+            this.cfd = cfd;
+            this.ttlCache = new TableTTLInfoCache();
+            this.index  = new PrefixIndex();
+
+            try {
+                List<TableTTLInfo> tableList = ViewUtil.getRowKeyPrefixesForTable(this.fullTableName, env);
+                tableList.forEach(m -> {
+                    if (m.getTTL() != TTL_NOT_DEFINED) {
+                        int tableId = ttlCache.addTable(m);
+                        index.put(m.getPrefix(), tableId);
+                        LOGGER.info(String.format("Adding table : " + m.toString()));
+                    }
+                });
+            } catch (Exception e) {
+                LOGGER.info(String.format("Failed to read from catalog: " + e.getMessage()));
+            }
+
+        }
+        public void visit(List<Cell> result) {
+
+            if (isMultiTenant) {
+                boolean matched = false;
+                byte[] rowkey = EMPTY_BYTE_ARRAY;
+                byte[] prefix = EMPTY_BYTE_ARRAY;
+                TableTTLInfo tableTTLInfo = null;
+                try {
+                    rowkey = CellUtil.cloneRow(result.get(0));
+                    Integer tableId = index.getTableIdWithPrefix(rowkey, 15);
+                    if (tableId == null) {
+                        tableId = index.getTableIdWithPrefix(rowkey, 0);
+                    }
+                    tableTTLInfo = ttlCache.getTableById(tableId);
+                    matched = tableTTLInfo != null;
+                    this.rowContext = new RowContext();
+                    this.rowContext.setTtl(matched ? tableTTLInfo.getTTL() : HConstants.FOREVER);
+                } catch (Exception e) {
+                    LOGGER.error(String.format("Exception when visiting table: " + e.getMessage()));
+                } finally {
+                    LOGGER.info(String.format("visiting table-info=%s, matched=%s, prefix-key=%s, row-key=%s",
+                            matched ? tableTTLInfo : "UNKNOWN",
+                            matched,
+                            matched ? Bytes.toStringBinary(tableTTLInfo.getPrefix()) : "UNKNOWN",
+                            Bytes.toStringBinary(Result.create(result).getRow())));
+                }
+            }
+        }
+        public RowContext getRowContext() {
+            return rowContext;
+        }
+
     }
 }
