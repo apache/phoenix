@@ -584,6 +584,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                       CompactionRequest request) throws IOException {
         if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
             final TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
+            LOGGER.info("In preCompact to use phoenix-compactions: "
+                    + tableName.getNameAsString());
+
             // Compaction and split upcalls run with the effective user context of the requesting user.
             // This will lead to failure of cross cluster RPC if the effective user is not
             // the login user. Switch to the login user context to ensure we have the expected
@@ -636,20 +639,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             }
                         }
                         if (table != null && !isDisabled && isPhoenixTableTTLEnabled) {
+                            LOGGER.info("Modifying major compaction scanner to use phoenix-compactions: "
+                                    + fullTableName);
                             internalScanner =
                                     new CompactionScanner(c.getEnvironment(), store, scanner,
                                             getMaxLookbackInMillis(c.getEnvironment().getConfiguration()),
-                                            SchemaUtil.getEmptyColumnFamily(table),
-                                            table.getEncodingScheme()
-                                                    == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
-                                                    QueryConstants.EMPTY_COLUMN_BYTES :
-                                                    table.getEncodingScheme().
-                                                            encode(QueryConstants.
-                                                                    ENCODED_EMPTY_COLUMN_NAME),
-                                            table.getTTL() == TTL_NOT_DEFINED
-                                                    ? DEFAULT_TTL : table.getTTL(),
-                                            table.getType() == PTableType.SYSTEM
-                                            );
+                                            table);
                         }
                     }
                     try {
