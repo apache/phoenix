@@ -752,7 +752,7 @@ public abstract class BaseTest {
         createTestTable(url, ddl, splits, ts);
     }
 
-    public static ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder) throws SQLException {
+    protected ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder) throws SQLException {
         PreparedStatement statement = conn.prepareStatement(queryBuilder.build());
         ResultSet rs = statement.executeQuery();
         return rs;

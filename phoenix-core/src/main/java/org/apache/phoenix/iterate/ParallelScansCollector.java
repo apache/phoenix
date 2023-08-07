@@ -20,6 +20,7 @@ package org.apache.phoenix.iterate;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.QueryPlan;
 
@@ -33,19 +34,22 @@ public class ParallelScansCollector {
     private final List<List<Scan>> parallelScans = new ArrayList<>();
     private List<Scan> lastBatch = new ArrayList<>();
     private Scan lastScan = null;
+    private final List<HRegionLocation> regionLocations = new ArrayList<>();
 
     public ParallelScansCollector(ParallelScanGrouper grouper) {
         this.grouper = grouper;
         parallelScans.add(lastBatch);
     }
 
-    public void addNewScan(QueryPlan plan, Scan newScan, boolean crossesRegionBoundary) {
+    public void addNewScan(QueryPlan plan, Scan newScan, boolean crossesRegionBoundary,
+                           HRegionLocation regionLocation) {
         if (grouper.shouldStartNewScan(plan, lastScan, newScan.getStartRow(),
-            lastScanCrossedRegionBoundary)) {
+                lastScanCrossedRegionBoundary)) {
             lastBatch = new ArrayList<>();
             parallelScans.add(lastBatch);
         }
         lastBatch.add(newScan);
+        regionLocations.add(regionLocation);
 
         lastScanCrossedRegionBoundary = crossesRegionBoundary;
         lastScan = newScan;
@@ -53,5 +57,9 @@ public class ParallelScansCollector {
 
     public List<List<Scan>> getParallelScans() {
         return parallelScans;
+    }
+
+    public List<HRegionLocation> getRegionLocations() {
+        return regionLocations;
     }
 }
