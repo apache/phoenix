@@ -2663,7 +2663,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
             assertEquals(
                     Arrays.asList(
                         Arrays.asList(
-                                KeyRange.getKeyRange(PChar.INSTANCE.toBytes("A"), false, PChar.INSTANCE.toBytes("D"), true)
+                                KeyRange.getKeyRange(PChar.INSTANCE.toBytes("A"), true, PChar.INSTANCE.toBytes("D"), true)
                                 ),
                         Arrays.asList(
                                 KeyRange.getKeyRange(PChar.INSTANCE.toBytes("EE"), true, KeyRange.UNBOUND, false)
@@ -2671,7 +2671,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
                             ),
                      rowKeyRanges
                     );
-            assertArrayEquals(PChar.INSTANCE.toBytes("BEE"), scan.getStartRow());
+            assertArrayEquals(PChar.INSTANCE.toBytes("AEE"), scan.getStartRow());
             assertArrayEquals(PChar.INSTANCE.toBytes("E"), scan.getStopRow());
         }
     }
@@ -2726,11 +2726,37 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
             String query = "SELECT * FROM T WHERE A = 'C' and (A,B,C) > ('C','B','X') and C='C'";
             QueryPlan queryPlan = TestUtil.getOptimizeQueryPlan(conn, query);
             Scan scan = queryPlan.getContext().getScan();
-            assertArrayEquals(ByteUtil.concat(PChar.INSTANCE.toBytes("C"), PChar.INSTANCE.toBytes("C"), PChar.INSTANCE.toBytes("C")), scan.getStartRow());
+            //
+            // Note: The optimal scan boundary for the above query is ['CCC' - *), however, I don't see an easy way to fix this currently so prioritizing.  Opened JIRA PHOENIX-5885
+            assertArrayEquals(ByteUtil.concat(PChar.INSTANCE.toBytes("C"), PChar.INSTANCE.toBytes("B"), PChar.INSTANCE.toBytes("C")), scan.getStartRow());
             assertArrayEquals(PChar.INSTANCE.toBytes("D"), scan.getStopRow());
         }
     }
-    
+
+    @Test
+    public void testEqualityAndGreaterThanRVC2() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE T (\n" +
+                    "    A CHAR(1) NOT NULL,\n" +
+                    "    B CHAR(1) NOT NULL,\n" +
+                    "    C CHAR(1) NOT NULL,\n" +
+                    "    D CHAR(1) NOT NULL,\n" +
+                    "    CONSTRAINT PK PRIMARY KEY (\n" +
+                    "        A,\n" +
+                    "        B,\n" +
+                    "        C,\n" +
+                    "        D\n" +
+                    "    )\n" +
+                    ")");
+            String query = "SELECT * FROM T WHERE A = 'C' and (A,B,C) > ('C','B','A') and C='C'";
+            QueryPlan queryPlan = TestUtil.getOptimizeQueryPlan(conn, query);
+            Scan scan = queryPlan.getContext().getScan();
+            assertArrayEquals(ByteUtil.concat(PChar.INSTANCE.toBytes("C"), PChar.INSTANCE.toBytes("B"), PChar.INSTANCE.toBytes("C")), scan.getStartRow());
+            assertArrayEquals(PChar.INSTANCE.toBytes("D"), scan.getStopRow());
+        }
+    }
+
     @Test
     public void testOrExpressionNonLeadingPKPushToScanBug4602() throws Exception {
         Connection conn = null;

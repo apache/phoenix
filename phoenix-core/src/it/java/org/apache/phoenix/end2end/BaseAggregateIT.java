@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.end2end.ParallelStatsDisabledIT.executeQuery;
-import static org.apache.phoenix.end2end.ParallelStatsDisabledIT.executeQueryThrowsException;
 import static org.apache.phoenix.end2end.ParallelStatsDisabledIT.validateQueryPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
