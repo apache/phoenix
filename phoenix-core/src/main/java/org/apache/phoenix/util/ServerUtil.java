@@ -170,7 +170,7 @@ public class ServerUtil {
         return parseRemoteException(t);
     }
 
-    private static SQLException parseRemoteException(Throwable t) {
+    public static SQLException parseRemoteException(Throwable t) {
         
         String message = t.getLocalizedMessage();
         if (message != null) {
