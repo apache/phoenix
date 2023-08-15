@@ -19,6 +19,9 @@ package org.apache.phoenix.exception;
 
 import java.sql.SQLException;
 
+/**
+ * Indicates metadata cache is stale.
+ */
 public class StaleMetadataCacheException extends SQLException {
     private static final long serialVersionUID = 1L;
     private static SQLExceptionCode code = SQLExceptionCode.STALE_METADATA_CACHE_EXCEPTION;

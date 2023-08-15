@@ -19,6 +19,9 @@ package org.apache.phoenix.coprocessor;
 
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
+
+import java.io.IOException;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
@@ -29,8 +32,6 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
 
 /**
  * This is first implementation of RegionServer coprocessor introduced by Phoenix.

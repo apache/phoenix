@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import java.io.IOException;
+import java.sql.SQLException;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerMetadataCache;
@@ -24,9 +27,6 @@ import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.sql.SQLException;
 
 /**
  * Client provides last DDL timestamp of tables/views/indexes included in read/write operation
@@ -37,8 +37,12 @@ import java.sql.SQLException;
 public class VerifyLastDDLTimestamp {
     private static final Logger LOGGER = LoggerFactory.getLogger(VerifyLastDDLTimestamp.class);
 
+    private VerifyLastDDLTimestamp() {
+        // Not to be instantiated.
+    }
+
     /**
-     * Verify that LAST_DDL_TIMESTAMP provided by the client is upto date. If it is stale it will
+     * Verify that LAST_DDL_TIMESTAMP provided by the client is up to date. If it is stale it will
      * throw StaleMetadataCacheException.
      *
      * @param tenantID               tenant id
