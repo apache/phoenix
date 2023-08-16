@@ -47,11 +47,18 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 public class IndexWriter implements Stoppable {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(IndexWriter.class);
-  public static final String INDEX_COMMITTER_CONF_KEY = "index.writer.commiter.class";
-  public static final String INDEX_FAILURE_POLICY_CONF_KEY = "index.writer.failurepolicy.class";
+  public static final String INDEX_COMMITTER_CONF_KEY = "phoenix.index.writer.commiter.class";
+  public static final String INDEX_FAILURE_POLICY_CONF_KEY = "phoenix.index.writer.failurepolicy.class";
   private AtomicBoolean stopped = new AtomicBoolean(false);
   private IndexCommitter writer;
   private IndexFailurePolicy failurePolicy;
+
+  // This relies on Hadoop Configuration to handle warning about deprecated configs and
+  // to set the correct non-deprecated configs when an old one shows up.
+  static {
+    Configuration.addDeprecation("index.writer.commiter.class", INDEX_COMMITTER_CONF_KEY);
+    Configuration.addDeprecation("index.writer.failurepolicy.class", INDEX_FAILURE_POLICY_CONF_KEY);
+  }
 
   /**
    * @throws IOException if the {@link IndexWriter} or {@link IndexFailurePolicy} cannot be

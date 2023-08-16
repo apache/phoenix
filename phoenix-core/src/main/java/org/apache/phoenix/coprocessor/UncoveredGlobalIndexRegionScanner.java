@@ -65,9 +65,9 @@ import org.slf4j.LoggerFactory;
 public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScanner {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(UncoveredGlobalIndexRegionScanner.class);
-    public static final String NUM_CONCURRENT_INDEX_THREADS_CONF_KEY = "index.threads.max";
+    public static final String NUM_CONCURRENT_INDEX_THREADS_CONF_KEY = "phoenix.index.threads.max";
     public static final int DEFAULT_CONCURRENT_INDEX_THREADS = 16;
-    public static final String INDEX_ROW_COUNTS_PER_TASK_CONF_KEY = "index.row.count.per.task";
+    public static final String INDEX_ROW_COUNTS_PER_TASK_CONF_KEY = "phoenix.index.row.count.per.task";
     public static final int DEFAULT_INDEX_ROW_COUNTS_PER_TASK = 2048;
 
     protected byte[][] regionEndKeys;
@@ -76,6 +76,13 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
     protected final TaskRunner pool;
     protected String exceptionMessage;
     protected final HTableFactory hTableFactory;
+
+    // This relies on Hadoop Configuration to handle warning about deprecated configs and
+    // to set the correct non-deprecated configs when an old one shows up.
+    static {
+        Configuration.addDeprecation("index.threads.max", NUM_CONCURRENT_INDEX_THREADS_CONF_KEY);
+        Configuration.addDeprecation("index.row.count.per.task", INDEX_ROW_COUNTS_PER_TASK_CONF_KEY);
+    }
 
     public UncoveredGlobalIndexRegionScanner(final RegionScanner innerScanner,
                                              final Region region,
