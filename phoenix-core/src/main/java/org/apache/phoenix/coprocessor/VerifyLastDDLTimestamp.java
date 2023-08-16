@@ -59,8 +59,8 @@ public class VerifyLastDDLTimestamp {
         long lastDDLTimestamp = cache.getLastDDLTimestampForTable(tenantID, schemaName, tableName);
         // Is it possible to have client last ddl timestamp greater than server side?
         if (clientLastDDLTimestamp < lastDDLTimestamp) {
-            LOGGER.error("Stale metadata for LAST_DDL_TIMESTAMP for tenantID: {}, schema: {}," +
-                            " table: {}, client provided timestamp: {}, server timestamp: {}",
+            LOGGER.error("Stale metadata for LAST_DDL_TIMESTAMP for tenantID: {}, schema: {},"
+                            + " table: {}, client provided timestamp: {}, server timestamp: {}",
                     Bytes.toString(tenantID), Bytes.toString(schemaName),
                     Bytes.toString(tableName), clientLastDDLTimestamp, lastDDLTimestamp);
             throw new StaleMetadataCacheException("Stale metadata cache for table name: "

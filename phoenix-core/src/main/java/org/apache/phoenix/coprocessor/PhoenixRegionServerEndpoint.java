@@ -65,8 +65,8 @@ public class PhoenixRegionServerEndpoint
                 VerifyLastDDLTimestamp.verifyLastDDLTimestamp(this.conf, tenantID, schemaName,
                         tableName, clientLastDDLTimestamp);
             } catch (Throwable t) {
-                String errorMsg = String.format("Verifying last ddl timestamp FAILED for " +
-                        "tenantID: %s,  fullTableName: %s", tenantIDStr, fullTableName);
+                String errorMsg = String.format("Verifying last ddl timestamp FAILED for "
+                        + "tenantID: %s,  fullTableName: %s", tenantIDStr, fullTableName);
                 LOGGER.error(errorMsg,  t);
                 IOException ioe = ServerUtil.createIOException(errorMsg, t);
                 ProtobufUtil.setControllerException(controller, ioe);
