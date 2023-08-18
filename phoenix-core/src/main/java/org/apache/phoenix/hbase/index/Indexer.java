@@ -138,7 +138,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
           new ThreadLocal<BatchMutateContext>();
   
   /** Configuration key for the {@link IndexBuilder} to use */
-  public static final String INDEX_BUILDER_CONF_KEY = "phoenix.index.builder";
+  public static final String INDEX_BUILDER_CONF_KEY = "index.builder";
 
   /**
    * Configuration key for if the indexer should check the version of HBase is running. Generally,
@@ -194,13 +194,6 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
             .encodeVersion("0.94.9");
 
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
-
-  // This relies on Hadoop Configuration to handle warning about deprecated configs and
-  // to set the correct non-deprecated configs when an old one shows up.
-  static {
-    Configuration.addDeprecation("index.builder", INDEX_BUILDER_CONF_KEY);
-  }
-
   @Override
   public Optional<RegionObserver> getRegionObserver() {
     return Optional.of(this);
