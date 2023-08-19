@@ -50,12 +50,12 @@ public class VerifyLastDDLTimestamp {
      * @param tableName              table name
      * @param clientLastDDLTimestamp last ddl timestamp provided by client
      * @param conf                   configuration
-     * @throws IOException
+     * @throws SQLException         StaleMetadataCacheException if client provided timestamp
+     *                              is stale.
      */
     public static void verifyLastDDLTimestamp(Configuration conf, byte[] tenantID,
             byte[] schemaName, byte[] tableName, long clientLastDDLTimestamp) throws SQLException {
         ServerMetadataCache cache = ServerMetadataCache.getInstance(conf);
-        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         long lastDDLTimestamp = cache.getLastDDLTimestampForTable(tenantID, schemaName, tableName);
         // Is it possible to have client last ddl timestamp greater than server side?
         if (clientLastDDLTimestamp < lastDDLTimestamp) {
@@ -63,6 +63,7 @@ public class VerifyLastDDLTimestamp {
                             + " table: {}, client provided timestamp: {}, server timestamp: {}",
                     Bytes.toString(tenantID), Bytes.toString(schemaName),
                     Bytes.toString(tableName), clientLastDDLTimestamp, lastDDLTimestamp);
+            String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
             throw new StaleMetadataCacheException("Stale metadata cache for table name: "
                     + fullTableName);
         }
