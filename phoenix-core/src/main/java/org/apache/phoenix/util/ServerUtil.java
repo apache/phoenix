@@ -170,7 +170,7 @@ public class ServerUtil {
         return parseRemoteException(t);
     }
 
-    private static SQLException parseRemoteException(Throwable t) {
+    public static SQLException parseRemoteException(Throwable t) {
         
         String message = t.getLocalizedMessage();
         if (message != null) {
@@ -179,7 +179,7 @@ public class ServerUtil {
             if (matcher.find()) {
                 int statusCode = Integer.parseInt(matcher.group(1));
                 SQLExceptionCode code = SQLExceptionCode.fromErrorCode(statusCode);
-                if(code.equals(SQLExceptionCode.HASH_JOIN_CACHE_NOT_FOUND)){
+                if (code.equals(SQLExceptionCode.HASH_JOIN_CACHE_NOT_FOUND)) {
                     Matcher m = HASH_JOIN_EXCEPTION_PATTERN.matcher(t.getLocalizedMessage());
                     if (m.find()) { return new HashJoinCacheNotFoundException(Long.parseLong(m.group(1))); }
                 }
@@ -206,7 +206,7 @@ public class ServerUtil {
             return conn.getTable(tableName);
         } catch (RuntimeException t) {
             // handle cases that an IOE is wrapped inside a RuntimeException like HTableInterface#createHTableInterface
-            if(t.getCause() instanceof IOException) {
+            if (t.getCause() instanceof IOException) {
                 throw (IOException)t.getCause();
             } else {
                 throw t;

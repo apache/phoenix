@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.cache;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Properties;
@@ -105,7 +104,7 @@ public class ServerMetadataCache {
      * @throws Exception
      */
     public long getLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName)
-            throws IOException {
+            throws SQLException {
         String fullTableNameStr = SchemaUtil.getTableName(schemaName, tableName);
         byte[] tableKey = SchemaUtil.getTableKey(tenantID, schemaName, tableName);
         ImmutableBytesPtr tableKeyPtr = new ImmutableBytesPtr(tableKey);
@@ -133,12 +132,6 @@ public class ServerMetadataCache {
             //  In that case, do we want to throw non retryable exception back to the client?
             // Update cache with the latest DDL timestamp from SYSCAT server.
             lastDDLTimestampMap.put(tableKeyPtr, table.getLastDDLTimestamp());
-        } catch (SQLException sqle) {
-            // Throw IOException back to the client and let the client retry depending on
-            // the configured retry policies.
-            LOGGER.warn("Exception while calling getTableNoCache for tenant id: {},"
-                    + " tableName: {}", tenantIDStr, fullTableNameStr, sqle);
-            throw new IOException(sqle);
         }
         return table.getLastDDLTimestamp();
     }
