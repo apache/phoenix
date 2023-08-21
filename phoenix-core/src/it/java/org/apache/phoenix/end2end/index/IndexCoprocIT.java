@@ -57,13 +57,13 @@ public class IndexCoprocIT extends ParallelStatsDisabledIT {
     public static final String GLOBAL_INDEX_CHECKER_CONFIG =
         "|org.apache.phoenix.index.GlobalIndexChecker|805306365|";
     public static final String INDEX_REGION_OBSERVER_CONFIG =
-            "|org.apache.phoenix.hbase.index.IndexRegionObserver|805306366|" +
-                    "index.builder=org.apache.phoenix.index.PhoenixIndexBuilder," +
-                    "org.apache.hadoop.hbase.index.codec.class=org.apache.phoenix.index.PhoenixIndexCodec";
+        "|org.apache.phoenix.hbase.index.IndexRegionObserver|805306366|" +
+            "index.builder=org.apache.phoenix.index.PhoenixIndexBuilder," +
+            "org.apache.hadoop.hbase.index.codec.class=org.apache.phoenix.index.PhoenixIndexCodec";
     public static final String INDEXER_CONFIG =
-            "|org.apache.phoenix.hbase.index.Indexer|805306366|" +
-                    "index.builder=org.apache.phoenix.index.PhoenixIndexBuilder," +
-                    "org.apache.hadoop.hbase.index.codec.class=org.apache.phoenix.index.PhoenixIndexCodec";
+        "|org.apache.phoenix.hbase.index.Indexer|805306366|" +
+            "index.builder=org.apache.phoenix.index.PhoenixIndexBuilder," +
+            "org.apache.hadoop.hbase.index.codec.class=org.apache.phoenix.index.PhoenixIndexCodec";
 
     public IndexCoprocIT(boolean isMultiTenant){
         this.isMultiTenant = isMultiTenant;

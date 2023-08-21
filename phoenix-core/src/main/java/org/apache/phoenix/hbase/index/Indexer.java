@@ -194,6 +194,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
             .encodeVersion("0.94.9");
 
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
+
   @Override
   public Optional<RegionObserver> getRegionObserver() {
     return Optional.of(this);

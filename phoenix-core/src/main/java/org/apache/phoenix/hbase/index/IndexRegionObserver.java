@@ -330,6 +330,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
   private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
+
   @Override
   public Optional<RegionObserver> getRegionObserver() {
     return Optional.of(this);
