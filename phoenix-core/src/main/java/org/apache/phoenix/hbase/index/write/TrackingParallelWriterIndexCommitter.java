@@ -74,9 +74,9 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(TrackingParallelWriterIndexCommitter.class);
 
-    public static final String NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY = "index.writer.threads.max";
+    public static final String NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY = "phoenix.index.writer.threads.max";
     private static final int DEFAULT_CONCURRENT_INDEX_WRITER_THREADS = 10;
-    private static final String INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY = "index.writer.threads.keepalivetime";
+    private static final String INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY = "phoenix.index.writer.threads.keepalivetime";
 
     private TaskRunner pool;
     private HTableFactory retryingFactory;
@@ -85,6 +85,13 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     private RegionCoprocessorEnvironment env;
     private KeyValueBuilder kvBuilder;
     protected boolean disableIndexOnFailure = false;
+
+    // This relies on Hadoop Configuration to handle warning about deprecated configs and
+    // to set the correct non-deprecated configs when an old one shows up.
+    static {
+        Configuration.addDeprecation("index.writer.threads.max", NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY);
+        Configuration.addDeprecation("index.writer.threads.keepalivetime", INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY);
+    }
 
     // for testing
     public TrackingParallelWriterIndexCommitter(String hbaseVersion) {
