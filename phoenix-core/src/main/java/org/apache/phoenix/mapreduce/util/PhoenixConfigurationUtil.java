@@ -121,7 +121,7 @@ public final class PhoenixConfigurationUtil {
 
     public static final String MAPREDUCE_INPUT_CLUSTER_QUORUM = "phoenix.mapreduce.input.cluster.quorum";
     
-    public static final String MAPREDUCE_OUTPUT_CLUSTER_QUORUM = "phoneix.mapreduce.output.cluster.quorum";
+    public static final String MAPREDUCE_OUTPUT_CLUSTER_QUORUM = "phoenix.mapreduce.output.cluster.quorum";
 
     public static final String INDEX_DISABLED_TIMESTAMP_VALUE = "phoenix.mr.index.disableTimestamp";
 
@@ -245,6 +245,12 @@ public final class PhoenixConfigurationUtil {
     public enum SchemaType {
         TABLE,
         QUERY
+    }
+
+    // This relies on Hadoop Configuration to handle warning about deprecated configs and
+    // to set the correct non-deprecated configs when an old one shows up.
+    static {
+        Configuration.addDeprecation("phoneix.mapreduce.output.cluster.quorum", MAPREDUCE_OUTPUT_CLUSTER_QUORUM);
     }
 
     private PhoenixConfigurationUtil(){

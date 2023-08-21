@@ -109,9 +109,9 @@ import static org.apache.phoenix.util.ScanUtil.isDummy;
 public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalIndexRegionScanner.class);
 
-    public static final String NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY = "index.verify.threads.max";
+    public static final String NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY = "phoenix.index.verify.threads.max";
     public static final int DEFAULT_CONCURRENT_INDEX_VERIFY_THREADS = 16;
-    public static final String INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY = "index.verify.row.count.per.task";
+    public static final String INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY = "phoenix.index.verify.row.count.per.task";
     public static final int DEFAULT_INDEX_VERIFY_ROW_COUNTS_PER_TASK = 2048;
     public static final String NO_EXPECTED_MUTATION = "No expected mutation";
     public static final String ACTUAL_MUTATION_IS_NULL_OR_EMPTY = "actualMutationList is null or empty";
@@ -161,6 +161,13 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     protected Map<byte[], NavigableSet<byte[]>> familyMap;
     protected IndexTool.IndexVerifyType verifyType = IndexTool.IndexVerifyType.NONE;
     protected boolean verify = false;
+
+    // This relies on Hadoop Configuration to handle warning about deprecated configs and
+    // to set the correct non-deprecated configs when an old one shows up.
+    static {
+        Configuration.addDeprecation("index.verify.threads.max", NUM_CONCURRENT_INDEX_VERIFY_THREADS_CONF_KEY);
+        Configuration.addDeprecation("index.verify.row.count.per.task", INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY);
+    }
 
     public GlobalIndexRegionScanner(final RegionScanner innerScanner,
                                     final Region region,
