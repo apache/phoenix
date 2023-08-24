@@ -91,7 +91,7 @@ public class ListJarsQueryPlan implements QueryPlan {
         columns.add(column);
         Expression expression =
                 new RowKeyColumnExpression(column, new RowKeyValueAccessor(columns, 0));
-        projectedColumns.add(new ExpressionProjector("jar_location", "", expression,
+        projectedColumns.add(new ExpressionProjector("jar_location", "jar_location", "", expression,
                 true));
         int estimatedByteSize = SizedUtil.KEY_VALUE_SIZE;
         JARS_PROJECTOR = new RowProjector(projectedColumns, estimatedByteSize, false);

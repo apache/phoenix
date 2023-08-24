@@ -770,20 +770,24 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private static final RowProjector EXPLAIN_PLAN_ROW_PROJECTOR_WITH_BYTE_ROW_ESTIMATES =
             new RowProjector(Arrays
                     .<ColumnProjector> asList(
-                        new ExpressionProjector(EXPLAIN_PLAN_ALIAS, EXPLAIN_PLAN_TABLE_NAME,
+                        new ExpressionProjector(EXPLAIN_PLAN_ALIAS, EXPLAIN_PLAN_ALIAS,
+                                EXPLAIN_PLAN_TABLE_NAME,
                                 new RowKeyColumnExpression(EXPLAIN_PLAN_DATUM,
                                         new RowKeyValueAccessor(Collections
                                                 .<PDatum> singletonList(EXPLAIN_PLAN_DATUM), 0)),
                                 false),
                         new ExpressionProjector(EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_ALIAS,
+                                EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_ALIAS,
                                 EXPLAIN_PLAN_TABLE_NAME, new KeyValueColumnExpression(
                                         EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN),
                                 false),
                         new ExpressionProjector(EXPLAIN_PLAN_ROWS_COLUMN_ALIAS,
+                                EXPLAIN_PLAN_ROWS_COLUMN_ALIAS,
                                 EXPLAIN_PLAN_TABLE_NAME,
                                 new KeyValueColumnExpression(EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN),
                                 false),
                         new ExpressionProjector(EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN_ALIAS,
+                                EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN_ALIAS,
                                 EXPLAIN_PLAN_TABLE_NAME,
                                 new KeyValueColumnExpression(EXPLAIN_PLAN_ESTIMATE_INFO_TS_COLUMN),
                                 false)),
