@@ -40,6 +40,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COU
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_RPC_CALLS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_RPC_RETRIES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_SCANNED_REGIONS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PAGED_ROWS_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SCAN_BYTES;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
 
@@ -52,8 +53,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -80,6 +80,8 @@ public class ScanningResultIterator implements ResultIterator {
 
     private final boolean isMapReduceContext;
     private final long maxQueryEndTime;
+
+    private long dummyRowCounter = 0;
 
     public ScanningResultIterator(ResultScanner scanner, Scan scan, ScanMetricsHolder scanMetricsHolder, StatementContext context, boolean isMapReduceContext, long maxQueryEndTime) {
         this.scanner = scanner;
@@ -141,6 +143,7 @@ public class ScanningResultIterator implements ResultIterator {
                     scanMetricsMap.get(COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME));
             changeMetric(scanMetricsHolder.getCountOfBytesScanned(),
                     scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
+            changeMetric(scanMetricsHolder.getCountOfRowsPaged(), dummyRowCounter);
 
             changeMetric(GLOBAL_SCAN_BYTES,
                     scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
@@ -167,6 +170,8 @@ public class ScanningResultIterator implements ResultIterator {
             changeMetric(GLOBAL_HBASE_COUNT_ROWS_FILTERED,
                     scanMetricsMap.get(COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME));
 
+            changeMetric(GLOBAL_PAGED_ROWS_COUNTER, dummyRowCounter);
+
             scanMetricsUpdated = true;
         }
 
@@ -177,6 +182,7 @@ public class ScanningResultIterator implements ResultIterator {
         try {
             Result result = scanner.next();
             while (result != null && (result.isEmpty() || isDummy(result))) {
+                dummyRowCounter += 1;
                 long timeOutForScan = maxQueryEndTime - EnvironmentEdgeManager.currentTimeMillis();
                 if (timeOutForScan < 0) {
                     throw new SQLExceptionInfo.Builder(OPERATION_TIMED_OUT).setMessage(
