@@ -104,8 +104,7 @@ public class PhoenixResultSetMetaData implements ResultSetMetaData {
 
     @Override
     public String getColumnName(int column) throws SQLException {
-        // TODO: will return alias if there is one
-        return rowProjector.getColumnProjector(column-1).getName();
+        return rowProjector.getColumnProjector(column-1).getExpressionString();
     }
 
     @Override

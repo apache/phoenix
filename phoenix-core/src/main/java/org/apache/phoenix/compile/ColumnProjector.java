@@ -40,7 +40,13 @@ public interface ColumnProjector {
      * @return the database column name
      */
     String getName();
-    
+
+    /**
+     * Get the expression string
+     * @return the expression for the column projector as a String
+     */
+    String getExpressionString();
+
     /**
      * Get the expression
      * @return the expression for the column projector
