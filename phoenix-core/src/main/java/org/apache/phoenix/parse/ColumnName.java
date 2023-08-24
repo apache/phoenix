@@ -39,7 +39,11 @@ public class ColumnName {
     public static ColumnName newColumnName(NamedNode familyName, NamedNode columnName) {
         return new ColumnName(familyName, columnName);
     }
-    
+
+    public static ColumnName newColumnName(String familyName, String columnName) {
+        return new ColumnName(familyName, columnName);
+    }
+
     private ColumnName(NamedNode familyNode, NamedNode columnNode) {
         this.familyNode = familyNode;
         this.columnNode = columnNode;

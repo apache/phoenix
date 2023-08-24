@@ -197,7 +197,10 @@ public enum SQLExceptionCode {
     CANNOT_QUERY_TABLE_WITH_SCN_OLDER_THAN_MAX_LOOKBACK_AGE(538, "42915",
         "Cannot use SCN to look further back in the past beyond the configured max lookback age"),
 
-     /**
+    NON_EQUALITY_COMPARISON(539, "42915", "Could not identify an equality operator"),
+    INVALID_JSON_DATA(540, "42916", "Invalid json data."),
+
+    /**
      * HBase and Phoenix specific implementation defined sub-classes.
      * Column family related exceptions.
      *

@@ -95,11 +95,13 @@ class MultiThreadedRunner implements Callable<Void> {
         LOGGER.info("\n\nThread Starting " + threadName + " ; '" + query.getStatement() + "' for "
                 + numberOfExecutions + " times\n\n");
         long threadStartTime = EnvironmentEdgeManager.currentTimeMillis();
+        String log = "Read result for query " + query.getId() + " durationInMs=";
         for (long i = 0; i < numberOfExecutions; i++) {
             long threadElapsedTime = EnvironmentEdgeManager.currentTimeMillis() - threadStartTime;
             if (threadElapsedTime >= executionDurationInMs) {
                 LOGGER.info("Queryset timeout of " + executionDurationInMs + " ms reached; current time is " + threadElapsedTime + " ms."
                         + "\nStopping queryset execution for query " + query.getId() + " on thread " + threadName + "...");
+                LOGGER.info(log + + threadElapsedTime + " Expired=true");
                 break;
             }
 
@@ -115,6 +117,8 @@ class MultiThreadedRunner implements Callable<Void> {
             }
         }
 
+        LOGGER.info(
+                log + (EnvironmentEdgeManager.currentTimeMillis() - threadStartTime) + " Expired=false");
         if (!writeRuntimeResults) {
             long duration = EnvironmentEdgeManager.currentTimeMillis() - threadStartTime;
             LOGGER.info("The read query " + query.getStatement() + " for this thread in ("
@@ -162,7 +166,7 @@ class MultiThreadedRunner implements Callable<Void> {
             conn.setAutoCommit(true);
             final String statementString = query.getDynamicStatement(ruleApplier, scenario);
             statement = conn.prepareStatement(statementString);
-            LOGGER.debug("Executing iteration: " + queryIteration + ": " + statementString);
+            LOGGER.info("Executing iteration: " + queryIteration + ": " + statementString);
             
             if (scenario.getWriteParams() != null) {
             	Workload writes = new WriteWorkload(PhoenixUtil.create(), parser,

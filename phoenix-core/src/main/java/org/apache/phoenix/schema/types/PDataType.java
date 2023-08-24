@@ -94,6 +94,21 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         return equalsAny(this, otherType, PVarbinary.INSTANCE, PBinary.INSTANCE);
     }
 
+    /**
+     * @return true if {@link PDataType} can be declared as primary key otherwise false.
+     */
+    public boolean canBePrimaryKey() {
+        return true;
+    }
+
+    /**
+     * @return true if {@link PDataType} supports equality operators (=,!=,<,>,<=,>=) otherwise
+     *         false.
+     */
+    public boolean isEqualitySupported() {
+        return true;
+    }
+
     public int estimateByteSize(Object o) {
         if (isFixedWidth()) { return getByteSize(); }
         if (isArrayType()) {
@@ -1175,6 +1190,18 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         }
         for (PDataType type : PDataType.values()) {
             if (type.isArrayType()) {
+                if(type.getJavaClass().isInstance(value)){
+                    if (type.isArrayType()) {
+                        PhoenixArray arr = (PhoenixArray) value;
+                        if ((type.getSqlType() == arr.baseType.sqlType
+                                + PDataType.ARRAY_TYPE_BASE)) {
+                            return type;
+                        }
+                    } else {
+                        return type;
+                    }
+                }
+
                 if (value instanceof PhoenixArray) {
                     PhoenixArray arr = (PhoenixArray)value;
                     if ((type.getSqlType() == arr.baseType.sqlType + PDataType.ARRAY_TYPE_BASE)

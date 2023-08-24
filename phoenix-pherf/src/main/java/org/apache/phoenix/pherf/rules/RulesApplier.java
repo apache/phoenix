@@ -155,7 +155,8 @@ public class RulesApplier {
         List<Scenario> scenarios = dataModel != null ? dataModel.getScenarios() : parser.getScenarios();
         DataValue value = null;
         if (scenarios.contains(scenario)) {
-            LOGGER.debug("We found a correct Scenario" + scenario.getName());
+            LOGGER.debug(
+                    "We found a correct Scenario" + scenario.getName() + "column " + phxMetaColumn.getName() + " " + phxMetaColumn.getType());
             
             Map<DataTypeMapping, List> overrideRuleMap = this.getCachedScenarioOverrides(scenario);
             
@@ -163,7 +164,7 @@ public class RulesApplier {
 	            List<Column> overrideRuleList = this.getCachedScenarioOverrides(scenario).get(phxMetaColumn.getType());
 	            
 				if (overrideRuleList != null && overrideRuleList.contains(phxMetaColumn)) {
-					LOGGER.debug("We found a correct override column rule");
+                    LOGGER.debug("We found a correct override column rule" + overrideRuleList);
 					Column columnRule = getColumnForRuleOverride(overrideRuleList, phxMetaColumn);
 					if (columnRule != null) {
 						return getDataValue(columnRule);
@@ -178,7 +179,7 @@ public class RulesApplier {
             // Make sure Column from Phoenix Metadata matches a rule column
             if (ruleList != null && ruleList.contains(phxMetaColumn)) {
                 // Generate some random data based on this rule
-                LOGGER.debug("We found a correct column rule");
+                LOGGER.debug("We found a correct column rule" + ruleList);
                 Column columnRule = getColumnForRule(ruleList, phxMetaColumn);
 
                 value = getDataValue(columnRule);
@@ -224,6 +225,7 @@ public class RulesApplier {
         switch (column.getType()) {
             case VARCHAR:
             case VARBINARY:
+            case JSON:
             case CHAR:
                 // Use the specified data values from configs if they exist
                 if (DataSequence.SEQUENTIAL.equals(column.getDataSequence())) {
@@ -569,6 +571,7 @@ public class RulesApplier {
             //For now we only have couple of these, likely this should replace for all the methods
             switch (column.getType()) {
             case VARCHAR:
+            case JSON:
             case VARBINARY:
             case CHAR:
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
