@@ -88,7 +88,7 @@ public class TraceQueryPlan implements QueryPlan {
         columns.add(column);
         Expression expression =
                 new RowKeyColumnExpression(column, new RowKeyValueAccessor(columns, 0));
-        projectedColumns.add(new ExpressionProjector(MetricInfo.TRACE.columnName, "", expression,
+        projectedColumns.add(new ExpressionProjector(MetricInfo.TRACE.columnName, MetricInfo.TRACE.columnName, "", expression,
                 true));
         int estimatedByteSize = SizedUtil.KEY_VALUE_SIZE + PLong.INSTANCE.getByteSize();
         TRACE_PROJECTOR = new RowProjector(projectedColumns, estimatedByteSize, false);
