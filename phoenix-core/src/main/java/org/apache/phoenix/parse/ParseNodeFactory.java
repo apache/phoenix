@@ -25,8 +25,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.hadoop.hbase.CompareOperator;
@@ -345,6 +347,10 @@ public class ParseNodeFactory {
 
     public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits, ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType,boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
         return new CreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, async, bindCount, udfParseNodes);
+    }
+
+    public CreateCDCStatement createCDC(TableName cdcObj, TableName dataTable, ColumnName timeIdxColumn, Set<PTable.CDCChangeScope> includeScopes, ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, int bindCount) {
+        return new CreateCDCStatement(cdcObj, dataTable, timeIdxColumn, includeScopes, props, ifNotExists, bindCount);
     }
 
     public CreateSequenceStatement createSequence(TableName tableName, ParseNode startsWith,

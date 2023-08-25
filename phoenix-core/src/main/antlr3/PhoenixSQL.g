@@ -81,6 +81,10 @@ tokens
     IF='if';
     CONSTRAINT='constraint';
     TABLES='tables';
+    CDC='cdc';
+    PRE='pre';
+    POST='post';
+    LATEST='latest';
     ALL='all';
     INDEX='index';
     INCLUDE='include';
@@ -187,6 +191,8 @@ import java.lang.Boolean;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.Stack;
 import java.sql.SQLException;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
@@ -201,6 +207,7 @@ import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTable.CDCChangeScope;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
@@ -424,6 +431,7 @@ oneStatement returns [BindableStatement ret]
     |   s=create_schema_node
     |   s=create_view_node
     |   s=create_index_node
+    |   s=create_cdc_node
     |   s=cursor_open_node
     |   s=cursor_close_node
     |   s=cursor_fetch_node
@@ -542,6 +550,28 @@ create_index_node returns [CreateIndexStatement ret]
                     l==null ? (u==null ? IndexType.getDefault() : IndexType.UNCOVERED_GLOBAL) :
                     IndexType.LOCAL, async != null, getBindCount(), new HashMap<String,
                     UDFParseNode>(udfParseNodes));
+        }
+    ;
+
+create_cdc_node returns [CreateCDCStatement ret]
+	:	CREATE CDC (IF NOT ex=EXISTS)? o=from_table_name ON t=from_table_name
+        LPAREN tcol=column_name RPAREN
+        (INCLUDE v=cdc_change_scopes)?
+        (p=fam_properties)?
+        {
+            ret = factory.createCDC(o, t, tcol, v, p, ex != null, getBindCount());
+        }
+    ;
+
+cdc_change_scopes returns [Set<CDCChangeScope> ret]
+@init { ret = new HashSet<>(); }
+    :   v=cdc_change_scope { $ret.add(v); } ( COMMA v=cdc_change_scope { $ret.add(v); } )*
+    ;
+
+cdc_change_scope returns [CDCChangeScope ret]
+    :   v=(PRE | POST | LATEST | ALL)
+        {
+            ret = CDCChangeScope.valueOf(v.getText());
         }
     ;
 

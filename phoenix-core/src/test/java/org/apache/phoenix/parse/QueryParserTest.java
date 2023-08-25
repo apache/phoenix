@@ -39,12 +39,12 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 
 
 public class QueryParserTest {
-    private void parseQuery(String sql) throws IOException, SQLException {
+    private <T extends BindableStatement> T parseQuery(String sql, Class<T> type) throws IOException, SQLException {
         SQLParser parser = new SQLParser(new StringReader(sql));
         BindableStatement stmt = null;
         stmt = parser.parseStatement();
         if (stmt.getOperation() != Operation.QUERY) {
-            return;
+            return type != null ? type.cast(stmt) : null;
         }
         String newSQL = stmt.toString();
         SQLParser newParser = new SQLParser(new StringReader(newSQL));
@@ -55,6 +55,11 @@ public class QueryParserTest {
             fail("Unable to parse new:\n" + newSQL);
         }
         assertEquals("Expected equality:\n" + sql + "\n" + newSQL, stmt, newStmt);
+        return type != null ? type.cast(stmt) : null;
+    }
+
+    private <T extends BindableStatement> T parseQuery(String sql) throws IOException, SQLException {
+        return parseQuery(sql, null);
     }
 
     private void parseQueryThatShouldFail(String sql) throws Exception {
@@ -486,6 +491,22 @@ public class QueryParserTest {
             assertEquals(2, stmt.getColumnDefs().size());
             assertNotNull(stmt.getPrimaryKeyConstraint());
         }
+    }
+
+    private CreateCDCStatement parseCreateCDCSimple(String sql, boolean ifNotExists, String tsCol) throws Exception {
+        CreateCDCStatement stmt = parseQuery(sql, CreateCDCStatement.class);
+        assertEquals("FOO", stmt.getCdcObjName().getTableName());
+        assertEquals("BAR", stmt.getDataTable().getTableName());
+        assertEquals(tsCol, stmt.getTimeIdxColumn().getColumnName());
+        assertEquals(ifNotExists, stmt.isIfNotExists());
+        return stmt;
+    }
+
+    @Test
+    public void testCreateCDCSimple() throws Exception {
+        parseCreateCDCSimple("create cdc foo on bar(ts)", false, "TS");
+        parseCreateCDCSimple("create cdc if not exists foo on bar(ts)", true, "TS");
+        parseCreateCDCSimple("create cdc foo on bar(PHOENIX_ROW_TIMESTAMP())", false, "PHOENIX_ROW_TIMESTAMP()");
     }
 
     @Test
