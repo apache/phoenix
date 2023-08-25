@@ -31,10 +31,10 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_LEVEL_TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 
 public class PhoenixMultiInputUtil {
@@ -42,8 +42,8 @@ public class PhoenixMultiInputUtil {
             "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, PHOENIX_TTL FROM " +
                     SYSTEM_CATALOG_NAME + " WHERE " +
                     TABLE_TYPE + " = '" + PTableType.VIEW.getSerializedValue() + "' AND " +
-                    PHOENIX_TTL + " IS NOT NULL AND " +
-                    PHOENIX_TTL + " > " + PHOENIX_TTL_NOT_DEFINED + " AND " +
+                    TTL + " IS NOT NULL AND " +
+                    TTL + " > " + PHOENIX_LEVEL_TTL_NOT_DEFINED + " AND " +
                     VIEW_TYPE + " <> " + PTable.ViewType.MAPPED.getSerializedValue();
 
     public static Connection buildTenantConnection(String url, String tenantId)

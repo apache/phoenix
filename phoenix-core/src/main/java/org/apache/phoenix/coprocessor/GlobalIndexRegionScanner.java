@@ -154,7 +154,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     protected TaskRunner pool;
     protected String exceptionMessage;
     protected HTableFactory hTableFactory;
-    protected long indexTableTTL;
+    protected int indexTableTTL;
     protected long maxLookBackInMills;
     protected IndexToolVerificationResult verificationResult = null;
     protected IndexVerificationResultRepository verificationResultRepository = null;
@@ -267,11 +267,11 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         throw new IllegalStateException("No cell found");
     }
 
-    protected static boolean isTimestampBeforeTTL(long tableTTL, long currentTime, long tsToCheck) {
+    protected static boolean isTimestampBeforeTTL(int tableTTL, long currentTime, long tsToCheck) {
         if (tableTTL == HConstants.FOREVER) {
             return false;
         }
-        return tsToCheck < (currentTime - tableTTL * 1000);
+        return tsToCheck < (currentTime - tableTTL * 1000L);
     }
 
     protected static boolean isTimestampBeyondMaxLookBack(long maxLookBackInMills,

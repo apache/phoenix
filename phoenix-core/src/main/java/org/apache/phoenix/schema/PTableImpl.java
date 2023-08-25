@@ -30,6 +30,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_LEVEL_TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
@@ -48,7 +49,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FO
 import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
 import static org.apache.phoenix.schema.TableProperty.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_OLD_TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_PHOENIX_TTL_HWM;
 
 import java.io.IOException;
@@ -68,6 +69,7 @@ import java.util.Map.Entry;
 
 import javax.annotation.Nonnull;
 
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
@@ -203,6 +205,7 @@ public class PTableImpl implements PTable {
     private final QualifierEncodingScheme qualifierEncodingScheme;
     private final EncodedCQCounter encodedCQCounter;
     private final Boolean useStatsForParallelization;
+    private final int ttl;
     private final long phoenixTTL;
     private final long phoenixTTLHighWaterMark;
     private final BitSet viewModifiedPropSet;
@@ -212,6 +215,7 @@ public class PTableImpl implements PTable {
     private String schemaVersion;
     private String externalSchemaId;
     private String streamingTopicName;
+    private byte[] rowKeyPrefix;
 
     public static class Builder {
         private PTableKey key;
@@ -277,6 +281,8 @@ public class PTableImpl implements PTable {
         private String schemaVersion;
         private String externalSchemaId;
         private String streamingTopicName;
+        private int ttl;
+        private byte[] rowKeyPrefix;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -612,8 +618,13 @@ public class PTableImpl implements PTable {
         }
 
         public Builder setPhoenixTTL(long phoenixTTL) {
-            propertyValues.put(TTL, String.valueOf(phoenixTTL));
             this.phoenixTTL = phoenixTTL;
+            return this;
+        }
+
+        public Builder setTTL(int ttl) {
+            propertyValues.put(TTL, String.valueOf(ttl));
+            this.ttl = ttl;
             return this;
         }
 
@@ -694,6 +705,13 @@ public class PTableImpl implements PTable {
          public Builder setStreamingTopicName(String streamingTopicName) {
             if (streamingTopicName != null) {
                 this.streamingTopicName = streamingTopicName;
+            }
+            return this;
+         }
+
+         public Builder setRowKeyPrefix(byte[] rowKeyPrefix) {
+            if (rowKeyPrefix != null) {
+                this.rowKeyPrefix = rowKeyPrefix;
             }
             return this;
          }
@@ -979,6 +997,7 @@ public class PTableImpl implements PTable {
         this.qualifierEncodingScheme = builder.qualifierEncodingScheme;
         this.encodedCQCounter = builder.encodedCQCounter;
         this.useStatsForParallelization = builder.useStatsForParallelization;
+        this.ttl = builder.ttl;
         this.phoenixTTL = builder.phoenixTTL;
         this.phoenixTTLHighWaterMark = builder.phoenixTTLHighWaterMark;
         this.viewModifiedPropSet = builder.viewModifiedPropSet;
@@ -988,6 +1007,7 @@ public class PTableImpl implements PTable {
         this.schemaVersion = builder.schemaVersion;
         this.externalSchemaId = builder.externalSchemaId;
         this.streamingTopicName = builder.streamingTopicName;
+        this.rowKeyPrefix = builder.rowKeyPrefix;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1067,7 +1087,9 @@ public class PTableImpl implements PTable {
                 .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled())
                 .setSchemaVersion(table.getSchemaVersion())
                 .setExternalSchemaId(table.getExternalSchemaId())
-                .setStreamingTopicName(table.getStreamingTopicName());
+                .setStreamingTopicName(table.getStreamingTopicName())
+                .setTTL(table.getTTL())
+                .setRowKeyPrefix(table.getRowKeyPrefix());
     }
 
     @Override
@@ -1951,7 +1973,7 @@ public class PTableImpl implements PTable {
         if (table.hasUseStatsForParallelization()) {
             useStatsForParallelization = table.getUseStatsForParallelization();
         }
-        long phoenixTTL = PHOENIX_TTL_NOT_DEFINED;
+        long phoenixTTL = PHOENIX_OLD_TTL_NOT_DEFINED;
         if (table.hasPhoenixTTL()) {
             phoenixTTL = table.getPhoenixTTL();
         }
@@ -1995,6 +2017,17 @@ public class PTableImpl implements PTable {
             streamingTopicName =
                 (String) PVarchar.INSTANCE.toObject(table.getStreamingTopicName().toByteArray());
         }
+
+        Integer ttl = PHOENIX_LEVEL_TTL_NOT_DEFINED;
+        if (table.hasTtl()) {
+            ttl = table.getTtl();
+        }
+
+        byte[] rowKeyPrefix = null;
+        if (table.hasRowKeyPrefix()) {
+            rowKeyPrefix = PVarbinary.INSTANCE.toBytes(table.getRowKeyPrefix());
+        }
+
         try {
             return new PTableImpl.Builder()
                     .setType(tableType)
@@ -2052,6 +2085,8 @@ public class PTableImpl implements PTable {
                     .setSchemaVersion(schemaVersion)
                     .setExternalSchemaId(externalSchemaId)
                     .setStreamingTopicName(streamingTopicName)
+                    .setTTL(ttl)
+                    .setRowKeyPrefix(rowKeyPrefix)
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -2191,6 +2226,10 @@ public class PTableImpl implements PTable {
         if (table.getStreamingTopicName() != null) {
             builder.setStreamingTopicName(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getStreamingTopicName())));
         }
+        builder.setTtl(table.getTTL());
+        if (table.getRowKeyPrefix() != null) {
+            builder.setRowKeyPrefix(ByteStringer.wrap(table.getRowKeyPrefix()));
+        }
         return builder.build();
     }
 
@@ -2287,11 +2326,17 @@ public class PTableImpl implements PTable {
     }
 
     @Override
+    public int getTTL() {
+        return ttl;
+    }
+    @Override
+    @Deprecated
     public long getPhoenixTTL() {
         return phoenixTTL;
     }
 
     @Override
+    @Deprecated
     public long getPhoenixTTLHighWaterMark() {
         return phoenixTTLHighWaterMark;
     }
@@ -2331,6 +2376,11 @@ public class PTableImpl implements PTable {
     @Override
     public String getStreamingTopicName() {
         return streamingTopicName;
+    }
+
+    @Override
+    public byte[] getRowKeyPrefix() {
+        return rowKeyPrefix;
     }
 
     private static final class KVColumnFamilyQualifier {

@@ -139,7 +139,7 @@ public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewList
             PTable parentTable = PhoenixRuntime.getTable(connection, null,
                     pTable.getParentName().toString());
             if (parentTable.getType() == PTableType.VIEW &&
-                    parentTable.getPhoenixTTL() > 0) {
+                    parentTable.getTTL() > 0) {
                             /* if the current view parent already has a TTL value, we want to
                             skip the current view cleanup job because we want to run the cleanup
                              job for at the GlobalView level instead of running multi-jobs at

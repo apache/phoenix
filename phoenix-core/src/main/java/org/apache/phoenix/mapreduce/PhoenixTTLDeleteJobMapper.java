@@ -86,7 +86,7 @@ public class PhoenixTTLDeleteJobMapper extends Mapper<NullWritable, ViewInfoTrac
             }
 
             LOGGER.debug(String.format("Deleting from view %s, TenantID %s, and TTL value: %d",
-                    value.getViewName(), value.getTenantId(), value.getPhoenixTtl()));
+                    value.getViewName(), value.getTenantId(), value.getTTL()));
 
             deleteExpiredRows(value, config, context);
 
@@ -158,8 +158,8 @@ public class PhoenixTTLDeleteJobMapper extends Mapper<NullWritable, ViewInfoTrac
             scan.setAttribute(
                     BaseScannerRegionObserver.DELETE_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
             scan.setAttribute(
-                    BaseScannerRegionObserver.PHOENIX_TTL,
-                    Bytes.toBytes(viewInfoTracker.getPhoenixTtl()));
+                    BaseScannerRegionObserver.TTL,
+                    Bytes.toBytes(viewInfoTracker.getTTL()));
             scan.setAttribute(
                     BaseScannerRegionObserver.PHOENIX_TTL_SCAN_TABLE_NAME,
                     Bytes.toBytes(sourceTableName));

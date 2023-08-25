@@ -202,6 +202,8 @@ public class Transform {
                 .setSchemaVersion(table.getSchemaVersion())
                 .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled())
                 .setStreamingTopicName(table.getStreamingTopicName())
+                .setTTL(table.getTTL())
+                .setRowKeyPrefix(table.getRowKeyPrefix())
                 // Transformables
                 .setImmutableStorageScheme(
                         (changedProps.getImmutableStorageSchemeProp() != null? changedProps.getImmutableStorageSchemeProp():table.getImmutableStorageScheme()))

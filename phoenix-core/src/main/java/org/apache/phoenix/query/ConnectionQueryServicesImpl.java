@@ -299,7 +299,6 @@ import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -4186,19 +4185,30 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0) {
             metaConnection = addColumnsIfNotExists(metaConnection,
-                    PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 -3,
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 - 5,
                     PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME
                             + " " + PVarchar.INSTANCE.getSqlTypeName());
 
             metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 -2,
+                MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 - 4,
                     PhoenixDatabaseMetaData.SCHEMA_VERSION + " " + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 -1,
+                MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 - 3,
                 PhoenixDatabaseMetaData.EXTERNAL_SCHEMA_ID + " " + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0,
+                MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 - 2,
                 PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME + " " + PVarchar.INSTANCE.getSqlTypeName());
+            /**
+             * TODO: Provide a path to copy existing data from PHOENIX_TTL to TTL column and then
+             * to DROP PHOENIX_TTL Column. See PHOENIX-7023
+             */
+            metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 - 1,
+                    PhoenixDatabaseMetaData.TTL + " " + PInteger.INSTANCE.getSqlTypeName());
+            metaConnection = addColumnsIfNotExists(metaConnection,
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0,
+                    PhoenixDatabaseMetaData.ROW_KEY_PREFIX + " " +
+                            PVarbinary.INSTANCE.getSqlTypeName());
             UpgradeUtil.bootstrapLastDDLTimestampForIndexes(metaConnection);
         }
         return metaConnection;

@@ -1338,7 +1338,7 @@ public class TestUtil {
         long tableTTL = -1;
         if (phoenixTTLEnabled) {
             tableTTL = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,
-                    tableName.getNameAsString())).getPhoenixTTL();
+                    tableName.getNameAsString())).getTTL();
         } else {
             tableTTL = getColumnDescriptor(conn, tableName).getTimeToLive();
         }

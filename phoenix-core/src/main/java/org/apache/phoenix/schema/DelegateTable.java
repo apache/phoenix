@@ -26,6 +26,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.transaction.TransactionFactory;
 
 public class DelegateTable implements PTable {
@@ -364,6 +365,10 @@ public class DelegateTable implements PTable {
         return delegate.hasViewModifiedUseStatsForParallelization();
     }
 
+    @Override public int getTTL() {
+        return delegate.getTTL();
+    }
+
     @Override public long getPhoenixTTL() { return delegate.getPhoenixTTL(); }
 
     @Override public long getPhoenixTTLHighWaterMark() {
@@ -396,6 +401,11 @@ public class DelegateTable implements PTable {
 
     @Override
     public String getStreamingTopicName() { return delegate.getStreamingTopicName(); }
+
+    @Override
+    public byte[] getRowKeyPrefix() {
+        return delegate.getRowKeyPrefix();
+    }
 
     @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }
 

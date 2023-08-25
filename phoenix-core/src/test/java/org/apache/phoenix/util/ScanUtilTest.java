@@ -536,7 +536,7 @@ public class ScanUtilTest {
 
                 long timestamp44 = 44L;
                 Scan testScan = new Scan();
-                testScan.setAttribute(BaseScannerRegionObserver.PHOENIX_TTL, Bytes.toBytes(1L));
+                testScan.setAttribute(BaseScannerRegionObserver.TTL, Bytes.toBytes(1));
                 // Test isTTLExpired
                 Assert.assertTrue(ScanUtil.isTTLExpired(cell42, testScan, timestamp44));
                 Assert.assertFalse(ScanUtil.isTTLExpired(cell43, testScan, timestamp44));
