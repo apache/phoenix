@@ -555,11 +555,18 @@ create_index_node returns [CreateIndexStatement ret]
 
 create_cdc_node returns [CreateCDCStatement ret]
 	:	CREATE CDC (IF NOT ex=EXISTS)? o=from_table_name ON t=from_table_name
-        LPAREN tcol=column_name RPAREN
-        (INCLUDE v=cdc_change_scopes)?
+        LPAREN (tcol=column_name | tfunc=cdc_time_func) RPAREN
+        (INCLUDE LPAREN v=cdc_change_scopes RPAREN)?
         (p=fam_properties)?
         {
-            ret = factory.createCDC(o, t, tcol, v, p, ex != null, getBindCount());
+            ret = factory.createCDC(o, t, tcol, tfunc, v, p, ex != null, getBindCount());
+        }
+    ;
+
+cdc_time_func returns [FunctionParseNode ret]
+    :   field=identifier LPAREN l=zero_or_more_expressions RPAREN
+        {
+            ret = factory.function(field, l);
         }
     ;
 
@@ -571,7 +578,7 @@ cdc_change_scopes returns [Set<CDCChangeScope> ret]
 cdc_change_scope returns [CDCChangeScope ret]
     :   v=(PRE | POST | LATEST | ALL)
         {
-            ret = CDCChangeScope.valueOf(v.getText());
+            ret = CDCChangeScope.valueOf(v.getText().toUpperCase());
         }
     ;
 

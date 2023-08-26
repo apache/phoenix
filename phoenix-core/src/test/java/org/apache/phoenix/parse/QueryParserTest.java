@@ -19,6 +19,7 @@ package org.apache.phoenix.parse;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -26,12 +27,15 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.junit.Test;
 
@@ -497,16 +501,30 @@ public class QueryParserTest {
         CreateCDCStatement stmt = parseQuery(sql, CreateCDCStatement.class);
         assertEquals("FOO", stmt.getCdcObjName().getTableName());
         assertEquals("BAR", stmt.getDataTable().getTableName());
-        assertEquals(tsCol, stmt.getTimeIdxColumn().getColumnName());
+        if (tsCol != null) {
+            assertEquals(tsCol, stmt.getTimeIdxColumn().getColumnName());
+        }
+        else {
+            assertNull(stmt.getTimeIdxColumn());
+        }
         assertEquals(ifNotExists, stmt.isIfNotExists());
         return stmt;
     }
 
     @Test
     public void testCreateCDCSimple() throws Exception {
+        CreateCDCStatement stmt = null;
         parseCreateCDCSimple("create cdc foo on bar(ts)", false, "TS");
         parseCreateCDCSimple("create cdc if not exists foo on bar(ts)", true, "TS");
-        parseCreateCDCSimple("create cdc foo on bar(PHOENIX_ROW_TIMESTAMP())", false, "PHOENIX_ROW_TIMESTAMP()");
+        stmt = parseCreateCDCSimple("create cdc foo on bar(PHOENIX_ROW_TIMESTAMP())", false, null);
+        assertEquals("PHOENIX_ROW_TIMESTAMP", stmt.getTimeIdxFunc().getName());
+        assertEquals(" PHOENIX_ROW_TIMESTAMP()", stmt.getTimeIdxFunc().toString());
+        stmt = parseCreateCDCSimple("create cdc foo on bar(ts) include (pre)", false, "TS");
+        assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE)), stmt.getIncludeScopes());
+        stmt = parseCreateCDCSimple("create cdc foo on bar(ts) include (pre, pre, post)", false, "TS");
+        assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)), stmt.getIncludeScopes());
+        stmt = parseCreateCDCSimple("create cdc if not exists foo on bar(ts) abc=def", true, "TS");
+        assertEquals(Arrays.asList(new Pair("ABC", "def")), stmt.getProps().get(""));
     }
 
     @Test

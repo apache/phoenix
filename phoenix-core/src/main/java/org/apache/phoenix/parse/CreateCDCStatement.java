@@ -12,16 +12,18 @@ public class CreateCDCStatement extends MutableStatement {
     private final TableName cdcObjName;
     private final TableName dataTable;
     private final ColumnName timeIdxColumn;
+    private final FunctionParseNode timeIdxFunc;
     private final Set<PTable.CDCChangeScope> includeScopes;
     private final ListMultimap<String,Pair<String,Object>> props;
     private final boolean ifNotExists;
     private final int bindCount;
 
     public CreateCDCStatement(TableName cdcObjName, TableName dataTable, ColumnName timeIdxColumn,
-                              Set<PTable.CDCChangeScope> includeScopes, ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists, int bindCount) {
+                              FunctionParseNode timeIdxFunc, Set<PTable.CDCChangeScope> includeScopes, ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists, int bindCount) {
         this.cdcObjName = cdcObjName;
         this.dataTable = dataTable;
         this.timeIdxColumn = timeIdxColumn;
+        this.timeIdxFunc = timeIdxFunc;
         this.includeScopes = includeScopes;
         this.props = props == null ? ArrayListMultimap.<String,Pair<String,Object>>create() : props;
         this.ifNotExists = ifNotExists;
@@ -38,6 +40,10 @@ public class CreateCDCStatement extends MutableStatement {
 
     public ColumnName getTimeIdxColumn() {
         return timeIdxColumn;
+    }
+
+    public FunctionParseNode getTimeIdxFunc() {
+        return timeIdxFunc;
     }
 
     public Set<PTable.CDCChangeScope> getIncludeScopes() {

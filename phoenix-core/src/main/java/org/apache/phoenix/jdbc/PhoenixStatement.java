@@ -143,6 +143,7 @@ import org.apache.phoenix.parse.DeclareCursorStatement;
 import org.apache.phoenix.parse.DeleteJarStatement;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.ExplainType;
+import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.ShowCreateTableStatement;
 import org.apache.phoenix.parse.ShowCreateTable;
 import org.apache.phoenix.parse.DropColumnStatement;
@@ -1060,10 +1061,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     private static class ExecutableCreateCDCStatement extends CreateCDCStatement implements CompilableStatement {
         public ExecutableCreateCDCStatement(TableName cdcObjName, TableName dataTable,
-                                            ColumnName timeIdxColumn, Set<PTable.CDCChangeScope> includeScopes,
-                                            ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists,
-                                            int bindCount) {
-            super(cdcObjName, dataTable, timeIdxColumn, includeScopes, props, ifNotExists, bindCount);
+                                            ColumnName timeIdxColumn, FunctionParseNode tfunc,
+                                            Set<PTable.CDCChangeScope> includeScopes, ListMultimap<String,
+                                            Pair<String, Object>> props, boolean ifNotExists, int bindCount) {
+            super(cdcObjName, dataTable, timeIdxColumn, tfunc, includeScopes, props, ifNotExists, bindCount);
         }
 
         @Override
@@ -1844,8 +1845,12 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
 
         @Override
-        public CreateCDCStatement createCDC(TableName cdcObj, TableName dataTable, ColumnName timeIdxColumn, Set<PTable.CDCChangeScope> includeScopes, ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, int bindCount) {
-            return new ExecutableCreateCDCStatement(cdcObj, dataTable, timeIdxColumn, includeScopes, props, ifNotExists, bindCount);
+        public CreateCDCStatement createCDC(TableName cdcObj, TableName dataTable, ColumnName timeIdxColumn,
+                                            FunctionParseNode timeIdxFunc, Set<PTable.CDCChangeScope> includeScopes,
+                                            ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists,
+                                            int bindCount) {
+            return new ExecutableCreateCDCStatement(cdcObj, dataTable, timeIdxColumn, timeIdxFunc, includeScopes, props,
+                    ifNotExists, bindCount);
         }
 
         @Override
