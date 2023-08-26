@@ -34,7 +34,6 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.join.MaxServerCacheSizeExceededException;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -142,6 +141,7 @@ public class IndexMetaDataCacheClient {
                     mutation.setAttribute(BaseScannerRegionObserver.DO_TRANSFORMING, TRUE_BYTES);
                 }
             }
+            ScanUtil.annotateMutationWithMetadataAttributes(table, mutation);
             if (attribValue != null) {
                 mutation.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, attribValue);
                 mutation.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION,

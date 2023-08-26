@@ -1122,6 +1122,7 @@ public class ScanUtil {
             return null;
         }
     }
+
     public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table,
             PhoenixConnection phoenixConnection) throws SQLException {
         boolean isTransforming = (table.getTransformingNewTable() != null);
@@ -1150,6 +1151,9 @@ public class ScanUtil {
                 return;
             }
             TransformMaintainer indexMaintainer = indexTable.getTransformMaintainer(oldTable, phoenixConnection);
+            scan.setAttribute(PhoenixIndexCodec.INDEX_NAME_FOR_IDX_MAINTAINER,
+                    indexTable.getTableName().getBytes());
+            ScanUtil.annotateScanWithMetadataAttributes(oldTable, scan);
             // This is the path where we are reading from the newly transformed table
             if (scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD) == null) {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -1186,6 +1190,9 @@ public class ScanUtil {
                 return;
             }
 
+            scan.setAttribute(PhoenixIndexCodec.INDEX_NAME_FOR_IDX_MAINTAINER,
+                    indexTable.getTableName().getBytes());
+            ScanUtil.annotateScanWithMetadataAttributes(dataTable, scan);
             if (scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD) == null) {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(indexTable), phoenixConnection);
@@ -1420,7 +1427,7 @@ public class ScanUtil {
      * @param table Table metadata for the target table/view of the write
      * @param scan Scan to trigger the server-side coproc
      */
-    public static void setWALAnnotationAttributes(PTable table, Scan scan) {
+    public static void annotateScanWithMetadataAttributes(PTable table, Scan scan) {
         if (table.getTenantId() != null) {
             scan.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(),
                     table.getTenantId().getBytes());
@@ -1443,6 +1450,103 @@ public class ScanUtil {
             }
         }
     }
+
+    /**
+     * Annotate Mutation with required metadata attributes (tenant id, schema name, logical table
+     * name, table type, last ddl timestamp) from the client side.
+     *
+     * @param tenantId tenant id.
+     * @param schemaName schema name.
+     * @param logicalTableName logical table name.
+     * @param tableType table type.
+     * @param timestamp last ddl timestamp.
+     * @param mutation mutation object to attach attributes.
+     */
+    public static void annotateMutationWithMetadataAttributes(byte[] tenantId,
+                                                              byte[] schemaName,
+                                                              byte[] logicalTableName,
+                                                              byte[] tableType,
+                                                              byte[] timestamp,
+                                                              Mutation mutation) {
+        if (tenantId != null) {
+            mutation.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(),
+                    tenantId);
+        }
+        mutation.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
+                schemaName);
+        mutation.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
+                logicalTableName);
+        mutation.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(),
+                tableType);
+        if (timestamp != null) {
+            mutation.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(),
+                    timestamp);
+        }
+    }
+
+    /**
+     * Annotate Scan with required metadata attributes (tenant id, schema name, logical table
+     * name, table type, last ddl timestamp), from old scan object to new scan object.
+     *
+     * @param oldScan old scan object.
+     * @param newScan new scan object.
+     */
+    public static void annotateScanWithMetadataAttributes(Scan oldScan, Scan newScan) {
+        byte[] tenantId =
+                oldScan.getAttribute(MutationState.MutationMetadataType.TENANT_ID.toString());
+        byte[] schemaName =
+                oldScan.getAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString());
+        byte[] logicalTableName = oldScan.getAttribute(
+                MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString());
+        byte[] tableType =
+                oldScan.getAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString());
+        byte[] timestamp =
+                oldScan.getAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString());
+        if (tenantId != null) {
+            newScan.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(), tenantId);
+        }
+        if (schemaName != null) {
+            newScan.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
+                    schemaName);
+        }
+        if (logicalTableName != null) {
+            newScan.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
+                    logicalTableName);
+        }
+        if (tableType != null) {
+            newScan.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(),
+                    tableType);
+        }
+        if (timestamp != null) {
+            newScan.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(),
+                    timestamp);
+        }
+    }
+
+    /**
+     * Annotate Mutation with required metadata attributes (tenant id, schema name, logical table
+     * name, table type, last ddl timestamp), derived from the given PTable object.
+     *
+     * @param table table object to derive metadata attributes from.
+     * @param mutation mutation object.
+     */
+    public static void annotateMutationWithMetadataAttributes(PTable table, Mutation mutation) {
+        if (table.getTenantId() != null) {
+            mutation.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(),
+                    table.getTenantId().getBytes());
+        }
+        mutation.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
+                table.getSchemaName().getBytes());
+        mutation.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
+                table.getTableName().getBytes());
+        mutation.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(),
+                table.getType().getValue().getBytes());
+        if (table.getLastDDLTimestamp() != null) {
+            mutation.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(),
+                    Bytes.toBytes(table.getLastDDLTimestamp()));
+        }
+    }
+
     public static PageFilter removePageFilterFromFilterList(FilterList filterList) {
         Iterator<Filter> filterIterator = filterList.getFilters().iterator();
         while (filterIterator.hasNext()) {
