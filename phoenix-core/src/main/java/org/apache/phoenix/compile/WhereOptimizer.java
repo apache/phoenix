@@ -1704,6 +1704,9 @@ public class WhereOptimizer {
             }
             // TODO: is there a case where we'd need to go through the childPart to calculate the key range?
             PColumn column = childSlot.getKeyPart().getColumn();
+            // PHOENIX-6960 : For DESC order, previous key should be treated as current key, to
+            // retrieve the correct key range.
+            key = column.getSortOrder() == SortOrder.DESC ? ByteUtil.previousKey(key) : key;
             PDataType type = column.getDataType();
             byte[] lowerRange = key;
             byte[] upperRange = ByteUtil.nextKey(key);
@@ -1722,7 +1725,10 @@ public class WhereOptimizer {
                 lowerRange = Arrays.copyOf(lowerRange, lowerRange.length+1);
                 lowerRange[lowerRange.length-1] = QueryConstants.SEPARATOR_BYTE;
             }
-            KeyRange range = type.getKeyRange(lowerRange, true, upperRange, false, SortOrder.ASC);
+            boolean lowerInclusive = column.getSortOrder() == SortOrder.ASC;
+            boolean upperInclusive = column.getSortOrder() == SortOrder.DESC;
+            KeyRange range = type.getKeyRange(lowerRange, lowerInclusive, upperRange,
+                    upperInclusive, SortOrder.ASC);
             if (column.getSortOrder() == SortOrder.DESC) {
                 range = range.invert();
             }
