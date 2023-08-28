@@ -1691,8 +1691,10 @@ public class WhereOptimizer {
             KeySlots childSlots = childParts.get(0);
             KeySlot childSlot = childSlots.getSlots().get(0);
             final String startsWith = node.getLiteralPrefix();
-            SortOrder sortOrder = node.getChildren().get(0).getSortOrder();
-            byte[] key = PVarchar.INSTANCE.toBytes(startsWith, sortOrder);
+            // TODO: is there a case where we'd need to go through the childPart to calculate the key range?
+            PColumn column = childSlot.getKeyPart().getColumn();
+            PDataType type = column.getDataType();
+            byte[] key = PVarchar.INSTANCE.toBytes(startsWith, column.getSortOrder());
             // If the expression is an equality expression against a fixed length column
             // and the key length doesn't match the column length, the expression can
             // never be true.
@@ -1702,12 +1704,10 @@ public class WhereOptimizer {
             if (childNodeFixedLength != null && key.length > childNodeFixedLength) {
                 return EMPTY_KEY_SLOTS;
             }
-            // TODO: is there a case where we'd need to go through the childPart to calculate the key range?
-            PColumn column = childSlot.getKeyPart().getColumn();
             // PHOENIX-6960 : For DESC order, previous key should be treated as current key, to
             // retrieve the correct key range.
-            key = column.getSortOrder() == SortOrder.DESC ? ByteUtil.previousKey(key) : key;
-            PDataType type = column.getDataType();
+            key = column.getSortOrder() == SortOrder.DESC && !type.isFixedWidth() ?
+                    ByteUtil.previousKey(key) : key;
             byte[] lowerRange = key;
             byte[] upperRange = ByteUtil.nextKey(key);
             Integer columnFixedLength = column.getMaxLength();

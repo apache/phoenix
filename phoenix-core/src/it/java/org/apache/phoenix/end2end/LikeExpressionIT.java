@@ -512,6 +512,60 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testLikeWithFixedWidthIndexDesc() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = tableName + "_IDX";
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName +
+                    " (id integer primary key, name char(5), type integer, status integer )");
+
+            stmt.execute("CREATE INDEX " + indexName + " ON " + tableName +
+                    "(status, type, name desc)");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(1, 'xyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(2, 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(3, 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(4, 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(5, 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(6, 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(7, 'xy', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xy%'");
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
     public void testLikeWithIndexAsc() throws Exception {
         String tableName = generateUniqueName();
         String indexName = tableName + "_IDX";
@@ -520,6 +574,60 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName +
                     " (id integer primary key, name varchar, type integer, status integer )");
+
+            stmt.execute("CREATE INDEX " + indexName + " ON " + tableName +
+                    "(status, type, name)");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(1, 'xyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(2, 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(3, 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(4, 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(5, 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(6, 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(7, 'xy', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xy%'");
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLikeWithFixedWidthIndexAsc() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = tableName + "_IDX";
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName +
+                    " (id integer primary key, name char(5), type integer, status integer )");
 
             stmt.execute("CREATE INDEX " + indexName + " ON " + tableName +
                     "(status, type, name)");
@@ -608,6 +716,48 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testLikeWithFixedWidthDesc() throws Exception {
+        String tableName = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName + " (id char(4) not null, name varchar, type " +
+                    "decimal, status integer CONSTRAINT pk PRIMARY KEY(id desc, type))");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('abc', 'abc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('ab', 'ab', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('abde', 'abdef', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('ac', 'ac', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('aa', 'aa', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName
+                    + " where type = 1 and id like 'ab%'");
+
+            assertTrue(rs.next());
+            assertEquals("abde", rs.getString(1));
+            assertEquals("abdef", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("abc", rs.getString(1));
+            assertEquals("abc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("ab", rs.getString(1));
+            assertEquals("ab", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
     public void testLikeWithAsc() throws Exception {
         String tableName = generateUniqueName();
 
@@ -615,6 +765,48 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName + " (id varchar, name varchar, type decimal, "
                     + "status integer CONSTRAINT pk PRIMARY KEY(id, type))");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('abc', 'abc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('ab', 'ab', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('abde', 'abdef', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('ac', 'ac', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('aa', 'aa', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName
+                    + " where type = 1 and id like 'ab%'");
+
+            assertTrue(rs.next());
+            assertEquals("ab", rs.getString(1));
+            assertEquals("ab", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("abc", rs.getString(1));
+            assertEquals("abc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("abde", rs.getString(1));
+            assertEquals("abdef", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLikeWithFixedWidthAsc() throws Exception {
+        String tableName = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName + " (id char(4) not null, name varchar," +
+                    " type decimal, status integer CONSTRAINT pk PRIMARY KEY(id, type))");
 
             conn.commit();
             stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('abc', 'abc', 1, 1)");
@@ -704,6 +896,60 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testLikeWithFixedWidthOrderByDesc() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = tableName + "_IDX";
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName +
+                    " (id integer primary key, name char(5), type integer, status integer )");
+
+            stmt.execute("CREATE INDEX " + indexName + " ON " + tableName +
+                    "(status, type)");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(1, 'xyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(2, 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(3, 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(4, 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(5, 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(6, 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(7, 'xy', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xy%' order by name desc");
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
     public void testLikeWithOrderByAsc() throws Exception {
         String tableName = generateUniqueName();
         String indexName = tableName + "_IDX";
@@ -712,6 +958,60 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
              Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + tableName +
                     " (id integer primary key, name varchar, type integer, status integer)");
+
+            stmt.execute("CREATE INDEX " + indexName + " ON " + tableName +
+                    "(status, type)");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(1, 'xyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(2, 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(3, 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(4, 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(5, 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(6, 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(7, 'xy', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xy%' order by name");
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLikeWithFixedWidthOrderByAsc() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = tableName + "_IDX";
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName +
+                    " (id integer primary key, name char(5), type integer, status integer)");
 
             stmt.execute("CREATE INDEX " + indexName + " ON " + tableName +
                     "(status, type)");
