@@ -349,7 +349,7 @@ public class ParseNodeFactory {
         return new CreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, async, bindCount, udfParseNodes);
     }
 
-    public CreateCDCStatement createCDC(TableName cdcObj, TableName dataTable, ColumnName timeIdxColumn,
+    public CreateCDCStatement createCDC(NamedNode cdcObj, TableName dataTable, ColumnName timeIdxColumn,
                                         FunctionParseNode timeIdxFunc, Set<PTable.CDCChangeScope> includeScopes,
                                         ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists,
                                         int bindCount) {
@@ -433,6 +433,10 @@ public class ParseNodeFactory {
     }
 
     public NamedNode indexName(String name) {
+        return new NamedNode(name);
+    }
+
+    public NamedNode cdcName(String name) {
         return new NamedNode(name);
     }
 

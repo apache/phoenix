@@ -9,7 +9,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 
 public class CreateCDCStatement extends MutableStatement {
-    private final TableName cdcObjName;
+    private final NamedNode cdcObjName;
     private final TableName dataTable;
     private final ColumnName timeIdxColumn;
     private final FunctionParseNode timeIdxFunc;
@@ -18,7 +18,7 @@ public class CreateCDCStatement extends MutableStatement {
     private final boolean ifNotExists;
     private final int bindCount;
 
-    public CreateCDCStatement(TableName cdcObjName, TableName dataTable, ColumnName timeIdxColumn,
+    public CreateCDCStatement(NamedNode cdcObjName, TableName dataTable, ColumnName timeIdxColumn,
                               FunctionParseNode timeIdxFunc, Set<PTable.CDCChangeScope> includeScopes, ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists, int bindCount) {
         this.cdcObjName = cdcObjName;
         this.dataTable = dataTable;
@@ -30,7 +30,7 @@ public class CreateCDCStatement extends MutableStatement {
         this.bindCount = bindCount;
     }
 
-    public TableName getCdcObjName() {
+    public NamedNode getCdcObjName() {
         return cdcObjName;
     }
 

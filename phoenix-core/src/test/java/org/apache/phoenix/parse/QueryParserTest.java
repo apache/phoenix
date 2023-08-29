@@ -499,7 +499,7 @@ public class QueryParserTest {
 
     private CreateCDCStatement parseCreateCDCSimple(String sql, boolean ifNotExists, String tsCol) throws Exception {
         CreateCDCStatement stmt = parseQuery(sql, CreateCDCStatement.class);
-        assertEquals("FOO", stmt.getCdcObjName().getTableName());
+        assertEquals("FOO", stmt.getCdcObjName().getName());
         assertEquals("BAR", stmt.getDataTable().getTableName());
         if (tsCol != null) {
             assertEquals(tsCol, stmt.getTimeIdxColumn().getColumnName());
@@ -515,6 +515,7 @@ public class QueryParserTest {
     public void testCreateCDCSimple() throws Exception {
         CreateCDCStatement stmt = null;
         parseCreateCDCSimple("create cdc foo on bar(ts)", false, "TS");
+        parseCreateCDCSimple("create cdc foo on s.bar(ts)", false, "TS");
         parseCreateCDCSimple("create cdc if not exists foo on bar(ts)", true, "TS");
         stmt = parseCreateCDCSimple("create cdc foo on bar(PHOENIX_ROW_TIMESTAMP())", false, null);
         assertEquals("PHOENIX_ROW_TIMESTAMP", stmt.getTimeIdxFunc().getName());
@@ -525,6 +526,28 @@ public class QueryParserTest {
         assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)), stmt.getIncludeScopes());
         stmt = parseCreateCDCSimple("create cdc if not exists foo on bar(ts) abc=def", true, "TS");
         assertEquals(Arrays.asList(new Pair("ABC", "def")), stmt.getProps().get(""));
+        stmt = parseCreateCDCSimple("create cdc if not exists foo on bar(ts) abc=def, prop=val", true, "TS");
+        assertEquals(Arrays.asList(new Pair("ABC", "def"), new Pair("PROP", "val")), stmt.getProps().get(""));
+    }
+
+    private void parseInvalidCreateCDC(String sql, int expRrrorCode) throws IOException {
+        try {
+            parseQuery(sql);
+            fail();
+        }
+        catch (SQLException e) {
+            assertEquals(expRrrorCode, e.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testInvalidCreateCDC() throws Exception {
+        parseInvalidCreateCDC("create cdc foo on bar", SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode());
+        parseInvalidCreateCDC("create cdc foo bar", SQLExceptionCode.MISSING_TOKEN.getErrorCode());
+        parseInvalidCreateCDC("create cdc foo bar ts", SQLExceptionCode.MISSING_TOKEN.getErrorCode());
+        parseInvalidCreateCDC("create cdc foo bar(ts)", SQLExceptionCode.MISSING_TOKEN.getErrorCode());
+        parseInvalidCreateCDC("create cdc s.foo on bar(ts)", SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode());
+        parseInvalidCreateCDC("create cdc foo bar(ts1, ts2)", SQLExceptionCode.MISSING_TOKEN.getErrorCode());
     }
 
     @Test

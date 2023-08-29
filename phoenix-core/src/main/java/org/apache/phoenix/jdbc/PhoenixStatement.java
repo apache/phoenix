@@ -1060,7 +1060,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
 
     private static class ExecutableCreateCDCStatement extends CreateCDCStatement implements CompilableStatement {
-        public ExecutableCreateCDCStatement(TableName cdcObjName, TableName dataTable,
+        public ExecutableCreateCDCStatement(NamedNode cdcObjName, TableName dataTable,
                                             ColumnName timeIdxColumn, FunctionParseNode tfunc,
                                             Set<PTable.CDCChangeScope> includeScopes, ListMultimap<String,
                                             Pair<String, Object>> props, boolean ifNotExists, int bindCount) {
@@ -1068,7 +1068,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
 
         @Override
-        public <T extends StatementPlan> T compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+        public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             return null;
         }
     }
@@ -1845,7 +1845,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
 
         @Override
-        public CreateCDCStatement createCDC(TableName cdcObj, TableName dataTable, ColumnName timeIdxColumn,
+        public CreateCDCStatement createCDC(NamedNode cdcObj, TableName dataTable, ColumnName timeIdxColumn,
                                             FunctionParseNode timeIdxFunc, Set<PTable.CDCChangeScope> includeScopes,
                                             ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists,
                                             int bindCount) {
