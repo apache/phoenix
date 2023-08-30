@@ -1,7 +1,25 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.phoenix.jdbc;
 
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableRef;
@@ -32,12 +50,47 @@ public class PhoenixTestDriverIT extends BaseTest {
     }
 
     /**
+     * Test that connections created using the same url have the same CQSI object.
+     */
+    @Test
+    public void testSameCQSI() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        String url = QueryUtil.getConnectionUrl(props, config, "client1");
+        try (Connection conn1 = DriverManager.getConnection(url);
+             Connection conn2 = DriverManager.getConnection(url)) {
+            ConnectionQueryServices cqs1 = conn1.unwrap(PhoenixConnection.class).getQueryServices();
+            ConnectionQueryServices cqs2 = conn2.unwrap(PhoenixConnection.class).getQueryServices();
+            Assert.assertNotNull(cqs1);
+            Assert.assertNotNull(cqs2);
+            Assert.assertTrue("Connections using the same URL should have the same CQSI object.", cqs1.equals(cqs2));
+        }
+    }
+
+    /**
+     * Test that connections created using different urls have different CQSI objects.
+     */
+    @Test
+    public void testDifferentCQSI() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        try (Connection conn1 = DriverManager.getConnection(url1);
+             Connection conn2 = DriverManager.getConnection(url2)) {
+            ConnectionQueryServices cqs1 = conn1.unwrap(PhoenixConnection.class).getQueryServices();
+            ConnectionQueryServices cqs2 = conn2.unwrap(PhoenixConnection.class).getQueryServices();
+            Assert.assertNotNull(cqs1);
+            Assert.assertNotNull(cqs2);
+            Assert.assertTrue("Connections using different URL should have different CQSI objects.", !cqs1.equals(cqs2));
+        }
+    }
+
+    /**
      * Create 2 connections using URLs with different principals.
      * Create a table using one connection and verify that the other connection's cache
      * does not have this table's metadata.
      */
     @Test
-    public void testMultipleCQSI() throws SQLException {
+    public void testDifferentCQSICache() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
         String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
