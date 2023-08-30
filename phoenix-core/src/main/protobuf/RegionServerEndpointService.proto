@@ -36,7 +36,7 @@ message LastDDLTimestampRequest {
   required int64 lastDDLTimestamp = 4;
 }
 
-service RegionServerCoprocService {
+service RegionServerEndpointService {
   rpc validateLastDDLTimestamp(ValidateLastDDLTimestampRequest)
       returns (ValidateLastDDLTimestampResponse);
 }

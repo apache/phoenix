@@ -21,7 +21,9 @@ import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
 
 import java.io.IOException;
+import java.util.Collections;
 
+import com.google.protobuf.Service;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
@@ -37,7 +39,7 @@ import org.slf4j.LoggerFactory;
  * This is first implementation of RegionServer coprocessor introduced by Phoenix.
  */
 public class PhoenixRegionServerEndpoint
-        extends RegionServerEndpointProtos.RegionServerCoprocService
+        extends RegionServerEndpointProtos.RegionServerEndpointService
         implements RegionServerCoprocessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixRegionServerEndpoint.class);
     Configuration conf;
@@ -45,6 +47,11 @@ public class PhoenixRegionServerEndpoint
     @Override
     public void start(CoprocessorEnvironment env) throws IOException {
         this.conf = env.getConfiguration();
+    }
+
+    @Override
+    public Iterable<Service> getServices() {
+        return Collections.singleton(this);
     }
 
     @Override
