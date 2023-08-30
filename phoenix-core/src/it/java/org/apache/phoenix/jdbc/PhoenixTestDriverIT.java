@@ -62,7 +62,7 @@ public class PhoenixTestDriverIT extends BaseTest {
             ConnectionQueryServices cqs2 = conn2.unwrap(PhoenixConnection.class).getQueryServices();
             Assert.assertNotNull(cqs1);
             Assert.assertNotNull(cqs2);
-            Assert.assertTrue("Connections using the same URL should have the same CQSI object.", cqs1.equals(cqs2));
+            Assert.assertEquals("Connections using the same URL should have the same CQSI object.", cqs1, cqs2);
         }
     }
 
@@ -80,7 +80,7 @@ public class PhoenixTestDriverIT extends BaseTest {
             ConnectionQueryServices cqs2 = conn2.unwrap(PhoenixConnection.class).getQueryServices();
             Assert.assertNotNull(cqs1);
             Assert.assertNotNull(cqs2);
-            Assert.assertTrue("Connections using different URL should have different CQSI objects.", !cqs1.equals(cqs2));
+            Assert.assertNotEquals("Connections using different URL should have different CQSI objects.", cqs1, cqs2);
         }
     }
 
