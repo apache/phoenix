@@ -4449,7 +4449,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // If the table timestamp is before 4.2.1 then run the upgrade script
             if (currentServerSideTableTimeStamp <
                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_2_1) {
-                if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSequenceSaltBuckets, e.getTable())) {
+                if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSequenceSaltBuckets,
+                        e.getTable())) {
                     metaConnection.removeTable(null,
                             PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA,
                             PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE,
