@@ -64,15 +64,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 
+import com.google.protobuf.ServiceException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.AsyncAdmin;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
+import org.apache.hadoop.hbase.ipc.ServerRpcController;
+import org.apache.hadoop.hbase.util.ByteStringer;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.BaseMutationPlan;
@@ -102,8 +112,11 @@ import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.compile.TraceQueryPlan;
 import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
+import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
@@ -317,16 +330,94 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger)
             throws SQLException {
-        return executeQuery(stmt, true, queryLogger, false);
+        return executeQuery(stmt, true, queryLogger, false, true);
     }
 
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger, boolean noCommit)
             throws SQLException {
-        return executeQuery(stmt, true, queryLogger, noCommit);
+        return executeQuery(stmt, true, queryLogger, noCommit, true);
+    }
+
+    /**
+     * Build a request for the validateLastDDLTimestamp RPC.
+     * @param tableRef
+     * @return
+     */
+    private RegionServerEndpointProtos.ValidateLastDDLTimestampRequest getValidateDDLTimestampRequest(TableRef tableRef) {
+        RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.Builder requestBuilder
+                = RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.newBuilder();
+        RegionServerEndpointProtos.LastDDLTimestampRequest.Builder innerBuilder
+                = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
+
+        byte[] tenantIDBytes = this.connection.getTenantId() == null ? HConstants.EMPTY_BYTE_ARRAY : this.connection.getTenantId().getBytes();
+        byte[] schemaBytes = tableRef.getTable().getSchemaName() == null ? HConstants.EMPTY_BYTE_ARRAY : tableRef.getTable().getSchemaName().getBytes();
+
+        innerBuilder.setTenantId(ByteStringer.wrap(tenantIDBytes));
+        innerBuilder.setSchemaName(ByteStringer.wrap(schemaBytes));
+        innerBuilder.setTableName(ByteStringer.wrap(tableRef.getTable().getTableName().getBytes()));
+        innerBuilder.setLastDDLTimestamp(tableRef.getTable().getLastDDLTimestamp());
+        requestBuilder.addLastDDLTimestampRequests(innerBuilder);
+        return  requestBuilder.build();
+    }
+
+    /**
+     * Verifies that table metadata in client cache is up-to-date with server.
+     * A random live region server is picked for invoking the RPC to validate LastDDLTimestamp.
+     * Retry once if there was an error performing the RPC, otherwise throw the Exception.
+     * @param tableRef
+     * @throws SQLException
+     */
+    private void validateDDLTimestamp(TableRef tableRef, boolean doRetry) throws SQLException {
+
+        try (Admin admin = this.connection.getQueryServices().getAdmin()) {
+            // get all live region servers
+            List<ServerName> regionServers = new ArrayList<>(admin.getRegionServers(true));
+            // pick one at random
+            ServerName regionServer = regionServers.get(ThreadLocalRandom.current().nextInt(regionServers.size()));
+
+            LOGGER.debug("Sending DDL timestamp validation request for table {} at regionserver {}",
+                    tableRef.getTable().getTableName().getString(), regionServer.toString());
+
+            // RPC
+            CoprocessorRpcChannel channel = admin.coprocessorService(regionServer);
+            PhoenixRegionServerEndpoint.BlockingInterface service = PhoenixRegionServerEndpoint.newBlockingStub(channel);
+            service.validateLastDDLTimestamp(null, getValidateDDLTimestampRequest(tableRef));
+        }
+        // handle server side exceptions
+        catch (ServiceException e) {
+            SQLException ex = ServerUtil.parseRemoteException(e.getCause());
+            // throw stale cache exception
+            if (ex != null && (ex instanceof StaleMetadataCacheException)) {
+                throw ex;
+            }
+            //retry once for any other server side exceptions
+            else {
+                LOGGER.error("Error in validating DDL timestamp for table {}: {}",
+                        tableRef.getTable().getName().getString(), ex);
+                if (doRetry) {
+                    validateDDLTimestamp(tableRef, false);
+                }
+                throw new SQLException(e.getCause());
+            }
+        }
+        // retry once for any other errors
+        catch (SQLException e) {
+            if (doRetry) {
+                validateDDLTimestamp(tableRef, false);
+            }
+            throw e;
+        }
+        catch (IOException e) {
+            if (doRetry) {
+                validateDDLTimestamp(tableRef, false);
+            }
+            throw new SQLException(e);
+        }
+        // do nothing if the validation succeeded.
     }
 
     private PhoenixResultSet executeQuery(final CompilableStatement stmt,
-                                          final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger, final boolean noCommit) throws SQLException {
+                                          final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger, final boolean noCommit, final boolean validateDDLTimestamp) throws SQLException {
         GLOBAL_SELECT_SQL_COUNTER.increment();
 
         try {
@@ -371,6 +462,16 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 plan =
                                         connection.getQueryServices().getOptimizer()
                                                 .optimize(PhoenixStatement.this, plan);
+                                setLastQueryPlan(plan);
+
+                                //if enabled, verify metadata for the table/view/index involved in the query plan
+                                boolean ddlTimestampValidationEnabled = conn.getQueryServices().getProps()
+                                        .getBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
+                                        QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
+                                if (ddlTimestampValidationEnabled && validateDDLTimestamp) {
+                                    validateDDLTimestamp(plan.getTableRef(), true);
+                                }
+
                                 // this will create its own trace internally, so we don't wrap this
                                 // whole thing in tracing
                                 ResultIterator resultIterator = plan.iterator();
@@ -394,7 +495,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         newResultSet(resultIterator, plan.getProjector(),
                                                 plan.getContext());
                                 resultSets.add(rs);
-                                setLastQueryPlan(plan);
                                 setLastResultSet(rs);
                                 setLastUpdateCount(NO_UPDATE);
                                 setLastUpdateOperation(stmt.getOperation());
@@ -417,11 +517,21 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                                     e.getSchemaName(), e.getTableName(), true)
                                             .wasUpdated()) {
                                         //TODO we can log retry count and error for debugging in LOG table
-                                        return executeQuery(stmt, false, queryLogger, noCommit);
+                                        return executeQuery(stmt, false, queryLogger, noCommit, validateDDLTimestamp);
                                     }
                                 }
                                 throw e;
-                            } catch (RuntimeException e) {
+                            }
+                            catch (SQLException e) {
+                                if (e instanceof StaleMetadataCacheException) {
+                                    String planSchemaName = getLastQueryPlan().getTableRef().getTable().getSchemaName().toString();
+                                    String planTableName = getLastQueryPlan().getTableRef().getTable().getTableName().toString();
+                                    new MetaDataClient(connection).updateCache(connection.getTenantId(), planSchemaName, planTableName, true);
+                                    return executeQuery(stmt, doRetryOnMetaNotFoundError, queryLogger, noCommit, false);
+                                }
+                                throw e;
+                            }
+                            catch (RuntimeException e) {
 
                                 // FIXME: Expression.evaluate does not throw SQLException
                                 // so this will unwrap throws from that.
