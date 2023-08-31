@@ -52,7 +52,7 @@ public class ChunkedResultIteratorIT
         Properties props = new Properties();
         props.setProperty(QueryServices.RENEW_LEASE_ENABLED, "false");
         props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, "2");
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
 
         conn.createStatement().execute("CREATE TABLE " + tableName
