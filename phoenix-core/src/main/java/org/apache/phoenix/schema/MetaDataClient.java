@@ -19,14 +19,13 @@ package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_LEVEL_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_PREFIX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
-import static org.apache.phoenix.schema.PTableType.SYSTEM;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
@@ -1969,7 +1968,7 @@ public class MetaDataClient {
      */
     private Integer getTTLFromAncestor(PTable view) throws TableNotFoundException {
         try {
-            return view.getTTL() != PHOENIX_LEVEL_TTL_NOT_DEFINED
+            return view.getTTL() != TTL_NOT_DEFINED
                     ? Integer.valueOf(view.getTTL()) : (checkIfParentIsTable(view)
                     ? connection.getTable(new PTableKey(null,
                             view.getPhysicalNames().get(0).getString())).getTTL()
@@ -2046,7 +2045,7 @@ public class MetaDataClient {
                     tableType == PTableType.VIEW ? parent.getColumns().size()
                             : QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 
-            Integer phoenixTTL = PHOENIX_LEVEL_TTL_NOT_DEFINED;
+            Integer phoenixTTL = TTL_NOT_DEFINED;
             Long phoenixTTLHighWaterMark = MIN_PHOENIX_TTL_HWM;
             Integer phoenixTTLProp = (Integer) TableProperty.TTL.getValue(tableProps);
             byte[] rowKeyPrefix = null;
@@ -2865,7 +2864,7 @@ public class MetaDataClient {
                         .setColumns(columns.values())
                         .setPhoenixTTL(PHOENIX_OLD_TTL_NOT_DEFINED)
                         .setPhoenixTTLHighWaterMark(MIN_PHOENIX_TTL_HWM)
-                        .setTTL(PHOENIX_LEVEL_TTL_NOT_DEFINED)
+                        .setTTL(TTL_NOT_DEFINED)
                         .build();
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
             }
@@ -3115,7 +3114,7 @@ public class MetaDataClient {
                 tableUpsert.setString(35, streamingTopicName);
             }
 
-            if (phoenixTTL == null || phoenixTTL == PHOENIX_LEVEL_TTL_NOT_DEFINED) {
+            if (phoenixTTL == null || phoenixTTL == TTL_NOT_DEFINED) {
                 tableUpsert.setNull(36, Types.INTEGER);
             } else {
                 tableUpsert.setInt(36, phoenixTTL);
@@ -3275,7 +3274,7 @@ public class MetaDataClient {
                         .setExternalSchemaId(result.getTable() != null ?
                         result.getTable().getExternalSchemaId() : null)
                         .setStreamingTopicName(streamingTopicName)
-                        .setTTL(phoenixTTL == null ? PHOENIX_LEVEL_TTL_NOT_DEFINED : phoenixTTL)
+                        .setTTL(phoenixTTL == null ? TTL_NOT_DEFINED : phoenixTTL)
                         .setRowKeyPrefix(rowKeyPrefix)
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);

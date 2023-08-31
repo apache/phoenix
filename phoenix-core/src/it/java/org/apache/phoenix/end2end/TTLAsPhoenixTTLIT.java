@@ -81,7 +81,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
              PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);){
             String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, false);
             //Checking Default TTL in case of PhoenixTTLEnabled
-            assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class), PhoenixDatabaseMetaData.PHOENIX_LEVEL_TTL_NOT_DEFINED, tableName);
+            assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class), PhoenixDatabaseMetaData.TTL_NOT_DEFINED, tableName);
             String ddl = "ALTER TABLE  " + tableName
                     + " SET TTL=1000";
             conn.createStatement().execute(ddl);
@@ -109,7 +109,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             String globalIndexName = createIndexOnTableOrViewProvidedWithTTL(conn, tableName, PTable.IndexType.GLOBAL, false);
             indexes = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName)).getIndexes();
             for (PTable index : indexes) {
-                assertTTLValueOfIndex(PhoenixDatabaseMetaData.PHOENIX_LEVEL_TTL_NOT_DEFINED, index);
+                assertTTLValueOfIndex(PhoenixDatabaseMetaData.TTL_NOT_DEFINED, index);
                 assertNull(index.getRowKeyPrefix());
             }
 
@@ -174,7 +174,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             //View gets TTL value from its hierarchy
             String viewName1 = createReadOnlyViewOnTableWithTTL(conn, tableName, false);
             assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class),
-                    PhoenixDatabaseMetaData.PHOENIX_LEVEL_TTL_NOT_DEFINED, viewName1);
+                    PhoenixDatabaseMetaData.TTL_NOT_DEFINED, viewName1);
 
             //Index on Global View should get TTL from View.
             createIndexOnTableOrViewProvidedWithTTL(conn, viewName, PTable.IndexType.GLOBAL,

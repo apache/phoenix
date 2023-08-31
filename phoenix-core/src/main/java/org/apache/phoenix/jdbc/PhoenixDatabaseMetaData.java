@@ -395,7 +395,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     // is stored in column TTL in SYSCAT
     public static final String TTL = "TTL";
     public static final byte[] TTL_BYTES = Bytes.toBytes(TTL);
-    public static final int PHOENIX_LEVEL_TTL_NOT_DEFINED = 0;
+    public static final int TTL_NOT_DEFINED = 0;
     @Deprecated
     public static final long PHOENIX_OLD_TTL_NOT_DEFINED = 0L;
     //Should we change name of Default value as well!?

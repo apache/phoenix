@@ -31,7 +31,7 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_LEVEL_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
@@ -39,11 +39,11 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 
 public class PhoenixMultiInputUtil {
     public static final String SELECT_ALL_VIEW_METADATA_FROM_SYSCAT_QUERY =
-            "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, PHOENIX_TTL FROM " +
+            "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, TTL FROM " +
                     SYSTEM_CATALOG_NAME + " WHERE " +
                     TABLE_TYPE + " = '" + PTableType.VIEW.getSerializedValue() + "' AND " +
                     TTL + " IS NOT NULL AND " +
-                    TTL + " > " + PHOENIX_LEVEL_TTL_NOT_DEFINED + " AND " +
+                    TTL + " > " + TTL_NOT_DEFINED + " AND " +
                     VIEW_TYPE + " <> " + PTable.ViewType.MAPPED.getSerializedValue();
 
     public static Connection buildTenantConnection(String url, String tenantId)

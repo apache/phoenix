@@ -24,7 +24,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.DEFAULT_COLUMN_FAMIL
 import static org.apache.phoenix.exception.SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_WITH_PROPERTIES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_LEVEL_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 
 import java.sql.SQLException;
 import java.util.Map;
@@ -264,7 +264,7 @@ public enum TableProperty {
                 if ("FOREVER".equalsIgnoreCase(strValue)) {
                     return HConstants.FOREVER;
                 } else if ("NONE".equalsIgnoreCase(strValue)) {
-                    return PHOENIX_LEVEL_TTL_NOT_DEFINED;
+                    return TTL_NOT_DEFINED;
                 }
             } else if (value != null) {
                 //Not converting to milli-seconds for better understanding at compaction and masking

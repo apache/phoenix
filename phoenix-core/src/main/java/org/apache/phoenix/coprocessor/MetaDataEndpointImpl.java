@@ -59,7 +59,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION_B
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_OLD_TTL_NOT_DEFINED;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_LEVEL_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE_BYTES;
@@ -1434,11 +1434,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             oldTable != null ? oldTable.getStreamingTopicName() : null);
 
         Cell ttlKv = tableKeyValues[TTL_INDEX];
-        int ttl = ttlKv == null ? PHOENIX_LEVEL_TTL_NOT_DEFINED :
+        int ttl = ttlKv == null ? TTL_NOT_DEFINED :
                 PInteger.INSTANCE.getCodec().decodeInt(ttlKv.getValueArray(),
                         ttlKv.getValueOffset(), SortOrder.getDefault());
         builder.setTTL(ttlKv != null ? ttl :
-                oldTable != null ? oldTable.getTTL() : PHOENIX_LEVEL_TTL_NOT_DEFINED);
+                oldTable != null ? oldTable.getTTL() : TTL_NOT_DEFINED);
 
         Cell rowKeyPrefixKv = tableKeyValues[ROW_KEY_PREFIX_INDEX];
         byte[] rowKeyPrefix = rowKeyPrefixKv != null ?
@@ -3476,7 +3476,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     Cell cell = cells.get(0);
                     long newPhoenixTTL = (long) PLong.INSTANCE.toObject(cell.getValueArray(),
                             cell.getValueOffset(), cell.getValueLength());
-                    hasNewPhoenixTTLAttribute =  newPhoenixTTL != PHOENIX_LEVEL_TTL_NOT_DEFINED;
+                    hasNewPhoenixTTLAttribute =  newPhoenixTTL != TTL_NOT_DEFINED;
                     //TODO:- Re-enable when we have ViewTTL
                     return false;
                 }
@@ -3485,7 +3485,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
         if (hasNewPhoenixTTLAttribute) {
             // Disallow if the parent has PHOENIX_TTL set.
-            if (parentTable != null &&  parentTable.getTTL() != PHOENIX_LEVEL_TTL_NOT_DEFINED) {
+            if (parentTable != null &&  parentTable.getTTL() != TTL_NOT_DEFINED) {
                 isSchemaMutationAllowed = false;
             }
 

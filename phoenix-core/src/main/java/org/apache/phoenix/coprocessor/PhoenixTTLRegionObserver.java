@@ -93,7 +93,7 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
         }
         LOG.trace(String.format(
                 "********** PHOENIX-TTL: PhoenixTTLRegionObserver::postScannerOpen TTL for table = "
-                        + "[%s], scan = [%s], PHOENIX_TTL = %d ***************, "
+                        + "[%s], scan = [%s], TTL = %d ***************, "
                         + "numMaskExpiredRequestCount=%d, "
                         + "numDeleteExpiredRequestCount=%d",
                 s.getRegionInfo().getTable().getNameAsString(),

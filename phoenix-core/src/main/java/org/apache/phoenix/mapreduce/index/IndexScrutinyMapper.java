@@ -69,7 +69,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_PHOENIX_TTL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_LEVEL_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 
 /**
  * Mapper that reads from the data table and checks the rows against the index table
@@ -340,7 +340,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                 SchemaUtil.isNamespaceMappingEnabled(null, cqsi.getProps()));
         if (configuration.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED)) {
-            return pSourceTable.getTTL() == PHOENIX_LEVEL_TTL_NOT_DEFINED ? DEFAULT_PHOENIX_TTL
+            return pSourceTable.getTTL() == TTL_NOT_DEFINED ? DEFAULT_PHOENIX_TTL
                     : pSourceTable.getTTL();
         } else {
             TableDescriptor tableDesc;
