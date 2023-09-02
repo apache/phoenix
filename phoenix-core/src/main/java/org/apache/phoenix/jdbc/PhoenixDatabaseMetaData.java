@@ -430,6 +430,12 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String SYSTEM_TRANSFORM_TABLE = "TRANSFORM";
     public static final String SYSTEM_TRANSFORM_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_TRANSFORM_TABLE);
 
+    public static final String CDC_INCLUDE_NAME = "INCLUDE";
+    public static final byte[] CDC_INCLUDE_BYTES = Bytes.toBytes(CDC_INCLUDE_NAME);
+
+    public static final String CDC_INDEX_TYPE_NAME = "INDEX_TYPE";
+    public static final byte[] CDC_INDEX_TYPE_BYTES = Bytes.toBytes(CDC_INDEX_TYPE_NAME);
+
     //SYSTEM:LOG
     public static final String SYSTEM_LOG_TABLE = "LOG";
     public static final String SYSTEM_LOG_NAME =

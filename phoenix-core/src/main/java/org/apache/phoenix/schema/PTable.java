@@ -1050,6 +1050,11 @@ public interface PTable extends PMetaDataEntity {
 
     enum CDCChangeScope {
         /**
+         * Include only the actual change in image.
+         */
+        CHANGE,
+
+        /**
          * Include only the pre image (state prior to the change) of the row.
          */
         PRE,
@@ -1060,14 +1065,19 @@ public interface PTable extends PMetaDataEntity {
         POST,
 
         /**
+         * Same as CHANGE, PRE, POST
+         */
+        ALL,
+
+        /**
+         * Include none of CHANGE, PRE, POST.
+         */
+        NONE,
+
+        /**
          * Include only the latest image of the row.
          */
         LATEST,
-
-        /**
-         * Include all images.
-         */
-        ALL,
     }
 
 }

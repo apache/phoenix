@@ -351,6 +351,8 @@ public enum SQLExceptionCode {
             + PhoenixDatabaseMetaData.PHOENIX_TTL + " property on an view when parent/child view has PHOENIX_TTL set,"),
     CHANGE_DETECTION_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY(10954, "44A36",
         CHANGE_DETECTION_ENABLED + " is only supported on tables and views"),
+    UNKNOWN_INDEX_TYPE(1098,"44A37", "Unknown INDEX type: "),
+    UNKNOWN_INCLUDE_CHANGE_SCOPE(1099,"44A38", "Unknown change scope for INCLUDE: "),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

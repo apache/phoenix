@@ -239,7 +239,7 @@ public class SchemaUtil {
     }
 
     /**
-     * Normalizes the fulltableName . Uses {@linkplain normalizeIdentifier}
+     * Normalizes the fulltableName . Uses {@linkplain #normalizeIdentifier}
      * @param fullTableName
      * @return
      */
@@ -1378,6 +1378,10 @@ public class SchemaUtil {
             }
         }
         return pTableFullName;
+    }
+
+    public static String getCDCIndexName(String cdcName) {
+        return "__CDC__" + cdcName;
     }
 
     private static boolean isQuotesNeeded(String name) {

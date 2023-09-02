@@ -44,7 +44,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_ENCODED_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER_COUNTER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
@@ -64,7 +63,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ARRAY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ROW_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.JAR_PATH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
@@ -121,7 +119,6 @@ import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_P
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
-import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.schema.PTableType.VIEW;
@@ -139,6 +136,7 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
@@ -155,6 +153,7 @@ import java.util.Set;
 import java.util.HashSet;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.parse.CreateCDCStatement;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.HConstants;
@@ -190,6 +189,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.SharedTableState;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.transform.Transform;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.util.TaskMetaDataServiceCallBack;
 import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.util.JacksonUtil;
@@ -289,8 +289,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Ints;
-
-import edu.umd.cs.findbugs.annotations.SuppressWarnings;
 
 public class MetaDataClient {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataClient.class);
@@ -1696,6 +1694,30 @@ public class MetaDataClient {
         }
 
         return buildIndex(table, tableRef);
+    }
+
+    public MutationState createCDC(CreateCDCStatement statement) throws SQLException {
+        Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
+        Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
+        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.CDC);
+
+        NamedNode indexName = FACTORY.indexName(SchemaUtil.getCDCIndexName(statement.getCdcObjName().getName()));
+        String timeIdxColName = statement.getTimeIdxColumn() != null ? statement.getTimeIdxColumn().getColumnName() : null;
+        IndexKeyConstraint indexKeyConstraint = FACTORY.indexKey(Arrays.asList(new Pair[]{Pair.newPair(
+                        timeIdxColName != null ?
+                                FACTORY.column(statement.getDataTable(), timeIdxColName, timeIdxColName) :
+                                statement.getTimeIdxFunc(),
+                        SortOrder.getDefault()
+        )}));
+        IndexType indexType = (IndexType) TableProperty.INDEX_TYPE.getValue(tableProps);
+        ListMultimap<String, Pair<String, Object>> indexProps = ArrayListMultimap.create();
+        // TODO: Transfer TTL and MaxLookback from statement.getProps() to indexProps.
+        CreateIndexStatement indexStatement = FACTORY.createIndex(indexName, FACTORY.namedTable(null,
+                        statement.getDataTable()), indexKeyConstraint, null, null, indexProps, false,
+                        indexType, false, 0, new HashMap<>());
+        MutationState indexMutationState = createIndex(indexStatement, null);
+
+        return indexMutationState; // TODO: contingent.
     }
 
     public MutationState dropSequence(DropSequenceStatement statement) throws SQLException {

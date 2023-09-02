@@ -27,6 +27,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
 
 import java.sql.SQLException;
+import java.util.Locale;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
@@ -335,6 +336,42 @@ public enum TableProperty {
 
         @Override public Object getPTableValue(PTable table) {
             return table.getStreamingTopicName();
+        }
+    },
+
+    INDEX_TYPE(PhoenixDatabaseMetaData.CDC_INDEX_TYPE_NAME, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY, false, false, false) {
+        @Override
+        public Object getValue(Object value) {
+            try {
+                return value == null ? PTable.IndexType.GLOBAL : PTable.IndexType.valueOf(value.toString().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new RuntimeException(new SQLExceptionInfo.Builder(SQLExceptionCode.UNKNOWN_INDEX_TYPE)
+                        .setMessage(value.toString())
+                        .build().buildException());
+            }
+        }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return null;
+        }
+    },
+
+    INCLUDE(PhoenixDatabaseMetaData.CDC_INCLUDE_NAME, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY, true, false, false) {
+        @Override
+        public Object getValue(Object value) {
+            try {
+                return value == null ? PTable.CDCChangeScope.CHANGE : PTable.CDCChangeScope.valueOf(value.toString().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new RuntimeException(new SQLExceptionInfo.Builder(SQLExceptionCode.UNKNOWN_INCLUDE_CHANGE_SCOPE)
+                        .setMessage(value.toString())
+                        .build().buildException());
+            }
+        }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return null;
         }
     };
 

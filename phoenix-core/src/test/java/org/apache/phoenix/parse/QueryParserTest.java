@@ -517,9 +517,10 @@ public class QueryParserTest {
         parseCreateCDCSimple("create cdc foo on bar(ts)", false, "TS");
         parseCreateCDCSimple("create cdc foo on s.bar(ts)", false, "TS");
         parseCreateCDCSimple("create cdc if not exists foo on bar(ts)", true, "TS");
-        stmt = parseCreateCDCSimple("create cdc foo on bar(PHOENIX_ROW_TIMESTAMP())", false, null);
-        assertEquals("PHOENIX_ROW_TIMESTAMP", stmt.getTimeIdxFunc().getName());
-        assertEquals(" PHOENIX_ROW_TIMESTAMP()", stmt.getTimeIdxFunc().toString());
+        stmt = parseCreateCDCSimple("create cdc foo on bar(TS_FUNC()) TTL=100, INDEX_TYPE=global", false, null);
+        assertEquals("TS_FUNC", stmt.getTimeIdxFunc().getName());
+        assertEquals(" TS_FUNC()", stmt.getTimeIdxFunc().toString());
+        assertEquals(Arrays.asList(new Pair("TTL", 100), new Pair("INDEX_TYPE", "global")), stmt.getProps().get(""));
         stmt = parseCreateCDCSimple("create cdc foo on bar(ts) include (pre)", false, "TS");
         assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE)), stmt.getIncludeScopes());
         stmt = parseCreateCDCSimple("create cdc foo on bar(ts) include (pre, pre, post)", false, "TS");
