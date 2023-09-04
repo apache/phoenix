@@ -1584,7 +1584,7 @@ public abstract class BaseTest {
      */
     protected static synchronized void disableAndDropNonSystemTables() throws Exception {
         if (driver == null) return;
-        Admin admin = driver.getConnectionQueryServices(null, null).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
         try {
             List<TableDescriptor> tables = admin.listTableDescriptors();
             for (TableDescriptor table : tables) {

@@ -31,7 +31,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import static org.apache.phoenix.util.TestUtil.PHOENIX_JDBC_URL;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -42,7 +41,7 @@ public class SkipSystemTablesExistenceCheckIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testTableResultIterator() throws Exception {
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL);
+        Connection conn = DriverManager.getConnection(getUrl());
         PhoenixConnection phoenixConnection = conn.unwrap(PhoenixConnection.class);
         String tableName = generateUniqueName();
 
@@ -60,9 +59,9 @@ public class SkipSystemTablesExistenceCheckIT extends ParallelStatsDisabledIT {
         ConnectionQueryServicesImpl queryServices = ((ConnectionQueryServicesImpl)phoenixConnection.getQueryServices());
         phoenixConnection.close();
         queryServices.setInitialized(false);
-        queryServices.init(PHOENIX_JDBC_URL, props);
+        queryServices.init(getUrl(), props);
         assertTrue(queryServices.isInitialized());
-        conn = DriverManager.getConnection(PHOENIX_JDBC_URL, props);
+        conn = DriverManager.getConnection(getUrl(), props);
         scanTable(conn, tableName);
     }
 
