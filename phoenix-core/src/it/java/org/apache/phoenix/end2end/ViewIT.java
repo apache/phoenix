@@ -56,10 +56,7 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableImpl;
-import org.apache.phoenix.schema.ReadOnlyTableException;
-import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.export.DefaultSchemaRegistryRepository;
 import org.apache.phoenix.schema.export.DefaultSchemaWriter;
 import org.apache.phoenix.schema.export.SchemaRegistryRepository;
@@ -900,16 +897,14 @@ public class ViewIT extends SplitSystemCatalogIT {
     public void testCreateViewOnTopOfView() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
              Statement stmt = conn.createStatement()) {
-            String fullViewName = SchemaUtil.getTableName(SCHEMA2,
-                    generateUniqueName());
-            String ddl = "CREATE VIEW " +  fullViewName + " AS SELECT * FROM " + fullViewName + " WHERE " +
+            String fullViewName = generateUniqueName();
+            String ddl = "CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullViewName + " WHERE " +
                     fullViewName + " = 1";
             stmt.execute(ddl);
-        fail("Should have thrown an exception");
-        } catch (TableNotFoundException tableException) {
-            assertEquals("Can not create a new view with the same parent view/table name",
-                    SQLExceptionCode.TABLE_UNDEFINED
-                            .getErrorCode(), tableException.getErrorCode());
+            fail("Should have thrown an exception");
+        } catch (ColumnNotFoundException columnException) {
+            assertEquals("Undefined column", SQLExceptionCode.COLUMN_NOT_FOUND
+                            .getErrorCode(), columnException.getErrorCode());
         }
     }
     private void validate(String viewName, Connection tenantConn,

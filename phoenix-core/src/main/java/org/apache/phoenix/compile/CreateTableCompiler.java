@@ -122,10 +122,6 @@ public class CreateTableCompiler {
             ExpressionCompiler expressionCompiler = new ColumnTrackingExpressionCompiler(context, isViewColumnReferencedToBe);
             parentToBe = tableRef.getTable();
 
-            //Throw exception if trying to create a view with same name as view/table
-            if(create.getBaseTableName().equals(create.getTableName())){
-                throw new TableNotFoundException("Can not create a new view with the same parent view/table name");
-            }
             // Disallow creating views on top of SYSTEM tables. See PHOENIX-5386
             if (parentToBe.getType() == PTableType.SYSTEM) {
                 throw new SQLExceptionInfo
