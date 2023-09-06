@@ -1058,12 +1058,15 @@ public class MetaDataClient {
                             .setMessage("Property: " + prop.getFirst()).build()
                             .buildException();
                 }
-                //If Phoenix Level TTL is enabled use TTL as Phoenix Table Property as skip
-                //TTL at HTableDescriptor level.
-                if (isPhoenixTTLEnabled() && prop.getFirst().equalsIgnoreCase(TTL)
-                        && tableType != PTableType.SYSTEM) {
+                //Keeping TTL value as Phoenix Table property irrespective of PhoenixTTLEnabled or
+                //not to store the value in SYSCAT. To keep PTableImpl.getPhoenixTTL() consistent
+                //for client side.
+                if (prop.getFirst().equalsIgnoreCase(TTL) && tableType != PTableType.SYSTEM) {
                     tableProps.put(prop.getFirst(), prop.getSecond());
-                    continue;
+                    if (isPhoenixTTLEnabled()) {
+                        //If phoenix.table.ttl.enabled is true doesn't store TTL as columnFamilyProp
+                        continue;
+                    }
                 }
 
                 // HTableDescriptor property or Phoenix Table Property
@@ -5299,7 +5302,7 @@ public class MetaDataClient {
                         metaProperties.setColumnEncodedBytesProp(QualifierEncodingScheme.fromSerializedValue((byte)value));
                     } else if (propName.equalsIgnoreCase(USE_STATS_FOR_PARALLELIZATION)) {
                         metaProperties.setUseStatsForParallelizationProp((Boolean)value);
-                    } else if (propName.equalsIgnoreCase(TTL) && isPhoenixTTLEnabled()) {
+                    } else if (propName.equalsIgnoreCase(TTL) /*&& isPhoenixTTLEnabled()*/) {
                         metaProperties.setPhoenixTTL((Long)value);
                     } else if (propName.equalsIgnoreCase(CHANGE_DETECTION_ENABLED)) {
                         metaProperties.setChangeDetectionEnabled((Boolean) value);

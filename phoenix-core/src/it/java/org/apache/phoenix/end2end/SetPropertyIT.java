@@ -426,6 +426,9 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             assertEquals(1000, columnFamilies[1].getTimeToLive());
             assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_BLOCKSIZE, columnFamilies[1].getBlocksize());
             assertEquals(Boolean.toString(false), tableDesc.getValue(TableDescriptorBuilder.COMPACTION_ENABLED));
+            //Check if Alter Table TTL also changes TTL stored in SYSCAT with phoenix.table.ttl disabled
+            assertEquals(1000, conn.unwrap(PhoenixConnection.class).getTable(
+                    new PTableKey(null, dataTableFullName)).getPhoenixTTL());
         }
     }
 
@@ -786,6 +789,9 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
                 assertEquals(1, columnFamilies.length);
                 assertEquals("XYZ", columnFamilies[0].getNameAsString());
                 assertEquals(86400, columnFamilies[0].getTimeToLive());
+                //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
+                assertEquals(86400, conn.unwrap(PhoenixConnection.class).getTable(
+                        new PTableKey(null, dataTableFullName)).getPhoenixTTL());
             }
             ddl = "ALTER TABLE " + dataTableFullName + " SET TTL=30";
             conn.createStatement().execute(ddl);
@@ -796,6 +802,9 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
                 assertEquals(1, columnFamilies.length);
                 assertEquals(30, columnFamilies[0].getTimeToLive());
                 assertEquals("XYZ", columnFamilies[0].getNameAsString());
+                //Check if Alter Table TTL also changes TTL stored in SYSCAT with phoenix.table.ttl disabled
+                assertEquals(30, conn.unwrap(PhoenixConnection.class).getTable(
+                        new PTableKey(null, dataTableFullName)).getPhoenixTTL());
             }
         } finally {
             conn.close();
@@ -942,6 +951,9 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
                 assertEquals("XYZ", columnFamilies[1].getNameAsString());
                 assertEquals(false, columnFamilies[1].isInMemory());
                 assertEquals(86400, columnFamilies[1].getTimeToLive());
+                //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
+                assertEquals(86400, conn.unwrap(PhoenixConnection.class).getTable(
+                        new PTableKey(null, dataTableFullName)).getPhoenixTTL());
             }
 
             ddl = "ALTER TABLE " + dataTableFullName + " SET TTL=1000";
@@ -957,6 +969,9 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
                 assertEquals("XYZ", columnFamilies[1].getNameAsString());
                 assertEquals(false, columnFamilies[1].isInMemory());
                 assertEquals(1000, columnFamilies[1].getTimeToLive());
+                //Check if Alter Table TTL also changes TTL stored in SYSCAT with phoenix.table.ttl disabled
+                assertEquals(1000, conn.unwrap(PhoenixConnection.class).getTable(
+                        new PTableKey(null, dataTableFullName)).getPhoenixTTL());
             }
 
             // the new column will be assigned to the column family XYZ. With the a KV column getting added for XYZ,

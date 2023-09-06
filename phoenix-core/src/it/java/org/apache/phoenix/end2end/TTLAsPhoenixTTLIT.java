@@ -17,6 +17,10 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PTable;
@@ -70,6 +74,13 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute(ddl);
         assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class), DEFAULT_TTL_FOR_TEST, tableName);
+        //Setting TTL should not be stored as CF Descriptor properties when
+        //phoenix.table.ttl.enabled is true
+        Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
+        ColumnFamilyDescriptor[] columnFamilies =
+                admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
+        assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, columnFamilies[0].getTimeToLive());
+
     }
 
     @Test
@@ -83,6 +94,12 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                     + " SET TTL=1000";
             conn.createStatement().execute(ddl);
             assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class), 1000, tableName);
+            //Asserting TTL should not be stored as CF Descriptor properties when
+            //phoenix.table.ttl.enabled is true
+            Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
+            ColumnFamilyDescriptor[] columnFamilies =
+                    admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
+            assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, columnFamilies[0].getTimeToLive());
         }
     }
 
