@@ -33,6 +33,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -206,6 +207,14 @@ public class HighAvailabilityGroup {
                     .build()
                     .buildException();
         }
+        String additionalJDBCParams = null;
+        int idx = url.indexOf("]");
+        int extraIdx = url.indexOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR, idx + 1);
+        if (extraIdx != -1) {
+            // skip the JDBC_PROTOCOL_SEPARATOR
+            additionalJDBCParams  = url.substring(extraIdx + 1);
+        }
+
         url = url.substring(url.indexOf("[") + 1, url.indexOf("]"));
         String[] urls = url.split("\\|");
 
@@ -216,7 +225,7 @@ public class HighAvailabilityGroup {
                     .build()
                     .buildException();
         }
-        return new HAGroupInfo(name, urls[0], urls[1]);
+        return new HAGroupInfo(name, urls[0], urls[1], additionalJDBCParams);
     }
 
     /**
@@ -578,7 +587,8 @@ public class HighAvailabilityGroup {
         }
         Preconditions.checkArgument(url.equals(info.getUrl1()) || url.equals(info.getUrl2()),
                 "The URL '" + url + "' does not belong to this HA group " + info);
-        String jdbcString = String.format("jdbc:phoenix:%s", url);
+
+        String jdbcString = info.getJDBCUrl(url);
 
         ClusterRole role = roleRecord.getRole(url);
         if (!role.canConnect()) {
@@ -741,8 +751,9 @@ public class HighAvailabilityGroup {
     static final class HAGroupInfo {
         private final String name;
         private final PairOfSameType<String> urls;
+        private final String additionalJDBCParams;
 
-        HAGroupInfo(String name, String url1, String url2) {
+        HAGroupInfo(String name, String url1, String url2, String additionalJDBCParams) {
             Preconditions.checkNotNull(name);
             Preconditions.checkNotNull(url1);
             Preconditions.checkNotNull(url2);
@@ -756,6 +767,11 @@ public class HighAvailabilityGroup {
             } else {
                 this.urls = new PairOfSameType<>(url1, url2);
             }
+            this.additionalJDBCParams = additionalJDBCParams;
+        }
+
+        HAGroupInfo(String name, String url1, String url2) {
+            this(name, url1, url2, null);
         }
 
         public String getName() {
@@ -768,6 +784,28 @@ public class HighAvailabilityGroup {
 
         public String getUrl2() {
             return urls.getSecond();
+        }
+
+        public String getJDBCUrl(String zkUrl) {
+            Preconditions.checkArgument(zkUrl.equals(getUrl1()) || zkUrl.equals(getUrl2()),
+                    "The URL '" + zkUrl + "' does not belong to this HA group " + this);
+            StringBuilder sb = new StringBuilder();
+            sb.append(PhoenixRuntime.JDBC_PROTOCOL);
+            sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+            sb.append(zkUrl);
+            if (!Strings.isNullOrEmpty(additionalJDBCParams)) {
+                sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
+                sb.append(additionalJDBCParams);
+            }
+            return sb.toString();
+        }
+
+        public String getJDBCUrl1() {
+            return getJDBCUrl(getUrl1());
+        }
+
+        public String getJDBCUrl2() {
+            return getJDBCUrl(getUrl2());
         }
 
         /**

@@ -232,7 +232,7 @@ public class ParallelPhoenixConnectionTest {
         waitForConnectionClose(connection2);
     }
 
-    @Test
+    @Test(timeout = 10000)
     public void testOpenBothConnectionDelay() throws SQLException {
         Properties properties = new Properties();
         properties.setProperty(ParallelPhoenixUtil.PHOENIX_HA_PARALLEL_OPERATION_TIMEOUT_ATTRIB,

@@ -47,7 +47,6 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -1169,7 +1168,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         String fullIndexeName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         // Check system tables priorities.
-        try (Admin admin = driver.getConnectionQueryServices(null, null).getAdmin();
+        try (Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
                 Connection c = DriverManager.getConnection(getUrl())) {
             ResultSet rs = c.getMetaData().getTables("", 
                     "\""+ PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + "\"", 
@@ -1262,63 +1261,6 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(ddl);
             verifyLastDDLTimestamp(dataTableFullName, startTS, conn);
-        }
-    }
-
-    @Test
-    public void testNormalizerIsDisbledForSalted() throws Exception {
-        String tableName = generateUniqueName();
-        String indexName = generateUniqueName();
-
-        String mtTableName = generateUniqueName();
-        String mtViewName = generateUniqueName();
-        String mtIndexName = generateUniqueName();
-
-        String conflictTableName = generateUniqueName();
-
-        String ddl =
-                "create table  " + tableName + " ( id integer PRIMARY KEY," + " col1 integer,"
-                        + " col2 bigint" + " ) SALT_BUCKETS=4";
-        String indexDdl =
-                "create index IF NOT EXISTS " + indexName + " on " + tableName + " (col2)";
-        String mtDdl =
-                "CREATE TABLE " + mtTableName + " (TenantId UNSIGNED_INT NOT NULL ,"
-                        + " Id UNSIGNED_INT NOT NULL ," + " val VARCHAR, "
-                        + " CONSTRAINT pk PRIMARY KEY(TenantId, Id) "
-                        + " ) MULTI_TENANT=true, SALT_BUCKETS=4";
-        String mtViewDdl =
-                "CREATE VIEW " + mtViewName + "(view_column CHAR(15)) AS " + " SELECT * FROM "
-                        + mtTableName + " WHERE val='L' ";
-        String mtIndexDdl = "CREATE INDEX " + mtIndexName + " on " + mtViewName + " (view_column) ";
-
-        String confictDdl =
-                "create table  " + conflictTableName + " ( id integer PRIMARY KEY,"
-                        + " col1 integer," + " col2 bigint" + " ) SALT_BUCKETS=4, "
-                        + TableDescriptorBuilder.NORMALIZATION_ENABLED + "=true";
-
-        Properties props = new Properties();
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute(ddl);
-        conn.createStatement().execute(indexDdl);
-        conn.createStatement().execute(mtDdl);
-        conn.createStatement().execute(mtViewDdl);
-        conn.createStatement().execute(mtIndexDdl);
-
-        Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-        assertEquals("false", admin.getDescriptor(TableName.valueOf(tableName))
-                .getValue(TableDescriptorBuilder.NORMALIZATION_ENABLED));
-        assertEquals("false", admin.getDescriptor(TableName.valueOf(indexName))
-                .getValue(TableDescriptorBuilder.NORMALIZATION_ENABLED));
-        assertEquals("false", admin.getDescriptor(TableName.valueOf(mtTableName))
-                .getValue(TableDescriptorBuilder.NORMALIZATION_ENABLED));
-        assertEquals("false", admin.getDescriptor(TableName.valueOf("_IDX_" + mtTableName))
-                .getValue(TableDescriptorBuilder.NORMALIZATION_ENABLED));
-
-        try {
-            conn.createStatement().execute(confictDdl);
-            fail("Should have thrown an exception");
-        } catch (Exception e) {
-            assertTrue(e instanceof SQLException);
         }
     }
 

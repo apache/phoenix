@@ -18,6 +18,7 @@
 package org.apache.phoenix.jdbc;
 
 import org.apache.hadoop.hbase.StartMiniClusterOption;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.curator.framework.CuratorFramework;
@@ -85,6 +86,8 @@ public class HighAvailabilityTestingUtility {
         private PhoenixHAAdminHelper haAdmin2;
         private Admin admin1;
         private Admin admin2;
+        @VisibleForTesting
+        static final String PRINCIPAL = "USER_FOO";
 
         public HBaseTestingUtilityPair() {
             Configuration conf1 = hbaseCluster1.getConfiguration();
@@ -243,7 +246,7 @@ public class HighAvailabilityTestingUtility {
         public Connection getClusterConnection(int clusterIndex) throws SQLException {
             String clusterUrl = clusterIndex == 1 ? getUrl1() : getUrl2();
             Properties props = new Properties();
-            String url = String.format("jdbc:phoenix:%s", clusterUrl);
+            String url = getJdbcUrl(clusterUrl);
             return DriverManager.getConnection(url, props);
         }
 
@@ -339,8 +342,19 @@ public class HighAvailabilityTestingUtility {
         /**
          * @return the JDBC connection URL for this pair of HBase cluster in the HA format
          */
-        public String getJdbcUrl() {
-            return String.format("jdbc:phoenix:[%s|%s]", url1, url2);
+        public String getJdbcHAUrl() {
+            return getJdbcUrl(String.format("[%s|%s]", url1, url2));
+        }
+
+        public String getJdbcUrl1() {
+            return getJdbcUrl(url1);
+        }
+        public String getJdbcUrl2() {
+            return getJdbcUrl(url2);
+        }
+
+        public String getJdbcUrl(String zkUrl) {
+            return String.format("jdbc:phoenix:%s:%s", zkUrl, PRINCIPAL);
         }
 
         public String getUrl1() {
@@ -395,7 +409,7 @@ public class HighAvailabilityTestingUtility {
         public void createTableOnClusterPair(String tableName, boolean replicationScope)
                 throws SQLException {
             for (String url : Arrays.asList(getUrl1(), getUrl2())) {
-                String jdbcUrl = String.format("jdbc:phoenix:%s", url);
+                String jdbcUrl = getJdbcUrl(url);
                 try (Connection conn = DriverManager.getConnection(jdbcUrl, new Properties())) {
                     conn.createStatement().execute(String.format(
                             "CREATE TABLE IF NOT EXISTS %s (\n"
@@ -426,7 +440,7 @@ public class HighAvailabilityTestingUtility {
          */
         public void createTenantSpecificTable(String tableName) throws SQLException {
             for (String url : Arrays.asList(getUrl1(), getUrl2())) {
-                String jdbcUrl = String.format("jdbc:phoenix:%s", url);
+                String jdbcUrl = getJdbcUrl(url);
                 try (Connection conn = DriverManager.getConnection(jdbcUrl, new Properties())) {
                     conn.createStatement().execute(String.format(
                             "CREATE TABLE IF NOT EXISTS %s (\n"

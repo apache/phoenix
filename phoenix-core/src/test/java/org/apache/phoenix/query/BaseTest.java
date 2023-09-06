@@ -749,7 +749,7 @@ public abstract class BaseTest {
         createTestTable(url, ddl, splits, ts);
     }
 
-    public static ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder) throws SQLException {
+    protected ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder) throws SQLException {
         PreparedStatement statement = conn.prepareStatement(queryBuilder.build());
         ResultSet rs = statement.executeQuery();
         return rs;
@@ -1584,7 +1584,7 @@ public abstract class BaseTest {
      */
     protected static synchronized void disableAndDropNonSystemTables() throws Exception {
         if (driver == null) return;
-        Admin admin = driver.getConnectionQueryServices(null, null).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
         try {
             List<TableDescriptor> tables = admin.listTableDescriptors();
             for (TableDescriptor table : tables) {

@@ -292,9 +292,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private ThreadLocal<BatchMutateContext> batchMutateContext =
           new ThreadLocal<BatchMutateContext>();
 
-  /** Configuration key for the {@link IndexBuilder} to use */
-  public static final String INDEX_BUILDER_CONF_KEY = "index.builder";
-
   /**
    * Configuration key for if the indexer should check the version of HBase is running. Generally,
    * you only want to ignore this for testing or for custom versions of HBase.

@@ -1564,16 +1564,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         PBoolean.INSTANCE.toObject(newDesc.build().getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
                     newDesc.setRegionSplitPolicyClassName(IndexRegionSplitPolicy.class.getName());
                 }
-                if (props.get(PhoenixDatabaseMetaData.SALT_BUCKETS) != null
-                        && (Integer) (props.get(PhoenixDatabaseMetaData.SALT_BUCKETS)) > 0) {
-                    if (props.get(TableDescriptorBuilder.NORMALIZATION_ENABLED) != null
-                            && (Boolean)(props.get(TableDescriptorBuilder.NORMALIZATION_ENABLED))) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_NORMALIZER_ON_SALTED_TABLE)
-                        .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
-                        .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
-                    }
-                    newDesc.setNormalizationEnabled(false);
-                }
                 try {
                     if (splits == null) {
                         admin.createTable(newDesc.build());
@@ -2612,8 +2602,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Special case for call during drop table to ensure that the empty column family exists.
             // In this, case we only include the table header row, as until we add schemaBytes and tableBytes
             // as args to this function, we have no way of getting them in this case.
-            // Also used to update table descriptor property values on ALTER TABLE t SET prop=xxx
             // TODO: change to  if (tableMetaData.isEmpty()) once we pass through schemaBytes and tableBytes
+            // Also, could be used to update table descriptor property values on ALTER TABLE t SET prop=xxx
             if ((tableMetaData.isEmpty()) || (tableMetaData.size() == 1 && tableMetaData.get(0).isEmpty())) {
                 if (modifyHTable) {
                     sendHBaseMetaData(tableDescriptors, pollingNeeded);
@@ -2884,16 +2874,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         if (!family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY)
                             .setMessage("Column Family: " + family + ", Property: " + propName)
-                            .setSchemaName(table.getSchemaName().getString())
-                            .setTableName(table.getTableName().getString())
-                            .build()
-                            .buildException();
-                        }
-                        if (propName.equals(TableDescriptorBuilder.NORMALIZATION_ENABLED)
-                                && (Boolean)propValue == true
-                                && table.getPropertyValues().containsKey(PhoenixDatabaseMetaData.SALT_BUCKETS)
-                                && Integer.parseInt(table.getPropertyValues().get(PhoenixDatabaseMetaData.SALT_BUCKETS)) > 0) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_NORMALIZER_ON_SALTED_TABLE)
                             .setSchemaName(table.getSchemaName().getString())
                             .setTableName(table.getTableName().getString())
                             .build()
@@ -3591,6 +3571,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 success = true;
                                 return null;
                             }
+                            nSequenceSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
+                                    QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
+                                    QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
                             boolean isDoNotUpgradePropSet = UpgradeUtil.isNoUpgradeSet(props);
                             Properties scnProps = PropertiesUtil.deepCopy(props);
                             scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
@@ -3662,7 +3645,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             + "before any other command");
                                 }
                             }
-                            scheduleRenewLeaseTasks();
                             success = true;
                         } catch (RetriableUpgradeException e) {
                             // Set success to true and don't set the exception as an initializationException,
@@ -3677,6 +3659,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 initializationException = new SQLException(e);
                             }
                         } finally {
+                            if (success) {
+                                scheduleRenewLeaseTasks();
+                            }
                             try {
                                 if (!success && hConnectionEstablished) {
                                     closeConnection();
@@ -3803,10 +3788,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private void createOtherSystemTables(PhoenixConnection metaConnection) throws SQLException, IOException {
         try {
-
-            nSequenceSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
-                    QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
-                    QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
             metaConnection.createStatement().execute(getSystemSequenceTableDDL(nSequenceSaltBuckets));
             // When creating the table above, DDL statements are
             // used. However, the CFD level properties are not set
@@ -4448,13 +4429,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public PhoenixConnection upgradeSystemSequence(
             PhoenixConnection metaConnection,
             Map<String, String> systemTableToSnapshotMap) throws SQLException, IOException {
-        int nSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
-                QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
-                QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
         try (Statement statement = metaConnection.createStatement()) {
-            String createSequenceTable = getSystemSequenceTableDDL(nSaltBuckets);
+            String createSequenceTable = getSystemSequenceTableDDL(nSequenceSaltBuckets);
             statement.executeUpdate(createSequenceTable);
-            nSequenceSaltBuckets = nSaltBuckets;
         } catch (NewerTableAlreadyExistsException e) {
             // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed
             // timestamp.
@@ -4487,7 +4464,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // If the table timestamp is before 4.2.1 then run the upgrade script
             if (currentServerSideTableTimeStamp <
                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_2_1) {
-                if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSaltBuckets, e.getTable())) {
+                if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSequenceSaltBuckets,
+                        e.getTable())) {
                     metaConnection.removeTable(null,
                             PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA,
                             PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE,
@@ -4499,7 +4477,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     clearTableRegionCache(TableName.valueOf(
                             PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES));
                 }
-                nSequenceSaltBuckets = nSaltBuckets;
             } else {
                 nSequenceSaltBuckets = getSaltBuckets(e);
             }

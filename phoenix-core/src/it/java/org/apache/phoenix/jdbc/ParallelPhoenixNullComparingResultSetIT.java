@@ -81,7 +81,7 @@ public class ParallelPhoenixNullComparingResultSetIT {
         // Make first cluster ACTIVE
         CLUSTERS.initClusterRole(haGroupName, PARALLEL);
 
-        jdbcUrl = CLUSTERS.getJdbcUrl();
+        jdbcUrl = CLUSTERS.getJdbcHAUrl();
         haGroup = HighAvailabilityTestingUtility.getHighAvailibilityGroup(jdbcUrl, PROPERTIES);
         LOG.info("Initialized haGroup {} with URL {}", haGroup.getGroupInfo().getName(), jdbcUrl);
         CLUSTERS.createTableOnClusterPair(tableName, false);
@@ -164,7 +164,7 @@ public class ParallelPhoenixNullComparingResultSetIT {
     }
 
     private void addRowToCluster(String url, String tableName, int id, int v) throws SQLException {
-        String jdbcUrl = String.format("jdbc:phoenix:%s", url);
+        String jdbcUrl = CLUSTERS.getJdbcUrl(url);
         try (Connection conn = DriverManager.getConnection(jdbcUrl, PROPERTIES)) {
             Statement stmt = conn.createStatement();
             stmt.executeUpdate(String.format("UPSERT INTO %s VALUES(%d, %d)", tableName, id, v));

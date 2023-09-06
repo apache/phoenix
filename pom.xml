@@ -113,7 +113,7 @@
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jsr305.version>2.0.1</jsr305.version>
     <snappy.version>0.3</snappy.version>
-    <commons-codec.version>1.7</commons-codec.version>
+    <commons-codec.version>1.16.0</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
     <collections.version>3.2.2</collections.version>
     <jodatime.version>2.10.5</jodatime.version>
@@ -125,7 +125,7 @@
     <zookeeper.version>3.5.7</zookeeper.version>
     <curator.version>4.2.0</curator.version>
     <jcodings.version>1.0.55</jcodings.version>
-    <jetty.version>9.4.46.v20220331</jetty.version>
+    <jetty.version>9.4.51.v20230217</jetty.version>
     <javax.servlet-api.version>3.1.0</javax.servlet-api.version>
     <!-- Test Dependencies -->
     <mockito.version>1.10.19</mockito.version>

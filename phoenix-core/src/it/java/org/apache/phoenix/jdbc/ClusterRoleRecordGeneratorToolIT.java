@@ -30,12 +30,14 @@ import java.util.List;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.rules.TestName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +47,7 @@ import org.slf4j.LoggerFactory;
  *
  * @see ClusterRoleRecordGeneratorToolTest
  */
+@Category(NeedsOwnMiniClusterTest.class)
 public class ClusterRoleRecordGeneratorToolIT {
     private static final Logger LOG = LoggerFactory.getLogger(ClusterRoleRecordGeneratorToolIT.class);
     private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
