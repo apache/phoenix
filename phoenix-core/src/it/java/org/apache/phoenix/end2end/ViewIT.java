@@ -894,17 +894,63 @@ public class ViewIT extends SplitSystemCatalogIT {
     }
 
     @Test
-    public void testCreateViewOnTopOfView() throws Exception {
+    //creating view with same name on top of a table with a non existent column
+    public void testCreateViewWithUndefinedSameColumnName() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
              Statement stmt = conn.createStatement()) {
+
             String fullViewName = generateUniqueName();
-            String ddl = "CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullViewName + " WHERE " +
-                    fullViewName + " = 1";
+            String ddl = "CREATE VIEW " + fullViewName +
+                    " AS SELECT * FROM " + fullViewName +
+                    " WHERE " + fullViewName + " = 1";
             stmt.execute(ddl);
             fail("Should have thrown an exception");
         } catch (ColumnNotFoundException columnException) {
-            assertEquals("Undefined column", SQLExceptionCode.COLUMN_NOT_FOUND
-                            .getErrorCode(), columnException.getErrorCode());
+            assertEquals("Undefined column",
+                    SQLExceptionCode.COLUMN_NOT_FOUND
+                    .getErrorCode(), columnException.getErrorCode());
+        }
+    }
+
+    @Test
+    //creating view with same name on top of a non existent table
+    public void testCreateViewOnTopOfUndefinedTableWithSameName() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+
+            String fullViewName = generateUniqueName();
+            String ddl = "CREATE VIEW " +  fullViewName +
+                    " AS SELECT * FROM " + fullViewName;
+            stmt.execute(ddl);
+            fail("Should have thrown an exception");
+        } catch (TableNotFoundException tableException) {
+            assertEquals("Table Undefined",
+                    SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(),
+                    tableException.getErrorCode());
+        }
+    }
+
+    @Test
+    //creating view with same name as the parent table
+    public void testCreateViewOnTopOfTableWithSameName() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+
+            String fullTableName = generateUniqueName();
+            String ddl = "CREATE TABLE " + fullTableName
+                    + " (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, "
+                    + "CONSTRAINT pk PRIMARY KEY (k1, k2))" + tableDDLOptions;
+            stmt.execute(ddl);
+
+            ddl = "CREATE VIEW " + fullTableName + "(v2 VARCHAR, k3 VARCHAR "
+                    + "PRIMARY KEY) "
+                    + "AS SELECT * FROM " + fullTableName + " WHERE K1 = 1";
+            stmt.execute(ddl);
+            fail("Should have thrown an exception");
+        } catch (TableAlreadyExistsException tableException) {
+            assertEquals("Table already exists",
+                    SQLExceptionCode.TABLE_ALREADY_EXIST
+                    .getErrorCode(), tableException.getErrorCode());
         }
     }
     private void validate(String viewName, Connection tenantConn,
