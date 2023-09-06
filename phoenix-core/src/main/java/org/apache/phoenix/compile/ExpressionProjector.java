@@ -46,8 +46,7 @@ public class ExpressionProjector implements ColumnProjector {
         this.expression = expression;
         this.tableName = tableName;
         this.isCaseSensitive = isCaseSensitive;
-        this.expressionString = isCaseSensitive ?
-                SchemaUtil.normalizeIdentifier(expression.toString()) : expression.toString();
+        this.expressionString = SchemaUtil.normalizeIdentifier(expression.toString());
     }
 
     @Override

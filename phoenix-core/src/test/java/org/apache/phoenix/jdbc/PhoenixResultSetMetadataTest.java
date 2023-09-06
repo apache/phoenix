@@ -18,6 +18,8 @@
 package org.apache.phoenix.jdbc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -56,18 +58,28 @@ public class PhoenixResultSetMetadataTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute(
                 "CREATE TABLE T (pk1 CHAR(15) not null, pk2 VARCHAR not null,  \"v1\" VARCHAR(15), v2 DATE, \"v3\" VARCHAR " +
                         "CONSTRAINT pk PRIMARY KEY (pk1, pk2)) ");
-        ResultSet rs = conn.createStatement().executeQuery("SELECT pk1 AS testalias1, pk2, " +
-                "\"v1\" AS \"testalias2\", v2, \"v3\" FROM T");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT pk1 AS testalias1, pk2 AS \"testalias2\", " +
+                "\"v1\" AS \"testalias3\", v2, \"v3\" FROM T");
+
         assertEquals("PK1", rs.getMetaData().getColumnName(1));
         assertEquals("TESTALIAS1", rs.getMetaData().getColumnLabel(1));
+        assertFalse(rs.getMetaData().isCaseSensitive(1));
+
         assertEquals("PK2", rs.getMetaData().getColumnName(2));
-        assertEquals("PK2", rs.getMetaData().getColumnLabel(2));
+        assertEquals("testalias2", rs.getMetaData().getColumnLabel(2));
+        assertTrue(rs.getMetaData().isCaseSensitive(2));
+
         assertEquals("v1", rs.getMetaData().getColumnName(3));
-        assertEquals("testalias2", rs.getMetaData().getColumnLabel(3));
+        assertEquals("testalias3", rs.getMetaData().getColumnLabel(3));
+        assertTrue(rs.getMetaData().isCaseSensitive(3));
+
         assertEquals("V2", rs.getMetaData().getColumnName(4));
         assertEquals("V2", rs.getMetaData().getColumnLabel(4));
+        assertFalse(rs.getMetaData().isCaseSensitive(4));
+
         assertEquals("v3", rs.getMetaData().getColumnName(5));
         assertEquals("v3", rs.getMetaData().getColumnLabel(5));
+        assertTrue(rs.getMetaData().isCaseSensitive(5));
     }
 
     @Test
