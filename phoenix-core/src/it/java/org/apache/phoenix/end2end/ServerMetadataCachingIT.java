@@ -4,9 +4,12 @@ package org.apache.phoenix.end2end;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -20,12 +23,17 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
 import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyLong;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Matchers.isNull;
 
 @Category({NeedsOwnMiniClusterTest.class })
 public class ServerMetadataCachingIT extends BaseTest {
@@ -69,16 +77,25 @@ public class ServerMetadataCachingIT extends BaseTest {
         String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
         String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
         String tableName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+        int expectedNumGetTableRPCs;
 
-        try (Connection conn1 = DriverManager.getConnection(url1);
-             Connection conn2 = DriverManager.getConnection(url2)) {
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
 
-            // create table and upsert data using client-1
+            // create table with UCF=never and upsert data using client-1
             createTable(conn1, tableName, Long.MAX_VALUE);
             upsert(conn1, tableName);
 
-            // select query from client-2 to populate client side metadata cache
+            // select query from client-2 works to populate client side metadata cache
+            // there should be 1 getTable RPC
             query(conn2, tableName);
+            expectedNumGetTableRPCs = 1;
+            Mockito.verify(spyCqs2, Mockito.times(expectedNumGetTableRPCs))
+                    .getTable((PName) isNull(),
+                            any(), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                            anyLong(), anyLong());
 
             // add column using client-1 to update last ddl timestamp
             alterTableAddColumn(conn1, tableName, "newCol1");
@@ -86,8 +103,22 @@ public class ServerMetadataCachingIT extends BaseTest {
             // invalidate region server cache
             ServerMetadataCache.resetCache();
 
-            // select query from client-2
+            // select query from client-2 with old ddl timestamp works
+            // there should be one more getTable RPC
             query(conn2, tableName);
+            expectedNumGetTableRPCs += 1;
+            Mockito.verify(spyCqs2, Mockito.times(expectedNumGetTableRPCs))
+                    .getTable((PName) isNull(),
+                            any(), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                            anyLong(), anyLong());
+
+            // select query from client-2 with latest ddl timestamp works
+            // there should be no more getTable RPCs
+            query(conn2, tableName);
+            Mockito.verify(spyCqs2, Mockito.times(expectedNumGetTableRPCs))
+                    .getTable((PName) isNull(),
+                            any(), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                            anyLong(), anyLong());
         }
     }
 }
