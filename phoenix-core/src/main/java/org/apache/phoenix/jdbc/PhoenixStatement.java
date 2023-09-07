@@ -76,13 +76,10 @@ import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.AsyncAdmin;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
-import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.util.ByteStringer;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.BaseMutationPlan;
@@ -300,10 +297,14 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private int queryTimeoutMillis;
     // Caching per Statement
     protected final Calendar localCalendar = Calendar.getInstance();
+    private boolean ddlTimestampValidationEnabled;
 
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
         this.queryTimeoutMillis = getDefaultQueryTimeoutMillis();
+        this.ddlTimestampValidationEnabled = this.connection.getQueryServices().getProps()
+                                .getBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
+                                QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
     }
 
     /**
@@ -330,12 +331,12 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger)
             throws SQLException {
-        return executeQuery(stmt, true, queryLogger, false, true);
+        return executeQuery(stmt, true, queryLogger, false, this.ddlTimestampValidationEnabled);
     }
 
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger, boolean noCommit)
             throws SQLException {
-        return executeQuery(stmt, true, queryLogger, noCommit, true);
+        return executeQuery(stmt, true, queryLogger, noCommit, this.ddlTimestampValidationEnabled);
     }
 
     /**
@@ -465,10 +466,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 setLastQueryPlan(plan);
 
                                 //if enabled, verify metadata for the table/view/index involved in the query plan
-                                boolean ddlTimestampValidationEnabled = conn.getQueryServices().getProps()
-                                        .getBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
-                                        QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
-                                if (ddlTimestampValidationEnabled && validateDDLTimestamp) {
+                                if (validateDDLTimestamp) {
                                     validateDDLTimestamp(plan.getTableRef(), true);
                                 }
 
