@@ -71,6 +71,11 @@ public class ServerMetadataCachingIT extends BaseTest {
                 + columnName + " INTEGER");
     }
 
+    /**
+     * Client-1 creates a table, upserts data and alters the table.
+     * Client-2 queries the table before and after the alter.
+     * Check queries work successfully in both cases and verify number of getTable RPCs.
+     */
     @Test
     public void testSelectQueryWithOldDDLTimestamp() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
