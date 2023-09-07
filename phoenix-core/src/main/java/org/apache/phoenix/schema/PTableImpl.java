@@ -1287,11 +1287,11 @@ public class PTableImpl implements PTable {
 
     @Override
     public PColumn getColumnForColumnName(String name) throws ColumnNotFoundException, AmbiguousColumnException {
-        String schemaNameStr = schemaName==null?null:schemaName.getString();
-        String tableNameStr = tableName==null?null:tableName.getString();
+        String schemaNameStr = schemaName == null ? null : schemaName.getString();
+        String tableNameStr = tableName == null ? null : tableName.getString();
 
         //Throw exception if trying to create a column name that does not exist
-        if (columnsByName == null){
+        if (columnsByName == null) {
             throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, name);
         }
 
