@@ -523,6 +523,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 throw e;
                             }
                             catch (SQLException e) {
+                                // force update cache in case of StaleMetadataCacheException and retry
                                 if (e instanceof StaleMetadataCacheException) {
                                     String planSchemaName = getLastQueryPlan().getTableRef().getTable().getSchemaName().toString();
                                     String planTableName = getLastQueryPlan().getTableRef().getTable().getTableName().toString();
