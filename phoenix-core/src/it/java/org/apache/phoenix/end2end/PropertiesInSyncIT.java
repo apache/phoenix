@@ -323,7 +323,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
         for (String propName: SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES) {
             try {
                 conn.createStatement().execute("alter table " + globalIndexName + " set "
-                + propName + "=" + DUMMY_PROP_VALUE);
+                + propName + "=" + INITIAL_TTL_VALUE);
                 fail("Should fail with SQLException when altering synced property for a global index");
             } catch (SQLException sqlE) {
                 assertEquals("Should fail to alter synced property for a global index",
