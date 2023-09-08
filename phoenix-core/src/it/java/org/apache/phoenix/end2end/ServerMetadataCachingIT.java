@@ -212,4 +212,53 @@ public class ServerMetadataCachingIT extends BaseTest {
             query(conn2, tableName);
         }
     }
+
+    /**
+     * Test Select query with old ddl timestamp and ddl timestamp validation encounters an exception.
+     */
+    @Test
+    public void testSelectQueryWithOldDDLTimestampWithExceptionRetry() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+        int expectedNumGetTableRPCs;
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            // create table and upsert using client-1
+            createTable(conn1, tableName, Long.MAX_VALUE);
+            upsert(conn1, tableName);
+
+            // query using client-2 to populate cache
+            query(conn2, tableName);
+            expectedNumGetTableRPCs = 1;
+            Mockito.verify(spyCqs2, Mockito.times(expectedNumGetTableRPCs))
+                    .getTable((PName) isNull(),
+                            any(), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                            anyLong(), anyLong());
+
+            // add column using client-1 to update last ddl timestamp
+            alterTableAddColumn(conn1, tableName, "newCol1");
+
+            // invalidate region server cache
+            ServerMetadataCache.resetCache();
+
+            // instrument CQSI admin to throw an IOException once when getRegionServers() is called
+            Admin spyAdmin = Mockito.spy(spyCqs2.getAdmin());
+            Mockito.doThrow(new IOException()).doCallRealMethod().when(spyAdmin).getRegionServers(eq(true));
+            Mockito.doReturn(spyAdmin).when(spyCqs2).getAdmin();
+
+            // query using client-2 should succeed, one additional getTable RPC
+            query(conn2, tableName);
+            expectedNumGetTableRPCs += 1;
+            Mockito.verify(spyCqs2, Mockito.times(expectedNumGetTableRPCs))
+                    .getTable((PName) isNull(),
+                            any(), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                            anyLong(), anyLong());
+        }
+    }
 }
