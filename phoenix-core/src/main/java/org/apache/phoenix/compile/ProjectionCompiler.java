@@ -470,10 +470,24 @@ public class ProjectionCompiler {
                         ExpressionCompiler.throwNonAggExpressionInAggException(expression.toString());
                     }
                 }
-                String columnAlias = aliasedNode.getAlias() != null ? aliasedNode.getAlias() : SchemaUtil.normalizeIdentifier(aliasedNode.getNode().getAlias());
-                boolean isCaseSensitive = aliasedNode.getAlias() != null ? aliasedNode.isCaseSensitve() : (columnAlias != null ? SchemaUtil.isCaseSensitive(aliasedNode.getNode().getAlias()) : selectVisitor.isCaseSensitive);
-                String name = columnAlias == null ? expression.toString() : columnAlias;
-                projectedColumns.add(new ExpressionProjector(name, tableRef.getTableAlias() == null ? (table.getName() == null ? "" : table.getName().getString()) : tableRef.getTableAlias(), expression, isCaseSensitive));
+
+                String tableName = tableRef.getTableAlias() == null ?
+                        (table.getName() == null ?
+                                "" :
+                                table.getName().getString()) :
+                        tableRef.getTableAlias();
+                String colName = SchemaUtil.normalizeIdentifier(aliasedNode.getNode().getAlias());
+                String name = colName == null ? expression.toString() : colName;
+                boolean isCaseSensitive = aliasedNode.getAlias() != null ?
+                        aliasedNode.isCaseSensitve() :
+                        (colName != null ?
+                                SchemaUtil.isCaseSensitive(aliasedNode.getNode().getAlias()) :
+                                selectVisitor.isCaseSensitive);
+                if (null != aliasedNode.getAlias()){
+                    projectedColumns.add(new ExpressionProjector(name, tableName, expression, isCaseSensitive, aliasedNode.getAlias()));
+                } else {
+                    projectedColumns.add(new ExpressionProjector(name, tableName, expression, isCaseSensitive));
+                }
             }
 
             selectVisitor.reset();

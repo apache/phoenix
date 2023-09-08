@@ -99,12 +99,12 @@ public class PhoenixResultSetMetaData implements ResultSetMetaData {
     
     @Override
     public String getColumnLabel(int column) throws SQLException {
-        return rowProjector.getColumnProjector(column-1).getName();
+        return rowProjector.getColumnProjector(column-1).getLabel();
     }
 
     @Override
     public String getColumnName(int column) throws SQLException {
-        return rowProjector.getColumnProjector(column-1).getExpressionString();
+        return rowProjector.getColumnProjector(column-1).getName();
     }
 
     @Override

@@ -39,14 +39,22 @@ public class ExpressionProjector implements ColumnProjector {
     private final Expression expression;
     private final String tableName;
     private final boolean isCaseSensitive;
-    private final String expressionString;
+    private final String label;
 
-    public ExpressionProjector(String name, String tableName, Expression expression, boolean isCaseSensitive) {
+    public ExpressionProjector(String name, String tableName, Expression expression, boolean isCaseSensitive, String label) {
         this.name = name;
         this.expression = expression;
         this.tableName = tableName;
         this.isCaseSensitive = isCaseSensitive;
-        this.expressionString = SchemaUtil.normalizeIdentifier(expression.toString());
+        this.label = label;
+    }
+
+    public ExpressionProjector(String name, String tableName, Expression expression, boolean isCaseSensitive) {
+        this.name = name;
+        this.label = name;
+        this.expression = expression;
+        this.tableName = tableName;
+        this.isCaseSensitive = isCaseSensitive;
     }
 
     @Override
@@ -65,8 +73,8 @@ public class ExpressionProjector implements ColumnProjector {
     }
 
     @Override
-    public String getExpressionString() {
-        return expressionString;
+    public String getLabel() {
+        return label;
     }
 
     @Override

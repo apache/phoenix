@@ -45,7 +45,7 @@ public interface ColumnProjector {
      * Get the expression string
      * @return the expression for the column projector as a String
      */
-    String getExpressionString();
+    String getLabel();
 
     /**
      * Get the expression
