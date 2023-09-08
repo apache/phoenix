@@ -1,10 +1,10 @@
 package org.apache.phoenix.end2end;
 
 
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
@@ -19,11 +19,10 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.mockito.Mockito;
 
+import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
@@ -124,6 +123,93 @@ public class ServerMetadataCachingIT extends BaseTest {
                     .getTable((PName) isNull(),
                             any(), eq(PVarchar.INSTANCE.toBytes(tableName)),
                             anyLong(), anyLong());
+        }
+    }
+
+    /**
+     * Test DDL timestamp validation retry logic in case of SQLException from Admin API.
+     */
+    @Test
+    public void testSelectQueryAdminSQLExceptionInValidation() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            // create table and upsert using client-1
+            createTable(conn1, tableName, Long.MAX_VALUE);
+            upsert(conn1, tableName);
+
+            // instrument CQSI to throw a SQLException once when getAdmin is called
+            Mockito.doThrow(new SQLException()).doCallRealMethod().when(spyCqs2).getAdmin();
+
+            // query using client-2 should succeed
+            query(conn2, tableName);
+        }
+    }
+
+    /**
+     * Test DDL timestamp validation retry logic in case of IOException from Admin API.
+     */
+    @Test
+    public void testSelectQueryAdminIOExceptionInValidation() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            // create table and upsert using client-1
+            createTable(conn1, tableName, Long.MAX_VALUE);
+            upsert(conn1, tableName);
+
+            // instrument CQSI admin to throw an IOException once when getRegionServers() is called
+            Admin spyAdmin = Mockito.spy(spyCqs2.getAdmin());
+            Mockito.doThrow(new IOException()).doCallRealMethod().when(spyAdmin).getRegionServers(eq(true));
+            Mockito.doReturn(spyAdmin).when(spyCqs2).getAdmin();
+
+            // query using client-2 should succeed
+            query(conn2, tableName);
+        }
+    }
+
+    /**
+     * Test DDL timestamp validation retry logic in case of any exception
+     * from Server other than StaleMetadataCacheException.
+     */
+    @Test
+    public void testSelectQueryServerSideExceptionInValidation() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            // create table and upsert using client-1
+            createTable(conn1, tableName, Long.MAX_VALUE);
+            upsert(conn1, tableName);
+
+            // Instrument ServerMetadataCache to throw a SQLException once
+            ServerMetadataCache spyCache = Mockito.spy(ServerMetadataCache.getInstance(config));
+            Mockito.doThrow(new SQLException()).doCallRealMethod().when(spyCache)
+                    .getLastDDLTimestampForTable(any(), any(), eq(Bytes.toBytes(tableName)));
+            ServerMetadataCache.setInstance(spyCache);
+
+            // query using client-2 should succeed
+            query(conn2, tableName);
         }
     }
 }

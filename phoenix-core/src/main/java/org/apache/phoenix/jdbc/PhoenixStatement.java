@@ -385,34 +385,23 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             service.validateLastDDLTimestamp(null, getValidateDDLTimestampRequest(tableRef));
         }
         // handle server side exceptions
-        catch (ServiceException e) {
-            SQLException ex = ServerUtil.parseRemoteException(e.getCause());
-            // throw stale cache exception
-            if (ex != null && (ex instanceof StaleMetadataCacheException)) {
-                throw ex;
-            }
-            //retry once for any other server side exceptions
-            else {
-                LOGGER.error("Error in validating DDL timestamp for table {}: {}",
-                        tableRef.getTable().getName().getString(), ex);
-                if (doRetry) {
-                    validateDDLTimestamp(tableRef, false);
+        catch (ServiceException | SQLException | IOException e) {
+            if (e instanceof ServiceException) {
+                SQLException ex = ServerUtil.parseRemoteException(e.getCause());
+                // throw if stale cache exception
+                if (ex != null && (ex instanceof StaleMetadataCacheException)) {
+                    throw ex;
                 }
-                throw new SQLException(e.getCause());
             }
-        }
-        // retry once for any other errors
-        catch (SQLException e) {
+            //retry once for any other errors
+            LOGGER.error("Error in validating DDL timestamp for table {}: {}",
+                    tableRef.getTable().getName().getString(), e.getCause());
             if (doRetry) {
                 validateDDLTimestamp(tableRef, false);
+                return;
             }
-            throw e;
-        }
-        catch (IOException e) {
-            if (doRetry) {
-                validateDDLTimestamp(tableRef, false);
-            }
-            throw new SQLException(e);
+            throw new SQLException("Error in validating DDL timestamp for table " +
+                    tableRef.getTable().getName().getString(), e.getCause());
         }
         // do nothing if the validation succeeded.
     }
