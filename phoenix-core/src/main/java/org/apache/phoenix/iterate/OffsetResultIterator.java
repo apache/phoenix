@@ -27,6 +27,7 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 
 import static org.apache.phoenix.util.ScanUtil.getDummyResult;
 import static org.apache.phoenix.util.ScanUtil.getDummyTuple;
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 /**
  * Iterates through tuples up to a limit
@@ -49,14 +50,16 @@ public class OffsetResultIterator extends DelegateResultIterator {
     }
     @Override
     public Tuple next() throws SQLException {
-        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         while (rowCount < offset) {
             Tuple tuple = super.next();
             if (tuple == null) { return null; }
-            rowCount++;
-            if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
-                return getDummyTuple(tuple);
+            if (isDummy(tuple)) {
+                // while rowCount < offset absorb the dummy and call next on the underlying scanner
+                continue;
             }
+            rowCount++;
+            // no page timeout check at this level because we cannot correctly resume
+            // scans for OFFSET queries until the offset is reached
         }
         return super.next();
     }

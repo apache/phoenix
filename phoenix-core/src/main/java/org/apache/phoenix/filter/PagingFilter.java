@@ -17,24 +17,24 @@
  */
 package org.apache.phoenix.filter;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.Arrays;
-import java.util.List;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterBase;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Writables;
 import org.apache.hadoop.io.Writable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.List;
 
 /**
  * This is a top level Phoenix filter which is injected to a scan at the server side. If the scan has
@@ -48,7 +48,11 @@ public class PagingFilter extends FilterBase implements Writable {
     State state;
     private long pageSizeMs;
     private long startTime;
-    private byte[] rowKeyAtStop;
+    // tracks the row which we will visit next. It is not always a full row key and maybe
+    // just the row key prefix.
+    private Cell nextHintCell;
+    // tracks the row we last visited
+    private Cell currentCell;
     private Filter delegate = null;
 
     public PagingFilter() {
@@ -70,10 +74,19 @@ public class PagingFilter extends FilterBase implements Writable {
     }
 
     public byte[] getRowKeyAtStop() {
-        if (rowKeyAtStop != null) {
-            return Arrays.copyOf(rowKeyAtStop, rowKeyAtStop.length);
+        byte[] rowKeyAtStop = null;
+        if (nextHintCell != null) {
+            // if we have already seeked to the next cell use that when we resume the scan
+            rowKeyAtStop = CellUtil.cloneRow(nextHintCell);
+        } else if (currentCell != null){
+            rowKeyAtStop = CellUtil.cloneRow(currentCell);
         }
-        return null;
+        return rowKeyAtStop;
+    }
+
+    public boolean isNextRowInclusive() {
+        // since this can be a key prefix we have to set inclusive to true when resuming scan
+        return nextHintCell != null;
     }
 
     public boolean isStopped() {
@@ -82,22 +95,18 @@ public class PagingFilter extends FilterBase implements Writable {
 
     public void init() {
         state = State.INITIAL;
-        rowKeyAtStop = null;
-    }
-
-    public void resetStartTime() {
-        if (state == State.STARTED) {
-            init();
-        }
+        currentCell = null;
+        nextHintCell = null;
     }
 
     @Override
     public void reset() throws IOException {
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
-        if (state == State.INITIAL) {
-            startTime = currentTime;
-            state = State.STARTED;
-        } else if (state == State.STARTED && currentTime - startTime >= pageSizeMs) {
+        // reset can be called multiple times for the same row sometimes even before we have
+        // scanned even one row. The order in which it is called is not very predictable.
+        // So to deal with this we need to ensure that we have seen atleast one row before we page.
+        // The currentCell != null check ensures that.
+        if (state == State.STARTED && currentCell != null && currentTime - startTime >= pageSizeMs) {
             state = State.TIME_TO_STOP;
         }
         if (delegate != null) {
@@ -110,33 +119,19 @@ public class PagingFilter extends FilterBase implements Writable {
     @Override
     public Cell getNextCellHint(Cell currentKV) throws IOException {
         if (delegate != null) {
-            return delegate.getNextCellHint(currentKV);
+            Cell ret = delegate.getNextCellHint(currentKV);
+            // save the hint so that if the filter stops we know where to resume the scan
+            nextHintCell = ret;
+            return ret;
         }
         return super.getNextCellHint(currentKV);
     }
 
-    public boolean filterRowKey(byte[] buffer, int offset, int length) throws IOException {
-        if (state == State.TIME_TO_STOP) {
-            if (rowKeyAtStop == null) {
-                rowKeyAtStop = new byte[length];
-                Bytes.putBytes(rowKeyAtStop, 0, buffer, offset, length);
-            }
-            return true;
-        }
-        if (delegate != null) {
-            return delegate.filterRowKey(buffer, offset, length);
-        }
-        return super.filterRowKey(buffer, offset, length);
-    }
-
     @Override
     public boolean filterRowKey(Cell cell) throws IOException {
-        if (state == State.TIME_TO_STOP) {
-            if (rowKeyAtStop == null) {
-                rowKeyAtStop = CellUtil.cloneRow(cell);
-            }
-            return true;
-        }
+        currentCell = cell;
+        // now that we have visited the row we need to reset the hint
+        nextHintCell = null;
         if (delegate != null) {
             return delegate.filterRowKey(cell);
         }
@@ -145,8 +140,11 @@ public class PagingFilter extends FilterBase implements Writable {
 
     @Override
     public boolean filterAllRemaining() throws IOException {
-        if (state == State.TIME_TO_STOP && rowKeyAtStop != null) {
+        if (state == State.TIME_TO_STOP) {
             state = State.STOPPED;
+            return true;
+        }
+        if (state == State.STOPPED) {
             return true;
         }
         if (delegate != null) {
@@ -156,7 +154,14 @@ public class PagingFilter extends FilterBase implements Writable {
     }
 
     @Override
+    /**
+     * This is called once for every row in the beginning.
+     */
     public boolean hasFilterRow() {
+        if (state == State.INITIAL) {
+            startTime = EnvironmentEdgeManager.currentTimeMillis();
+            state = State.STARTED;
+        }
         return true;
     }
 
@@ -223,6 +228,8 @@ public class PagingFilter extends FilterBase implements Writable {
 
     @Override
     public Filter.ReturnCode filterCell(Cell c) throws IOException {
+        currentCell = c;
+        nextHintCell = null;
         if (delegate != null) {
             return delegate.filterCell(c);
         }
