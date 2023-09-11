@@ -31,7 +31,7 @@ import org.apache.phoenix.util.SchemaUtil;
  * 
  * Projector for getting value from a select statement for an expression
  *
- * 
+ *
  * @since 0.1
  */
 public class ExpressionProjector implements ColumnProjector {
@@ -41,17 +41,9 @@ public class ExpressionProjector implements ColumnProjector {
     private final boolean isCaseSensitive;
     private final String label;
 
-    public ExpressionProjector(String name, String tableName, Expression expression, boolean isCaseSensitive, String label) {
+    public ExpressionProjector(String name, String label, String tableName, Expression expression, boolean isCaseSensitive) {
         this.name = name;
-        this.expression = expression;
-        this.tableName = tableName;
-        this.isCaseSensitive = isCaseSensitive;
         this.label = label;
-    }
-
-    public ExpressionProjector(String name, String tableName, Expression expression, boolean isCaseSensitive) {
-        this.name = name;
-        this.label = name;
         this.expression = expression;
         this.tableName = tableName;
         this.isCaseSensitive = isCaseSensitive;

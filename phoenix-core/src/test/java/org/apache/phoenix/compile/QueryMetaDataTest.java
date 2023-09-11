@@ -310,6 +310,7 @@ public class QueryMetaDataTest extends BaseConnectionlessQueryTest {
         assertEquals("a_string".toUpperCase(),md.getColumnName(2));
         assertEquals("b_string".toUpperCase(),md.getColumnName(3));
         assertEquals("a_integer".toUpperCase(),md.getColumnName(4));
+        assertEquals("i".toUpperCase(),md.getColumnLabel(4));
         assertEquals("a_date".toUpperCase(),md.getColumnName(5));
         
         assertEquals(String.class.getName(),md.getColumnClassName(1));

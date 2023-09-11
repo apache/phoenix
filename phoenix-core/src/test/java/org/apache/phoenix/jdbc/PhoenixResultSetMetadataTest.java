@@ -127,4 +127,31 @@ public class PhoenixResultSetMetadataTest extends BaseConnectionlessQueryTest {
         assertEquals("SQRT((3 + PK2))", rs.getMetaData().getColumnName(1));
         assertEquals("sqrt", rs.getMetaData().getColumnLabel(1));
     }
+
+    @Test
+    public void testView() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(
+                "CREATE TABLE IF NOT EXISTS S.T (A INTEGER PRIMARY KEY, B INTEGER, C VARCHAR, D INTEGER)");
+        conn.createStatement().execute(
+                "CREATE VIEW IF NOT EXISTS S.V (VA INTEGER, VB INTEGER) AS SELECT * FROM S.T WHERE B=200");
+        conn.createStatement().execute(
+                "UPSERT INTO S.V (A, B, C, D, VA, VB) VALUES (2, 200, 'def', -20, 91, 101)");
+        conn.createStatement().execute(
+                "ALTER VIEW S.V DROP COLUMN C");
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM S.V");
+        assertEquals("A", rs.getMetaData().getColumnName(1));
+        assertEquals("A", rs.getMetaData().getColumnLabel(1));
+        assertEquals("B", rs.getMetaData().getColumnName(2));
+        assertEquals("B", rs.getMetaData().getColumnLabel(2));
+        assertEquals("C", rs.getMetaData().getColumnName(3));
+        assertEquals("C", rs.getMetaData().getColumnLabel(3));
+        assertEquals("D", rs.getMetaData().getColumnName(4));
+        assertEquals("D", rs.getMetaData().getColumnLabel(4));
+        assertEquals("VA", rs.getMetaData().getColumnName(5));
+        assertEquals("VA", rs.getMetaData().getColumnLabel(5));
+        assertEquals("VB", rs.getMetaData().getColumnName(6));
+        assertEquals("VB", rs.getMetaData().getColumnLabel(6));
+    }
 }

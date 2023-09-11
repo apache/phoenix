@@ -130,7 +130,8 @@ public class RowProjector {
                 CloneExpressionVisitor visitor = new CloneExpressionVisitor();
                 Expression clonedExpression = expression.accept(visitor);
                 clonedColProjectors.add(new ExpressionProjector(colProjector.getName(),
-                        colProjector.getTableName(), 
+                        colProjector.getLabel(),
+                        colProjector.getTableName(),
                         clonedExpression,
                         colProjector.isCaseSensitive()));
             } else {
