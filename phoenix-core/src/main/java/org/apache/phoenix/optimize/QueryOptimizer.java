@@ -24,6 +24,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ColumnProjector;
@@ -36,16 +37,12 @@ import org.apache.phoenix.compile.QueryCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.compile.StatementNormalizer;
-import org.apache.phoenix.compile.SubqueryRewriter;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AliasedNode;
-import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.AndRewriterBooleanParseNodeVisitor;
 import org.apache.phoenix.parse.BindTableNode;
-import org.apache.phoenix.parse.BooleanParseNodeVisitor;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.DerivedTableNode;
 import org.apache.phoenix.parse.HintNode;
@@ -60,7 +57,6 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TableNodeVisitor;
-import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -69,6 +65,7 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TableRef;
@@ -78,6 +75,7 @@ import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.util.SchemaUtil;
 
 public class QueryOptimizer {
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
@@ -338,27 +336,63 @@ public class QueryOptimizer {
         Map<TableRef, QueryPlan> dataPlans = Collections.singletonMap(indexTableRef, dataPlan);
         PTable indexTable = indexTableRef.getTable();
         PIndexState indexState = indexTable.getIndexState();
+        boolean isServerMergeForUncoveredIndexEnabled = statement.getConnection()
+                .getQueryServices().getProps().getBoolean(
+                QueryServices.SERVER_MERGE_FOR_UNCOVERED_INDEX,
+                QueryServicesOptions.DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX);
         if (indexState == PIndexState.ACTIVE || indexState == PIndexState.PENDING_ACTIVE
                 || (indexState == PIndexState.PENDING_DISABLE && isUnderPendingDisableThreshold(indexTableRef.getCurrentTime(), indexTable.getIndexDisableTimestamp()))) {
             try {
+                if (!isServerMergeForUncoveredIndexEnabled
+                    || select.getHint().hasHint(HintNode.Hint.NO_INDEX_SERVER_MERGE)) {
+                    String schemaNameStr = index.getSchemaName() == null ? null
+                            : index.getSchemaName().getString();
+                    String tableNameStr = index.getTableName() == null ? null
+                            : index.getTableName().getString();
+                    throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, "*");
+                }
             	// translate nodes that match expressions that are indexed to the associated column parse node
-                indexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, null, statement.getConnection(), indexSelect.getUdfParseNodes()));
-                QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans);
+                SelectStatement rewrittenIndexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, null, statement.getConnection(), indexSelect.getUdfParseNodes()));
+                QueryCompiler compiler = new QueryCompiler(statement, rewrittenIndexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans);
 
                 QueryPlan plan = compiler.compile();
-
+                if (indexTable.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
+                    // Indexed columns should also be added to the data columns to join for uncovered global indexes.
+                    // This is required to verify index rows against data table rows
+                    plan.getContext().setUncoveredIndex(true);
+                    PhoenixConnection connection = statement.getConnection();
+                    PTable dataTable = connection.getTable(new PTableKey(connection.getTenantId(),
+                            SchemaUtil.getTableName(indexTable.getParentSchemaName().getString(),
+                                    indexTable.getParentTableName().getString())));
+                    Set<org.apache.hadoop.hbase.util.Pair<String, String>> indexedColumns =
+                            indexTable.getIndexMaintainer(dataTable, statement.getConnection()).getIndexedColumnInfo();
+                    for (org.apache.hadoop.hbase.util.Pair<String, String> pair : indexedColumns) {
+                        // The first member of the pair is the column family. For the data table PK columns, the column
+                        // family is set to null. The data PK columns should not be added to the set of data columns
+                        // to join back to index rows
+                        if (pair.getFirst() != null) {
+                            PColumn pColumn = dataTable.getColumnForColumnName(pair.getSecond());
+                            // The following adds the column to the set
+                            plan.getContext().getDataColumnPosition(pColumn);
+                        }
+                    }
+                }
                 indexTableRef = plan.getTableRef();
                 indexTable = indexTableRef.getTable();
                 indexState = indexTable.getIndexState();
                 // Checking number of columns handles the wildcard cases correctly, as in that case the index
                 // must contain all columns from the data table to be able to be used.
                 if (indexState == PIndexState.ACTIVE || indexState == PIndexState.PENDING_ACTIVE
-                        || (indexState == PIndexState.PENDING_DISABLE && isUnderPendingDisableThreshold(indexTableRef.getCurrentTime(), indexTable.getIndexDisableTimestamp()))) {
+                        || (indexState == PIndexState.PENDING_DISABLE
+                        && isUnderPendingDisableThreshold(indexTableRef.getCurrentTime(),
+                        indexTable.getIndexDisableTimestamp()))) {
                     if (plan.getProjector().getColumnCount() == nColumns) {
                         return plan;
-                    } else if (index.getIndexType() == IndexType.GLOBAL) {
-                        String schemaNameStr = index.getSchemaName()==null?null:index.getSchemaName().getString();
-                        String tableNameStr = index.getTableName()==null?null:index.getTableName().getString();
+                    } else {
+                        String schemaNameStr = index.getSchemaName() == null ? null
+                                : index.getSchemaName().getString();
+                        String tableNameStr = index.getTableName() == null ? null
+                                : index.getTableName().getString();
                         throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, "*");
                     }
                 }
@@ -369,6 +403,10 @@ public class QueryOptimizer {
                  * otherwise we just don't use this index (as opposed to trying to join back from
                  * the index table to the data table.
                  */
+                // Reset the state changes from the attempt above
+                indexTableRef.setHinted(false);
+                dataPlan.getContext().setUncoveredIndex(false);
+
                 SelectStatement dataSelect = (SelectStatement)dataPlan.getStatement();
                 ParseNode where = dataSelect.getWhere();
                 if (isHinted && where != null) {

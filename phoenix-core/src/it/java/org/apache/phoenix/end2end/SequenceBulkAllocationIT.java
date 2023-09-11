@@ -1119,6 +1119,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
             throws SQLException {
     	
         PreparedStatement ps = conn.prepareStatement("SELECT NEXT ? VALUES FOR  " + sequenceName + " ");
+        ps.getMetaData(); // check for PHOENIX-6665
         ps.setLong(1, numSlotToAllocate);
         ResultSet rs = ps.executeQuery();
         assertTrue(rs.next());
@@ -1165,15 +1166,15 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
                         .executeQuery(
                             "SELECT start_with, current_value, increment_by, cache_size, min_value, max_value, cycle_flag, sequence_schema, sequence_name FROM \"SYSTEM\".\"SEQUENCE\" where sequence_name='" + props.getNameWithoutSchema() + "'");
         assertTrue(rs.next());
-        assertEquals(props.startsWith, rs.getLong("start_with"));
-        assertEquals(props.incrementBy, rs.getLong("increment_by"));
-        assertEquals(props.cacheSize, rs.getLong("cache_size"));
-        assertEquals(false, rs.getBoolean("cycle_flag"));
-        assertEquals(props.getSchemaName(), rs.getString("sequence_schema"));
-        assertEquals(props.getNameWithoutSchema(), rs.getString("sequence_name"));
-        assertEquals(currentValue, rs.getLong("current_value"));
-        assertEquals(props.minValue, rs.getLong("min_value"));
-        assertEquals(props.maxValue, rs.getLong("max_value"));
+        assertEquals("start_with", props.startsWith, rs.getLong("start_with"));
+        assertEquals("increment_by", props.incrementBy, rs.getLong("increment_by"));
+        assertEquals("cache_size", props.cacheSize, rs.getLong("cache_size"));
+        assertEquals("cycle_flag", false, rs.getBoolean("cycle_flag"));
+        assertEquals("sequence_schema", props.getSchemaName(), rs.getString("sequence_schema"));
+        assertEquals("sequence_name", props.getNameWithoutSchema(), rs.getString("sequence_name"));
+        assertEquals("current_value", currentValue, rs.getLong("current_value"));
+        assertEquals("min_value", props.minValue, rs.getLong("min_value"));
+        assertEquals("max_value", props.maxValue, rs.getLong("max_value"));
         assertFalse(rs.next());
     }
 

@@ -20,7 +20,9 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 
@@ -86,5 +88,13 @@ public class DelegateRegionScanner implements RegionScanner {
     @Override
     public RegionInfo getRegionInfo() {
         return delegate.getRegionInfo();
+    }
+
+    public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
+        try {
+            return ((DelegateRegionScanner) delegate).getNewRegionScanner(scan);
+        } catch (ClassCastException e) {
+            throw new DoNotRetryIOException(e);
+        }
     }
 }

@@ -45,6 +45,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
@@ -73,7 +74,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
         // ensure we didn't create a physical HBase table for the tenant-specific table
         Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-        assertEquals(0, admin.listTables(TENANT_TABLE_NAME).length);
+        assertEquals(0, admin.listTableDescriptors(Pattern.compile(TENANT_TABLE_NAME)).size());
     }
     
     @Test

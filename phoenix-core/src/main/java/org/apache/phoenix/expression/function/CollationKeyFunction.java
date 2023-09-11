@@ -35,11 +35,11 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.VarBinaryFormatter;
+import org.apache.phoenix.util.i18n.LinguisticSort;
+import org.apache.phoenix.util.i18n.LocaleUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.force.db.i18n.LinguisticSort;
-import com.force.i18n.LocaleUtils;
 
 /**
  * A Phoenix Function that calculates a collation key for an input string based
@@ -51,10 +51,12 @@ import com.force.i18n.LocaleUtils;
  * are all valid locale representations. Note the language code, country code
  * and variant are used as arguments to the constructor of java.util.Locale.
  *
- * This function uses the open-source i18n-util package to obtain the collators
- * it needs from the provided locale.
+ * This function originally used the open-source i18n-util package to obtain the
+ * collators it needs from the provided locale. As i18n-util is not maintained
+ * anymore, the relevant parts from it were copied into Phoenix.
+ * See: https://issues.apache.org/jira/browse/PHOENIX-6818
  *
- * The LinguisticSort implementation in i18n-util encapsulates sort-related
+ * The LinguisticSort implementation from i18n-util encapsulates sort-related
  * functionality for a substantive list of locales. For each locale, it provides
  * a collator and an Oracle-specific database function that can be used to sort
  * strings according to the natural language rules of that locale.

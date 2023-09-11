@@ -29,7 +29,7 @@ import static org.junit.Assert.assertNull;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
@@ -55,7 +55,7 @@ public class SelectStatementRewriterTest extends BaseConnectionlessQueryTest {
         Filter filter = compileStatement(query);
         assertEquals(
                 singleKVFilter(constantComparison(
-                    CompareOp.EQUAL,
+                    CompareOperator.EQUAL,
                     A_INTEGER,
                     0)),
                 filter);
@@ -68,9 +68,9 @@ public class SelectStatementRewriterTest extends BaseConnectionlessQueryTest {
         Filter filter = compileStatement(query);
         assertEquals(
                 singleKVFilter(constantComparison(
-                    CompareOp.EQUAL,
-                    A_INTEGER,
-                    0)),
+                        CompareOperator.EQUAL,
+                        A_INTEGER,
+                        0)),
                 filter);
     }
     
@@ -82,12 +82,12 @@ public class SelectStatementRewriterTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 multiEncodedKVFilter(and(
                         constantComparison(
-                            CompareOp.EQUAL,
-                            A_INTEGER, 0),
+                                CompareOperator.EQUAL,
+                                A_INTEGER, 0),
                         constantComparison(
-                            CompareOp.EQUAL,
-                            A_STRING, "foo")
-                    ), TWO_BYTE_QUALIFIERS),
+                                CompareOperator.EQUAL,
+                                A_STRING, "foo")
+                ), TWO_BYTE_QUALIFIERS),
                 filter);
     }
 
@@ -106,12 +106,12 @@ public class SelectStatementRewriterTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 multiEncodedKVFilter(and(
                         constantComparison(
-                            CompareOp.EQUAL,
-                            A_INTEGER, 0),
+                                CompareOperator.EQUAL,
+                                A_INTEGER, 0),
                         constantComparison(
-                            CompareOp.EQUAL,
-                            A_STRING, "foo")
-                    ), TWO_BYTE_QUALIFIERS),
+                                CompareOperator.EQUAL,
+                                A_STRING, "foo")
+                ), TWO_BYTE_QUALIFIERS),
                 filter);
     }
 }

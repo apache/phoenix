@@ -939,16 +939,16 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
             String explainPlan = QueryUtil.getExplainPlan(rs);
             if (localIndex) {
             	assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1,'1David']\n" + 
-                        "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                        "    SERVER FILTER BY FIRST KEY ONLY\n" +
                         "CLIENT MERGE SORT\n" +
                         "    PARALLEL LEFT-JOIN TABLE 0 (SKIP MERGE)\n" +
                         "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1]\n" + 
-                        "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                        "            SERVER FILTER BY FIRST KEY ONLY\n" +
                         "        CLIENT MERGE SORT", explainPlan);
             }
             else {
             	assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName + " ['1David']\n" + 
-                        "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                        "    SERVER FILTER BY FIRST KEY ONLY\n" +
                         "    PARALLEL LEFT-JOIN TABLE 0 (SKIP MERGE)\n" +
                         "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + indexName + "\n" + 
                         "            SERVER FILTER BY FIRST KEY ONLY", explainPlan);

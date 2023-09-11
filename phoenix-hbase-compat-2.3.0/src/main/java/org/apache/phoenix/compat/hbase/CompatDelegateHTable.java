@@ -19,7 +19,6 @@ package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
 
-import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.Table;
 
@@ -29,11 +28,6 @@ public abstract class CompatDelegateHTable implements Table {
 
     public CompatDelegateHTable(Table delegate) {
         this.delegate = delegate;
-    }
-
-    @Override
-    public RegionLocator getRegionLocator() throws IOException {
-        return delegate.getRegionLocator();
     }
 
     @Override

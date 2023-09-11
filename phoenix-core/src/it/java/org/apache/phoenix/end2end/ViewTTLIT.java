@@ -18,13 +18,13 @@
 
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.filter.BinaryComparator;
-import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.QualifierFilter;
 import org.apache.hadoop.hbase.filter.RowFilter;
@@ -60,10 +60,12 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
@@ -76,6 +78,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -119,6 +122,20 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     static final String COL8_FMT = "h%05d";
     static final String COL9_FMT = "i%05d";
 
+    protected static void setUpTestDriver(ReadOnlyProps props) throws Exception {
+        setUpTestDriver(props, props);
+    }
+
+    @BeforeClass
+    public static final void doSetup() throws Exception {
+        // Turn on the PHOENIX_TTL feature
+        Map<String, String> DEFAULT_PROPERTIES = new HashMap<String, String>() {{
+            put(QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, String.valueOf(true));
+        }};
+
+        setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS, DEFAULT_PROPERTIES.entrySet().iterator()));
+    }
+
     // Scans the HBase rows directly and asserts
     private void assertUsingHBaseRows(byte[] hbaseTableName,
             long minTimestamp, int expectedRows) throws IOException, SQLException {
@@ -143,10 +160,10 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             long minTimestamp, boolean rawScan, int expectedRows) throws IOException, SQLException {
 
         FilterList filterList = new FilterList(FilterList.Operator.MUST_PASS_ALL);
-        RowFilter schemaNameFilter = new RowFilter(CompareFilter.CompareOp.EQUAL,
+        RowFilter schemaNameFilter = new RowFilter(CompareOperator.EQUAL,
                 new SubstringComparator(schemaName));
         QualifierFilter phoenixTTLQualifierFilter = new QualifierFilter(
-                CompareFilter.CompareOp.EQUAL,
+                CompareOperator.EQUAL,
                 new BinaryComparator(PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES));
         filterList.addFilter(schemaNameFilter);
         filterList.addFilter(phoenixTTLQualifierFilter);
@@ -2337,7 +2354,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     }
 
     private void validateExpiredRowsAreNotReturnedUsingCounts(long phoenixTTL, DataReader dataReader,
-            SchemaBuilder schemaBuilder) throws SQLException {
+            SchemaBuilder schemaBuilder) throws IOException, SQLException {
 
         String tenantConnectUrl =
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
@@ -2376,7 +2393,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         // Verify before TTL expiration
         Properties props = new Properties();
-        long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+        long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() + 1;
         props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
         props.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {
@@ -2413,7 +2430,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                         .getTenantId();
 
         // Verify rows exists (not masked) at current time
-        long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+        long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() + 1;
         Properties props = new Properties();
         props.setProperty("CurrentSCN", Long.toString(scnTimestamp ));
         try (Connection readConnection = DriverManager.getConnection(tenantConnectUrl, props)) {

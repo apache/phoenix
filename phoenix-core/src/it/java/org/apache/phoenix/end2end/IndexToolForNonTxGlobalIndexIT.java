@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -36,15 +38,13 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.mapreduce.Counters;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
@@ -86,7 +86,10 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.INDEX_TOOL_RUN_STATUS_BYTES;
@@ -169,7 +172,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
                 QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         serverProps.put(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(8));
-        serverProps.put(CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+        serverProps.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
             Long.toString(MAX_LOOKBACK_AGE));
         serverProps.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
             Long.toString(Long.MAX_VALUE));
@@ -282,7 +285,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
                             indexTableName, dataTableFullName));
             IndexTool indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
                     IndexTool.IndexVerifyType.ONLY);
-            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+            if (BaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
                 Cell cell =
                         IndexToolIT.getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName,
                                 indexTableFullName);
@@ -309,15 +312,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
                 admin.getDescriptor(indexTable).getColumnFamilies()[0];
             ColumnFamilyDescriptor newDesc =
                 ColumnFamilyDescriptorBuilder.newBuilder(desc).setTimeToLive(1).build();
-            admin.modifyColumnFamily(indexTable, newDesc);
-            Thread.sleep(1000);
-            Pair<Integer, Integer> status = admin.getAlterStatus(indexTable);
-            int retry = 0;
-            while (retry < 20 && status.getFirst() != 0) {
-                Thread.sleep(2000);
-                status = admin.getAlterStatus(indexTable);
-            }
-            assertEquals(0, (int) status.getFirst());
+            Future<Void> modifyColumnFams = admin.modifyColumnFamilyAsync(indexTable, newDesc);
+            modifyColumnFams.get(41000, TimeUnit.MILLISECONDS);
 
             TableName indexToolOutputTable = TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES);
             admin.disableTable(indexToolOutputTable);
@@ -427,7 +423,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+            if (BaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
                 assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
                 assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
             } else {
@@ -600,7 +596,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
             IndexRebuildRegionScanner.setIgnoreIndexRebuildForTesting(true);
             conn.createStatement().execute(String.format(
                     "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP) ASYNC " + this.indexDDLOptions, indexTableName, viewFullName));
-            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+            if (BaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
                 // Run the index MR job and verify that the index table rebuild fails
                 IndexToolIT.runIndexTool(useSnapshot, schemaName, viewName, indexTableName,
                         null, -1, IndexTool.IndexVerifyType.AFTER);
@@ -624,7 +620,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
     @Test
     public void testIndexToolFailedMapperNotRecordToResultTable() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported() && mutable && singleCell);
+        Assume.assumeTrue(mutable && singleCell);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String schemaName = generateUniqueName();
@@ -684,7 +680,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
             // called PHOENIX_INDEX_TOOL
             IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
                     null, 0, IndexTool.IndexVerifyType.ONLY);
-            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+            if (BaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
                 Cell cell = IndexToolIT.getErrorMessageFromIndexToolOutputTable(conn, dataTableFullName, indexTableFullName);
                 try {
                     String expectedErrorMsg = IndexRebuildRegionScanner.ERROR_MESSAGE_MISSING_INDEX_ROW;
@@ -711,7 +707,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
     @Test
     public void testIndexToolForIncrementalRebuild() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
@@ -778,7 +773,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
     @Test
     public void testIndexToolForIncrementalVerify() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         ManualEnvironmentEdge customEdge = new ManualEnvironmentEdge();
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
@@ -908,7 +902,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
     @Test
     public void testIndexToolForIncrementalVerify_viewIndex() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         ManualEnvironmentEdge customeEdge = new ManualEnvironmentEdge();
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
@@ -1078,7 +1071,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
             truncateIndexAndIndexToolTables(indexTableFullName);
 
             boolean MaxLookbackEnabled =
-                    CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration());
+                    BaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration());
             //now check that disabling logging AFTER leaves only the BEFORE logs on a BOTH run
             assertDisableLogging(conn, MaxLookbackEnabled ? 2 : 0, IndexTool.IndexVerifyType.BOTH,
                 IndexTool.IndexDisableLoggingType.AFTER,
@@ -1110,7 +1103,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
     @Test
     public void testEnableOutputLoggingForMaxLookback() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isMaxLookbackTimeSupported());
         //by default we don't log invalid or missing rows past max lookback age to the
         // PHOENIX_INDEX_TOOL table. Verify that we can flip that logging on from the client-side
         // using a system property (such as from the command line) and have it log rows on the
@@ -1217,7 +1209,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_EXPIRED_INDEX_ROW_COUNT).getValue());
             assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
-            if (CompatBaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
+            if (BaseScannerRegionObserver.isMaxLookbackTimeEnabled(getUtility().getConfiguration())) {
                 assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
                 assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
             } else {
@@ -1276,7 +1268,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
     @Test
     public void testIncrementalRebuildWithPageSize() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
@@ -1332,7 +1323,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
     @Test
     public void testUpdatablePKFilterViewIndexRebuild() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         if (!mutable) {
             return;
         }
@@ -1411,7 +1401,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
     @Test
     public void testUpdatableNonPkFilterViewIndexRebuild() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isRawFilterSupported());
         if (!mutable) {
             return;
         }
@@ -1614,12 +1603,16 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         return output;
     }
 
-    public static class FastFailRegionObserver extends BaseRegionObserver {
+    public static class FastFailRegionObserver implements RegionObserver, RegionCoprocessor {
         @Override
         public RegionScanner postScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
                                         final Scan scan,
                                                final RegionScanner s) throws IOException {
             throw new DoNotRetryIOException("I'm just a coproc that's designed to fail fast");
+        }
+        @Override
+        public Optional<RegionObserver> getRegionObserver() {
+            return Optional.of(this);
         }
     }
 }

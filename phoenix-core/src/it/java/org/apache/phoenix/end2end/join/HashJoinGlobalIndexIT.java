@@ -200,7 +200,7 @@ public class HashJoinGlobalIndexIT extends HashJoinIT {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_customer\n" +
-                "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    PARALLEL INNER-JOIN TABLE 1\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY",

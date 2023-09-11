@@ -104,8 +104,9 @@ public interface PTable extends PMetaDataEntity {
     }
 
     public enum IndexType {
-        GLOBAL((byte)1),
-        LOCAL((byte)2);
+        GLOBAL((byte)1), // Covered Global
+        LOCAL((byte)2), // Covered Local
+        UNCOVERED_GLOBAL((byte)3); // Uncovered Global
 
         private final byte[] byteValue;
         private final byte serializedValue;
@@ -663,6 +664,9 @@ public interface PTable extends PMetaDataEntity {
     long getTimeStamp();
     long getSequenceNumber();
     long getIndexDisableTimestamp();
+
+    boolean isIndexStateDisabled();
+
     /**
      * @return table name
      */
@@ -892,7 +896,7 @@ public interface PTable extends PMetaDataEntity {
     int getRowTimestampColPos();
     long getUpdateCacheFrequency();
     boolean isNamespaceMapped();
-    
+
     /**
      * @return The sequence name used to get the unique identifier for views
      * that are automatically partitioned.
@@ -951,6 +955,12 @@ public interface PTable extends PMetaDataEntity {
      * a Phoenix table or view in the registry.
      */
     String getExternalSchemaId();
+
+    /**
+     * @return Optional string to be used for a logical topic name that change detection capture
+     * will use to persist changes for this table or view
+     */
+    String getStreamingTopicName();
 
     /**
      * Class to help track encoded column qualifier counters per column family.

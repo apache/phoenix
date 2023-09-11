@@ -169,6 +169,11 @@ public class TransformMonitorIT extends ParallelStatsDisabledIT {
                 assertMetadata(conn, PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS, PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, viewName);
                 conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
 
+                ResultSet rs = conn.createStatement().executeQuery("SELECT VIEW_COL2 FROM " + viewName + " WHERE VIEW_COL1=100");
+                assertTrue(rs.next());
+                assertEquals("viewCol2", rs.getString(1));
+                assertFalse(rs.next());
+
                 int additionalRows = 2;
                 // Upsert new rows to new table. Note that after transform is complete, we are using the new table
                 TransformToolIT.upsertRows(conn, viewName, (int)newRowCount+1, additionalRows);
@@ -190,7 +195,7 @@ public class TransformMonitorIT extends ParallelStatsDisabledIT {
                 assertEquals((newRowCount+additionalRows)*2, countRowsForViewIndex(conn, dataTableFullName));
 
                 conn.createStatement().execute("UPSERT INTO " + viewName2 + "(ID, NAME, VIEW_COL1, VIEW_COL2) VALUES (100, 'uname100', 1000, 'viewCol100')");
-                ResultSet rs = conn.createStatement().executeQuery("SELECT VIEW_COL2, NAME FROM " + viewName2 + " WHERE VIEW_COL1=1000");
+                rs = conn.createStatement().executeQuery("SELECT VIEW_COL2, NAME FROM " + viewName2 + " WHERE VIEW_COL1=1000");
                 assertTrue(rs.next());
                 assertEquals("viewCol100", rs.getString(1));
                 assertEquals("uname100", rs.getString(2));
@@ -536,19 +541,22 @@ public class TransformMonitorIT extends ParallelStatsDisabledIT {
         try (Connection conn1 = DriverManager.getConnection(getUrl(), testProps)) {
             conn1.setAutoCommit(true);
             int numOfRows = 1;
-            TransformToolIT.createTableAndUpsertRows(conn1, dataTableName, numOfRows, isImmutable? " IMMUTABLE_ROWS=true" : "");
+            TransformToolIT.createTableAndUpsertRows(conn1, dataTableName, numOfRows, isImmutable ? " IMMUTABLE_ROWS=true" : "");
 
-            conn1.createStatement().execute("ALTER TABLE " + dataTableName +
-                    " SET IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
-            SystemTransformRecord record = Transform.getTransformRecord(null, dataTableName, null, null, conn1.unwrap(PhoenixConnection.class));
-            assertNotNull(record);
-            waitForTransformToGetToState(conn1.unwrap(PhoenixConnection.class), record, PTable.TransformStatus.COMPLETED);
-
-            // A connection does transform and another connection doesn't try to upsert into old table
             String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
             try (Connection conn2 = DriverManager.getConnection(url2, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                 conn2.setAutoCommit(true);
                 TransformToolIT.upsertRows(conn2, dataTableName, 2, 1);
+
+                conn1.createStatement().execute("ALTER TABLE " + dataTableName +
+                        " SET IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+                SystemTransformRecord record = Transform.getTransformRecord(null, dataTableName, null, null, conn1.unwrap(PhoenixConnection.class));
+                assertNotNull(record);
+                waitForTransformToGetToState(conn1.unwrap(PhoenixConnection.class), record, PTable.TransformStatus.COMPLETED);
+                assertMetadata(conn1, PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS, PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, record.getNewPhysicalTableName());
+
+                // A connection does transform and another connection doesn't try to upsert into old table
+                TransformToolIT.upsertRows(conn2, dataTableName, 3, 1);
 
                 ResultSet rs = conn2.createStatement().executeQuery("SELECT ID, NAME, ZIP FROM " + dataTableName);
                 assertTrue(rs.next());
@@ -559,6 +567,10 @@ public class TransformMonitorIT extends ParallelStatsDisabledIT {
                 assertEquals("2", rs.getString(1));
                 assertEquals("uname2", rs.getString(2));
                 assertEquals( 95052, rs.getInt(3));
+                assertTrue(rs.next());
+                assertEquals("3", rs.getString(1));
+                assertEquals("uname3", rs.getString(2));
+                assertEquals( 95053, rs.getInt(3));
                 assertFalse(rs.next());
             }
         }

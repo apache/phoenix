@@ -50,7 +50,6 @@ import java.util.Collection;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -60,6 +59,7 @@ import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
 import org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.MavenCoordinates;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.SystemTaskSplitPolicy;
@@ -125,7 +125,7 @@ public class BackwardCompatibilityIT {
 
     @After
     public synchronized void cleanUpAfterTest() throws Exception {
-        boolean refCountLeaked = CompatUtil.isAnyStoreRefCountLeaked(hbaseTestUtil.getAdmin());
+        boolean refCountLeaked = BaseTest.isAnyStoreRefCountLeaked(hbaseTestUtil.getAdmin());
         ConnectionFactory.shutdown();
         try {
             DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
@@ -416,7 +416,7 @@ public class BackwardCompatibilityIT {
         executeQueryWithClientVersion(compatibleClientVersion, ADD_VIEW_INDEX, zkQuorum);
         org.apache.hadoop.hbase.client.Connection conn = hbaseTestUtil.getConnection();
         try (Admin admin = conn.getAdmin()) {
-            HTableDescriptor tableDescriptor = admin.getTableDescriptor(
+            TableDescriptor tableDescriptor = admin.getDescriptor(
                     TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
             //The oldest client we test is 5.1.0, which already adds SystemCatalogRegionObserver
             assertTrue("Coprocessor " + SystemCatalogRegionObserver.class.getName()
@@ -427,7 +427,7 @@ public class BackwardCompatibilityIT {
             executeQueriesWithCurrentVersion(QUERY_VIEW_INDEX, url, NONE);
             assertExpectedOutput(QUERY_VIEW_INDEX);
 
-            tableDescriptor = admin.getTableDescriptor(
+            tableDescriptor = admin.getDescriptor(
                     TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
             assertTrue("Coprocessor " + SystemCatalogRegionObserver.class.getName()
                     + " has been added with compatible client version: "

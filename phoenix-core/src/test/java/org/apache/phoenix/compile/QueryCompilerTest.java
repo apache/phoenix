@@ -78,6 +78,7 @@ import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.TimeUnit;
+import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
@@ -99,6 +100,7 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -110,8 +112,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 
@@ -2508,19 +2508,19 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             rs = conn.createStatement().executeQuery("EXPLAIN "+query);
             explainPlan = QueryUtil.getExplainPlan(rs);
             assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER T3\n" + 
-                    "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    PARALLEL INNER-JOIN TABLE 0\n" + 
                     "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
-                    "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "            SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    DYNAMIC SERVER FILTER BY B.J IN (\"A.:K\")",explainPlan);
             query = "SELECT a.k,b.k from t2 b join t1 a ON a.k = b.k where a.col1 || a.col2 = 'foobar'";
             rs = conn.createStatement().executeQuery("EXPLAIN "+query);
             explainPlan = QueryUtil.getExplainPlan(rs);
             assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER T2\n" + 
-                    "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    PARALLEL INNER-JOIN TABLE 0\n" + 
                     "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
-                    "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "            SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    DYNAMIC SERVER FILTER BY B.K IN (\"A.:K\")",explainPlan);
         } finally {
             conn.close();
@@ -4949,12 +4949,12 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             QueryPlan plan = stmt.optimizeQuery(query);
             plan.iterator();
             //Fail since we have 3 rows in pointLookup
-            assertFalse(plan.getContext().getScan().isSmall());
+            assertEquals(Scan.ReadType.DEFAULT, plan.getContext().getScan().getReadType());
             query = "select * from foo where a = 'a' and b = 'b' and c = 'c'";
             plan = stmt.compileQuery(query);
             plan.iterator();
             //Should be small scan, query is for single row pointLookup
-            assertTrue(plan.getContext().getScan().isSmall());
+            assertEquals(Scan.ReadType.PREAD, plan.getContext().getScan().getReadType());
         }
     }
 
@@ -6887,4 +6887,216 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    @Test
+    public void testEliminateUnnecessaryReversedScanBug6798() throws Exception {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(getUrl());
+            String tableName = generateUniqueName();
+
+            String sql =
+                    "create table " + tableName + "(group_id integer not null, "
+                            + " keyword varchar not null, " + " cost integer, "
+                            + " CONSTRAINT TEST_PK PRIMARY KEY (group_id,keyword)) ";
+            conn.createStatement().execute(sql);
+
+            /**
+             * Test {@link GroupBy#isOrderPreserving} is false and {@link OrderBy} is reversed.
+             */
+            sql =
+                    "select keyword,sum(cost) from " + tableName
+                            + " group by keyword order by keyword desc";
+            QueryPlan queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            Scan scan = queryPlan.getContext().getScan();
+            assertTrue(!queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == OrderBy.REV_ROW_KEY_ORDER_BY);
+            assertTrue(!ScanUtil.isReversed(scan));
+
+            /**
+             * Test {@link GroupBy#isOrderPreserving} is true and {@link OrderBy} is reversed.
+             */
+            sql =
+                    "select keyword,sum(cost) from " + tableName
+                            + " group by group_id,keyword order by group_id desc,keyword desc";
+            queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
+            scan = queryPlan.getContext().getScan();
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == OrderBy.REV_ROW_KEY_ORDER_BY);
+            assertTrue(ScanUtil.isReversed(scan));
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testReverseIndexRangeBugPhoenix6916() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("create table " + tableName + " (id varchar primary key, ts timestamp)");
+            stmt.execute("create index " + indexName + " on " + tableName + "(ts desc)");
+
+            String query =
+                    "select id, ts from " + tableName
+                            + " where ts >= TIMESTAMP '2023-02-23 13:30:00'  and ts < TIMESTAMP '2023-02-23 13:40:00'";
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName
+                    + " [~1,677,159,600,000] - [~1,677,159,000,000]\n    SERVER FILTER BY FIRST KEY ONLY",
+                explainPlan);
+        }
+    }
+
+    @Test
+    public void testReverseVarLengthRange6916() throws Exception {
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+
+            stmt.execute("create table " + tableName + " (k varchar primary key desc)");
+
+            // Explain doesn't display open/closed ranges
+            String explainExpected =
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName
+                            + " [~'aaa'] - [~'a']\n    SERVER FILTER BY FIRST KEY ONLY";
+
+            String openQry = "select * from " + tableName + " where k > 'a' and k<'aaa'";
+            Scan openScan =
+                    getOptimizedQueryPlan(openQry, Collections.emptyList()).getContext().getScan();
+            assertEquals("\\x9E\\x9E\\x9F\\x00", Bytes.toStringBinary(openScan.getStartRow()));
+            assertEquals("\\x9E\\xFF", Bytes.toStringBinary(openScan.getStopRow()));
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + openQry);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals(explainExpected, explainPlan);
+
+            String closedQry = "select * from " + tableName + " where k >= 'a' and k <= 'aaa'";
+            Scan closedScan =
+                    getOptimizedQueryPlan(closedQry, Collections.emptyList()).getContext()
+                            .getScan();
+            assertEquals("\\x9E\\x9E\\x9E\\xFF", Bytes.toStringBinary(closedScan.getStartRow()));
+            assertEquals("\\x9F\\x00", Bytes.toStringBinary(closedScan.getStopRow()));
+            rs = stmt.executeQuery("EXPLAIN " + closedQry);
+            explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals(explainExpected, explainPlan);
+        }
+    }
+
+    @Test
+    public void testUncoveredPhoenix6969() throws Exception {
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+
+            stmt.execute(
+                "create table dd (k1 integer not null, k2 integer not null, k3 integer not null,"
+                + " k4 integer not null, v1 integer, v2 integer, v3 integer, v4 integer"
+                + " constraint pk primary key (k1,k2,k3,k4))");
+            stmt.execute("create index ii on dd (k4, k1, k2, k3)");
+            String query =
+                    "select /*+ index(dd ii) */ k1, k2, k3, k4, v1, v2, v3, v4 from dd"
+                    + " where k4=1 and k2=1 order by k1 asc, v1 asc limit  1";
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            //We are more interested in the query compiling than the exact result
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER II [1]\n"
+                    + "    SERVER MERGE [0.V1, 0.V2, 0.V3, 0.V4]\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY AND \"K2\" = 1\n"
+                    + "    SERVER TOP 1 ROW SORTED BY [\"K1\", \"V1\"]\n"
+                    + "CLIENT MERGE SORT\n"
+                    + "CLIENT LIMIT 1", explainPlan);
+        }
+    }
+
+    @Test
+    public void testUncoveredPhoenix6984() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE D (\n" + "K1 CHAR(6) NOT NULL,\n"
+                    + "K2 VARCHAR(22) NOT NULL,\n"
+                    + "K3 CHAR(2) NOT NULL,\n"
+                    + "K4 VARCHAR(36) NOT NULL,\n"
+                    + "V1 TIMESTAMP,\n"
+                    + "V2 TIMESTAMP,\n"
+                    + "CONSTRAINT PK_BILLING_ORDER PRIMARY KEY (K1,K2,K3,K4))");
+
+            stmt.execute("CREATE INDEX I ON D(K2, K1, K3, K4)");
+            String query =
+                    "SELECT /*+ INDEX(D I), NO_INDEX_SERVER_MERGE */ * "
+                            + "FROM D "
+                            + "WHERE K2 = 'XXX' AND "
+                            + "V2 >= TIMESTAMP '2023-05-31 23:59:59.000' AND "
+                            + "V1 <= TIMESTAMP '2023-04-01 00:00:00.000' "
+                            + "ORDER BY V2 asc";
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER D\n"
+                    + "    SERVER FILTER BY (V2 >= TIMESTAMP '2023-05-31 23:59:59.000'"
+                    + " AND V1 <= TIMESTAMP '2023-04-01 00:00:00.000')\n"
+                    + "    SERVER SORTED BY [D.V2]\n"
+                    + "CLIENT MERGE SORT\n"
+                    + "    SKIP-SCAN-JOIN TABLE 0\n"
+                    + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER I ['XXX']\n"
+                    + "            SERVER FILTER BY FIRST KEY ONLY\n"
+                    + "    DYNAMIC SERVER FILTER BY (\"D.K1\", \"D.K2\", \"D.K3\", \"D.K4\")"
+                    + " IN (($2.$4, $2.$5, $2.$6, $2.$7))",
+                explainPlan);
+        }
+    }
+
+    @Test
+    public void testUncoveredPhoenix6986() throws Exception {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.SERVER_MERGE_FOR_UNCOVERED_INDEX,
+            Boolean.toString(false));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+            Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE TAB_PHOENIX_6986 (\n" + "K1 CHAR(6) NOT NULL,\n"
+                + "K2 VARCHAR(22) NOT NULL,\n"
+                + "K3 CHAR(2) NOT NULL,\n"
+                + "K4 VARCHAR(36) NOT NULL,\n"
+                + "V1 TIMESTAMP,\n"
+                + "V2 TIMESTAMP,\n"
+                + "CONSTRAINT PK_PHOENIX_6986 PRIMARY KEY (K1,K2,K3,K4))");
+
+            stmt.execute("CREATE INDEX IDX_PHOENIX_6986 ON TAB_PHOENIX_6986(K2, K1, K3, K4)");
+            String query =
+                "SELECT /*+ INDEX(TAB_PHOENIX_6986 IDX_PHOENIX_6986) */ * "
+                    + "FROM TAB_PHOENIX_6986 "
+                    + "WHERE K2 = 'XXX' AND "
+                    + "V2 >= TIMESTAMP '2023-05-31 23:59:59.000' AND "
+                    + "V1 <= TIMESTAMP '2023-04-01 00:00:00.000' "
+                    + "ORDER BY V2 asc";
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER TAB_PHOENIX_6986\n"
+                    + "    SERVER FILTER BY (V2 >= TIMESTAMP '2023-05-31 23:59:59.000'"
+                    + " AND V1 <= TIMESTAMP '2023-04-01 00:00:00.000')\n"
+                    + "    SERVER SORTED BY [TAB_PHOENIX_6986.V2]\n"
+                    + "CLIENT MERGE SORT\n"
+                    + "    SKIP-SCAN-JOIN TABLE 0\n"
+                    + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX_PHOENIX_6986 ['XXX']\n"
+                    + "            SERVER FILTER BY FIRST KEY ONLY\n"
+                    + "    DYNAMIC SERVER FILTER BY (\"TAB_PHOENIX_6986.K1\", \"TAB_PHOENIX_6986.K2\", \"TAB_PHOENIX_6986.K3\", \"TAB_PHOENIX_6986.K4\")"
+                    + " IN (($2.$4, $2.$5, $2.$6, $2.$7))",
+                explainPlan);
+        }
+    }
+
+    @Test
+    public void testUncoveredPhoenix6961() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Statement stmt = conn.createStatement();) {
+            stmt.execute(
+                "create table d (k integer primary key, v1 integer, v2 integer, v3 integer, v4 integer)");
+            stmt.execute("create index i on d(v2) include (v3)");
+            String query = "select /*+ index(d i) */ * from d where v2=1 and v3=1";
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER I [1]\n"
+                    + "    SERVER MERGE [0.V1, 0.V4]\n"
+                    + "    SERVER FILTER BY \"V3\" = 1",
+                    explainPlan);
+        }
+    }
 }

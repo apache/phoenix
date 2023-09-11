@@ -46,6 +46,7 @@ import static org.apache.phoenix.monitoring.MetricType.UPSERT_SUCCESS_SQL_COUNTE
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
+import java.sql.BatchUpdateException;
 import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -56,6 +57,7 @@ import java.sql.Statement;
 import java.text.Format;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -100,7 +102,6 @@ import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.compile.TraceQueryPlan;
 import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.exception.BatchUpdateExecution;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.UpgradeRequiredException;
@@ -108,6 +109,7 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -139,6 +141,7 @@ import org.apache.phoenix.parse.DMLStatement;
 import org.apache.phoenix.parse.DeclareCursorStatement;
 import org.apache.phoenix.parse.DeleteJarStatement;
 import org.apache.phoenix.parse.DeleteStatement;
+import org.apache.phoenix.parse.ExplainType;
 import org.apache.phoenix.parse.ShowCreateTableStatement;
 import org.apache.phoenix.parse.ShowCreateTable;
 import org.apache.phoenix.parse.DropColumnStatement;
@@ -244,7 +247,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
  * 
  * @since 0.1
  */
-public class PhoenixStatement implements Statement, SQLCloseable {
+public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable {
 	
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixStatement.class);
     
@@ -283,7 +286,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     private int maxRows;
     private int fetchSize = -1;
     private int queryTimeoutMillis;
-    
+    // Caching per Statement
+    protected final Calendar localCalendar = Calendar.getInstance();
+
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
         this.queryTimeoutMillis = getDefaultQueryTimeoutMillis();
@@ -336,6 +341,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                             PhoenixResultSet rs = null;
                             try {
                                 PhoenixConnection conn = getConnection();
+                                conn.checkOpen();
 
                                 if (conn.getQueryServices().isUpgradeRequired() && !conn
                                         .isRunningUpgrade()
@@ -540,7 +546,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                 isDelete = stmt instanceof ExecutableDeleteStatement;
                                 isAtomicUpsert = isUpsert && ((ExecutableUpsertStatement)stmt).getOnDupKeyPairs() != null;
                                 if (plan.getTargetRef() != null && plan.getTargetRef().getTable() != null) {
-                                    if(!Strings.isNullOrEmpty(plan.getTargetRef().getTable().getPhysicalName().toString())) {
+                                    if (!Strings.isNullOrEmpty(plan.getTargetRef().getTable().getPhysicalName().toString())) {
                                         tableName = plan.getTargetRef().getTable().getPhysicalName().toString();
                                     }
                                     if (plan.getTargetRef().getTable().isTransactional()) {
@@ -564,7 +570,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                 setLastUpdateCount(lastUpdateCount);
                                 setLastUpdateOperation(stmt.getOperation());
                                 connection.incrementStatementExecutionCounter();
-                                if(queryLogger.isAuditLoggingEnabled()) {
+                                if (queryLogger.isAuditLoggingEnabled()) {
                                     queryLogger.log(QueryLogInfo.TABLE_NAME_I, getTargetForAudit(stmt));
                                     queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.COMPLETED.toString());
                                     queryLogger.log(QueryLogInfo.NO_OF_RESULTS_ITERATED_I, lastUpdateCount);
@@ -646,7 +652,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     }, PhoenixContextExecutor.inContext(),
                         Tracing.withTracing(connection, this.toString()));
         } catch (Exception e) {
-            if(queryLogger.isAuditLoggingEnabled()) {
+            if (queryLogger.isAuditLoggingEnabled()) {
                 queryLogger.log(QueryLogInfo.TABLE_NAME_I, getTargetForAudit(stmt));
                 queryLogger.log(QueryLogInfo.EXCEPTION_TRACE_I, Throwables.getStackTraceAsString(e));
                 queryLogger.log(QueryLogInfo.QUERY_STATUS_I, QueryStatus.FAILED.toString());
@@ -786,8 +792,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
     private static class ExecutableExplainStatement extends ExplainStatement implements CompilableStatement {
 
-        public ExecutableExplainStatement(BindableStatement statement) {
-            super(statement);
+        ExecutableExplainStatement(BindableStatement statement, ExplainType explainType) {
+            super(statement, explainType);
         }
 
         @Override
@@ -813,6 +819,13 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             }
             final StatementPlan plan = compilePlan;
             List<String> planSteps = plan.getExplainPlan().getPlanSteps();
+            ExplainType explainType = getExplainType();
+            if (explainType == ExplainType.DEFAULT) {
+                List<String> updatedExplainPlanSteps = new ArrayList<>(planSteps);
+                updatedExplainPlanSteps.removeIf(planStep -> planStep != null
+                        && planStep.contains(ExplainTable.REGION_LOCATIONS));
+                planSteps = Collections.unmodifiableList(updatedExplainPlanSteps);
+            }
             List<Tuple> tuples = Lists.newArrayListWithExpectedSize(planSteps.size());
             Long estimatedBytesToScan = plan.getEstimatedBytesToScan();
             Long estimatedRowsToScan = plan.getEstimatedRowsToScan();
@@ -1018,7 +1031,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         @SuppressWarnings("unchecked")
         @Override
         public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
-            if(!getUdfParseNodes().isEmpty()) {
+            if (!getUdfParseNodes().isEmpty()) {
                 stmt.throwIfUnallowedUserDefinedFunctions(getUdfParseNodes());
             }
 		    DeleteCompiler compiler = new DeleteCompiler(stmt, this.getOperation());
@@ -1030,9 +1043,10 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     
     private static class ExecutableCreateTableStatement extends CreateTableStatement implements CompilableStatement {
         ExecutableCreateTableStatement(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columnDefs,
-                PrimaryKeyConstraint pkConstraint, List<ParseNode> splitNodes, PTableType tableType, boolean ifNotExists,
-                TableName baseTableName, ParseNode tableTypeIdNode, int bindCount, Boolean immutableRows) {
-            super(tableName, props, columnDefs, pkConstraint, splitNodes, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows);
+                                       PrimaryKeyConstraint pkConstraint, List<ParseNode> splitNodes, PTableType tableType, boolean ifNotExists,
+                                       TableName baseTableName, ParseNode tableTypeIdNode, int bindCount, Boolean immutableRows,
+                                       Map<String, Integer> familyCounters) {
+            super(tableName, props, columnDefs, pkConstraint, splitNodes, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows, familyCounters);
         }
 
         @SuppressWarnings("unchecked")
@@ -1826,11 +1840,16 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         public ExecutableDeleteStatement delete(NamedTableNode table, HintNode hint, ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
             return new ExecutableDeleteStatement(table, hint, whereNode, orderBy, limit, bindCount, udfParseNodes);
         }
-        
+
+        @Override
+        public CreateTableStatement createTable(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint, List<ParseNode> splits, PTableType tableType, boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode, int bindCount, Boolean immutableRows, Map<String, Integer> cqCounters) {
+            return new ExecutableCreateTableStatement(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows, cqCounters);
+        }
+
         @Override
         public CreateTableStatement createTable(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint,
                 List<ParseNode> splits, PTableType tableType, boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode, int bindCount, Boolean immutableRows) {
-            return new ExecutableCreateTableStatement(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows);
+            return new ExecutableCreateTableStatement(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows, null);
         }
 
         @Override
@@ -1934,8 +1953,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
 
         @Override
-        public ExplainStatement explain(BindableStatement statement) {
-            return new ExecutableExplainStatement(statement);
+        public ExplainStatement explain(BindableStatement statement, ExplainType explainType) {
+            return new ExecutableExplainStatement(statement, explainType);
         }
 
         @Override
@@ -2009,26 +2028,41 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
     /**
      * Execute the current batch of statements. If any exception occurs
-     * during execution, a org.apache.phoenix.exception.BatchUpdateException
-     * is thrown which includes the index of the statement within the
-     * batch when the exception occurred.
+     * during execution, a {@link java.sql.BatchUpdateException}
+     * is thrown which compposes the update counts for statements executed so
+     * far.
      */
     @Override
     public int[] executeBatch() throws SQLException {
         int i = 0;
+        int[] returnCodes = new int [batch.size()];
+        Arrays.fill(returnCodes, -1);
+        boolean autoCommit = connection.getAutoCommit();
+        connection.setAutoCommit(false);
         try {
-            int[] returnCodes = new int [batch.size()];
             for (i = 0; i < returnCodes.length; i++) {
                 PhoenixPreparedStatement statement = batch.get(i);
-                returnCodes[i] = statement.execute(true) ? Statement.SUCCESS_NO_INFO : statement.getUpdateCount();
+                statement.executeForBatch();
+                returnCodes[i] = statement.getUpdateCount();
             }
             // Flush all changes in batch if auto flush is true
             flushIfNecessary();
             // If we make it all the way through, clear the batch
             clearBatch();
+            if (autoCommit) {
+                connection.commit();
+            }
             return returnCodes;
-        } catch (Throwable t) {
-            throw new BatchUpdateExecution(t,i);
+        } catch (SQLException t) {
+            if (i == returnCodes.length) {
+                // Exception after for loop, perhaps in commit(), discard returnCodes.
+                throw new BatchUpdateException(t);
+            } else {
+                returnCodes[i] = Statement.EXECUTE_FAILED;
+                throw new BatchUpdateException(returnCodes, t);
+            }
+        } finally {
+            connection.setAutoCommit(autoCommit);
         }
     }
 
@@ -2111,7 +2145,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         TableName tableName = null;
         if (stmt instanceof ExecutableSelectStatement) {
             TableNode from = ((ExecutableSelectStatement)stmt).getFrom();
-            if(from instanceof NamedTableNode) {
+            if (from instanceof NamedTableNode) {
                 tableName = ((NamedTableNode)from).getName();
             }
         } else if (stmt instanceof ExecutableUpsertStatement) {
@@ -2511,4 +2545,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             }
         }
     }
+
+    public Calendar getLocalCalendar() {
+        return localCalendar;
+    }
+
 }

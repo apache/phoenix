@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.exception;
 
+import java.sql.BatchUpdateException;
 import java.sql.SQLException;
 import java.sql.SQLTimeoutException;
 import java.util.Map;
@@ -248,6 +249,16 @@ public enum SQLExceptionCode {
     }),
     TABLES_NOT_IN_SYNC(1140, "42M05", "Tables not in sync for some properties."),
 
+    // High Availability Errors
+    HA_CLOSED_AFTER_FAILOVER(1984, "F1Q84", "Connection closed after failover happened.",
+        i -> new FailoverSQLException(i.getMessage(), i.getHaGroupInfo(), i.getRootCause())),
+    HA_NO_ACTIVE_CLUSTER(1985, "F1Q85", "No ACTIVE HBase cluster found.",
+        i -> new FailoverSQLException(i.getMessage(), i.getHaGroupInfo(), i.getRootCause())),
+    HA_READ_FROM_CLUSTER_FAILED_ON_NULL(1986, "F1Q86", "Unable to read from cluster for null."),
+    HA_INVALID_PROPERTIES(1987, "F1Q87", "Invalid properties to get a Phoenix HA connection."),
+    HA_CLUSTER_CAN_NOT_CONNECT(1988, "F1Q88", "Cluster can not serve any requests for this HA group"),
+
+
     // Syntax error
     TYPE_NOT_SUPPORTED_FOR_OPERATOR(1014, "42Y01", "The operator does not support the operand type."),
     AGGREGATE_IN_GROUP_BY(1016, "42Y26", "Aggregate expressions may not be used in GROUP BY."),
@@ -438,6 +449,16 @@ public enum SQLExceptionCode {
     + "Table not in this region."),
     UNABLE_TO_UPSERT_TASK(1146, "XCL46",
         "Error upserting records in SYSTEM.TASK table"),
+    INVALID_CQ(1148, "XCL48",
+            "ENCODED_QUALIFIER is less than INITIAL_VALUE."),
+    DUPLICATE_CQ(1149, "XCL49",
+            "Duplicate ENCODED_QUALIFIER."),
+    MISSING_CQ(1150, "XCL49",
+            "Missing ENCODED_QUALIFIER."),
+    EXECUTE_BATCH_FOR_STMT_WITH_RESULT_SET(1151, "XCL51", "A batch operation can't include a "
+            + "statement that produces result sets.", Factory.BATCH_UPDATE_ERROR),
+
+
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
      */
@@ -573,7 +594,10 @@ public enum SQLExceptionCode {
 
     CANNOT_TRANSFORM_TABLE_WITH_APPEND_ONLY_SCHEMA(913, "43M24", "Cannot transform a table with append-only schema."),
 
-    CANNOT_TRANSFORM_TRANSACTIONAL_TABLE(914, "43M25", "Cannot transform a transactional table.");
+    CANNOT_TRANSFORM_TRANSACTIONAL_TABLE(914, "43M25", "Cannot transform a transactional table."),
+
+    //SQLCode for testing exceptions
+    FAILED_KNOWINGLY_FOR_TEST(7777, "TEST", "Exception was thrown to test something");
 
     private final int errorCode;
     private final String sqlState;
@@ -613,15 +637,16 @@ public enum SQLExceptionCode {
     }
 
     public static interface Factory {
-        public static final Factory DEFAULT = new Factory() {
+        Factory DEFAULT = new Factory() {
 
             @Override
             public SQLException newException(SQLExceptionInfo info) {
-                return new SQLException(info.toString(), info.getCode().getSQLState(), info.getCode().getErrorCode(), info.getRootCause());
+                return new SQLException(info.toString(), info.getCode().getSQLState(),
+                        info.getCode().getErrorCode(), info.getRootCause());
             }
             
         };
-        public static final Factory SYNTAX_ERROR = new Factory() {
+        Factory SYNTAX_ERROR = new Factory() {
 
             @Override
             public SQLException newException(SQLExceptionInfo info) {
@@ -629,7 +654,16 @@ public enum SQLExceptionCode {
             }
             
         };
-        public SQLException newException(SQLExceptionInfo info);
+        Factory BATCH_UPDATE_ERROR = new Factory() {
+
+            @Override
+            public SQLException newException(SQLExceptionInfo info) {
+                return new BatchUpdateException(info.toString(), info.getCode().getSQLState(),
+                        info.getCode().getErrorCode(), (int[]) null, info.getRootCause());
+            }
+
+        };
+        SQLException newException(SQLExceptionInfo info);
     }
     
     private static final Map<Integer,SQLExceptionCode> errorCodeMap = Maps.newHashMapWithExpectedSize(SQLExceptionCode.values().length);

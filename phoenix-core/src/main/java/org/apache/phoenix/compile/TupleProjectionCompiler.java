@@ -18,7 +18,6 @@
 package org.apache.phoenix.compile;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
-import static org.apache.phoenix.util.IndexUtil.isHintedGlobalIndex;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -42,7 +41,7 @@ import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.schema.IndexDataColumnRef;
+import org.apache.phoenix.schema.IndexUncoveredDataColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
@@ -55,6 +54,7 @@ import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -159,9 +159,9 @@ public class TupleProjectionCompiler {
             	EncodedColumnsUtil.setColumns(column, table, context.getScan());
             }
         }
-        // add IndexDataColumnRef
-        position = projectedColumns.size();
-        for (IndexDataColumnRef sourceColumnRef : visitor.indexColumnRefSet) {
+        // add IndexUncoveredDataColumnRef
+        position = projectedColumns.size() + (hasSaltingColumn ? 1 : 0);
+        for (IndexUncoveredDataColumnRef sourceColumnRef : visitor.indexColumnRefSet) {
             PColumn column = new ProjectedColumn(sourceColumnRef.getColumn().getName(), 
                     sourceColumnRef.getColumn().getFamilyName(), position++, 
                     sourceColumnRef.getColumn().isNullable(), sourceColumnRef, sourceColumnRef.getColumn().getColumnQualifierBytes());
@@ -239,12 +239,12 @@ public class TupleProjectionCompiler {
     private static class ColumnRefVisitor extends StatelessTraverseAllParseNodeVisitor {
         private final StatementContext context;
         private final LinkedHashSet<ColumnRef> nonPkColumnRefSet;
-        private final LinkedHashSet<IndexDataColumnRef> indexColumnRefSet;
+        private final LinkedHashSet<IndexUncoveredDataColumnRef> indexColumnRefSet;
         
         private ColumnRefVisitor(StatementContext context) {
             this.context = context;
             this.nonPkColumnRefSet = new LinkedHashSet<ColumnRef>();
-            this.indexColumnRefSet = new LinkedHashSet<IndexDataColumnRef>();
+            this.indexColumnRefSet = new LinkedHashSet<IndexUncoveredDataColumnRef>();
         }
 
         @Override
@@ -256,11 +256,10 @@ public class TupleProjectionCompiler {
                     nonPkColumnRefSet.add(resolveColumn);
                 }
             } catch (ColumnNotFoundException e) {
-                if (context.getCurrentTable().getTable().getIndexType() == PTable.IndexType.LOCAL
-                        || isHintedGlobalIndex(context.getCurrentTable())) {
+                if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(context.getCurrentTable())) {
                     try {
                         context.setUncoveredIndex(true);
-                        indexColumnRefSet.add(new IndexDataColumnRef(context,
+                        indexColumnRefSet.add(new IndexUncoveredDataColumnRef(context,
                                 context.getCurrentTable(), node.getName()));
                     } catch (ColumnFamilyNotFoundException c) {
                         throw e;

@@ -224,7 +224,7 @@ public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
 
         TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(htableName));
         for (byte[] familyName : familyNames) {
-            builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(familyName));
+            builder.setColumnFamily(ColumnFamilyDescriptorBuilder.of(familyName));
         }
         admin.createTable(builder.build());
 

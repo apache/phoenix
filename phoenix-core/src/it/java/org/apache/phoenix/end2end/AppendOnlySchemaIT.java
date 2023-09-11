@@ -58,8 +58,10 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.mockito.AdditionalMatchers;
 import org.mockito.Mockito;
 
 @Category(ParallelStatsDisabledTest.class)
@@ -112,9 +114,9 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
             }
             
             // verify getTable rpcs
-            verify(connectionQueryServices, sameClient ? never() : times(1))
-                    .getTable((PName) isNull(), eq(new byte[0]),
-                            eq(Bytes.toBytes(viewName)), anyLong(), anyLong());
+            verify(connectionQueryServices, never())
+                    .getTable((PName) isNull(), AdditionalMatchers.aryEq(new byte[0]),
+                            AdditionalMatchers.aryEq(Bytes.toBytes(viewName)), anyLong(), anyLong());
             
             // verify no create table rpcs
             verify(connectionQueryServices, never()).createTable(anyListOf(Mutation.class),
@@ -322,38 +324,6 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
             PTable view = pconn.getTable(new PTableKey(pconn.getTenantId(), viewName));
             assertEquals(true, view.isAppendOnlySchema());
             assertEquals(1000, view.getUpdateCacheFrequency());
-        }
-    }
-    
-    @Test
-    public void testUpsertRowToDeletedTable() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn1 = DriverManager.getConnection(getUrl(), props);
-                Connection conn2 = DriverManager.getConnection(getUrl(), props)) {
-            String metricTableName = generateUniqueName();
-            String viewName = generateUniqueName();
-            String metricIdSeqTableName = generateUniqueName();
-            // create sequence for auto partition
-            conn1.createStatement().execute("CREATE SEQUENCE " + metricIdSeqTableName + "  CACHE 1");
-            // create base table
-            conn1.createStatement().execute("CREATE TABLE " + metricTableName + " (metricId INTEGER NOT NULL, metricVal DOUBLE, CONSTRAINT PK PRIMARY KEY(metricId))"
-                    + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=1, AUTO_PARTITION_SEQ=" + metricIdSeqTableName);
-            // create view
-            String ddl =
-                    "CREATE VIEW IF NOT EXISTS "
-                            + viewName + "( hostName varchar NOT NULL,"
-                            + " CONSTRAINT HOSTNAME_PK PRIMARY KEY (hostName))"
-                            + " AS SELECT * FROM " + metricTableName
-                            + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=300000";
-            conn1.createStatement().execute(ddl);
-            
-            // drop the table using a different connection
-            conn2.createStatement().execute("DROP VIEW " + viewName);
-            
-            // upsert one row
-            conn1.createStatement().execute("UPSERT INTO " + viewName + "(hostName, metricVal) VALUES('host1', 1.0)");
-            // upsert doesn't fail since base table still exists
-            conn1.commit();
         }
     }
 

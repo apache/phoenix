@@ -28,7 +28,7 @@ public class PTableRefImpl extends PTableRef {
     }
 
     public PTableRefImpl(PTableRef tableRef) {
-        super(tableRef.getLastAccessTime(), tableRef.getResolvedTimeStamp(), tableRef.getEstimatedSize());
+        super(tableRef.getCreateTime(), tableRef.getResolvedTimeStamp(), tableRef.getEstimatedSize());
         this.table = tableRef.getTable();
     }
 

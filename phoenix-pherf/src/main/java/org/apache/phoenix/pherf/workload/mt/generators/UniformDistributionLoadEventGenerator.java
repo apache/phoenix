@@ -37,6 +37,10 @@ import java.util.Random;
 public class UniformDistributionLoadEventGenerator extends BaseLoadEventGenerator {
 
     private static class UniformDistributionSampler {
+
+        private final Random RANDOM = new Random();
+
+
         private final LoadProfile loadProfile;
         private final String modelName;
         private final String scenarioName;
@@ -47,7 +51,7 @@ public class UniformDistributionLoadEventGenerator extends BaseLoadEventGenerato
         private final List<Operation> operationList;
 
         public UniformDistributionSampler(List<Operation> operationList, DataModel model,
-                Scenario scenario) {
+                                          Scenario scenario) {
             this.modelName = model.getName();
             this.scenarioName = scenario.getName();
             this.tableName = scenario.getTableName();
@@ -72,12 +76,19 @@ public class UniformDistributionLoadEventGenerator extends BaseLoadEventGenerato
         public TenantOperationInfo nextSample() {
             int sampleIndex = this.distribution.nextInt(operationList.size());
             Operation op = operationList.get(sampleIndex);
+            int numTenants = 1;
+
+            if(tenantGroup.getNumTenants() != 0){
+                numTenants = tenantGroup.getNumTenants();
+            }
 
             String tenantGroupId = tenantGroup.getId();
             String tenantIdPrefix = Strings
                     .padStart(tenantGroupId, loadProfile.getGroupIdLength(), 'x');
+           
             String formattedTenantId = String.format(loadProfile.getTenantIdFormat(),
-                    tenantIdPrefix.substring(0, loadProfile.getGroupIdLength()), 1);
+                    tenantIdPrefix.substring(0, loadProfile.getGroupIdLength()), RANDOM.nextInt(numTenants));
+
             String paddedTenantId = Strings.padStart(formattedTenantId, loadProfile.getTenantIdLength(), 'x');
             String tenantId = paddedTenantId.substring(0, loadProfile.getTenantIdLength());
 
@@ -91,13 +102,13 @@ public class UniformDistributionLoadEventGenerator extends BaseLoadEventGenerato
 
 
     public UniformDistributionLoadEventGenerator(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario,
-            Properties properties) {
+                                                 Properties properties) {
         super(phoenixUtil, model, scenario, properties);
         this.sampler = new UniformDistributionSampler(operationFactory.getOperations(), model, scenario);
     }
 
     public UniformDistributionLoadEventGenerator(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario,
-            List<PherfWorkHandler> workHandlers, Properties properties) {
+                                                 List<PherfWorkHandler> workHandlers, Properties properties) {
         super(phoenixUtil, model, scenario, workHandlers, properties);
         this.sampler = new UniformDistributionSampler(operationFactory.getOperations(), model, scenario);
     }

@@ -234,7 +234,7 @@ public class TestCoveredColumnIndexCodec {
       Delete d) throws IOException {
     LocalHBaseState table = new SimpleTableState(Result.create(currentState));
     LocalTableState state = new LocalTableState(table, d);
-    state.setCurrentTimestamp(d.getTimeStamp());
+    state.setCurrentTimestamp(d.getTimestamp());
     // now we shouldn't see anything when getting the index update
     state.addPendingUpdates(d.getFamilyCellMap().get(FAMILY));
     Iterable<IndexUpdate> updates = codec.getIndexUpserts(state, IndexMetaData.NULL_INDEX_META_DATA, null, null, false);

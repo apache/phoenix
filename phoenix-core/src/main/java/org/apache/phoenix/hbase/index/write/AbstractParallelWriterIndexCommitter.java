@@ -51,9 +51,9 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
  */
 public abstract class AbstractParallelWriterIndexCommitter implements IndexCommitter {
 
-    public static final String NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY = "index.writer.threads.max";
+    public static final String NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY = "phoenix.index.writer.threads.max";
     private static final int DEFAULT_CONCURRENT_INDEX_WRITER_THREADS = 10;
-    public static final String INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY = "index.writer.threads.keepalivetime";
+    public static final String INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY = "phoenix.index.writer.threads.keepalivetime";
     private static final Logger LOG = LoggerFactory.getLogger(IndexWriter.class);
 
     protected HTableFactory retryingFactory;
@@ -65,6 +65,12 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
     protected TaskBatch<Void> tasks;
     protected boolean disableIndexOnFailure = false;
 
+    // This relies on Hadoop Configuration to handle warning about deprecated configs and
+    // to set the correct non-deprecated configs when an old one shows up.
+    static {
+        Configuration.addDeprecation("index.writer.threads.max", NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY);
+        Configuration.addDeprecation("index.writer.threads.keepalivetime", INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY);
+    }
 
     public AbstractParallelWriterIndexCommitter() {}
 

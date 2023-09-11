@@ -417,7 +417,8 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
                 "(a_char CHAR(15) NOT NULL, " +
                 "b_char CHAR(10) NOT NULL, " +
                 "c_var_array VARCHAR ARRAY, " +
-                "d_char_array CHAR(15) ARRAY[3] CONSTRAINT PK PRIMARY KEY (a_char, b_char)) " +
+                "d_char_array CHAR(15) ARRAY[3] " +
+                "CONSTRAINT PK PRIMARY KEY (a_char, b_char)) " +
                 "TTL=2592000, IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN', REPLICATION_SCOPE=1";
         List<String> queries = new ArrayList<String>(){};
         queries.add(query);
@@ -458,7 +459,8 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
                 "b_char CHAR(10) NOT NULL, " +
                 "\"av\".\"_\" CHAR(1), " +
                 "\"bv\".\"_\" CHAR(1), " +
-                "\"cv\".\"_\" CHAR(1) CONSTRAINT PK PRIMARY KEY (a_char, b_char)) " + properties;
+                "\"cv\".\"_\" CHAR(1) " +
+                "CONSTRAINT PK PRIMARY KEY (a_char, b_char)) " + properties;
         List<String> queries = new ArrayList<String>(){};
         queries.add(query);
         String result = runSchemaExtractionTool(schemaName, tableName, null, queries);

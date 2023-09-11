@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema.types;
 
 import java.sql.Date;
+import java.sql.SQLException;
 import java.sql.Types;
 import java.text.Format;
 
@@ -61,10 +62,20 @@ public class PUnsignedDate extends PDataType<Date> {
     }
 
     @Override
-    public Object toObject(byte[] b, int o, int l, PDataType actualType, SortOrder sortOrder, Integer maxLength, Integer scale) {
+    public Date toObject(byte[] b, int o, int l, PDataType actualType, SortOrder sortOrder,
+            Integer maxLength, Integer scale) {
         Date d = (Date) PDate.INSTANCE.toObject(b, o, l, actualType, sortOrder);
         throwIfNonNegativeDate(d);
         return d;
+    }
+
+    @Override
+    public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+            SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
+            throws SQLException {
+        java.sql.Date sqlDate =
+                toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
+        return PDate.INSTANCE.dateToClass(sqlDate, actualType, jdbcType);
     }
 
     @Override

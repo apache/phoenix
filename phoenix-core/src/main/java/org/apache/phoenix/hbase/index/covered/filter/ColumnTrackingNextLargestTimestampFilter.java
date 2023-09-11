@@ -49,6 +49,11 @@ public class ColumnTrackingNextLargestTimestampFilter extends FilterBase {
 
   @Override
   public ReturnCode filterKeyValue(Cell v) {
+    return this.filterCell(v);
+  }
+
+  @Override
+  public ReturnCode filterCell(Cell v) {
     long timestamp = v.getTimestamp();
     if (timestamp > ts) {
       this.column.setTs(timestamp);

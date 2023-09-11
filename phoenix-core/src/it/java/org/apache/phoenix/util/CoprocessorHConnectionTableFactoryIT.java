@@ -22,10 +22,10 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
@@ -87,7 +87,7 @@ public class CoprocessorHConnectionTableFactoryIT extends BaseTest {
     final String index1Name = generateUniqueName();
     final Connection conn = DriverManager.getConnection(getUrl());
 
-    final HBaseAdmin admin = getUtility().getHBaseAdmin();
+    final Admin admin = getUtility().getAdmin();
     final MiniHBaseCluster cluster = getUtility().getHBaseCluster();
     final HRegionServer regionServer = cluster.getRegionServer(0);
     Configuration conf = admin.getConfiguration();
@@ -100,14 +100,14 @@ public class CoprocessorHConnectionTableFactoryIT extends BaseTest {
         + ORG_PREFIX + "-" + noOfOrgs / 2 + "')";
     conn.createStatement().execute(createTableSql);
     conn.createStatement().execute("CREATE INDEX " + index1Name + " ON " + tableName + "(v1)");
-    List<HRegionInfo> regions = admin.getTableRegions(TableName.valueOf(tableName));
-    final HRegionInfo regionInfo = regions.get(0);
+    List<RegionInfo> regions = admin.getRegions(TableName.valueOf(tableName));
+    final RegionInfo regionInfo = regions.get(0);
 
     writeToTable(tableName, conn, noOfOrgs);
     int beforeRegionCloseCount = getActiveConnections(regionServer, conf);
-    int regionsCount = admin.getOnlineRegions(regionServer.getServerName()).size();
+    int regionsCount = admin.getRegions(regionServer.getServerName()).size();
     admin.unassign(regionInfo.getEncodedNameAsBytes(), true);
-    while(!(admin.getOnlineRegions(regionServer.getServerName()).size() < regionsCount));
+    while(!(admin.getRegions(regionServer.getServerName()).size() < regionsCount));
     int afterRegionCloseCount = getActiveConnections(regionServer, conf);
     assertTrue("Cached connections not closed when region closes: ",
     afterRegionCloseCount == beforeRegionCloseCount && afterRegionCloseCount > 0);

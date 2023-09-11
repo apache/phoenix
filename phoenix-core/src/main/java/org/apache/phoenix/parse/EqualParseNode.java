@@ -17,8 +17,7 @@
  */
 package org.apache.phoenix.parse;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
-
+import org.apache.hadoop.hbase.CompareOperator;
 
 /**
  * 
@@ -34,12 +33,12 @@ public class EqualParseNode extends ComparisonParseNode {
     }
 
     @Override
-    public CompareOp getFilterOp() {
-        return CompareOp.EQUAL;
+    public CompareOperator getFilterOp() {
+        return CompareOperator.EQUAL;
     }
 
     @Override
-    public CompareOp getInvertFilterOp() {
-        return CompareOp.EQUAL;
+    public CompareOperator getInvertFilterOp() {
+        return CompareOperator.EQUAL;
     }
 }

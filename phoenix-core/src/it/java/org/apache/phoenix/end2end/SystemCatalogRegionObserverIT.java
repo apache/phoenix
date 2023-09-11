@@ -24,7 +24,9 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
+import org.apache.hadoop.hbase.client.CoprocessorDescriptor;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.coprocessor.SystemCatalogRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -68,8 +70,9 @@ public class SystemCatalogRegionObserverIT extends BaseTest {
             Table syscatTable = phoenixConn.getQueryServices().getTable(
                 SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, true).getName());
             assertTrue("SystemCatalogRegionObserver was not added to SYSTEM.CATALOG",
-                syscatTable.getTableDescriptor().getCoprocessors().contains(
-                SystemCatalogRegionObserver.class.getName()));
+                syscatTable.getDescriptor().getCoprocessorDescriptors().stream()
+                        .map(CoprocessorDescriptor::getClassName).collect(Collectors.toList())
+                        .contains(SystemCatalogRegionObserver.class.getName()));
         }
     }
 }

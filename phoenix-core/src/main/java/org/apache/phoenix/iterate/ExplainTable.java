@@ -18,12 +18,16 @@
 package org.apache.phoenix.iterate;
 
 import java.text.Format;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
@@ -41,10 +45,13 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
+import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
@@ -54,11 +61,17 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 public abstract class ExplainTable {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExplainTable.class);
     private static final List<KeyRange> EVERYTHING = Collections.singletonList(KeyRange.EVERYTHING_RANGE);
     public static final String POINT_LOOKUP_ON_STRING = "POINT LOOKUP ON ";
+    public static final String REGION_LOCATIONS = " (region locations = ";
+
     protected final StatementContext context;
     protected final TableRef tableRef;
     protected final GroupBy groupBy;
@@ -66,7 +79,7 @@ public abstract class ExplainTable {
     protected final HintNode hint;
     protected final Integer limit;
     protected final Integer offset;
-   
+
     public ExplainTable(StatementContext context, TableRef table) {
         this(context, table, GroupBy.EMPTY_GROUP_BY, OrderBy.EMPTY_ORDER_BY, HintNode.EMPTY_HINT_NODE, null, null);
     }
@@ -110,8 +123,10 @@ public abstract class ExplainTable {
         return buf.toString();
     }
 
-    protected void explain(String prefix, List<String> planSteps,
-            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+    protected void explain(String prefix,
+                           List<String> planSteps,
+                           ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
+                           List<HRegionLocation> regionLocations) {
         StringBuilder buf = new StringBuilder(prefix);
         ScanRanges scanRanges = context.getScanRanges();
         Scan scan = context.getScan();
@@ -163,6 +178,7 @@ public abstract class ExplainTable {
         
         PageFilter pageFilter = null;
         FirstKeyOnlyFilter firstKeyOnlyFilter = null;
+        EmptyColumnOnlyFilter emptyColumnOnlyFilter = null;
         BooleanExpressionFilter whereFilter = null;
         DistinctPrefixFilter distinctFilter = null;
         Iterator<Filter> filterIterator = ScanUtil.getFilterIterator(scan);
@@ -171,6 +187,8 @@ public abstract class ExplainTable {
                 Filter filter = filterIterator.next();
                 if (filter instanceof FirstKeyOnlyFilter) {
                     firstKeyOnlyFilter = (FirstKeyOnlyFilter)filter;
+                } else if (filter instanceof EmptyColumnOnlyFilter) {
+                    emptyColumnOnlyFilter = (EmptyColumnOnlyFilter)filter;
                 } else if (filter instanceof PageFilter) {
                     pageFilter = (PageFilter)filter;
                 } else if (filter instanceof BooleanExpressionFilter) {
@@ -203,6 +221,7 @@ public abstract class ExplainTable {
         if (whereFilterStr != null) {
             String serverWhereFilter = "SERVER FILTER BY "
                 + (firstKeyOnlyFilter == null ? "" : "FIRST KEY ONLY AND ")
+                + (emptyColumnOnlyFilter == null ? "" : "EMPTY COLUMN ONLY AND ")
                 + whereFilterStr;
             planSteps.add("    " + serverWhereFilter);
             if (explainPlanAttributesBuilder != null) {
@@ -213,6 +232,12 @@ public abstract class ExplainTable {
             if (explainPlanAttributesBuilder != null) {
                 explainPlanAttributesBuilder.setServerWhereFilter(
                     "SERVER FILTER BY FIRST KEY ONLY");
+            }
+        } else if (emptyColumnOnlyFilter != null) {
+            planSteps.add("    SERVER FILTER BY EMPTY COLUMN ONLY");
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setServerWhereFilter(
+                        "SERVER FILTER BY EMPTY COLUMN ONLY");
             }
         }
         if (distinctFilter != null) {
@@ -243,7 +268,7 @@ public abstract class ExplainTable {
             if (pageFilter != null) {
                 limit = pageFilter.getPageSize();
             } else {
-                byte[] limitBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_LIMIT);
+                byte[] limitBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_LIMIT);
                 if (limitBytes != null) {
                     limit = Bytes.toLong(limitBytes);
                 }
@@ -264,12 +289,116 @@ public abstract class ExplainTable {
         if (groupByLimitBytes != null) {
             groupByLimit = (Integer) PInteger.INSTANCE.toObject(groupByLimitBytes);
         }
+        getRegionLocations(planSteps, explainPlanAttributesBuilder, regionLocations);
         groupBy.explain(planSteps, groupByLimit, explainPlanAttributesBuilder);
         if (scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX) != null) {
             planSteps.add("    SERVER ARRAY ELEMENT PROJECTION");
             if (explainPlanAttributesBuilder != null) {
                 explainPlanAttributesBuilder.setServerArrayElementProjection(true);
             }
+        }
+    }
+
+    /**
+     * Retrieve region locations and set the values in the explain plan output.
+     *
+     * @param planSteps list of plan steps to add explain plan output to.
+     * @param explainPlanAttributesBuilder explain plan v2 attributes builder instance.
+     * @param regionLocations region locations.
+     */
+    private void getRegionLocations(List<String> planSteps,
+                                    ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
+                                    List<HRegionLocation> regionLocations) {
+        String regionLocationPlan = getRegionLocationsForExplainPlan(explainPlanAttributesBuilder,
+                regionLocations);
+        if (regionLocationPlan.length() > 0) {
+            planSteps.add(regionLocationPlan);
+        }
+    }
+
+    /**
+     * Retrieve region locations from hbase client and set the values for the explain plan output.
+     * If the list of region locations exceed max limit, print only list with the max limit and
+     * print num of total list size.
+     *
+     * @param explainPlanAttributesBuilder explain plan v2 attributes builder instance.
+     * @param regionLocationsFromResultIterator region locations.
+     * @return region locations to be added to the explain plan output.
+     */
+    private String getRegionLocationsForExplainPlan(
+            ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
+            List<HRegionLocation> regionLocationsFromResultIterator) {
+        if (regionLocationsFromResultIterator == null) {
+            return "";
+        }
+        try {
+            StringBuilder buf = new StringBuilder().append(REGION_LOCATIONS);
+            Set<RegionBoundary> regionBoundaries = new HashSet<>();
+            List<HRegionLocation> regionLocations = new ArrayList<>();
+            for (HRegionLocation regionLocation : regionLocationsFromResultIterator) {
+                RegionBoundary regionBoundary =
+                        new RegionBoundary(regionLocation.getRegion().getStartKey(),
+                                regionLocation.getRegion().getEndKey());
+                if (!regionBoundaries.contains(regionBoundary)) {
+                    regionLocations.add(regionLocation);
+                    regionBoundaries.add(regionBoundary);
+                }
+            }
+            int maxLimitRegionLoc = context.getConnection().getQueryServices().getConfiguration()
+                    .getInt(QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN,
+                            QueryServicesOptions.DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN);
+            if (explainPlanAttributesBuilder != null) {
+                explainPlanAttributesBuilder.setRegionLocations(
+                        Collections.unmodifiableList(regionLocations));
+            }
+            if (regionLocations.size() > maxLimitRegionLoc) {
+                int originalSize = regionLocations.size();
+                List<HRegionLocation> trimmedRegionLocations =
+                        regionLocations.subList(0, maxLimitRegionLoc);
+                buf.append(trimmedRegionLocations);
+                buf.append("...total size = ");
+                buf.append(originalSize);
+            } else {
+                buf.append(regionLocations);
+            }
+            buf.append(") ");
+            return buf.toString();
+        } catch (Exception e) {
+            LOGGER.error("Explain table unable to add region locations.", e);
+            return "";
+        }
+    }
+
+    /**
+     * Region boundary class with start and end key of the region.
+     */
+    private static class RegionBoundary {
+        private final byte[] startKey;
+        private final byte[] endKey;
+
+        RegionBoundary(byte[] startKey, byte[] endKey) {
+            this.startKey = startKey;
+            this.endKey = endKey;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            RegionBoundary that = (RegionBoundary) o;
+            return Bytes.compareTo(startKey, that.startKey) == 0
+                    && Bytes.compareTo(endKey, that.endKey) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = Arrays.hashCode(startKey);
+            result = 31 * result + Arrays.hashCode(endKey);
+            return result;
         }
     }
 
@@ -403,4 +532,5 @@ public abstract class ExplainTable {
         buf.setCharAt(buf.length()-1, ']');
         return buf.toString();
     }
+
 }

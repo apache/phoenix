@@ -161,7 +161,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SUPPLIER_TABLE_FULL_NAME +" [1,'S1'] - [1,'S5']\n" +
-                "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        CLIENT MERGE SORT",
                 /*
                  * testJoinPlanWithIndex()
@@ -175,7 +175,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
                 "CLIENT MERGE SORT\n" + 
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER " + JOIN_SUPPLIER_TABLE_FULL_NAME +" [1,'S1'] - [1,'S5']\n" + 
-                "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        CLIENT MERGE SORT",
                 /*
                  * testJoinWithSkipMergeOptimization()
@@ -190,7 +190,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
                 "    PARALLEL INNER-JOIN TABLE 1\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SUPPLIER_TABLE_FULL_NAME + " [1]\n" +
-                "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    DYNAMIC SERVER FILTER BY \"I.:item_id\" IN (\"O.item_id\")",
                 /*
@@ -230,7 +230,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_TABLE_FULL_NAME + " [1]\n" +
-                "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 1\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " [1]\n" +
@@ -252,7 +252,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n" +
                 "            PARALLEL INNER-JOIN TABLE 0\n" +
                 "                CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_TABLE_FULL_NAME+" [1]\n"+
-                "                    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "                    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "                CLIENT MERGE SORT\n" +
                 "    DYNAMIC SERVER FILTER BY \"I.:item_id\" IN (\"O.item_id\")",
                 /*
@@ -466,7 +466,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
                  */
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SUPPLIER_TABLE_FULL_NAME + " [1,'S1']\n" + 
                 "    SERVER MERGE [0.PHONE]\n" +
-                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "CLIENT MERGE SORT\n" + 
                 "    PARALLEL INNER-JOIN TABLE 0\n" + 
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " [1,*] - [1,'T6']\n" + 
@@ -483,7 +483,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
                  */
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SUPPLIER_TABLE_FULL_NAME + " [1,'S1']\n" + 
                 "    SERVER MERGE [0.PHONE]\n" +
-                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"S.PHONE\"]\n" + 
                 "CLIENT MERGE SORT\n" + 
                 "    PARALLEL INNER-JOIN TABLE 0\n" + 
@@ -500,7 +500,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
                  */
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SUPPLIER_TABLE_FULL_NAME + " [1,*] - [1,'S3']\n" +
                 "    SERVER MERGE [0.PHONE]\n" +
-                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    SERVER AGGREGATE INTO SINGLE ROW\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " [1,*] - [1,'T6']\n" +

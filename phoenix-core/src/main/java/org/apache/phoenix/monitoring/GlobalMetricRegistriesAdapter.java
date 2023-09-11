@@ -53,6 +53,13 @@ public class GlobalMetricRegistriesAdapter {
     private static GlobalMetricRegistriesAdapter INSTANCE = new GlobalMetricRegistriesAdapter();
 
     private GlobalMetricRegistriesAdapter() {
+        if (MetricUtil.isDefaultMetricsInitialized()) {
+            // Prevent clobbering the default metrics HBase has set up in
+            // RS or Master while JmxCacheBuster shuts the Metrics down
+            LOGGER.info("HBase metrics is already initialized. "
+                    + "Skipping Phoenix metrics initialization.");
+            return;
+        }
         DefaultMetricsSystem.initialize("Phoenix");
         JvmMetrics.initSingleton("Phoenix", "");
     }

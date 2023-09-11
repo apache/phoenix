@@ -17,31 +17,23 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.phoenix.filter.SystemCatalogViewIndexIdFilter;
 import org.apache.phoenix.util.ScanUtil;
 
 import java.io.IOException;
+import java.util.Optional;
 
 import static org.apache.phoenix.util.ScanUtil.UNKNOWN_CLIENT_VERSION;
 
 /**
  * Coprocessor that checks whether the VIEW_INDEX_ID needs to retrieve.
  */
-public class SystemCatalogRegionObserver extends BaseRegionObserver {
-    @Override public void start(CoprocessorEnvironment e) throws IOException {
-        super.start(e);
-    }
-
-    @Override public void stop(CoprocessorEnvironment e) throws IOException {
-        super.stop(e);
-    }
-
+public class SystemCatalogRegionObserver implements RegionObserver, RegionCoprocessor {
     @Override
     public void preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> e, Scan scan)
             throws IOException {
@@ -54,5 +46,10 @@ public class SystemCatalogRegionObserver extends BaseRegionObserver {
         if (clientVersion != UNKNOWN_CLIENT_VERSION) {
             ScanUtil.andFilterAtBeginning(scan, new SystemCatalogViewIndexIdFilter(clientVersion));
         }
+    }
+
+    @Override
+    public Optional<RegionObserver> getRegionObserver() {
+        return Optional.of(this);
     }
 }

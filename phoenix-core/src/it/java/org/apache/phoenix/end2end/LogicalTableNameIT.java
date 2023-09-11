@@ -31,6 +31,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -430,7 +431,7 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
         }
     }
 
-    @Test
+    @Test @Ignore("Requires PHOENIX-6722")
     public void testChangeDetectionAfterTableNameChange() throws Exception {
         try(Connection conn = getConnection(props)) {
             String schemaName = "S_" + generateUniqueName();

@@ -19,7 +19,7 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.hbase.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
@@ -60,7 +60,7 @@ public class ConcurrentUpsertsWithoutIndexedColsIT
     private static final Map<String, String> PROPS = ImmutableMap.of(
         QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB,
         Long.toString(0),
-        CompatBaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+        BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
         Integer.toString(1000000));
 
     @BeforeClass

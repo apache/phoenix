@@ -85,7 +85,7 @@ public class SaltedScanRangesTest {
         List<Object> testCases = Lists.newArrayList();
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false),
+                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false, SortOrder.ASC),
                     }},
                     new int[] {0},
                     KeyRange.getKeyRange(KeyRange.UNBOUND, new byte[]{1}),
@@ -93,7 +93,7 @@ public class SaltedScanRangesTest {
                     true));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false),
+                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false, SortOrder.ASC),
                     }},
                     new int[] {0},
                     KeyRange.getKeyRange(new byte[]{1},new byte[]{2}),
@@ -101,7 +101,7 @@ public class SaltedScanRangesTest {
                     true));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false),
+                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false, SortOrder.ASC),
                     }},
                     new int[] {0},
                     KeyRange.getKeyRange(new byte[]{2},KeyRange.UNBOUND),
@@ -109,7 +109,7 @@ public class SaltedScanRangesTest {
                     true));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false),
+                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false, SortOrder.ASC),
                     }},
                     new int[] {0},
                     KeyRange.getKeyRange(new byte[]{1},ByteUtil.concat(new byte[]{1}, Bytes.toBytes("c"))),
@@ -117,7 +117,7 @@ public class SaltedScanRangesTest {
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false),
+                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false, SortOrder.ASC),
                     }},
                     new int[] {0},
                     KeyRange.getKeyRange(ByteUtil.concat(new byte[]{1}, Bytes.toBytes("e")), new byte[]{2}),
@@ -125,7 +125,7 @@ public class SaltedScanRangesTest {
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false),
+                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false, SortOrder.ASC),
                     }},
                     new int[] {0},
                     KeyRange.getKeyRange(ByteUtil.concat(new byte[]{1}, Bytes.toBytes("d")), new byte[]{2}),
@@ -133,9 +133,9 @@ public class SaltedScanRangesTest {
                     true));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false),
-                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("h"), true, Bytes.toBytes("i"), false),
-                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("m"), true, Bytes.toBytes("p"), false),
+                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false, SortOrder.ASC),
+                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("h"), true, Bytes.toBytes("i"), false, SortOrder.ASC),
+                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("m"), true, Bytes.toBytes("p"), false, SortOrder.ASC),
                     }},
                     new int[] {0},
                     KeyRange.getKeyRange(ByteUtil.concat(new byte[]{1}, Bytes.toBytes("f")), ByteUtil.concat(new byte[]{1}, Bytes.toBytes("g"))),
@@ -143,9 +143,9 @@ public class SaltedScanRangesTest {
                     true));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false),
-                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("h"), true, Bytes.toBytes("i"), false),
-                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("m"), true, Bytes.toBytes("p"), false),
+                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, Bytes.toBytes("e"), false, SortOrder.ASC),
+                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("h"), true, Bytes.toBytes("i"), false, SortOrder.ASC),
+                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("m"), true, Bytes.toBytes("p"), false, SortOrder.ASC),
                     }},
                     new int[] {0},
                     KeyRange.getKeyRange(ByteUtil.concat(new byte[]{1}, Bytes.toBytes("f")), ByteUtil.concat(new byte[]{1}, Bytes.toBytes("g"))),
@@ -153,7 +153,7 @@ public class SaltedScanRangesTest {
                     false));
         testCases.addAll(
                 foreach(new KeyRange[][]{{
-                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, KeyRange.UNBOUND, false),
+                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, KeyRange.UNBOUND, false, SortOrder.ASC),
                     }},
                     new int[] {1},
                     KeyRange.getKeyRange(new byte[]{1,0},new byte[]{2,0}),

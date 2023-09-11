@@ -55,6 +55,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
+import static org.apache.phoenix.schema.MetaDataClient.ALTER_SYSCATALOG_TABLE_UPGRADE;
 
 public class ColumnMetaDataOps {
     public static final String UPSERT_COLUMN =
@@ -91,7 +92,12 @@ public class ColumnMetaDataOps {
     }
 
     private static void addColumnMutationInternal(PhoenixConnection connection, String tenantId, String schemaName, String tableName, PColumn column, String parentTableName, String pkName, Short keySeq, boolean isSalted) throws SQLException {
-        try (PreparedStatement colUpsert = connection.prepareStatement(UPSERT_COLUMN)) {
+        String addColumnSqlToUse = connection.isRunningUpgrade()
+                && tableName.equals(SYSTEM_CATALOG_TABLE)
+                && schemaName.equals(SYSTEM_CATALOG_SCHEMA) ? ALTER_SYSCATALOG_TABLE_UPGRADE
+                : UPSERT_COLUMN;
+
+        try (PreparedStatement colUpsert = connection.prepareStatement(addColumnSqlToUse)) {
             colUpsert.setString(1, tenantId);
             colUpsert.setString(2, schemaName);
             colUpsert.setString(3, tableName);
@@ -130,12 +136,15 @@ public class ColumnMetaDataOps {
             } else {
                 colUpsert.setString(18, column.getExpressionStr());
             }
-            if (column.getColumnQualifierBytes() == null) {
-                colUpsert.setNull(19, Types.VARBINARY);
-            } else {
-                colUpsert.setBytes(19, column.getColumnQualifierBytes());
+            //Do not try to set extra columns when using ALTER_SYSCATALOG_TABLE_UPGRADE
+            if (colUpsert.getParameterMetaData().getParameterCount() > 18) {
+                if (column.getColumnQualifierBytes() == null) {
+                    colUpsert.setNull(19, Types.VARBINARY);
+                } else {
+                    colUpsert.setBytes(19, column.getColumnQualifierBytes());
+                }
+                colUpsert.setBoolean(20, column.isRowTimestamp());
             }
-            colUpsert.setBoolean(20, column.isRowTimestamp());
             colUpsert.execute();
         }
     }

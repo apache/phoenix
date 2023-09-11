@@ -33,7 +33,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.expression.Expression;
@@ -81,7 +81,7 @@ public class HavingCompilerTest extends BaseConnectionlessQueryTest {
         String query = "select count(1) from atable group by a_string having a_string = 'foo'";
         List<Object> binds = Collections.emptyList();
         Expressions expressions = compileStatement(query,binds);
-        Expression w = constantComparison(CompareOp.EQUAL, A_STRING,"foo");
+        Expression w = constantComparison(CompareOperator.EQUAL, A_STRING,"foo");
         assertEquals(w, expressions.whereClause);
         assertNull(expressions.havingClause);
     }
@@ -93,7 +93,7 @@ public class HavingCompilerTest extends BaseConnectionlessQueryTest {
         Date date = new Date(System.currentTimeMillis());
         List<Object> binds = Arrays.<Object>asList(date);
         Expressions expressions = compileStatement(query,binds);
-        Expression w = constantComparison(CompareOp.GREATER, RoundDateExpression.create(Arrays.asList(A_DATE,LiteralExpression.newConstant("hour"),LiteralExpression.newConstant(1))), date);
+        Expression w = constantComparison(CompareOperator.GREATER, RoundDateExpression.create(Arrays.asList(A_DATE,LiteralExpression.newConstant("hour"),LiteralExpression.newConstant(1))), date);
         assertEquals(w, expressions.whereClause);
         assertNull(expressions.havingClause);
     }
@@ -103,7 +103,7 @@ public class HavingCompilerTest extends BaseConnectionlessQueryTest {
         String query = "select count(1) from atable where b_string > 'bar' group by a_string having a_string = 'foo'";
         List<Object> binds = Collections.emptyList();
         Expressions expressions = compileStatement(query,binds);
-        Expression w = and(constantComparison(CompareOp.GREATER, B_STRING,"bar"),constantComparison(CompareOp.EQUAL, A_STRING,"foo"));
+        Expression w = and(constantComparison(CompareOperator.GREATER, B_STRING,"bar"),constantComparison(CompareOperator.EQUAL, A_STRING,"foo"));
         assertEquals(w, expressions.whereClause);
         assertNull(expressions.havingClause);
     }
@@ -114,8 +114,8 @@ public class HavingCompilerTest extends BaseConnectionlessQueryTest {
         String query = "select count(1) from atable where b_string > 'bar' group by a_string having count(1) >= 1 and a_string = 'foo'";
         List<Object> binds = Collections.emptyList();
         Expressions expressions = compileStatement(query,binds);
-        Expression h = constantComparison(CompareOp.GREATER_OR_EQUAL, new CountAggregateFunction(),1L);
-        Expression w = and(constantComparison(CompareOp.GREATER, B_STRING,"bar"),constantComparison(CompareOp.EQUAL, A_STRING,"foo"));
+        Expression h = constantComparison(CompareOperator.GREATER_OR_EQUAL, new CountAggregateFunction(),1L);
+        Expression w = and(constantComparison(CompareOperator.GREATER, B_STRING,"bar"),constantComparison(CompareOperator.EQUAL, A_STRING,"foo"));
         assertEquals(w, expressions.whereClause);
         assertEquals(h, expressions.havingClause);
     }
@@ -125,8 +125,8 @@ public class HavingCompilerTest extends BaseConnectionlessQueryTest {
         String query = "select count(1) from atable group by a_string having count(1) >= 1 and a_string = 'foo'";
         List<Object> binds = Collections.emptyList();
         Expressions expressions = compileStatement(query,binds);
-        Expression h = constantComparison(CompareOp.GREATER_OR_EQUAL, new CountAggregateFunction(),1L);
-        Expression w = constantComparison(CompareOp.EQUAL, A_STRING,"foo");
+        Expression h = constantComparison(CompareOperator.GREATER_OR_EQUAL, new CountAggregateFunction(),1L);
+        Expression w = constantComparison(CompareOperator.EQUAL, A_STRING,"foo");
         assertEquals(w, expressions.whereClause);
         assertEquals(h, expressions.havingClause);
     }
@@ -146,7 +146,7 @@ public class HavingCompilerTest extends BaseConnectionlessQueryTest {
         String query = "select count(1) from atable group by a_string having count(a_string) >= 1";
         List<Object> binds = Collections.emptyList();
         Expressions expressions = compileStatement(query,binds);
-        Expression h = constantComparison(CompareOp.GREATER_OR_EQUAL, new CountAggregateFunction(Arrays.asList(A_STRING)),1L);
+        Expression h = constantComparison(CompareOperator.GREATER_OR_EQUAL, new CountAggregateFunction(Arrays.asList(A_STRING)),1L);
         assertNull(expressions.whereClause);
         assertEquals(h, expressions.havingClause);
     }
@@ -158,8 +158,8 @@ public class HavingCompilerTest extends BaseConnectionlessQueryTest {
         Expressions expressions = compileStatement(query,binds);
         PColumn aCol = ATABLE.getColumnForColumnName("A_STRING");
         Expression h = or(
-                constantComparison(CompareOp.GREATER_OR_EQUAL, new CountAggregateFunction(),1L),
-                constantComparison(CompareOp.EQUAL, 
+                constantComparison(CompareOperator.GREATER_OR_EQUAL, new CountAggregateFunction(),1L),
+                constantComparison(CompareOperator.EQUAL,
                         new RowKeyColumnExpression(aCol, // a_string comes from group by key in this case
                                 new RowKeyValueAccessor(Arrays.<PColumn>asList(aCol), 0)),"foo"));
         assertNull(expressions.whereClause);
@@ -171,7 +171,7 @@ public class HavingCompilerTest extends BaseConnectionlessQueryTest {
         String query = "select count(1) from atable group by a_string,b_string having a_string = 'a' and b_string = 'b'";
         List<Object> binds = Collections.emptyList();
         Expressions expressions = compileStatement(query,binds);
-        Expression w = and(constantComparison(CompareOp.EQUAL, A_STRING,"a"),constantComparison(CompareOp.EQUAL, B_STRING,"b"));
+        Expression w = and(constantComparison(CompareOperator.EQUAL, A_STRING,"a"),constantComparison(CompareOperator.EQUAL, B_STRING,"b"));
         assertEquals(w, expressions.whereClause);
         assertNull(expressions.havingClause);
     }
@@ -181,7 +181,7 @@ public class HavingCompilerTest extends BaseConnectionlessQueryTest {
         String query = "select count(1) from atable group by a_string,b_string having a_string = 'a' or b_string = 'b'";
         List<Object> binds = Collections.emptyList();
         Expressions expressions = compileStatement(query,binds);
-        Expression w = or(constantComparison(CompareOp.EQUAL, A_STRING,"a"),constantComparison(CompareOp.EQUAL, B_STRING,"b"));
+        Expression w = or(constantComparison(CompareOperator.EQUAL, A_STRING,"a"),constantComparison(CompareOperator.EQUAL, B_STRING,"b"));
         assertEquals(w, expressions.whereClause);
         assertNull(expressions.havingClause);
     }

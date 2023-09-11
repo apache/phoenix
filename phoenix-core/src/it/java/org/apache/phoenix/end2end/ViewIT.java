@@ -63,6 +63,7 @@ import org.apache.phoenix.schema.export.DefaultSchemaRegistryRepository;
 import org.apache.phoenix.schema.export.DefaultSchemaWriter;
 import org.apache.phoenix.schema.export.SchemaRegistryRepository;
 import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
@@ -107,10 +108,10 @@ public class ViewIT extends SplitSystemCatalogIT {
     // name is used by failsafe as file name in reports
     @Parameters(name="ViewIT_transactionProvider={0}, columnEncoded={1}")
     public static synchronized Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
-            { "TEPHRA", false }, { "TEPHRA", true },
-            { "OMID", false }, 
-            { null, false }, { null, true }}),0);
+        return Arrays.asList(new Object[][] {
+            // OMID does not support column encoding
+            { "OMID", false },
+            { null, false }, { null, true }});
     }
     
     @BeforeClass
@@ -338,12 +339,15 @@ public class ViewIT extends SplitSystemCatalogIT {
         final String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String version = "V1.0";
-            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, version);
+            String topicName = "MyTopicName";
+            CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName,
+                tableName, version, topicName);
             String createViewSql = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName +
-                    " SCHEMA_VERSION='" + version + "'";
+                    " SCHEMA_VERSION='" + version + "', STREAMING_TOPIC_NAME='" + topicName + "'";
             conn.createStatement().execute(createViewSql);
             PTable view = PhoenixRuntime.getTableNoCache(conn, viewFullName);
             assertEquals(version, view.getSchemaVersion());
+            assertEquals(topicName, view.getStreamingTopicName());
         }
     }
 
@@ -1064,8 +1068,10 @@ public class ViewIT extends SplitSystemCatalogIT {
                 assertEquals(fullTableName,
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1,51]", explainPlanAttributes.getKeyRanges());
-                assertEquals("SERVER FILTER BY FIRST KEY ONLY",
-                    explainPlanAttributes.getServerWhereFilter());
+                assertTrue(explainPlanAttributes.getServerWhereFilter().
+                        equals("SERVER FILTER BY FIRST KEY ONLY") ||
+                        explainPlanAttributes.getServerWhereFilter().
+                                equals("SERVER FILTER BY EMPTY COLUMN ONLY"));
                 assertEquals("CLIENT MERGE SORT",
                     explainPlanAttributes.getClientSortAlgo());
             } else {
@@ -1080,8 +1086,9 @@ public class ViewIT extends SplitSystemCatalogIT {
                 } else {
                     assertEquals("PARALLEL " + saltBuckets + "-WAY",
                         explainPlanAttributes.getIteratorTypeAndScanSize());
-                    assertEquals(" [0," + Short.MIN_VALUE + ",51] - ["
-                        + (saltBuckets - 1) + "," + Short.MIN_VALUE + ",51]",
+                    assertEquals(" [X'00'," + Short.MIN_VALUE + ",51] - ["
+                        + PVarbinary.INSTANCE.toStringLiteral(new byte[] {(byte)(saltBuckets - 1)})
+                        + "," + Short.MIN_VALUE + ",51]",
                         explainPlanAttributes.getKeyRanges());
                     assertEquals("CLIENT MERGE SORT",
                         explainPlanAttributes.getClientSortAlgo());
@@ -1123,8 +1130,10 @@ public class ViewIT extends SplitSystemCatalogIT {
             explainPlanAttributes = plan.getPlanStepsAsAttributes();
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals("SERVER FILTER BY FIRST KEY ONLY",
-                explainPlanAttributes.getServerWhereFilter());
+            assertTrue(explainPlanAttributes.getServerWhereFilter().
+                    equals("SERVER FILTER BY FIRST KEY ONLY") ||
+                    explainPlanAttributes.getServerWhereFilter().
+                            equals("SERVER FILTER BY EMPTY COLUMN ONLY"));
             if (localIndex) {
                 physicalTableName = fullTableName;
                 assertEquals("PARALLEL " + (saltBuckets == null ? 1 : saltBuckets)
@@ -1146,8 +1155,9 @@ public class ViewIT extends SplitSystemCatalogIT {
                 } else {
                     assertEquals("PARALLEL " + saltBuckets + "-WAY",
                         explainPlanAttributes.getIteratorTypeAndScanSize());
-                    assertEquals(" [0," + (Short.MIN_VALUE + 1) + ",'foo'] - ["
-                        + (saltBuckets - 1) + "," + (Short.MIN_VALUE + 1)
+                    assertEquals(" [X'00'," + (Short.MIN_VALUE + 1) + ",'foo'] - ["
+                        + PVarbinary.INSTANCE.toStringLiteral(new byte[] {(byte)(saltBuckets - 1)})
+                        + "," + (Short.MIN_VALUE + 1)
                         + ",'foo']", explainPlanAttributes.getKeyRanges());
                     assertEquals("CLIENT MERGE SORT",
                         explainPlanAttributes.getClientSortAlgo());

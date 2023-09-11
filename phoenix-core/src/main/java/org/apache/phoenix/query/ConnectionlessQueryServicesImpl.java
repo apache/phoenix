@@ -34,7 +34,6 @@ import java.util.concurrent.ExecutionException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -42,6 +41,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.RegionInfoBuilder;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Addressing;
@@ -62,6 +62,7 @@ import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
+import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
@@ -74,7 +75,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
@@ -109,7 +109,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * @since 0.1
  */
 public class ConnectionlessQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices  {
-    private static ServerName SERVER_NAME = ServerName.parseServerName(HConstants.LOCALHOST + Addressing.HOSTNAME_PORT_SEPARATOR + HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT);
+    private static ServerName SERVER_NAME = ServerName.parseServerName(HConstants.LOCALHOST + Addressing.HOSTNAME_PORT_SEPARATOR + HConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT);
     private static final GuidePostsCacheProvider
             GUIDE_POSTS_CACHE_PROVIDER = new GuidePostsCacheProvider();
     private final ReadOnlyProps props;
@@ -159,7 +159,14 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     private PMetaData newEmptyMetaData() {
-        return new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, getProps());
+        long updateCacheFrequency = (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
+                getProps().get(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB));
+        // We cannot have zero update cache frequency for connectionless query services as we need to keep the
+        // metadata in the cache (i.e., in memory)
+        if (updateCacheFrequency == 0) {
+            updateCacheFrequency = Long.MAX_VALUE;
+        }
+        return new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, updateCacheFrequency, getProps());
     }
 
     protected String getSystemCatalogTableDDL() {
@@ -259,7 +266,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     
     @Override
     public PhoenixConnection connect(String url, Properties info) throws SQLException {
-        return new PhoenixConnection(this, url, info, metaData.clone());
+        return new PhoenixConnection(this, url, info);
     }
 
     @Override
@@ -377,7 +384,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
                 scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
                 String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
-                metaConnection = new PhoenixConnection(this, globalUrl, scnProps, newEmptyMetaData());
+                metaConnection = new PhoenixConnection(this, globalUrl, scnProps);
                 metaConnection.setRunningUpgrade(true);
                 try {
                     metaConnection.createStatement().executeUpdate(getSystemCatalogTableDDL());
@@ -500,7 +507,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public HTableDescriptor getTableDescriptor(byte[] tableName) throws SQLException {
+    public TableDescriptor getTableDescriptor(byte[] tableName) throws SQLException {
         return null;
     }
 
@@ -801,4 +808,9 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public void truncateTable(String schemaName, String tableName, boolean isNamespaceMapped) throws SQLException {}
+
+    @Override
+    public PMetaData getMetaDataCache() {
+        return metaData;
+    }
 }

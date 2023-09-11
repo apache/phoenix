@@ -23,6 +23,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Array;
 import java.sql.Connection;
@@ -31,6 +32,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Properties;
 
 import org.apache.phoenix.query.BaseTest;
@@ -1002,4 +1004,52 @@ public class Array1IT extends ArrayIT {
         conn.close();
     }
 
+    @Test
+    public void testGetSetObject() throws SQLException {
+        String table = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String[] s = new String[] { "1", "2" };
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+                Statement stmt = conn.createStatement();
+                PreparedStatement insertStmt =
+                        conn.prepareStatement("upsert into " + table + "(k, a) values (?,?)")) {
+            stmt.executeUpdate(
+                "CREATE TABLE  " + table + "  ( k VARCHAR PRIMARY KEY, a VARCHAR(5) ARRAY)");
+            PhoenixArray phoenixArray = (PhoenixArray) conn.createArrayOf("VARCHAR", s);
+
+            insertStmt.setString(1, "a");
+            insertStmt.setArray(2, phoenixArray);
+            insertStmt.executeUpdate();
+            insertStmt.setString(1, "b");
+            insertStmt.setObject(2, phoenixArray);
+            insertStmt.executeUpdate();
+            conn.commit();
+            try {
+                insertStmt.setString(1, "c");
+                insertStmt.setObject(2, s);
+                insertStmt.executeUpdate();
+                conn.commit();
+                fail("must only accept java.sql.Array objects");
+            } catch (Exception e) {
+                // FIXME we should be throwing an SQLException
+                // Success
+            }
+
+            ResultSet rs = stmt.executeQuery("select * from " + table);
+            int rows = 0;
+            while (rs.next()) {
+                rows++;
+                assertEquals(phoenixArray, rs.getObject(2));
+                assertEquals(phoenixArray, rs.getObject(2, java.sql.Array.class));
+                assertEquals(phoenixArray, rs.getArray(2));
+                try {
+                    rs.getObject(2, String[].class);
+                    fail("must only accept java.sql.Array subclasses");
+                } catch (SQLException e) {
+                    // Success
+                }
+            }
+            assertEquals(2, rows);
+        }
+    }
 }

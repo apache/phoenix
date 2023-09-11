@@ -19,10 +19,12 @@ package org.apache.phoenix.schema.tool;
 
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -30,26 +32,29 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.List;
 import java.util.ArrayList;
-
+import java.util.Arrays;
+import java.util.stream.Collectors;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
+import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.util.MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES;
 
 public class SchemaExtractionProcessor implements SchemaProcessor {
@@ -59,6 +64,9 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
     private static final String CREATE_TABLE = "CREATE TABLE %s";
     private static final String CREATE_INDEX = "CREATE %sINDEX %s ON %s";
     private static final String CREATE_VIEW = "CREATE VIEW %s%s AS SELECT * FROM %s%s";
+    private static final List<String> QUOTE_PROPERTIES =
+            //Copying here, because this only exists in Hbase 2.5+
+            Arrays.asList(new String[] {"hbase.store.file-tracker.impl"});
 
     private PTable table;
     private Configuration conf;
@@ -88,11 +96,11 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         if (ddl != null) {
             return ddl;
         }
-        if(this.table.getType().equals(PTableType.TABLE)) {
+        if (this.table.getType().equals(PTableType.TABLE)) {
             ddl = extractCreateTableDDL(this.table);
-        } else if(this.table.getType().equals(PTableType.INDEX)) {
+        } else if (this.table.getType().equals(PTableType.INDEX)) {
             ddl = extractCreateIndexDDL(this.table);
-        } else if(this.table.getType().equals(PTableType.VIEW)) {
+        } else if (this.table.getType().equals(PTableType.VIEW)) {
             ddl = extractCreateViewDDL(this.table);
         }
         return ddl;
@@ -117,7 +125,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             populateDefaultProperties(indexPTable);
             setPTableProperties(indexPTable);
             ConnectionQueryServices cqsi = getCQSIObject();
-            HTableDescriptor htd = getTableDescriptor(cqsi, table);
+            TableDescriptor htd = getTableDescriptor(cqsi, table);
             setHTableProperties(htd);
         }
 
@@ -145,7 +153,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             indexPKName.add(indexColumn);
             indexSortOrderMap.put(indexColumn, indexedColumn.getSortOrder());
         }
-        for(PColumn pColumn : dataPK) {
+        for (PColumn pColumn : dataPK) {
             dataPKName.add(pColumn.getName().getString());
         }
 
@@ -156,11 +164,11 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         }
 
         for (String column : indexPKName) {
-            if(indexedColumnsBuilder.length()!=0) {
+            if (indexedColumnsBuilder.length()!=0) {
                 indexedColumnsBuilder.append(", ");
             }
             indexedColumnsBuilder.append(column);
-            if(indexSortOrderMap.containsKey(column)
+            if (indexSortOrderMap.containsKey(column)
                     && indexSortOrderMap.get(column) != SortOrder.getDefault()) {
                 indexedColumnsBuilder.append(" ");
                 indexedColumnsBuilder.append(indexSortOrderMap.get(column));
@@ -171,14 +179,14 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
 
     private List<PColumn> getSymmetricDifferencePColumns(List<PColumn> firstList, List<PColumn> secondList) {
         List<PColumn> effectivePK = new ArrayList<>();
-        for(PColumn column : firstList) {
-            if(secondList.contains(column)) {
+        for (PColumn column : firstList) {
+            if (secondList.contains(column)) {
                 continue;
             }
             effectivePK.add(column);
         }
-        for(PColumn column : secondList) {
-            if(firstList.contains(column)) {
+        for (PColumn column : secondList) {
+            if (firstList.contains(column)) {
                 continue;
             }
             effectivePK.add(column);
@@ -191,7 +199,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
             return null;
         }
         String [] columnNameSplit = columnName.split(":");
-        if(columnNameSplit[0].equals("") || columnNameSplit[0].equalsIgnoreCase(defaultCF) ||
+        if (columnNameSplit[0].equals("") || columnNameSplit[0].equalsIgnoreCase(defaultCF) ||
                 (defaultCF.startsWith("L#") && columnNameSplit[0].equalsIgnoreCase(defaultCF.substring(2)))) {
             return formatColumnOrExpression(columnNameSplit[1]);
         } else {
@@ -222,10 +230,10 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         StringBuilder coveredColumnsBuilder = new StringBuilder();
         List<PColumn> pkColumns = indexPTable.getColumns();
         for (PColumn cc : pkColumns) {
-            if(coveredColumnsBuilder.length()!=0) {
+            if (coveredColumnsBuilder.length()!=0) {
                 coveredColumnsBuilder.append(", ");
             }
-            if(cc.getFamilyName()!=null) {
+            if (cc.getFamilyName()!=null) {
                 String indexColumn = extractIndexColumn(cc.getName().getString(), defaultCF);
                 if (indexColumn != null) {
                     coveredColumnsBuilder.append(indexColumn);
@@ -242,7 +250,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         outputBuilder.append("(");
         outputBuilder.append(indexedColumnString);
         outputBuilder.append(")");
-        if(!coveredColumnString.equals("")) {
+        if (!coveredColumnString.equals("")) {
             outputBuilder.append(" INCLUDE (");
             outputBuilder.append(coveredColumnString);
             outputBuilder.append(")");
@@ -269,7 +277,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         String columnInfoString = getColumnInfoStringForView(table, baseTable);
 
         String whereClause = table.getViewStatement();
-        if(whereClause != null) {
+        if (whereClause != null) {
             whereClause = whereClause.substring(whereClause.indexOf("WHERE"));
         }
         return generateCreateViewDDL(columnInfoString, quotedBaseTableName,
@@ -289,8 +297,8 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         String pTableName = table.getTableName().getString();
 
         ConnectionQueryServices cqsi = getCQSIObject();
-        HTableDescriptor htd = getTableDescriptor(cqsi, table);
-        HColumnDescriptor[] hcds = htd.getColumnFamilies();
+        TableDescriptor htd = getTableDescriptor(cqsi, table);
+        ColumnFamilyDescriptor[] hcds = htd.getColumnFamilies();
         populateDefaultProperties(table);
         setPTableProperties(table);
         setHTableProperties(htd);
@@ -298,43 +306,48 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
 
         String columnInfoString = getColumnInfoStringForTable(table);
         String propertiesString = convertPropertiesToString(false);
+        String columnQualifierString = convertColumnQualifierCountersToString(table);
 
-        return generateTableDDLString(columnInfoString, propertiesString, pSchemaName, pTableName);
+        return generateTableDDLString(columnInfoString, propertiesString, columnQualifierString,
+                pSchemaName, pTableName);
     }
 
     private String generateTableDDLString(String columnInfoString, String propertiesString,
-            String pSchemaName, String pTableName) {
+                  String columnQualifierString, String pSchemaName, String pTableName) {
         String quotedTableFullName = SchemaUtil.getFullTableNameWithQuotes(pSchemaName, pTableName);
         StringBuilder outputBuilder = new StringBuilder(String.format(CREATE_TABLE,
                 quotedTableFullName));
-        outputBuilder.append(columnInfoString).append(" ").append(propertiesString);
+        outputBuilder.append(columnInfoString).append(" ").append(propertiesString)
+                .append(columnQualifierString);
         return outputBuilder.toString();
     }
 
     private void populateDefaultProperties(PTable table) {
-        Map<String, String> propsMap = HColumnDescriptor.getDefaultValues();
+        Map<String, String> propsMap = ColumnFamilyDescriptorBuilder.getDefaultValues();
         for (Map.Entry<String, String> entry : propsMap.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
             defaultProps.put(key, value);
-            if(key.equalsIgnoreCase(HColumnDescriptor.BLOOMFILTER) || key.equalsIgnoreCase(
-                    HColumnDescriptor.COMPRESSION)) {
+            if (key.equalsIgnoreCase(ColumnFamilyDescriptorBuilder.BLOOMFILTER)) {
+                defaultProps.put(key, "ROW");
+            }
+            if (key.equalsIgnoreCase(ColumnFamilyDescriptorBuilder.COMPRESSION)) {
                 defaultProps.put(key, "NONE");
             }
-            if(key.equalsIgnoreCase(HColumnDescriptor.DATA_BLOCK_ENCODING)) {
+            if (key.equalsIgnoreCase(ColumnFamilyDescriptorBuilder.DATA_BLOCK_ENCODING)) {
                 defaultProps.put(key, String.valueOf(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING));
             }
         }
         defaultProps.putAll(table.getDefaultPropertyValues());
     }
 
-    private void setHTableProperties(HTableDescriptor htd) {
+    private void setHTableProperties(TableDescriptor htd) {
         Map<Bytes, Bytes> propsMap = htd.getValues();
         for (Map.Entry<Bytes, Bytes> entry : propsMap.entrySet()) {
             Bytes key = entry.getKey();
             Bytes value = entry.getValue();
-            if(Bytes.toString(key.get()).contains("coprocessor") || Bytes.toString(key.get()).contains(
-                    HTableDescriptor.IS_META)) {
+            if (Bytes.toString(key.get()).contains("coprocessor") || Bytes.toString(key.get()).contains(
+                    TableDescriptorBuilder.IS_META)) {
                 continue;
             }
             defaultProps.put(Bytes.toString(key.get()), "false");
@@ -342,14 +355,14 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         }
     }
 
-    private void setHColumnFamilyProperties(HColumnDescriptor[] columnDescriptors) {
+    private void setHColumnFamilyProperties(ColumnFamilyDescriptor[] columnDescriptors) {
         Map<Bytes, Bytes> propsMap = columnDescriptors[0].getValues();
-        for(Map.Entry<Bytes, Bytes> entry : propsMap.entrySet()) {
+        for (Map.Entry<Bytes, Bytes> entry : propsMap.entrySet()) {
             Bytes key = entry.getKey();
             Bytes globalValue = entry.getValue();
             Map<String, String> cfToPropertyValueMap = new HashMap<String, String>();
             Set<Bytes> cfPropertyValueSet = new HashSet<>();
-            for(HColumnDescriptor columnDescriptor: columnDescriptors) {
+            for (ColumnFamilyDescriptor columnDescriptor: columnDescriptors) {
                 String columnFamilyName = Bytes.toString(columnDescriptor.getName());
                 Bytes value = columnDescriptor.getValues().get(key);
                 // check if it is universal properties
@@ -361,7 +374,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
                 cfPropertyValueSet.add(value);
             }
             if (cfPropertyValueSet.size() > 1) {
-                for(Map.Entry<String, String> mapEntry: cfToPropertyValueMap.entrySet()) {
+                for (Map.Entry<String, String> mapEntry: cfToPropertyValueMap.entrySet()) {
                     definedProps.put(String.format("%s.%s",  mapEntry.getKey(), Bytes.toString(key.get())), mapEntry.getValue());
                 }
             } else {
@@ -372,37 +385,69 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
 
     private void setPTableProperties(PTable table) {
         Map <String, String> map = table.getPropertyValues();
-        for(Map.Entry<String, String> entry : map.entrySet()) {
+        for (Map.Entry<String, String> entry : map.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
-            if(value != null) {
+            if (value != null) {
                 definedProps.put(key, value);
             }
         }
     }
 
-    private HTableDescriptor getTableDescriptor(ConnectionQueryServices cqsi, PTable table)
+    private TableDescriptor getTableDescriptor(ConnectionQueryServices cqsi, PTable table)
             throws SQLException, IOException {
         try (Admin admin = cqsi.getAdmin()) {
-            return admin.getTableDescriptor(TableName.valueOf(
+            return admin.getDescriptor(TableName.valueOf(
                 table.getPhysicalName().getString()));
         }
     }
 
+    private String convertColumnQualifierCountersToString(PTable table) {
+        StringBuilder cqBuilder = new StringBuilder();
+        if (shouldGenerateWithDefaults) {
+            return cqBuilder.toString();
+        }
+        Map<String, Integer> cqCounterValues = table.getEncodedCQCounter().values();
+        ArrayList<String> cqCounters = new ArrayList<>(cqCounterValues.size());
+
+        for (Map.Entry<String, Integer> entry : cqCounterValues.entrySet()) {
+            Boolean include = table.getColumns().stream()
+                    .filter(c -> !table.getPKColumns().contains(c))
+                    .filter(pColumn -> table.getImmutableStorageScheme() == SINGLE_CELL_ARRAY_WITH_OFFSETS ?
+                            pColumn.getFamilyName().getString().equalsIgnoreCase(entry.getKey()) : true)
+                    .map(o -> table.getEncodingScheme().decode(o.getColumnQualifierBytes()))
+                    .max(Integer::compare).map(maxCounter -> maxCounter != entry.getValue() - 1)
+                    .orElse(false);
+            if (include) {
+                String def = "'" + entry.getKey() + "'=" + entry.getValue().toString();
+                cqCounters.add(def);
+            }
+        }
+        if (cqCounters.size() > 0) {
+            cqBuilder.append(" COLUMN_QUALIFIER_COUNTER");
+            cqBuilder.append(" (");
+            cqBuilder.append(StringUtils.join( ", ", cqCounters));
+            cqBuilder.append(')');
+        }
+        return cqBuilder.toString();
+    }
+
     private String convertPropertiesToString(boolean forIndex) {
         StringBuilder optionBuilder = new StringBuilder();
-        for(Map.Entry<String, String> entry : definedProps.entrySet()) {
+        for (Map.Entry<String, String> entry : definedProps.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
             String columnFamilyName = QueryConstants.DEFAULT_COLUMN_FAMILY;
 
             String[] colPropKey = key.split("\\.");
-            if (colPropKey.length > 1) {
+            if (QUOTE_PROPERTIES.contains(key)) {
+                key = "\"" + key + "\"";
+            } else if (colPropKey.length > 1) {
                 columnFamilyName = colPropKey[0];
                 key = colPropKey[1];
             }
 
-            if(value!=null && (shouldGenerateWithDefaults || (defaultProps.get(key) != null && !value.equals(defaultProps.get(key))))) {
+            if (value!=null && (shouldGenerateWithDefaults || (defaultProps.get(key) != null && !value.equals(defaultProps.get(key))))) {
                 if (forIndex) {
                     // cannot set these for index
                     if (key.equals(UPDATE_CACHE_FREQUENCY)) {
@@ -423,7 +468,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
                         key : String.format("\"%s\".%s", columnFamilyName, key);
                 // properties value that corresponds to a number will not need single quotes around it
                 // properties value that corresponds to a boolean value will not need single quotes around it
-                if(!(NumberUtils.isNumber(value)) &&
+                if (!(NumberUtils.isNumber(value)) &&
                         !(value.equalsIgnoreCase(Boolean.TRUE.toString()) ||value.equalsIgnoreCase(Boolean.FALSE.toString()))) {
                     value= "'" + value + "'";
                 }
@@ -445,7 +490,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
     }
 
     public Connection getConnection() throws SQLException {
-        if(tenantId!=null) {
+        if (tenantId!=null) {
             conf.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
         return ConnectionUtil.getInputConnection(conf);
@@ -459,13 +504,89 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
         return getColumnInfoString(table, colInfo, columns, pkColumns);
     }
 
+    private boolean hasEncodedQualifier(PTable table)
+    {
+        return table.getColumns().size() > 0
+                && !shouldGenerateWithDefaults
+                && table.getType() == PTableType.TABLE
+                && table.getEncodingScheme() != PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+    }
+
+    private boolean areEncodedIdsComplete(List<Integer> encodedIds, Integer initialID,
+                                         Integer lastEncodedID) {
+        if (encodedIds.size() == 0) {
+            return true;
+        }
+        if (encodedIds.get(0) > initialID ||
+                encodedIds.get(encodedIds.size() - 1) < lastEncodedID) {
+            return false;
+        }
+        for (int i = 1; i < encodedIds.size(); i++) {
+            if (encodedIds.get(i - 1) + 1 != encodedIds.get(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private List<String> getNonConsecutiveQualifierFamilies(PTable table) {
+        List<String> ret = new ArrayList<>();
+        if (!hasEncodedQualifier(table)) {
+            return ret;
+        }
+
+        PTable.QualifierEncodingScheme scheme = table.getEncodingScheme();
+        PTable.EncodedCQCounter encodedCQCounter = table.getEncodedCQCounter();
+        if (table.getImmutableStorageScheme() == SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+            // For this scheme we track column qualifier counters at the column family level
+            for (PColumnFamily colFamily : table.getColumnFamilies()) {
+                String colFamilyName = colFamily.getName().getString();
+                List<Integer> encodedIds = colFamily.getColumns().stream()
+                        .filter(c -> !table.getPKColumns().contains(c))
+                        .map(pColumn -> scheme.decode(pColumn.getColumnQualifierBytes()))
+                        .collect(Collectors.toList());
+                Collections.sort(encodedIds);
+                if (!areEncodedIdsComplete(encodedIds,
+                        QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE,
+                        encodedCQCounter.getNextQualifier(colFamilyName) - 1)) {
+                    ret.add(colFamilyName);
+                }
+            }
+        } else {
+            // For other schemes, column qualifier counters are tracked using the default column
+            // family.
+            List<Integer> encodedIds = table.getColumns().stream()
+                    .filter(c -> !table.getPKColumns().contains(c))
+                    .map(pColumn -> scheme.decode(pColumn.getColumnQualifierBytes()))
+                    .collect(Collectors.toList());
+            Collections.sort(encodedIds);
+            String defaultFamilyName = table.getDefaultFamilyName() == null ?
+                    QueryConstants.DEFAULT_COLUMN_FAMILY
+                    : table.getDefaultFamilyName().getString();
+            if (!areEncodedIdsComplete(encodedIds,
+                    QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE,
+                    encodedCQCounter.getNextQualifier(defaultFamilyName) - 1)) {
+                ret = table.getColumnFamilies().stream()
+                        .map(pColumnFamily -> pColumnFamily.getName().getString())
+                        .collect(Collectors.toList());
+            }
+        }
+        return ret;
+    }
+
     private String getColumnInfoString(PTable table, StringBuilder colInfo, List<PColumn> columns,
             List<PColumn> pkColumns) {
+        List<String> nonConsecutiveCounterFamilies = getNonConsecutiveQualifierFamilies(table);
         ArrayList<String> colDefs = new ArrayList<>(columns.size());
         for (PColumn col : columns) {
             String def = extractColumn(col);
             if (pkColumns.size() == 1 && pkColumns.contains(col)) {
                 def += " PRIMARY KEY" + extractPKColumnAttributes(col);
+            }
+            if (!pkColumns.contains(col)
+                    && nonConsecutiveCounterFamilies.contains(col.getFamilyName().getString())) {
+                def += " ENCODED_QUALIFIER " +
+                        table.getEncodingScheme().decode(col.getColumnQualifierBytes());
             }
             colDefs.add(def);
         }

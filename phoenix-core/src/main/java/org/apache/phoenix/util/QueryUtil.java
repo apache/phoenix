@@ -73,8 +73,8 @@ import javax.annotation.Nullable;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
 import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
@@ -141,18 +141,18 @@ public final class QueryUtil {
     private static final String FROM = "FROM";
     private static final String WHERE = "WHERE";
     private static final String AND = "AND";
-    private static final String[] CompareOpString = new String[CompareOp.values().length];
+    private static final String[] CompareOpString = new String[CompareOperator.values().length];
 
     static {
-        CompareOpString[CompareOp.EQUAL.ordinal()] = "=";
-        CompareOpString[CompareOp.NOT_EQUAL.ordinal()] = "!=";
-        CompareOpString[CompareOp.GREATER.ordinal()] = ">";
-        CompareOpString[CompareOp.LESS.ordinal()] = "<";
-        CompareOpString[CompareOp.GREATER_OR_EQUAL.ordinal()] = ">=";
-        CompareOpString[CompareOp.LESS_OR_EQUAL.ordinal()] = "<=";
+        CompareOpString[CompareOperator.EQUAL.ordinal()] = "=";
+        CompareOpString[CompareOperator.NOT_EQUAL.ordinal()] = "!=";
+        CompareOpString[CompareOperator.GREATER.ordinal()] = ">";
+        CompareOpString[CompareOperator.LESS.ordinal()] = "<";
+        CompareOpString[CompareOperator.GREATER_OR_EQUAL.ordinal()] = ">=";
+        CompareOpString[CompareOperator.LESS_OR_EQUAL.ordinal()] = "<=";
     }
 
-    public static String toSQL(CompareOp op) {
+    public static String toSQL(CompareOperator op) {
         return CompareOpString[op.ordinal()];
     }
     
@@ -420,7 +420,8 @@ public final class QueryUtil {
     private static Connection getConnection(Properties props, Configuration conf)
             throws SQLException {
         String url = getConnectionUrl(props, conf);
-        LOGGER.info("Creating connection with the jdbc url: " + url);
+        LOGGER.info(String.format("Creating connection with the jdbc url: %s, isServerSide = %s",
+                url, props.getProperty(IS_SERVER_CONNECTION)));
         props = PropertiesUtil.combineProperties(props, conf);
         return DriverManager.getConnection(url, props);
     }
@@ -435,7 +436,7 @@ public final class QueryUtil {
     public static String getConnectionUrl(Properties props, Configuration conf, String principal)
             throws SQLException {
         // read the hbase properties from the configuration
-        int port = getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT, props, conf);
+        int port = getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT, props, conf);
         // Build the ZK quorum server string with "server:clientport" list, separated by ','
         final String server = getString(HConstants.ZOOKEEPER_QUORUM, HConstants.LOCALHOST, props, conf);
         String znodeParent = getString(HConstants.ZOOKEEPER_ZNODE_PARENT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT, props, conf);
@@ -510,7 +511,7 @@ public final class QueryUtil {
     }
     
     public static String getViewPartitionClause(String partitionColumnName, long autoPartitionNum) {
-        return partitionColumnName  + " " + toSQL(CompareOp.EQUAL) + " " + autoPartitionNum;
+        return partitionColumnName  + " " + toSQL(CompareOperator.EQUAL) + " " + autoPartitionNum;
     }
 
     public static Connection getConnectionForQueryLog(Configuration config) throws SQLException {
@@ -706,7 +707,7 @@ public final class QueryUtil {
             addTenantIdFilter(connection, buf, catalog, parameterValues);
             if (schemaPattern != null) {
                 buf.append(" and " + TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like ?" ));
-                if(schemaPattern.length() > 0) {
+                if (schemaPattern.length() > 0) {
                     parameterValues.add(schemaPattern);
                 }
             }
@@ -750,7 +751,7 @@ public final class QueryUtil {
             if (schemaPattern != null) {
                 appendConjunction(whereClause);
                 whereClause.append(SEQUENCE_SCHEMA + (schemaPattern.length() == 0 ? " is null" : " like ?\n" ));
-                if(schemaPattern.length() > 0) {
+                if (schemaPattern.length() > 0) {
                     parameterValues.add(schemaPattern);
                 }
             }
@@ -766,7 +767,7 @@ public final class QueryUtil {
         }
         buf.append(" order by 4, 1, 2, 3\n");
         PreparedStatement stmt = connection.prepareStatement(buf.toString());
-        for(int i = 0; i < parameterValues.size(); i++) {
+        for (int i = 0; i < parameterValues.size(); i++) {
             stmt.setString(i+1, parameterValues.get(i));
         }
         return stmt;
@@ -825,5 +826,19 @@ public final class QueryUtil {
     private static void appendConjunction(StringBuilder buf) {
         buf.append(buf.length() == 0 ? "" : " and ");
     }
-    
+
+    public static String generateInListParams(int nParams) {
+        List<String> paramList = Lists.newArrayList();
+        for (int i = 0; i < nParams; i++) {
+            paramList.add("?");
+        }
+        return Joiner.on(", ").join(paramList);
+    }
+
+    public static void setQuoteInListElements(PreparedStatement ps, List<String> unQuotedString,
+        int index) throws SQLException {
+        for (int i = 0; i < unQuotedString.size(); i++) {
+            ps.setString(++index, "'" + unQuotedString + "'");
+        }
+    }
 }

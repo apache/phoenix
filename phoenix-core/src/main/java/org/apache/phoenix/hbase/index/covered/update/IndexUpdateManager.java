@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
@@ -51,13 +52,13 @@ public class IndexUpdateManager {
     @Override
     public int compare(Mutation o1, Mutation o2) {
       // always sort rows first
-      int compare = o1.compareTo(o2);
+      int compare = Row.COMPARATOR.compare(o1, o2);
       if (compare != 0) {
         return compare;
       }
 
       // if same row, sort by reverse timestamp (larger first)
-      compare = Longs.compare(o2.getTimeStamp(), o1.getTimeStamp());
+      compare = Longs.compare(o2.getTimestamp(), o1.getTimestamp());
       if (compare != 0) {
         return compare;
       }
@@ -142,7 +143,7 @@ public class IndexUpdateManager {
     Delete pendingDelete = pendingMutation instanceof Delete ? (Delete) pendingMutation : null;
     boolean sawRowMatch = false;
     for (Mutation stored : updates) {
-      int compare = pendingMutation.compareTo(stored);
+      int compare = Mutation.COMPARATOR.compare(pendingMutation, stored);
       // skip to the right row
       if (compare < 0) {
         continue;
@@ -157,7 +158,7 @@ public class IndexUpdateManager {
       sawRowMatch = true;
 
       // skip until we hit the right timestamp
-      if (stored.getTimeStamp() < pendingMutation.getTimeStamp()) {
+      if (stored.getTimestamp() < pendingMutation.getTimestamp()) {
         continue;
       }
 
@@ -236,7 +237,7 @@ public class IndexUpdateManager {
           sb.append("[REMOVED]");
         }
         sb.append(m.getClass().getSimpleName() + ":"
-            + ((m instanceof Put) ? m.getTimeStamp() + " " : ""));
+            + ((m instanceof Put) ? m.getTimestamp() + " " : ""));
         sb.append(" row=" + Bytes.toStringBinary(m.getRow()));
         sb.append("\n");
         if (m.getFamilyCellMap().isEmpty()) {

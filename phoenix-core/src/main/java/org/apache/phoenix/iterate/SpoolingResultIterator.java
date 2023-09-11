@@ -98,9 +98,11 @@ public class SpoolingResultIterator implements PeekingResultIterator {
 
     private SpoolingResultIterator(SpoolingMetricsHolder spoolMetrics, MemoryMetricsHolder memoryMetrics, ResultIterator scanner, QueryServices services) throws SQLException {
         this (spoolMetrics, memoryMetrics, scanner, services.getMemoryManager(),
-                services.getProps().getLong(QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
+                services.getProps().getLongBytes(QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
                     QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES),
-                services.getProps().getLong(QueryServices.MAX_SPOOL_TO_DISK_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SPOOL_TO_DISK_BYTES),
+                services.getProps()
+                        .getLongBytes(QueryServices.MAX_SPOOL_TO_DISK_BYTES_ATTRIB,
+                                QueryServicesOptions.DEFAULT_MAX_SPOOL_TO_DISK_BYTES),
                 services.getProps().get(QueryServices.SPOOL_DIRECTORY, QueryServicesOptions.DEFAULT_SPOOL_DIRECTORY));
     }
 

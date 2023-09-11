@@ -28,6 +28,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.google.protobuf.RpcController;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
@@ -58,6 +59,8 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     // Track open connections to free them on close as unit tests don't always do this.
     private Set<PhoenixConnection> connections =
             Collections.newSetFromMap(new ConcurrentHashMap<PhoenixConnection, Boolean>());
+    // Use Provider.values() instead of Provider.available() here because array accesses will be
+    // indexed by ordinal.
     private final PhoenixTransactionService[] txServices = new PhoenixTransactionService[TransactionFactory.Provider.values().length];
     
     public ConnectionQueryServicesTestImpl(QueryServices services, ConnectionInfo info, Properties props) throws SQLException {
@@ -74,6 +77,10 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     public void removeConnection(PhoenixConnection connection) throws SQLException {
         connections.remove(connection);
         super.removeConnection(connection);
+    }
+
+    public RpcController getController() {
+        return super.getController();
     }
 
     @Override

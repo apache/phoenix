@@ -45,6 +45,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
@@ -54,8 +55,14 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
+import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_BYTES;
+import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURING_UPGRADE_MS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SCAN_PAGE_SIZE;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -81,21 +88,31 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.CheckAndMutate;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -106,6 +123,10 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
+import org.apache.hadoop.hbase.filter.CompareFilter;
+import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.PageFilter;
+import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -119,6 +140,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
@@ -158,6 +180,8 @@ public class UpgradeUtil {
     private static final Logger LOGGER = LoggerFactory.getLogger(UpgradeUtil.class);
     private static final byte[] SEQ_PREFIX_BYTES = ByteUtil.concat(QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("_SEQ_"));
     public static final byte[] UPGRADE_TO_4_7_COLUMN_NAME = Bytes.toBytes("UPGRADE_TO_4_7");
+    private static final byte[] LINK_ROW = new byte[]{PTable.LinkType.CHILD_TABLE.getSerializedValue()};
+
     /**
      * Attribute for Phoenix's internal purposes only. When this attribute is set on a phoenix connection, then
      * the upgrade code for upgrading the cluster to the new minor release is not triggered. Note that presence 
@@ -219,7 +243,7 @@ public class UpgradeUtil {
     private static void createSequenceSnapshot(Admin admin, PhoenixConnection conn) throws SQLException {
         byte[] tableName = getSequenceSnapshotName();
         TableDescriptor desc = TableDescriptorBuilder.newBuilder(TableName.valueOf(tableName))
-                .addColumnFamily(ColumnFamilyDescriptorBuilder.of(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES))
+                .setColumnFamily(ColumnFamilyDescriptorBuilder.of(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_FAMILY_BYTES))
                 .build();
         try {
             admin.createTable(desc);
@@ -252,7 +276,7 @@ public class UpgradeUtil {
 
         Scan scan = new Scan();
         scan.setRaw(true);
-        scan.setMaxVersions();
+        scan.readAllVersions();
         ResultScanner scanner = null;
         Table source = null;
         Table target = null;
@@ -263,18 +287,18 @@ public class UpgradeUtil {
             Result result;
              while ((result = scanner.next()) != null) {
                 for (Cell keyValue : result.rawCells()) {
-                    sizeBytes += CellUtil.estimatedSerializedSizeOf(keyValue);
-                    if (KeyValue.Type.codeToType(keyValue.getTypeByte()) == KeyValue.Type.Put) {
+                    sizeBytes += PrivateCellUtil.estimatedSerializedSizeOf(keyValue);
+                    if (keyValue.getType() == Cell.Type.Put) {
                         // Put new value
                         Put put = new Put(keyValue.getRowArray(), keyValue.getRowOffset(), keyValue.getRowLength());
                         put.add(keyValue);
                         mutations.add(put);
-                    } else if (KeyValue.Type.codeToType(keyValue.getTypeByte()) == KeyValue.Type.Delete){
+                    } else if (keyValue.getType() == Cell.Type.Delete){
                         // Copy delete marker using new key so that it continues
                         // to delete the key value preceding it that will be updated
                         // as well.
                         Delete delete = new Delete(keyValue.getRowArray(), keyValue.getRowOffset(), keyValue.getRowLength());
-                        delete.addDeleteMarker(keyValue);
+                        delete.add(keyValue);
                         mutations.add(delete);
                     }
                 }
@@ -353,6 +377,39 @@ public class UpgradeUtil {
         }
     }
 
+    /**
+     * Utility method to get a HBaseConnection with overridden properties
+     * @param options
+     * @return
+     * @throws IOException
+     */
+    private static org.apache.hadoop.hbase.client.Connection getHBaseConnection(Configuration config, Map<String, String> options)
+            throws IOException {
+        Configuration conf = HBaseConfiguration.create(config);
+
+        conf.set(HConstants.HBASE_RPC_READ_TIMEOUT_KEY, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+        conf.set(HConstants.HBASE_RPC_WRITE_TIMEOUT_KEY, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+        conf.set(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+        if (options != null) {
+            for (Map.Entry<String, String> entry : options.entrySet()) {
+                String k = entry.getKey();
+                String v = entry.getValue();
+                switch (k) {
+                    case HConstants.HBASE_RPC_TIMEOUT_KEY:
+                        conf.set(HConstants.HBASE_RPC_READ_TIMEOUT_KEY, v);
+                        conf.set(HConstants.HBASE_RPC_WRITE_TIMEOUT_KEY, v);
+                        break;
+                    default:
+                        conf.set(k, v);
+                        break;
+                };
+            };
+        }
+        LOGGER.info(String.format("Creating HBase cluster connection to ==> %s", conf.get(HConstants.ZOOKEEPER_QUORUM)));
+        return ConnectionFactory.createConnection(conf);
+    }
+
+
     public static PhoenixConnection upgradeLocalIndexes(PhoenixConnection metaConnection)
             throws SQLException, IOException, org.apache.hadoop.hbase.TableNotFoundException {
         Properties props = PropertiesUtil.deepCopy(metaConnection.getClientInfo());
@@ -374,7 +431,8 @@ public class UpgradeUtil {
             boolean droppedLocalIndexes = false;
             while (rs.next()) {
                 if (!droppedLocalIndexes) {
-                    TableDescriptor[] localIndexTables = admin.listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
+                    List<TableDescriptor> localIndexTables = admin.listTableDescriptors(
+                            Pattern.compile(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*"));
                     String localIndexSplitter = LocalIndexSplitter.class.getName();
                     for (TableDescriptor table : localIndexTables) {
                         TableDescriptor dataTableDesc = admin.getDescriptor(TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(table.getTableName().getNameAsString())));
@@ -389,13 +447,13 @@ public class UpgradeUtil {
                                 for (Entry<Bytes, Bytes> keyValue: cf.getValues().entrySet()){
                                     colDefBuilder.setValue(keyValue.getKey().copyBytes(), keyValue.getValue().copyBytes());
                                 }
-                                dataTableDescBuilder.addColumnFamily(colDefBuilder.build());
+                                dataTableDescBuilder.setColumnFamily(colDefBuilder.build());
                                 modifyTable = true;
                             }
                         }
-                        Collection<String> coprocessors = dataTableDesc.getCoprocessors();
-                        for (String coprocessor:  coprocessors) {
-                            if (coprocessor.equals(localIndexSplitter)) {
+                        Collection<CoprocessorDescriptor> coprocessors = dataTableDesc.getCoprocessorDescriptors();
+                        for (CoprocessorDescriptor coprocessor:  coprocessors) {
+                            if (coprocessor.getClassName().equals(localIndexSplitter)) {
                                 dataTableDescBuilder.removeCoprocessor(localIndexSplitter);
                                 modifyTable = true;
                             }
@@ -404,8 +462,11 @@ public class UpgradeUtil {
                             admin.modifyTable(dataTableDescBuilder.build());
                         }
                     }
-                    admin.disableTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
-                    admin.deleteTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
+                    Pattern pattern = Pattern.compile(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
+                    for(TableDescriptor tableDescriptor : admin.listTableDescriptors(pattern)){
+                        admin.disableTable(tableDescriptor.getTableName());
+                        admin.deleteTable(tableDescriptor.getTableName());
+                    }
                     droppedLocalIndexes = true;
                 }
                 String schemaName = rs.getString(1);
@@ -687,9 +748,11 @@ public class UpgradeUtil {
             Put saltPut = new Put(seqTableKey);
             saltPut.add(saltKV);
             // Prevent multiple clients from doing this upgrade
-            if (!sysTable.checkAndPut(seqTableKey,
-                    PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                    PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES, null, saltPut)) {
+            CheckAndMutate checkAndMutate = CheckAndMutate.newBuilder(seqTableKey)
+                    .ifNotExists(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES)
+                    .build(saltPut);
+
+            if (!sysTable.checkAndMutate(checkAndMutate).isSuccess()) {
                 if (oldTable == null) { // Unexpected, but to be safe just run pre-split code
                     preSplitSequenceTable(conn, nSaltBuckets);
                     return true;
@@ -707,9 +770,12 @@ public class UpgradeUtil {
                     seqNumPut.add(seqNumKV);
                     // Increment TABLE_SEQ_NUM in checkAndPut as semaphore so that only single client
                     // pre-splits the sequence table.
-                    if (sysTable.checkAndPut(seqTableKey,
-                            PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                            PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES, oldSeqNum, seqNumPut)) {
+                    checkAndMutate = CheckAndMutate.newBuilder(seqTableKey)
+                            .ifEquals(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                                    PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES,oldSeqNum)
+                            .build(seqNumPut);
+
+                    if (sysTable.checkAndMutate(checkAndMutate).isSuccess()) {
                         preSplitSequenceTable(conn, nSaltBuckets);
                         return true;
                     }
@@ -728,7 +794,7 @@ public class UpgradeUtil {
                 boolean success = false;
                 Scan scan = new Scan();
                 scan.setRaw(true);
-                scan.setMaxVersions();
+                scan.readAllVersions();
                 Table seqTable = conn.getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
                 try {
                     boolean committed = false;
@@ -750,7 +816,7 @@ public class UpgradeUtil {
                                                 buf, keyValue.getQualifierOffset(), keyValue.getQualifierLength(),
                                                 keyValue.getTimestamp(), KeyValue.Type.Delete,
                                                 ByteUtil.EMPTY_BYTE_ARRAY,0,0);
-                                        delete.addDeleteMarker(deleteKeyValue);
+                                        delete.add(deleteKeyValue);
                                         mutations.add(delete);
                                         sizeBytes += deleteKeyValue.getLength();
                                         // Put new value
@@ -762,7 +828,7 @@ public class UpgradeUtil {
                                         // to delete the key value preceding it that will be updated
                                         // as well.
                                         Delete delete = new Delete(newKeyValue.getRowArray(), newKeyValue.getRowOffset(), newKeyValue.getRowLength());
-                                        delete.addDeleteMarker(newKeyValue);
+                                        delete.add(newKeyValue);
                                         mutations.add(delete);
                                     }
                                 }
@@ -866,7 +932,7 @@ public class UpgradeUtil {
         return new KeyValue(newBuf, 0, newBuf.length,
                 buf, keyValue.getFamilyOffset(), keyValue.getFamilyLength(),
                 buf, keyValue.getQualifierOffset(), keyValue.getQualifierLength(),
-                keyValue.getTimestamp(), KeyValue.Type.codeToType(keyValue.getTypeByte()),
+                keyValue.getTimestamp(), KeyValue.Type.codeToType(keyValue.getType().getCode()),
                 buf, keyValue.getValueOffset(), keyValue.getValueLength());
     }
     
@@ -1178,36 +1244,133 @@ public class UpgradeUtil {
             }
         }
     }
-    
+
     /**
-     * Move child links form SYSTEM.CATALOG to SYSTEM.CHILD_LINK
+     * Move or copy child links from SYSTEM.CATALOG to SYSTEM.CHILD_LINK
      * @param oldMetaConnection caller should take care of closing the passed connection appropriately
      * @throws SQLException
      */
-    public static void moveChildLinks(PhoenixConnection oldMetaConnection) throws SQLException {
-        PhoenixConnection metaConnection = null;
-        try {
-            // Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 
-            metaConnection = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP);
-            LOGGER.info("Upgrading metadata to add parent to child links for views");
-            metaConnection.commit();
-            String createChildLink = "UPSERT INTO SYSTEM.CHILD_LINK(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, LINK_TYPE) " +
-                                        "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, LINK_TYPE " + 
-                                        "FROM SYSTEM.CATALOG " + 
-                                        "WHERE LINK_TYPE = 4";
-            metaConnection.createStatement().execute(createChildLink);
-            metaConnection.commit();
-            String deleteChildLink = "DELETE FROM SYSTEM.CATALOG WHERE LINK_TYPE = 4 ";
-            metaConnection.createStatement().execute(deleteChildLink);
-            metaConnection.commit();
-            metaConnection.getQueryServices().clearCache();
-        } finally {
-            if (metaConnection != null) {
-                metaConnection.close();
-            }
+
+    public static void moveOrCopyChildLinks(PhoenixConnection oldMetaConnection, Map<String, String> options) throws IOException {
+        long numberOfCopiedParentChildRows = 0;
+        long numberOfDeletedParentChildRows = 0;
+
+        boolean moveChildLinksDuringUpgradeEnabled =
+                oldMetaConnection.getQueryServices().getProps().getBoolean(
+                        QueryServices.MOVE_CHILD_LINKS_DURING_UPGRADE_ENABLED,
+                        QueryServicesOptions.DEFAULT_MOVE_CHILD_LINKS_DURING_UPGRADE_ENABLED);
+
+        Configuration conf = oldMetaConnection.getQueryServices().getConfiguration();
+
+        ReadOnlyProps readOnlyProps = oldMetaConnection.getQueryServices().getProps();
+        TableName sysCat = SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME, readOnlyProps);
+        TableName sysChildLink = SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME, readOnlyProps);
+
+        LOGGER.debug(String.format("SYSTEM CATALOG tabled use for copying child links: %s", sysCat.toString()));
+        LOGGER.debug(String.format("SYSTEM CHILD LINK table used for copying child links: %s", sysChildLink.toString()));
+
+
+        try (org.apache.hadoop.hbase.client.Connection moveChildLinkConnection =  getHBaseConnection(conf, options);
+             Table sysCatalogTable = moveChildLinkConnection.getTable(sysCat)) {
+            boolean pageMore = false;
+            byte[] lastRowKey = null;
+
+            do {
+                Scan scan = new Scan();
+                scan.addFamily(DEFAULT_COLUMN_FAMILY_BYTES);
+                // Push down the filter to hbase to avoid transfer
+                SingleColumnValueFilter childLinkFilter = new SingleColumnValueFilter(
+                        DEFAULT_COLUMN_FAMILY_BYTES,
+                        LINK_TYPE_BYTES, CompareOperator.EQUAL,
+                        new byte[]{ PTable.LinkType.CHILD_TABLE.getSerializedValue()});
+
+                childLinkFilter.setFilterIfMissing(true);
+                // Limit number of records
+                PageFilter pf = new PageFilter(DEFAULT_SCAN_PAGE_SIZE);
+
+                scan.setFilter(new FilterList(FilterList.Operator.MUST_PASS_ALL, pf, childLinkFilter));
+                if (pageMore) {
+                    scan.withStartRow(lastRowKey, false);
+                }
+                // Collect the row keys to process them in batch
+                try (ResultScanner scanner = sysCatalogTable.getScanner(scan)) {
+                    int count = 0;
+                    List<byte[]> rowKeys = new ArrayList<>();
+                    List<Put> puts = new ArrayList<>();
+                    for (Result rr = scanner.next(); rr != null; rr = scanner.next()) {
+                        count++;
+                        lastRowKey = rr.getRow();
+                        byte[] tmpKey = new byte[lastRowKey.length];
+                        System.arraycopy(lastRowKey, 0, tmpKey, 0, tmpKey.length);
+                        long rowTS = rr.rawCells()[0].getTimestamp();
+                        rowKeys.add(tmpKey);
+                        Put put = new Put(tmpKey);
+                        put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, EMPTY_COLUMN_BYTES, rowTS,
+                                EMPTY_COLUMN_VALUE_BYTES);
+                        put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, LINK_TYPE_BYTES, rowTS,
+                                LINK_ROW);
+                        puts.add(put);
+                    }
+
+                    if (puts.size() > 0) {
+                        Object[] putResults = new Object[puts.size()];
+                        try (Table childLinkTable = moveChildLinkConnection.getTable(sysChildLink)) {
+                            // Process a batch of child links
+                            childLinkTable.batch(puts, putResults);
+                            // if move child links is enabled instead of copy, delete the rows from SYSTEM.CATALOG.
+                            if (moveChildLinksDuringUpgradeEnabled) {
+                                List<Delete> deletes = Lists.newArrayList();
+                                for (int i = 0; i < putResults.length; i++) {
+                                    if (java.util.Objects.nonNull(putResults[i])) {
+                                        deletes.add(new Delete(rowKeys.get(i)));
+                                    }
+                                }
+                                numberOfCopiedParentChildRows += deletes.size();
+
+                                Object[] deleteResults = new Object[deletes.size()];
+                                sysCatalogTable.batch(deletes, deleteResults);
+                                int numDeletes = 0;
+                                for (int i = 0; i < deleteResults.length; i++) {
+                                    if (java.util.Objects.nonNull(deleteResults[i])) {
+                                        numDeletes++;
+                                    }
+                                }
+                                numberOfDeletedParentChildRows += numDeletes;
+
+                            } else {
+                                int numCopied = 0;
+                                for (int i = 0; i < putResults.length; i++) {
+                                    if (java.util.Objects.nonNull(putResults[i])) {
+                                        numCopied++;
+                                    }
+                                }
+                                numberOfCopiedParentChildRows += numCopied;
+                            }
+
+                        } catch (Exception e) {
+                            LOGGER.error(String.format(
+                                    "Failed adding child link batch from %s to %s with Exception :",
+                                    SYSTEM_CATALOG_NAME, SYSTEM_CHILD_LINK_NAME), e);
+                        }
+                    }
+                    pageMore = count != 0;
+                    LOGGER.info(String.format("moveOrCopyChildLinks in progress => numberOfCopiedParentChildRows: %d " +
+                                    "numberOfDeletedParentChildRows: %d",
+                            numberOfCopiedParentChildRows,
+                            numberOfDeletedParentChildRows));
+
+                }
+            } while (pageMore);
+        } catch (IOException ioe) {
+            LOGGER.error(String.format(
+                    "Failed adding child link rows from %s to %s with Exception :",
+                    SYSTEM_CATALOG_NAME, SYSTEM_CHILD_LINK_NAME), ioe);
+            throw ioe;
         }
+        LOGGER.info(String.format("Finished moving/copying child link rows from %s to %s ",
+                SYSTEM_CATALOG_NAME, SYSTEM_CHILD_LINK_NAME));
     }
-    
+
     public static void addViewIndexToParentLinks(PhoenixConnection oldMetaConnection) throws SQLException {
         PhoenixConnection metaConn = null;
         boolean isMetaConnUsingQueryConn = true;
@@ -1331,7 +1494,7 @@ public class UpgradeUtil {
             Map<String, Object> syncedProps, Set<TableDescriptor> tableDescsToSync) throws SQLException {
         for (PTable indexTable: baseTable.getIndexes()) {
             // We already handle local index property synchronization when considering all column families of the base table
-            if (indexTable.getIndexType() == IndexType.GLOBAL) {
+            if (IndexUtil.isGlobalIndex(indexTable)) {
                 addTableDescIfPropsChanged(cqs.getTableDescriptor(indexTable.getPhysicalName().getBytes()),
                         defaultColFam, syncedProps, tableDescsToSync);
             }
@@ -1662,6 +1825,25 @@ public class UpgradeUtil {
         }
     }
 
+    private static String getTableRVCWithParam(List<String> tableNames) {
+        StringBuilder query = new StringBuilder("(");
+        for (int i = 0; i < tableNames.size(); i += 3) {
+            String tenantId = tableNames.get(i);
+            String schemaName = tableNames.get(i + 1);
+            String tableName = tableNames.get(i + 2);
+            query.append('(');
+            query.append(tenantId == null ? "null" : " ? ");
+            query.append(',');
+            query.append(schemaName == null ? "null" : " ? ");
+            query.append(',');
+            query.append(" ? ");
+            query.append("),");
+        }
+        // Replace trailing , with ) to end IN expression
+        query.setCharAt(query.length() - 1, ')');
+        return query.toString();
+    }
+
     private static String getTableRVC(List<String> tableNames) {
         StringBuilder query = new StringBuilder("(");
         for (int i = 0; i < tableNames.size(); i+=3) {
@@ -1696,25 +1878,44 @@ public class UpgradeUtil {
         // Find the header rows for tables that have not been upgraded already.
         // We don't care about views, as the row key cannot be different than the table.
         // We need this query to find physical tables which won't have a link row.
-        String query = "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME,TABLE_TYPE\n" + 
-                "FROM SYSTEM.CATALOG (ROW_KEY_ORDER_OPTIMIZABLE BOOLEAN)\n" + 
-                "WHERE COLUMN_NAME IS NULL\n" + 
-                "AND COLUMN_FAMILY IS NULL\n" + 
-                "AND ROW_KEY_ORDER_OPTIMIZABLE IS NULL\n" +
-                "AND TABLE_TYPE IN ('" + PTableType.TABLE.getSerializedValue() + "','" + otherType.getSerializedValue() + "')\n" +
-                "AND (TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN " + getTableRVC(tableNames);
-        rs = conn.createStatement().executeQuery(query);
-        
-        while (rs.next()) {
-            if (PTableType.TABLE.getSerializedValue().equals(rs.getString(4))) {
-                physicalTables.add(SchemaUtil.getTableName(rs.getString(2), rs.getString(3)));
-            } else {
-                otherTables.add(rs.getString(1));
-                otherTables.add(rs.getString(2));
-                otherTables.add(rs.getString(3));
+
+        String query = String.format("SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME,TABLE_TYPE"
+                + "FROM SYSTEM.CATALOG (ROW_KEY_ORDER_OPTIMIZABLE BOOLEAN)"
+                + "WHERE COLUMN_NAME IS NULL"
+                + "AND COLUMN_FAMILY IS NULL"
+                + "AND ROW_KEY_ORDER_OPTIMIZABLE IS NULL"
+                + "AND TABLE_TYPE IN (%s , %s )"
+                + "AND (TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN %s ",
+            PTableType.TABLE.getSerializedValue(), otherType.getSerializedValue(),
+            getTableRVCWithParam(tableNames));
+        try (PreparedStatement selSysCat = conn.prepareStatement(query)) {
+            int param = 0;
+            for (int i = 0; i < tableNames.size(); i += 3) {
+                String tenantId = tableNames.get(i);
+                String schemaName = tableNames.get(i + 1);
+                String tableName = tableNames.get(i + 2);
+                if (tenantId != null) {
+                    selSysCat.setString(++param, tenantId);
+                }
+                if (schemaName != null) {
+                    selSysCat.setString(++param, schemaName);
+                }
+                selSysCat.setString(++param, tableName);
             }
+            rs = selSysCat.executeQuery();
+            while (rs.next()) {
+                if (PTableType.TABLE.getSerializedValue()
+                    .equals(rs.getString(4))) {
+                    physicalTables.add(SchemaUtil
+                        .getTableName(rs.getString(2), rs.getString(3)));
+                } else {
+                    otherTables.add(rs.getString(1));
+                    otherTables.add(rs.getString(2));
+                    otherTables.add(rs.getString(3));
+                }
+            }
+            return otherTables;
         }
-        return otherTables;
     }
     
     // Return all types that are descending and either:
@@ -1870,16 +2071,28 @@ public class UpgradeUtil {
                 String theTenantId = tableNames.get(i);
                 String theSchemaName = tableNames.get(i+1);
                 String theTableName = tableNames.get(i+2);
-                globalConn.createStatement().execute("UPSERT INTO " + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + 
-                    " (" + PhoenixDatabaseMetaData.TENANT_ID + "," +
-                           PhoenixDatabaseMetaData.TABLE_SCHEM + "," +
-                           PhoenixDatabaseMetaData.TABLE_NAME + "," +
-                           MetaDataEndpointImpl.ROW_KEY_ORDER_OPTIMIZABLE + " BOOLEAN"
-                   + ") VALUES (" +
-                           "'" + (theTenantId == null ? StringUtil.EMPTY_STRING : theTenantId) + "'," +
-                           "'" + (theSchemaName == null ? StringUtil.EMPTY_STRING : theSchemaName) + "'," +
-                           "'" + theTableName + "'," +
-                           "TRUE)");
+                String upsSyscat = String.format("UPSERT INTO "
+                    + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME
+                    + " (" + PhoenixDatabaseMetaData.TENANT_ID + ","
+                    + PhoenixDatabaseMetaData.TABLE_SCHEM + ","
+                    + PhoenixDatabaseMetaData.TABLE_NAME + ","
+                    + MetaDataEndpointImpl.ROW_KEY_ORDER_OPTIMIZABLE + " BOOLEAN"
+                    + ") VALUES ( ?, ?, ?, TRUE)");
+                try (PreparedStatement upsSyscatStmt = globalConn.prepareStatement(upsSyscat)) {
+                    int param = 0;
+                    if (theTenantId == null) {
+                        upsSyscatStmt.setNull(++param, Types.VARCHAR);
+                    } else {
+                        upsSyscatStmt.setString(++param, theTenantId);
+                    }
+                    if (theSchemaName == null) {
+                        upsSyscatStmt.setNull(++param, Types.VARCHAR);
+                    } else {
+                        upsSyscatStmt.setString(++param, theSchemaName);
+                    }
+                    upsSyscatStmt.setString(++param, theTableName);
+                    upsSyscatStmt.execute();
+                }
             }
             globalConn.commit();
             for (int i = 0; i < tableNames.size(); i += 3) {
@@ -2002,45 +2215,51 @@ public class UpgradeUtil {
      * @return true if any upgrades were performed and false otherwise.
      */
     private static boolean upgradeSharedIndex(PhoenixConnection upgradeConn, PhoenixConnection globalConn, String physicalName, boolean bypassUpgrade) throws SQLException {
-        String query =
-                "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME\n" + 
-                "FROM SYSTEM.CATALOG cat1\n" + 
-                "WHERE COLUMN_NAME IS NULL\n" + 
-                "AND COLUMN_FAMILY = '" + physicalName + "'\n" + 
-                "AND LINK_TYPE = " + LinkType.PHYSICAL_TABLE.getSerializedValue() + "\n" +
-                "ORDER BY TENANT_ID";
-        ResultSet rs = globalConn.createStatement().executeQuery(query);
-        String lastTenantId = null;
-        Connection conn = globalConn;
-        String url = globalConn.getURL();
-        boolean wasUpgraded = false;
-        while (rs.next()) {
-            String fullTableName = SchemaUtil.getTableName(
+        String query = String.format(
+            "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME"
+                + "FROM SYSTEM.CATALOG cat1"
+                + "WHERE COLUMN_NAME IS NULL"
+                + "AND COLUMN_FAMILY = ? "
+                + "AND LINK_TYPE = %s "
+                + "ORDER BY TENANT_ID", LinkType.PHYSICAL_TABLE.getSerializedValue());
+        try (PreparedStatement selSysCatstmt = globalConn.prepareStatement(query)) {
+            selSysCatstmt.setString(1, physicalName);
+            ResultSet rs = selSysCatstmt.executeQuery();
+            String lastTenantId = null;
+            Connection conn = globalConn;
+            String url = globalConn.getURL();
+            boolean wasUpgraded = false;
+            while (rs.next()) {
+                String fullTableName = SchemaUtil.getTableName(
                     rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
                     rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
-            String tenantId = rs.getString(1);
-            if (tenantId != null && !tenantId.equals(lastTenantId))  {
-                if (lastTenantId != null) {
-                    conn.close();
+                String tenantId = rs.getString(1);
+                if (tenantId != null && !tenantId.equals(lastTenantId)) {
+                    if (lastTenantId != null) {
+                        conn.close();
+                    }
+                    // Open tenant-specific connection when we find a new one
+                    Properties props = new Properties(globalConn.getClientInfo());
+                    props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                    conn = DriverManager.getConnection(url, props);
+                    lastTenantId = tenantId;
                 }
-                // Open tenant-specific connection when we find a new one
-                Properties props = new Properties(globalConn.getClientInfo());
-                props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-                conn = DriverManager.getConnection(url, props);
-                lastTenantId = tenantId;
+                PTable table = PhoenixRuntime.getTable(conn, fullTableName);
+                String tableTenantId =
+                    table.getTenantId() == null ? null : table.getTenantId().getString();
+                if (Objects.equal(lastTenantId, tableTenantId) && !table.rowKeyOrderOptimizable()) {
+                    upgradeDescVarLengthRowKeys(upgradeConn, globalConn,
+                        table.getSchemaName().getString(), table.getTableName().getString(), false,
+                        bypassUpgrade);
+                    wasUpgraded = true;
+                }
             }
-            PTable table = PhoenixRuntime.getTable(conn, fullTableName);
-            String tableTenantId = table.getTenantId() == null ? null : table.getTenantId().getString();
-            if (Objects.equal(lastTenantId, tableTenantId) && !table.rowKeyOrderOptimizable()) {
-                upgradeDescVarLengthRowKeys(upgradeConn, globalConn, table.getSchemaName().getString(), table.getTableName().getString(), false, bypassUpgrade);
-                wasUpgraded = true;
+            rs.close();
+            if (lastTenantId != null) {
+                conn.close();
             }
+            return wasUpgraded;
         }
-        rs.close();
-        if (lastTenantId != null) {
-            conn.close();
-        }
-        return wasUpgraded;
     }
 
     public static void addRowKeyOrderOptimizableCell(List<Mutation> tableMetadata, byte[] tableHeaderRowKey, long clientTimeStamp) {
@@ -2067,12 +2286,14 @@ public class UpgradeUtil {
 
             // check for null in UPGRADE_TO_4_7_COLUMN_NAME in checkAndPut so that only single client
             // drop the rows of SYSTEM.STATS
-            if (metaTable.checkAndPut(statsTableKey, PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                    UPGRADE_TO_4_7_COLUMN_NAME, null, upgradePut)) {
+            CheckAndMutate checkAndMutate = CheckAndMutate.newBuilder(statsTableKey)
+                    .ifNotExists(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, UPGRADE_TO_4_7_COLUMN_NAME)
+                    .build(upgradePut);
+            if (metaTable.checkAndMutate(checkAndMutate).isSuccess()) {
                 List<Mutation> mutations = Lists.newArrayListWithExpectedSize(1000);
                 Scan scan = new Scan();
                 scan.setRaw(true);
-                scan.setMaxVersions();
+                scan.readAllVersions();
                 ResultScanner statsScanner = statsTable.getScanner(scan);
                 Result r;
                 mutations.clear();
@@ -2080,7 +2301,7 @@ public class UpgradeUtil {
                 while ((r = statsScanner.next()) != null) {
                     Delete delete = null;
                     for (Cell keyValue : r.rawCells()) {
-                        if (KeyValue.Type.codeToType(keyValue.getTypeByte()) == KeyValue.Type.Put) {
+                        if (keyValue.getType() == Cell.Type.Put) {
                             if (delete == null) {
                                 delete = new Delete(keyValue.getRowArray(), keyValue.getRowOffset(), keyValue.getRowLength());
                             }
@@ -2089,7 +2310,7 @@ public class UpgradeUtil {
                                     keyValue.getFamilyLength(), keyValue.getQualifierArray(),
                                     keyValue.getQualifierOffset(), keyValue.getQualifierLength(),
                                     keyValue.getTimestamp(), KeyValue.Type.Delete, ByteUtil.EMPTY_BYTE_ARRAY, 0, 0);
-                            delete.addDeleteMarker(deleteKeyValue);
+                            delete.add(deleteKeyValue);
                         }
                     }
                     if (delete != null) {
@@ -2400,13 +2621,18 @@ public class UpgradeUtil {
         String newSchemaName = MetaDataUtil.getViewIndexSequenceSchemaName(physicalName, true);
         String newSequenceName = MetaDataUtil.getViewIndexSequenceName(physicalName, tenantId, true);
         // create new entry with new schema format
-        String upsert = "UPSERT INTO " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " SELECT NULL,\'" + newSchemaName +
-            "\',\'" + newSequenceName
-                + "\'," + START_WITH + "," + CURRENT_VALUE + "," + INCREMENT_BY + "," + CACHE_SIZE + "," + MIN_VALUE
-                + "," + MAX_VALUE + "," + CYCLE_FLAG + "," + LIMIT_REACHED_FLAG + " FROM "
-                + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE " + PhoenixDatabaseMetaData.TENANT_ID
-                + " IS NULL AND " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + oldSchemaName + "'";
-        connection.createStatement().executeUpdate(upsert);
+        String upsert = "UPSERT INTO " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
+            + " SELECT NULL, ?, ?, " + START_WITH + "," + CURRENT_VALUE + "," + INCREMENT_BY
+            + "," + CACHE_SIZE + "," + MIN_VALUE + "," + MAX_VALUE + "," + CYCLE_FLAG + ","
+            + LIMIT_REACHED_FLAG + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE "
+            + PhoenixDatabaseMetaData.TENANT_ID + " IS NULL AND "
+            + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " =  ?";
+        try (PreparedStatement upsertSeqStmt = connection.prepareStatement(upsert)) {
+            upsertSeqStmt.setString(1, newSchemaName);
+            upsertSeqStmt.setString(2, newSequenceName);
+            upsertSeqStmt.setString(3, oldSchemaName);
+            upsertSeqStmt.executeUpdate();
+        }
     }
 
     private static void updateLink(PhoenixConnection conn, String srcTableName,
@@ -2633,23 +2859,45 @@ public class UpgradeUtil {
         }
     }
 
-    //When upgrading to Phoenix 4.16 or 5.1, make each existing table's DDL timestamp equal to its
-    // last updated row timestamp.
-    public static void bootstrapLastDDLTimestamp(Connection metaConnection) throws SQLException  {
+    //When upgrading to Phoenix 4.16 or 5.1, make each existing table's/view's DDL timestamp equal
+    //to its last updated row timestamp.
+    public static void bootstrapLastDDLTimestampForTablesAndViews(Connection metaConnection)
+            throws SQLException  {
+        bootstrapLastDDLTimestamp(metaConnection,
+                new String[]{PTableType.TABLE.getSerializedValue(),
+                        PTableType.VIEW.getSerializedValue()});
+    }
+
+    //When upgrading to Phoenix 5.2, make each existing index's DDL timestamp equal to its
+    //last updated row timestamp.
+    public static void bootstrapLastDDLTimestampForIndexes(Connection metaConnection)
+            throws SQLException {
+        bootstrapLastDDLTimestamp(metaConnection,
+                new String[]{PTableType.INDEX.getSerializedValue()});
+    }
+
+    /**
+     * Sets the LAST_DDL_TIMESTAMP for the metadata header rows for all objects of the given table
+     * types to their PHOENIX_ROW_TIMESTAMP()
+     * @param metaConnection a {@link PhoenixConnection}
+     * @param tableTypes array of serialized {@link PTableType} values
+     */
+    private static void bootstrapLastDDLTimestamp(Connection metaConnection, String[] tableTypes)
+            throws SQLException {
+        String tableTypesString = Stream.of(tableTypes).collect(
+                Collectors.joining("','", "'", "'")).toString();
         String pkCols = TENANT_ID + ", " + TABLE_SCHEM +
-            ", " + TABLE_NAME + ", " + COLUMN_NAME + ", " + COLUMN_FAMILY;
+                ", " + TABLE_NAME + ", " + COLUMN_NAME + ", " + COLUMN_FAMILY;
         final String upsertSql =
-            "UPSERT INTO " + SYSTEM_CATALOG_NAME + " (" + pkCols + ", " +
-        LAST_DDL_TIMESTAMP + ")" + " " +
-            "SELECT " + pkCols + ", PHOENIX_ROW_TIMESTAMP() FROM " + SYSTEM_CATALOG_NAME + " " +
-                "WHERE " + TABLE_TYPE + " " + " in " + "('" + PTableType.TABLE.getSerializedValue()
-                + "', '" + PTableType.VIEW.getSerializedValue() + "')";
-        LOGGER.info("Setting DDL timestamps for tables and views to row timestamps");
+            "UPSERT INTO " + SYSTEM_CATALOG_NAME + " (" + pkCols + ", " + LAST_DDL_TIMESTAMP + ")"
+                + " " + "SELECT " + pkCols + ", PHOENIX_ROW_TIMESTAMP() FROM " + SYSTEM_CATALOG_NAME
+                + " " + "WHERE " + TABLE_TYPE + " " + " in " + "(" + tableTypesString + ")";
+        LOGGER.info("Setting DDL timestamps for table_type={} to row timestamps", tableTypesString);
         try (PreparedStatement stmt = metaConnection.prepareStatement(upsertSql)) {
             stmt.execute();
             metaConnection.commit();
         }
-        LOGGER.info("Setting DDL timestamps for tables and views is complete");
+        LOGGER.info("Setting DDL timestamps for table_type={} is complete", tableTypesString);
     }
 
     public static boolean tableHasKeepDeleted(PhoenixConnection conn, String pTableName)

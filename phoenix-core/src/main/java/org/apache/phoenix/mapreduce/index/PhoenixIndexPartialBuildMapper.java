@@ -114,7 +114,7 @@ public class PhoenixIndexPartialBuildMapper extends TableMapper<ImmutableBytesWr
             Put put = null;
             Delete del = null;
             for (Cell cell : value.rawCells()) {
-                if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
+                if (cell.getType() == Cell.Type.Put) {
                     if (put == null) {
                         put = new Put(CellUtil.cloneRow(cell));
                         put.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);

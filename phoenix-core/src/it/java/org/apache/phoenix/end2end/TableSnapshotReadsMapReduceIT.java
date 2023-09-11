@@ -375,7 +375,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
       snapshotCreateSync(hbaseTableName, admin, SNAPSHOT_NAME);
 
       List<SnapshotDescription> snapshots = admin.listSnapshots();
-      Assert.assertEquals(tableName, snapshots.get(0).getTable());
+      Assert.assertEquals(tableName, snapshots.get(0).getTableNameAsString());
 
       // Capture the snapshot timestamp to use as SCN while reading the table later
       // Assigning the timestamp value here will make tests less flaky

@@ -24,6 +24,7 @@ import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +39,7 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.client.Table;
@@ -47,6 +49,7 @@ import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControlle
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Region.RowLock;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -311,7 +314,7 @@ public class ServerUtil {
                 @Override
                     public Connection apply(ConnectionType t) {
                     try {
-                        return env.createConnection(getTypeSpecificConfiguration(connectionType, env.getConfiguration()));
+                        return CompatUtil.createShortCircuitConnection(getTypeSpecificConfiguration(connectionType, env.getConfiguration()), env);
                     } catch (IOException e) {
                        throw new RuntimeException(e);
                     }
@@ -416,5 +419,17 @@ public class ServerUtil {
             t = e;
         }
         return t;
+    }
+
+    /**
+     * Returns true if HBase namespace exists, else returns false
+     * @param admin HbaseAdmin Object
+     * @param schemaName Phoenix schema name for which we check existence of the HBase namespace
+     * @return true if the HBase namespace exists, else returns false
+     * @throws IOException If there is an exception checking the HBase namespace
+     */
+    public static boolean isHBaseNamespaceAvailable(Admin admin, String schemaName) throws IOException{
+        String[] hbaseNamespaces = admin.listNamespaces();
+        return Arrays.asList(hbaseNamespaces).contains(schemaName);
     }
 }

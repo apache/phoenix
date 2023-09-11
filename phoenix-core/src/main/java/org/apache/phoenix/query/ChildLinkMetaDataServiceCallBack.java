@@ -18,9 +18,11 @@
 
 package org.apache.phoenix.query;
 
+import com.google.protobuf.RpcController;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
+import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos
@@ -41,15 +43,16 @@ class ChildLinkMetaDataServiceCallBack
     implements Batch.Call<ChildLinkMetaDataService, MetaDataResponse> {
 
     private final List<Mutation> childLinkMutations;
+    private final RpcController controller;
 
-    public ChildLinkMetaDataServiceCallBack(List<Mutation> childLinkMutations) {
+    public ChildLinkMetaDataServiceCallBack(RpcController controller, List<Mutation> childLinkMutations) {
+        this.controller = controller;
         this.childLinkMutations = childLinkMutations;
     }
 
     @Override
     public MetaDataResponse call(ChildLinkMetaDataService instance)
             throws IOException {
-        ServerRpcController controller = new ServerRpcController();
         BlockingRpcCallback<MetaDataResponse> rpcCallback =
             new BlockingRpcCallback<>();
         CreateViewAddChildLinkRequest.Builder builder =
@@ -60,9 +63,22 @@ class ChildLinkMetaDataServiceCallBack
         }
         CreateViewAddChildLinkRequest build = builder.build();
         instance.createViewAddChildLink(controller, build, rpcCallback);
-        if (controller.getFailedOn() != null) {
-            throw controller.getFailedOn();
-        }
+        checkForRemoteExceptions(controller);
         return rpcCallback.get();
     }
+
+    private void checkForRemoteExceptions(RpcController controller) throws IOException {
+        if (controller != null) {
+            if (controller instanceof ServerRpcController) {
+                if (((ServerRpcController)controller).getFailedOn() != null) {
+                    throw ((ServerRpcController)controller).getFailedOn();
+                }
+            } else {
+                if (((HBaseRpcController)controller).getFailed() != null) {
+                    throw ((HBaseRpcController)controller).getFailed();
+                }
+            }
+        }
+    }
+
 }

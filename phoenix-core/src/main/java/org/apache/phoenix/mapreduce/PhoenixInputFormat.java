@@ -55,6 +55,7 @@ import java.sql.Statement;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * {@link InputFormat} implementation from Phoenix.
@@ -87,74 +88,106 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
         return generateSplits(queryPlan, configuration);
     }
 
-    private List<InputSplit> generateSplits(final QueryPlan qplan, Configuration config) throws IOException {
+    /**
+     * Randomise the length parameter of the splits to ensure random execution order.
+     * Yarn orders splits by size before execution.
+     *
+     * @param splits
+     */
+    protected void randomizeSplitLength(List<InputSplit> splits) {
+        LOGGER.info("Randomizing split size");
+        if (splits.size() == 0) {
+            return;
+        }
+        double defaultLength = 1000000d;
+        double totalLength = splits.stream().mapToDouble(s -> {
+            try {
+                return (double) s.getLength();
+            } catch (IOException | InterruptedException e1) {
+                return defaultLength;
+            }
+        }).sum();
+        long avgLength = (long) (totalLength / splits.size());
+        splits.stream().forEach(s -> ((PhoenixInputSplit) s)
+                .setLength(avgLength + ThreadLocalRandom.current().nextInt(10000)));
+    }
+
+    protected List<InputSplit> generateSplits(final QueryPlan qplan, Configuration config)
+            throws IOException {
         // We must call this in order to initialize the scans and splits from the query plan
         setupParallelScansFromQueryPlan(qplan);
         final List<KeyRange> splits = qplan.getSplits();
         Preconditions.checkNotNull(splits);
 
         // Get the RegionSizeCalculator
-        try(org.apache.hadoop.hbase.client.Connection connection =
-                    HBaseFactoryProvider.getHConnectionFactory().createConnection(config)) {
-        RegionLocator regionLocator = connection.getRegionLocator(TableName.valueOf(qplan
-                .getTableRef().getTable().getPhysicalName().toString()));
-        RegionSizeCalculator sizeCalculator = new RegionSizeCalculator(regionLocator, connection
-                .getAdmin());
+        try (org.apache.hadoop.hbase.client.Connection connection =
+                HBaseFactoryProvider.getHConnectionFactory().createConnection(config)) {
+            RegionLocator regionLocator =
+                    connection.getRegionLocator(TableName
+                            .valueOf(qplan.getTableRef().getTable().getPhysicalName().toString()));
+            RegionSizeCalculator sizeCalculator =
+                    new RegionSizeCalculator(regionLocator, connection.getAdmin());
 
-        final List<InputSplit> psplits = Lists.newArrayListWithExpectedSize(splits.size());
-        for (List<Scan> scans : qplan.getScans()) {
-            // Get the region location
-            HRegionLocation location = regionLocator.getRegionLocation(
-                    scans.get(0).getStartRow(),
-                    false
-            );
+            final List<InputSplit> psplits = Lists.newArrayListWithExpectedSize(splits.size());
+            for (List<Scan> scans : qplan.getScans()) {
+                // Get the region location
+                HRegionLocation location =
+                        regionLocator.getRegionLocation(scans.get(0).getStartRow(), false);
 
-            String regionLocation = location.getHostname();
+                String regionLocation = location.getHostname();
 
-            // Get the region size
-            long regionSize = sizeCalculator.getRegionSize(
-                    location.getRegion().getRegionName()
-            );
+                // Get the region size
+                long regionSize =
+                        sizeCalculator.getRegionSize(location.getRegion().getRegionName());
 
-            // Generate splits based off statistics, or just region splits?
-            boolean splitByStats = PhoenixConfigurationUtil.getSplitByStats(config);
+                // Generate splits based off statistics, or just region splits?
+                boolean splitByStats = PhoenixConfigurationUtil.getSplitByStats(config);
 
-            if (splitByStats) {
-                for (Scan aScan : scans) {
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug("Split for  scan : " + aScan + "with scanAttribute : " + aScan
-                                .getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : [" +
-                                aScan.getCaching() + ", " + aScan.getCacheBlocks() + ", " + aScan
-                                .getBatch() + "] and  regionLocation : " + regionLocation);
+                if (splitByStats) {
+                    for (Scan aScan : scans) {
+                        if (LOGGER.isDebugEnabled()) {
+                            LOGGER.debug("Split for  scan : " + aScan + "with scanAttribute : "
+                                    + aScan.getAttributesMap()
+                                    + " [scanCache, cacheBlock, scanBatch] : [" + aScan.getCaching()
+                                    + ", " + aScan.getCacheBlocks() + ", " + aScan.getBatch()
+                                    + "] and  regionLocation : " + regionLocation);
+                        }
+
+                        // The size is bogus, but it's not a problem
+                        psplits.add(new PhoenixInputSplit(Collections.singletonList(aScan),
+                                regionSize, regionLocation));
                     }
-
-                    psplits.add(new PhoenixInputSplit(Collections.singletonList(aScan), regionSize, regionLocation));
-                }
                 } else {
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Scan count[" + scans.size() + "] : " + Bytes.toStringBinary(scans
-                            .get(0).getStartRow()) + " ~ " + Bytes.toStringBinary(scans.get(scans
-                            .size() - 1).getStopRow()));
-                    LOGGER.debug("First scan : " + scans.get(0) + "with scanAttribute : " + scans
-                            .get(0).getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : " +
-                            "[" + scans.get(0).getCaching() + ", " + scans.get(0).getCacheBlocks()
-                            + ", " + scans.get(0).getBatch() + "] and  regionLocation : " +
-                            regionLocation);
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug("Scan count[" + scans.size() + "] : "
+                                + Bytes.toStringBinary(scans.get(0).getStartRow()) + " ~ "
+                                + Bytes.toStringBinary(scans.get(scans.size() - 1).getStopRow()));
+                        LOGGER.debug("First scan : " + scans.get(0) + "with scanAttribute : "
+                                + scans.get(0).getAttributesMap()
+                                + " [scanCache, cacheBlock, scanBatch] : " + "["
+                                + scans.get(0).getCaching() + ", " + scans.get(0).getCacheBlocks()
+                                + ", " + scans.get(0).getBatch() + "] and  regionLocation : "
+                                + regionLocation);
 
-                    for (int i = 0, limit = scans.size(); i < limit; i++) {
-                        LOGGER.debug("EXPECTED_UPPER_REGION_KEY[" + i + "] : " + Bytes
-                                .toStringBinary(scans.get(i).getAttribute
-                                        (BaseScannerRegionObserver.EXPECTED_UPPER_REGION_KEY)));
+                        for (int i = 0, limit = scans.size(); i < limit; i++) {
+                            LOGGER.debug("EXPECTED_UPPER_REGION_KEY[" + i + "] : "
+                                    + Bytes.toStringBinary(scans.get(i).getAttribute(
+                                        BaseScannerRegionObserver.EXPECTED_UPPER_REGION_KEY)));
+                        }
                     }
-                }
 
-                psplits.add(new PhoenixInputSplit(scans, regionSize, regionLocation));
+                    psplits.add(new PhoenixInputSplit(scans, regionSize, regionLocation));
+                }
             }
+
+            if (PhoenixConfigurationUtil.isMRRandomizeMapperExecutionOrder(config)) {
+                randomizeSplitLength(psplits);
+            }
+
+            return psplits;
         }
-        return psplits;
     }
-    }
-    
+
     /**
      * Returns the query plan associated with the select query.
      * @param context

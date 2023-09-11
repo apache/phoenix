@@ -145,7 +145,9 @@ public class DeleteCompiler {
         final boolean autoFlush = connection.getAutoCommit() || tableRef.getTable().isTransactional();
         ConnectionQueryServices services = connection.getQueryServices();
         final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        final long maxSizeBytes = services.getProps().getLong(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
+        final long maxSizeBytes = services.getProps()
+                .getLongBytes(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
+                        QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         final int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
         MultiRowMutationState mutations = new MultiRowMutationState(batchSize);
         List<MultiRowMutationState> otherMutations = null;
@@ -344,7 +346,7 @@ public class DeleteCompiler {
         if (!table.getIndexes().isEmpty()) {
             List<PTable> nonDisabledIndexes = Lists.newArrayListWithExpectedSize(table.getIndexes().size());
             for (PTable index : table.getIndexes()) {
-                if (index.getIndexState() != PIndexState.DISABLE && isMaintainedOnClient(index)) {
+                if (!index.getIndexState().isDisabled() && isMaintainedOnClient(index)) {
                     nonDisabledIndexes.add(index);
                 }
             }
@@ -352,7 +354,12 @@ public class DeleteCompiler {
         }
         return Collections.emptyList();
     }
-    
+
+    /**
+     * Implementation of MutationPlan that is selected if
+     * 1) the query is strictly point lookup, and
+     * 2) the query has no LIMIT clause.
+     */
     public class MultiRowDeleteMutationPlan implements MutationPlan {
         private final List<MutationPlan> plans;
         private final MutationPlan firstPlan;
@@ -587,7 +594,9 @@ public class DeleteCompiler {
         }
 
         final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        final long maxSizeBytes = services.getProps().getLong(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
+        final long maxSizeBytes = services.getProps()
+                .getLongBytes(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
+                        QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
  
         // If we're doing a query for a set of rows with no where clause, then we don't need to contact the server at all.
         if (noQueryReqd) {
@@ -661,6 +670,9 @@ public class DeleteCompiler {
         }
     }
 
+    /**
+     * Implementation of MutationPlan for composing a MultiRowDeleteMutationPlan.
+     */
     private class SingleRowDeleteMutationPlan implements MutationPlan {
 
         private final QueryPlan dataPlan;
@@ -744,6 +756,14 @@ public class DeleteCompiler {
         }
     }
 
+    /**
+     * Implementation of MutationPlan that is selected if
+     * 1) there is no immutable index presented for the table,
+     * 2) auto commit is enabled as well as server side delete mutations are enabled,
+     * 3) the table is not transactional,
+     * 4) the query has no LIMIT clause, and
+     * 5) the query has WHERE clause and is not strictly point lookup.
+     */
     public class ServerSelectDeleteMutationPlan implements MutationPlan {
         private final StatementContext context;
         private final QueryPlan dataPlan;
@@ -868,6 +888,10 @@ public class DeleteCompiler {
         }
     }
 
+    /**
+     * Implementation of MutationPlan that is selected if the query doesn't match the criteria of
+     * ServerSelectDeleteMutationPlan.
+     */
     public class ClientSelectDeleteMutationPlan implements MutationPlan {
         private final StatementContext context;
         private final TableRef targetTableRef;

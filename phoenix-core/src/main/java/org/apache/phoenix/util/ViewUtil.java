@@ -15,6 +15,7 @@
  */
 package org.apache.phoenix.util;
 
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -259,7 +260,7 @@ public class ViewUtil {
 		Scan scan = MetaDataUtil.newTableRowsScan(key, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                 timestamp);
         SingleColumnValueFilter linkFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES,
-                LINK_TYPE_BYTES, CompareFilter.CompareOp.EQUAL,
+                LINK_TYPE_BYTES, CompareOperator.EQUAL,
                 linkType.getSerializedValueAsByteArray());
         linkFilter.setFilterIfMissing(true);
         scan.setFilter(linkFilter);
@@ -344,7 +345,7 @@ public class ViewUtil {
                 timestamp);
         SingleColumnValueFilter linkFilter =
                 new SingleColumnValueFilter(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES,
-                        CompareFilter.CompareOp.EQUAL,
+                        CompareOperator.EQUAL,
                         LinkType.CHILD_TABLE.getSerializedValueAsByteArray()) {
                     // if we found a row with the CHILD_TABLE link type we are done and can
                     // terminate the scan

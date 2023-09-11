@@ -41,7 +41,7 @@ public class ToTimeParseNode extends FunctionParseNode {
             dateFormat = context.getTimeFormat();
         }
         if (timeZoneId == null) {
-            timeZoneId = context.getDateFormatTimeZone().getID();
+            timeZoneId = context.getDateFormatTimeZoneId();
         }
         return new ToTimeFunction(children, dateFormat, timeZoneId);
     }

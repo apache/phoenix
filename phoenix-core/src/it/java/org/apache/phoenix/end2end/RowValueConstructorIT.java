@@ -36,6 +36,7 @@ import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW8;
 import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -47,6 +48,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.Properties;
@@ -54,6 +56,7 @@ import java.util.Properties;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -369,7 +372,7 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
                 count++;
             }
             // we have key values (7,5) (8,4) and (9,3) present in aTable. So the query should return the 3 records.
-            assertTrue(count == 3); 
+            assertEquals(3, count);
         } finally {
             conn.close();
         }
@@ -1238,7 +1241,7 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
                 explainPlanAttributes.getExplainScanType());
             assertEquals(tempTableWithCompositePK,
                 explainPlanAttributes.getTableName());
-            assertEquals(" [0,2] - [3,4]", explainPlanAttributes.getKeyRanges());
+            assertEquals(" [X'00',2] - [X'03',4]", explainPlanAttributes.getKeyRanges());
             assertEquals("CLIENT MERGE SORT",
                 explainPlanAttributes.getClientSortAlgo());
         } finally {
@@ -1731,6 +1734,44 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
             statement.optimizeQuery(sql);
         } finally {
             conn.close();
+        }
+    }
+
+    @Test
+    public void testRVCConjunction() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())){
+
+            String tableName = generateUniqueName();
+            String ddl = String.format("create table %s(a varchar(10) not null, b varchar(10) not null, c varchar(10) not null constraint pk primary key(a, b, c))",tableName);
+            String upsert = String.format("upsert into %s values(?, ?, ?)", tableName);
+
+            try( Statement statement = conn.createStatement()){
+                statement.execute(ddl);
+            }
+
+            try( PreparedStatement statement = conn.prepareStatement(upsert)){
+                statement.setString(1,"abc");
+                statement.setString(2,"def");
+                statement.setString(3,"RRSQ_IMKKL");
+                statement.executeUpdate();
+                statement.setString(3,"RRS_ZYTDT");
+                statement.executeUpdate();
+            }
+            conn.commit();
+
+            String conjunctionSelect = String.format("select A, B, C from %s where (A, B, C) > ('abc', 'def', 'RRSQ_IMKKL') AND C like 'RRS\\\\_%%'",tableName);
+            try(Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(conjunctionSelect)) {
+                assertTrue(rs.next());
+                assertEquals("abc",rs.getString(1));
+                assertEquals("def",rs.getString(2));
+                assertEquals("RRS_ZYTDT",rs.getString(3));
+                PhoenixStatement phoenixStatement = statement.unwrap(PhoenixStatement.class);
+
+                byte[] lowerBound = phoenixStatement.getQueryPlan().getScans().get(0).get(0).getStartRow();
+                byte[] expected = new byte[] {'a','b','c',0,'d','e','f',0,'R','R','S','_'};
+                assertArrayEquals(expected,lowerBound);
+                assertFalse(rs.next());
+            }
         }
     }
 

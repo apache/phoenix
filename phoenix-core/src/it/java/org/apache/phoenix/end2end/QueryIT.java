@@ -168,5 +168,4 @@ public class QueryIT extends BaseQueryIT {
             conn.close();
         }
     }
-
 }

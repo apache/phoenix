@@ -153,9 +153,9 @@ public class ChunkedResultIterator implements PeekingResultIterator {
             } else if (ScanUtil.isReversed(scan)) {
                 // lastKey is the last row the previous iterator meet but not returned.
                 // for reverse scan, use prevLastKey as the new stopRow.
-                scan.setStopRow(ByteUtil.copyKeyBytesIfNecessary(prevLastKey));
+                scan.withStopRow(ByteUtil.copyKeyBytesIfNecessary(prevLastKey));
             } else {
-                scan.setStartRow(ByteUtil.copyKeyBytesIfNecessary(lastKey));
+                scan.withStartRow(ByteUtil.copyKeyBytesIfNecessary(lastKey));
             }
             if (LOGGER.isDebugEnabled()) LOGGER.debug(LogUtil.addCustomAnnotations("Get next chunked result iterator over " + tableRef.getTable().getPhysicalName().getString() + " with " + scan, ScanUtil.getCustomAnnotations(scan)));
             String tableName = tableRef.getTable().getPhysicalName().getString();
@@ -163,10 +163,11 @@ public class ChunkedResultIterator implements PeekingResultIterator {
             ScanMetricsHolder scanMetricsHolder = ScanMetricsHolder.getInstance(readMetrics, tableName, scan,
                     context.getConnection().getLogLevel());
             long renewLeaseThreshold = context.getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
+            //Chunking is deprecated, putting max value for timeout here.
             ResultIterator singleChunkResultIterator =
                     new SingleChunkResultIterator(new TableResultIterator(mutationState, scan,
                             scanMetricsHolder, renewLeaseThreshold, plan,
-                            DefaultParallelScanGrouper.getInstance()), chunkSize);
+                            DefaultParallelScanGrouper.getInstance(), Long.MAX_VALUE), chunkSize);
             resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator, scan, tableName, plan);
         }
         return resultIterator;

@@ -45,6 +45,8 @@ import java.util.TreeSet;
 
 import javax.annotation.Nullable;
 
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredResultSet;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
@@ -117,17 +119,36 @@ import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions
  * @since 0.1
  */
 public class PhoenixRuntime {
+    public final static char JDBC_PROTOCOL_TERMINATOR = ';';
+    public final static char JDBC_PROTOCOL_SEPARATOR = ':';
+
+    /**
+     * JDBC URL jdbc protocol identifier
+     */
+    public final static String JDBC_PROTOCOL_IDENTIFIER = "jdbc";
+
+    /**
+     * JDBC URL phoenix protocol identifier
+     */
+    public final static String JDBC_PHOENIX_PROTOCOL_IDENTIFIER = "phoenix";
+
+    /**
+     * JDBC URL phoenix protocol identifier
+     */
+    public final static String JDBC_PHOENIX_THIN_IDENTIFIER = "thin";
+
     /**
      * Root for the JDBC URL that the Phoenix accepts accepts.
      */
-    public final static String JDBC_PROTOCOL = "jdbc:phoenix";
+    public final static String JDBC_PROTOCOL = JDBC_PROTOCOL_IDENTIFIER + JDBC_PROTOCOL_SEPARATOR + JDBC_PHOENIX_PROTOCOL_IDENTIFIER;
+
     /**
      * Root for the JDBC URL used by the thin driver. Duplicated here to avoid dependencies
      * between modules.
      */
-    public final static String JDBC_THIN_PROTOCOL = "jdbc:phoenix:thin";
-    public final static char JDBC_PROTOCOL_TERMINATOR = ';';
-    public final static char JDBC_PROTOCOL_SEPARATOR = ':';
+    public final static String JDBC_THIN_PROTOCOL = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + JDBC_PHOENIX_THIN_IDENTIFIER;
+
+
 
     @Deprecated
     public final static String EMBEDDED_JDBC_PROTOCOL = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
@@ -718,7 +739,10 @@ public class PhoenixRuntime {
             options.addOption(localIndexUpgradeOption);
             options.addOption(binaryEncodingOption);
 
-            CommandLineParser parser = new DefaultParser(false, false);
+            CommandLineParser parser = DefaultParser.builder().
+                    setAllowPartialMatching(false).
+                    setStripLeadingAndTrailingQuotes(false).
+                    build();
             CommandLine cmdLine = null;
             try {
                 cmdLine = parser.parse(options, args);
@@ -1460,7 +1484,9 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     public static Map<String, Map<MetricType, Long>> getRequestReadMetricInfo(ResultSet rs) throws SQLException {
-        PhoenixResultSet resultSet = rs.unwrap(PhoenixResultSet.class);
+        PhoenixMonitoredResultSet
+                resultSet = rs.unwrap(PhoenixMonitoredResultSet
+                .class);
         return resultSet.getReadMetrics();
     }
     
@@ -1495,7 +1521,8 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     public static Map<MetricType, Long> getOverAllReadRequestMetricInfo(ResultSet rs) throws SQLException {
-        PhoenixResultSet resultSet = rs.unwrap(PhoenixResultSet.class);
+        PhoenixMonitoredResultSet
+                resultSet = rs.unwrap(PhoenixMonitoredResultSet.class);
         return resultSet.getOverAllRequestReadMetrics();
     }
     
@@ -1535,7 +1562,8 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     public static Map<String, Map<MetricType, Long>> getWriteMetricInfoForMutationsSinceLastReset(Connection conn) throws SQLException {
-        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection
+                pConn = conn.unwrap(PhoenixMonitoredConnection.class);
         return pConn.getMutationMetrics();
     }
     
@@ -1574,7 +1602,7 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     public static Map<String, Map<MetricType, Long>> getReadMetricInfoForMutationsSinceLastReset(Connection conn) throws SQLException {
-        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection pConn = conn.unwrap(PhoenixMonitoredConnection.class);
         return pConn.getReadMetrics();
     }
     
@@ -1592,7 +1620,8 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     public static void resetMetrics(ResultSet rs) throws SQLException {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+        PhoenixMonitoredResultSet
+                prs = rs.unwrap(PhoenixMonitoredResultSet.class);
         prs.resetMetrics();
     }
     
@@ -1604,7 +1633,8 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     public static void resetMetrics(Connection conn) throws SQLException {
-        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+        PhoenixMonitoredConnection
+                pConn = conn.unwrap(PhoenixMonitoredConnection.class);
         pConn.clearMetrics();
     }
     

@@ -52,7 +52,7 @@ public class GuidePostsCacheImpl implements GuidePostsCache {
                 QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS);
 
         // Maximum total weight (size in bytes) of stats entries
-        final long maxTableStatsCacheSize = config.getLong(
+        final long maxTableStatsCacheSize = config.getLongBytes(
                 QueryServices.STATS_MAX_CACHE_SIZE,
                 QueryServicesOptions.DEFAULT_STATS_MAX_CACHE_SIZE);
 

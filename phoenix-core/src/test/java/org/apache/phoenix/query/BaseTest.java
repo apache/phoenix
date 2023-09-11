@@ -91,6 +91,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -103,6 +104,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -115,13 +117,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nonnull;
 
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
+import org.apache.hadoop.hbase.RegionMetrics;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -157,6 +160,7 @@ import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -614,7 +618,6 @@ public abstract class BaseTest {
          */
         conf.setInt(HConstants.REGION_SERVER_HANDLER_COUNT, 5);
         conf.setInt("hbase.regionserver.metahandler.count", 2);
-        conf.setInt(HConstants.MASTER_HANDLER_COUNT, 2);
         conf.setInt("dfs.namenode.handler.count", 2);
         conf.setInt("dfs.namenode.service.handler.count", 2);
         conf.setInt("dfs.datanode.handler.count", 2);
@@ -744,6 +747,12 @@ public abstract class BaseTest {
         }
         createSchema(url,tableName, ts);
         createTestTable(url, ddl, splits, ts);
+    }
+
+    protected ResultSet executeQuery(Connection conn, QueryBuilder queryBuilder) throws SQLException {
+        PreparedStatement statement = conn.prepareStatement(queryBuilder.build());
+        ResultSet rs = statement.executeQuery();
+        return rs;
     }
 
     private static AtomicInteger NAME_SUFFIX = new AtomicInteger(0);
@@ -1575,9 +1584,9 @@ public abstract class BaseTest {
      */
     protected static synchronized void disableAndDropNonSystemTables() throws Exception {
         if (driver == null) return;
-        Admin admin = driver.getConnectionQueryServices(null, null).getAdmin();
+        Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
         try {
-            TableDescriptor[] tables = admin.listTables();
+            List<TableDescriptor> tables = admin.listTableDescriptors();
             for (TableDescriptor table : tables) {
                 String schemaName = SchemaUtil.getSchemaNameFromFullName(table.getTableName().getName());
                 if (!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) {
@@ -1693,7 +1702,7 @@ public abstract class BaseTest {
 
         LOGGER.info("Disabled and dropped {} tables in {} ms", tableCount, endTime-startTime);
     }
-    
+
     public static void assertOneOfValuesEqualsResultSet(ResultSet rs, List<List<Object>>... expectedResultsArray) throws SQLException {
         List<List<Object>> results = Lists.newArrayList();
         while (rs.next()) {
@@ -1764,25 +1773,26 @@ public abstract class BaseTest {
         String upsert = "UPSERT INTO " + fullTableName
                 + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         PreparedStatement stmt = conn.prepareStatement(upsert);
+        //varchar_pk
         stmt.setString(1, firstRowInBatch ? "firstRowInBatch_" : "" + "varchar"+index);
-        stmt.setString(2, "char"+index);
-        stmt.setInt(3, index);
-        stmt.setLong(4, index);
-        stmt.setBigDecimal(5, new BigDecimal(index));
+        stmt.setString(2, "char"+index); // char_pk
+        stmt.setInt(3, index); // int_pk
+        stmt.setLong(4, index); // long_pk
+        stmt.setBigDecimal(5, new BigDecimal(index)); // decimal_pk
         Date date = DateUtil.parseDate("2015-01-01 00:00:00");
-        stmt.setDate(6, date);
-        stmt.setString(7, "varchar_a");
-        stmt.setString(8, "chara");
-        stmt.setInt(9, index+1);
-        stmt.setLong(10, index+1);
-        stmt.setBigDecimal(11, new BigDecimal(index+1));
-        stmt.setDate(12, date);
-        stmt.setString(13, "varchar_b");
-        stmt.setString(14, "charb");
-        stmt.setInt(15, index+2);
-        stmt.setLong(16, index+2);
-        stmt.setBigDecimal(17, new BigDecimal(index+2));
-        stmt.setDate(18, date);
+        stmt.setDate(6, date); // date_pk
+        stmt.setString(7, "varchar_a"); // a.varchar_col1
+        stmt.setString(8, "chara"); // a.char_col1
+        stmt.setInt(9, index+1); // a.int_col1
+        stmt.setLong(10, index+1); // a.long_col1
+        stmt.setBigDecimal(11, new BigDecimal(index+1)); // a.decimal_col1
+        stmt.setDate(12, date); // a.date1
+        stmt.setString(13, "varchar_b"); // b.varchar_col2
+        stmt.setString(14, "charb"); // b.char_col2
+        stmt.setInt(15, index+2); // b.int_col2
+        stmt.setLong(16, index+2); // b.long_col2
+        stmt.setBigDecimal(17, new BigDecimal(index+2)); // b.decimal_col2
+        stmt.setDate(18, date); // b.date2
         stmt.executeUpdate();
     }
 
@@ -1932,7 +1942,7 @@ public abstract class BaseTest {
     /**
      * Returns true if the region contains atleast one of the metadata rows we are interested in
      */
-    protected static boolean regionContainsMetadataRows(HRegionInfo regionInfo,
+    protected static boolean regionContainsMetadataRows(RegionInfo regionInfo,
             List<byte[]> metadataRowKeys) {
         for (byte[] rowKey : metadataRowKeys) {
             if (regionInfo.containsRow(rowKey)) {
@@ -1961,19 +1971,19 @@ public abstract class BaseTest {
         }
         List<RegionInfo> regionInfoList = admin.getRegions(fullTableName);
         assertEquals(splitPoints.size(), regionInfoList.size());
-        HashMap<ServerName, List<HRegionInfo>> serverToRegionsList = Maps.newHashMapWithExpectedSize(NUM_SLAVES_BASE);
+        HashMap<ServerName, List<RegionInfo>> serverToRegionsList = Maps.newHashMapWithExpectedSize(NUM_SLAVES_BASE);
         Deque<ServerName> availableRegionServers = new ArrayDeque<ServerName>(NUM_SLAVES_BASE);
         for (int i=0; i<NUM_SLAVES_BASE; ++i) {
             availableRegionServers.push(util.getHBaseCluster().getRegionServer(i).getServerName());
         }
-        List<HRegionInfo> tableRegions =
-                admin.getTableRegions(fullTableName);
-        for (HRegionInfo hRegionInfo : tableRegions) {
+        List<RegionInfo> tableRegions =
+                admin.getRegions(fullTableName);
+        for (RegionInfo hRegionInfo : tableRegions) {
             // filter on regions we are interested in
             if (regionContainsMetadataRows(hRegionInfo, splitPoints)) {
                 ServerName serverName = am.getRegionStates().getRegionServerOfRegion(hRegionInfo);
                 if (!serverToRegionsList.containsKey(serverName)) {
-                    serverToRegionsList.put(serverName, new ArrayList<HRegionInfo>());
+                    serverToRegionsList.put(serverName, new ArrayList<RegionInfo>());
                 }
                 serverToRegionsList.get(serverName).add(hRegionInfo);
                 availableRegionServers.remove(serverName);
@@ -1981,8 +1991,8 @@ public abstract class BaseTest {
         }
         assertFalse("No region servers available to move regions on to ",
                 availableRegionServers.isEmpty());
-        for (Entry<ServerName, List<HRegionInfo>> entry : serverToRegionsList.entrySet()) {
-            List<HRegionInfo> regions = entry.getValue();
+        for (Entry<ServerName, List<RegionInfo>> entry : serverToRegionsList.entrySet()) {
+            List<RegionInfo> regions = entry.getValue();
             if (regions.size()>1) {
                 for (int i=1; i< regions.size(); ++i) {
                     moveRegion(regions.get(i), entry.getKey(), availableRegionServers.pop());
@@ -1992,12 +2002,12 @@ public abstract class BaseTest {
 
         // verify each region is on its own region server
         tableRegions =
-                admin.getTableRegions(fullTableName);
+                admin.getRegions(fullTableName);
         Set<ServerName> serverNames = Sets.newHashSet();
-        for (HRegionInfo hRegionInfo : tableRegions) {
+        for (RegionInfo regionInfo : tableRegions) {
             // filter on regions we are interested in
-            if (regionContainsMetadataRows(hRegionInfo, splitPoints)) {
-                ServerName serverName = am.getRegionStates().getRegionServerOfRegion(hRegionInfo);
+            if (regionContainsMetadataRows(regionInfo, splitPoints)) {
+                ServerName serverName = am.getRegionStates().getRegionServerOfRegion(regionInfo);
                 if (!serverNames.contains(serverName)) {
                     serverNames.add(serverName);
                 }
@@ -2037,7 +2047,7 @@ public abstract class BaseTest {
     /**
      * Ensures each region of SYSTEM.CATALOG is on a different region server
      */
-    private static void moveRegion(HRegionInfo regionInfo, ServerName srcServerName, ServerName dstServerName) throws Exception  {
+    private static void moveRegion(RegionInfo regionInfo, ServerName srcServerName, ServerName dstServerName) throws Exception  {
         Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         HBaseTestingUtility util = getUtility();
         MiniHBaseCluster cluster = util.getHBaseCluster();
@@ -2047,7 +2057,7 @@ public abstract class BaseTest {
         HRegionServer dstServer = util.getHBaseCluster().getRegionServer(dstServerName);
         HRegionServer srcServer = util.getHBaseCluster().getRegionServer(srcServerName);
         byte[] encodedRegionNameInBytes = regionInfo.getEncodedNameAsBytes();
-        admin.move(encodedRegionNameInBytes, Bytes.toBytes(dstServer.getServerName().getServerName()));
+        admin.move(encodedRegionNameInBytes, dstServer.getServerName());
         while (dstServer.getOnlineRegion(regionInfo.getRegionName()) == null
                 || dstServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
                 || srcServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)) {
@@ -2090,7 +2100,55 @@ public abstract class BaseTest {
     protected synchronized static boolean isAnyStoreRefCountLeaked()
             throws IOException {
         if (getUtility() != null) {
-            return CompatUtil.isAnyStoreRefCountLeaked(getUtility().getAdmin());
+            return isAnyStoreRefCountLeaked(getUtility().getAdmin());
+        }
+        return false;
+    }
+
+    /**
+     * HBase 2.3+ has storeRefCount available in RegionMetrics
+     *
+     * @param admin Admin instance
+     * @return true if any region has refCount leakage
+     * @throws IOException if something went wrong while connecting to Admin
+     */
+    public synchronized static boolean isAnyStoreRefCountLeaked(Admin admin)
+            throws IOException {
+        int retries = 5;
+        while (retries > 0) {
+            boolean isStoreRefCountLeaked = isStoreRefCountLeaked(admin);
+            if (!isStoreRefCountLeaked) {
+                return false;
+            }
+            retries--;
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                LOGGER.error("Interrupted while sleeping", e);
+                break;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isStoreRefCountLeaked(Admin admin)
+            throws IOException {
+        for (ServerName serverName : admin.getRegionServers()) {
+            for (RegionMetrics regionMetrics : admin.getRegionMetrics(serverName)) {
+                if (regionMetrics.getNameAsString().
+                    contains(TableName.META_TABLE_NAME.getNameAsString())) {
+                    // Just because something is trying to read from hbase:meta in the background
+                    // doesn't mean we leaked a scanner, so skip this
+                    continue;
+                }
+                int regionTotalRefCount = regionMetrics.getStoreRefCount();
+                if (regionTotalRefCount > 0) {
+                    LOGGER.error("Region {} has refCount leak. Total refCount"
+                            + " of all storeFiles combined for the region: {}",
+                        regionMetrics.getNameAsString(), regionTotalRefCount);
+                    return true;
+                }
+            }
         }
         return false;
     }

@@ -129,6 +129,7 @@ public interface PhoenixTransactionContext {
 
     public static final String TX_ROLLBACK_ATTRIBUTE_KEY = "tephra.tx.rollback"; //"phoenix.tx.rollback"; 
 
+    // Note: After PHOENIX-6627, is PhoenixTransactionContext.PROPERTY_TTL still useful?
     public static final String PROPERTY_TTL = "dataset.table.ttl";
     public static final byte[] PROPERTY_TTL_BYTES = Bytes.toBytes(PROPERTY_TTL);
 
@@ -156,14 +157,14 @@ public interface PhoenixTransactionContext {
     public void abort() throws SQLException;
     
     /**
-     * Create a checkpoint in a transaction as defined in [TEPHRA-96]
+     * Create a checkpoint in a transaction.
      * @throws SQLException
      */
     public void checkpoint(boolean hasUncommittedData) throws SQLException;
 
     /**
      * Commit DDL to guarantee that no transaction started before create index
-     * and committed afterwards, as explained in [PHOENIX-2478], [TEPHRA-157] and [OMID-56].
+     * and committed afterwards, as explained in [PHOENIX-2478] and [OMID-56].
      *
      * @param dataTable  the table that the DDL command works on
      * @throws SQLException

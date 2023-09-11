@@ -31,6 +31,7 @@ import org.apache.phoenix.schema.TableRef;
 public interface TableResultIteratorFactory {
     public TableResultIterator newIterator(MutationState mutationState, TableRef tableRef,
             Scan scan, ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold,
-            QueryPlan plan, ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException;
+            QueryPlan plan, ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr,ServerCache> caches,
+            long maxQueryEndTime) throws SQLException;
 
 }

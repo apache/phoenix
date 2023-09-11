@@ -120,7 +120,7 @@ public class QueryLoggerIT extends BaseTest {
 
         // sleep for sometime to let query log committed
         Thread.sleep(delay);
-        try (ResultSet explainRS = conn.createStatement().executeQuery("Explain " + query);
+        try (ResultSet explainRS = conn.createStatement().executeQuery("Explain with regions " + query);
              ResultSet rs = conn.createStatement().executeQuery(logQuery)) {
             boolean foundQueryLog = false;
 
@@ -300,7 +300,7 @@ public class QueryLoggerIT extends BaseTest {
 
             // sleep for sometime to let query log committed
             Thread.sleep(delay);
-            String explainQuery = "Explain " + "SELECT * FROM " + tableName + " where V = 'value5'";
+            String explainQuery = "EXPLAIN WITH REGIONS " + "SELECT * FROM " + tableName + " where V = 'value5'";
             try (ResultSet explainRS = conn.createStatement()
                     .executeQuery(explainQuery);
                  ResultSet rs = conn.createStatement().executeQuery(logQuery)) {

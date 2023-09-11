@@ -34,6 +34,7 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -148,8 +149,9 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
         expectedPlan = indexSaltBuckets == null ? 
              "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableFullName + " [~'y']\n" +
              "    SERVER FILTER BY FIRST KEY ONLY" :
-            ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + indexTableFullName + " [0,~'y'] - ["+(indexSaltBuckets.intValue()-1)+",~'y']\n" +
-
+            ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + indexTableFullName + " [X'00',~'y'] - [" +
+             PVarbinary.INSTANCE.toStringLiteral(new byte[] {(byte)(indexSaltBuckets - 1)}) +
+             ",~'y']\n" +
              "    SERVER FILTER BY FIRST KEY ONLY\n" +
              "CLIENT MERGE SORT");
         assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
@@ -170,9 +172,10 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
         expectedPlan = indexSaltBuckets == null ? 
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableFullName + " [*] - [~'x']\n"
           + "    SERVER FILTER BY FIRST KEY ONLY" :
-            ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + indexTableFullName + " [0,*] - ["+(indexSaltBuckets.intValue()-1)+",~'x']\n"
-
-           + "    SERVER FILTER BY FIRST KEY ONLY\n" +
+            ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + indexTableFullName + " [X'00',*] - ["
+          + PVarbinary.INSTANCE.toStringLiteral(new byte[] {(byte)(indexSaltBuckets - 1)})
+          + ",~'x']\n"
+          + "    SERVER FILTER BY FIRST KEY ONLY\n" +
              "CLIENT MERGE SORT");
         assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
         

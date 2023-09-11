@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -50,7 +51,7 @@ import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -225,9 +226,9 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
         try {
             int status = tool.run(cmdArgs);
             assertEquals("MR Job should complete successfully", 0, status);
-            HBaseAdmin hBaseAdmin = utility.getHBaseAdmin();
+            Admin hBaseAdmin = utility.getAdmin();
             assertEquals("Snapshot should be automatically deleted when UpdateStatisticsTool has completed",
-                    0, hBaseAdmin.listSnapshots(tool.getSnapshotName()).size());
+                    0, hBaseAdmin.listSnapshots(Pattern.compile(tool.getSnapshotName())).size());
         } catch (Exception e) {
             fail("Exception when running UpdateStatisticsTool for " + tableName + " Exception: " + e);
         } finally {
@@ -264,7 +265,8 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
         assertEquals("PARALLEL 1-WAY", planAttributes.getIteratorTypeAndScanSize());
         assertEquals("FULL SCAN ", planAttributes.getExplainScanType());
         assertEquals(physicalTableName, planAttributes.getTableName());
-        assertEquals("SERVER FILTER BY FIRST KEY ONLY", planAttributes.getServerWhereFilter());
+        assertEquals("SERVER FILTER BY " + (columnEncoded ? "FIRST KEY ONLY" :
+                "EMPTY COLUMN ONLY"), planAttributes.getServerWhereFilter());
         conn.close();
     }
 

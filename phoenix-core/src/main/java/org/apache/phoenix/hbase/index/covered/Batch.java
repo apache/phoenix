@@ -28,7 +28,6 @@ import org.apache.hadoop.hbase.KeyValue;
  */
 public class Batch {
 
-  private static final long pointDeleteCode = KeyValue.Type.Delete.getCode();
   private final long timestamp;
   private List<Cell> batch = new ArrayList<Cell>();
   private boolean allPointDeletes = true;
@@ -41,7 +40,7 @@ public class Batch {
   }
 
   public void add(Cell kv){
-    if (pointDeleteCode != kv.getTypeByte()) {
+    if (Cell.Type.Delete != kv.getType()) {
       allPointDeletes = false;
     }
     batch.add(kv);

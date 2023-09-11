@@ -282,7 +282,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                 TableName tableName = TableName.valueOf(NS + "." + TBL);
                 TableDescriptorBuilder builder = TableDescriptorBuilder
                         .newBuilder(tableName);
-                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(CF));
+                builder.setColumnFamily(ColumnFamilyDescriptorBuilder.of(CF));
                 admin.createTable(builder.build());
 
                 String view2 = "\"" + NS + "." + TBL + "\"";

@@ -95,7 +95,7 @@ public class DropMetadataIT extends ParallelStatsDisabledIT {
              TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(hbaseNativeBytes));
             ColumnFamilyDescriptor columnDescriptor = ColumnFamilyDescriptorBuilder.newBuilder(FAMILY_NAME)
                     .setKeepDeletedCells(KeepDeletedCells.TRUE).build();
-            builder.addColumnFamily(columnDescriptor);
+            builder.setColumnFamily(columnDescriptor);
             admin.createTable(builder.build());
         } finally {
             admin.close();

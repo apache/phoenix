@@ -18,25 +18,37 @@
 
 package org.apache.phoenix.pherf.rules;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.commons.math3.random.RandomDataGenerator;
-import org.apache.phoenix.pherf.PherfConstants;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
+
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.phoenix.pherf.configuration.*;
+import org.apache.commons.math3.random.RandomDataGenerator;
+import org.apache.phoenix.pherf.PherfConstants;
+import org.apache.phoenix.pherf.configuration.Column;
+import org.apache.phoenix.pherf.configuration.DataModel;
+import org.apache.phoenix.pherf.configuration.DataSequence;
+import org.apache.phoenix.pherf.configuration.DataTypeMapping;
+import org.apache.phoenix.pherf.configuration.Scenario;
+import org.apache.phoenix.pherf.configuration.XMLConfigParser;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.joda.time.DateTime;
-import org.joda.time.DateTimeZone;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class RulesApplier {
     private static final Logger LOGGER = LoggerFactory.getLogger(RulesApplier.class);
@@ -325,28 +337,32 @@ public class RulesApplier {
     }
 
     public String generateRandomDate(String min, String max) throws Exception {
-        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(DateTimeZone.UTC);
-        DateTime minDt;
-        DateTime maxDt;
-        DateTime dt;
+        DateTimeFormatter fmtr =
+                DateTimeFormatter.ofPattern(PherfConstants.DEFAULT_DATE_PATTERN)
+                        .withZone(ZoneId.of("UTC"));
+        Instant minDt;
+        Instant maxDt;
+        Instant dt;
 
-        minDt = fmtr.parseDateTime(checkDatePattern(min));
-        maxDt = fmtr.parseDateTime(checkDatePattern(max));
+        minDt = ZonedDateTime.parse(checkDatePattern(min), fmtr).toInstant();
+        maxDt = ZonedDateTime.parse(checkDatePattern(max), fmtr).toInstant();
 
         // Get Ms Date between min and max
         synchronized (randomDataGenerator) {
             //Make sure date generated is exactly between the passed limits
-            long rndLong = randomDataGenerator.nextLong(minDt.getMillis()+1, maxDt.getMillis()-1);
-            dt = new DateTime(rndLong, PherfConstants.DEFAULT_TIME_ZONE);
+            long rndLong = randomDataGenerator.nextLong(minDt.toEpochMilli()+1, maxDt.toEpochMilli()-1);
+            dt = Instant.ofEpochMilli(rndLong);
         }
 
-        return fmtr.print(dt);
+        return fmtr.format(dt);
     }
 
     public String getCurrentDate() {
-        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(DateTimeZone.UTC);;
-        DateTime dt = new DateTime(PherfConstants.DEFAULT_TIME_ZONE);
-        return fmtr.print(dt);
+        DateTimeFormatter fmtr =
+                DateTimeFormatter.ofPattern(PherfConstants.DEFAULT_DATE_PATTERN)
+                        .withZone(ZoneId.of("UTC"));
+        LocalDateTime dt = LocalDateTime.now();
+        return fmtr.format(dt);
     }
 
     /**
@@ -422,9 +438,11 @@ public class RulesApplier {
 
     // Checks if date is in defult pattern
     public String checkDatePattern(String date) {
-        DateTimeFormatter fmtr = DateTimeFormat.forPattern(PherfConstants.DEFAULT_DATE_PATTERN).withZone(DateTimeZone.UTC);;
-        DateTime parsedDate = fmtr.parseDateTime(date);
-        return fmtr.print(parsedDate);
+        DateTimeFormatter fmtr =
+                DateTimeFormatter.ofPattern(PherfConstants.DEFAULT_DATE_PATTERN)
+                        .withZone(ZoneId.of("UTC"));
+        Instant parsedDate = ZonedDateTime.parse(date, fmtr).toInstant();
+        return fmtr.format(parsedDate);
     }
 
     /**

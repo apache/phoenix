@@ -23,7 +23,7 @@ public class UpgradeRequiredException extends RetriableUpgradeException {
     private final long systemCatalogTimestamp;
 
     public UpgradeRequiredException() {
-        this(HConstants.OLDEST_TIMESTAMP);
+        this(Long.MIN_VALUE);
     }
 
     public UpgradeRequiredException(long systemCatalogTimeStamp) {

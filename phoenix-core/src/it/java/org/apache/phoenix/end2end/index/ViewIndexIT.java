@@ -303,7 +303,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
             createViewIndex(conn, schemaName, globalViewIdx, globalView, "K1");
             //now check that the right coprocs are installed
             Admin admin = conn.getQueryServices().getAdmin();
-            TableDescriptor td = admin.getTableDescriptor(TableName.valueOf(
+            TableDescriptor td = admin.getDescriptor(TableName.valueOf(
                 MetaDataUtil.getViewIndexPhysicalName(SchemaUtil.getPhysicalHBaseTableName(
                     schemaName, baseTable, isNamespaceMapped).getString())));
             assertTrue(td.hasCoprocessor(GlobalIndexChecker.class.getName()));
@@ -826,7 +826,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         final String viewIndexFullName = SchemaUtil.getTableName(schemaName, viewIndexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String version = "V1.0";
-            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, version);
+            CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, version, null);
             String createViewSql = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName +
                     " SCHEMA_VERSION='" + version + "'";
             conn.createStatement().execute(createViewSql);

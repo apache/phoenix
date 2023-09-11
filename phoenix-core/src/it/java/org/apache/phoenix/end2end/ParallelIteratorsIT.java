@@ -41,6 +41,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
@@ -214,7 +215,7 @@ public class ParallelIteratorsIT extends ParallelStatsEnabledIT {
     }
 
     private static KeyRange newKeyRange(byte[] lowerRange, byte[] upperRange) {
-        return PChar.INSTANCE.getKeyRange(lowerRange, true, upperRange, false);
+        return PChar.INSTANCE.getKeyRange(lowerRange, true, upperRange, false, SortOrder.ASC);
     }
     
     private void createTable (Connection conn, byte[][] splits) throws SQLException {

@@ -27,11 +27,14 @@ import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Append;
+import org.apache.hadoop.hbase.client.CheckAndMutate;
+import org.apache.hadoop.hbase.client.CheckAndMutateResult;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Row;
@@ -223,6 +226,11 @@ public class DelegateHTable extends CompatDelegateHTable implements Table {
     }
 
     @Override
+    public CheckAndMutateResult checkAndMutate(CheckAndMutate checkAndMutate) throws IOException {
+        return delegate.checkAndMutate(checkAndMutate);
+    }
+
+    @Override
     public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier, CompareOp compareOp,
             byte[] value, RowMutations mutation) throws IOException {
         return delegate.checkAndMutate(row, family, qualifier, compareOp, value, mutation);
@@ -298,12 +306,12 @@ public class DelegateHTable extends CompatDelegateHTable implements Table {
 
     @Override
     public boolean[] exists(List<Get> gets) throws IOException {
-        return delegate.existsAll(gets);
+        return delegate.exists(gets);
     }
 
     @Override
     public long getRpcTimeout(TimeUnit unit) {
-        return delegate.getRpcTimeout();
+        return delegate.getRpcTimeout(unit);
     }
 
     @Override
@@ -319,5 +327,10 @@ public class DelegateHTable extends CompatDelegateHTable implements Table {
     @Override
     public long getOperationTimeout(TimeUnit unit) {
         return delegate.getOperationTimeout(unit);
+    }
+
+    @Override
+    public RegionLocator getRegionLocator() throws IOException {
+        return delegate.getRegionLocator();
     }
 }

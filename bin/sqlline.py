@@ -107,11 +107,21 @@ colorSetting = tryDecode(args.color)
 if os.name == 'nt':
     colorSetting = "false"
 
+#See PHOENIX-6661
+if os.uname()[4].startswith('ppc'):
+    disable_jna = " -Dorg.jline.terminal.jna=false "
+else:
+    disable_jna = ""
+
 java_cmd = java + ' $PHOENIX_OPTS ' + \
-    ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.hadoop_conf + os.pathsep + \
-    phoenix_utils.sqlline_with_deps_jar + os.pathsep + phoenix_utils.slf4j_backend_jar + os.pathsep + \
+    ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + \
+    phoenix_utils.hadoop_conf + os.pathsep + \
+    phoenix_utils.sqlline_with_deps_jar + os.pathsep + \
+    phoenix_utils.slf4j_backend_jar + os.pathsep + \
+    phoenix_utils.logging_jar + os.pathsep + \
     phoenix_utils.phoenix_client_embedded_jar + \
-    '" -Dlog4j.configuration=file:' + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
+    '" -Dlog4j2.configurationFile=file:' + os.path.join(phoenix_utils.current_dir, "log4j2.properties") + \
+    disable_jna + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver" + \
     " -u jdbc:phoenix:" + phoenix_utils.shell_quote([zookeeper]) + \
     " -n none -p none --color=" + colorSetting + " --fastConnect=" + tryDecode(args.fastconnect) + \

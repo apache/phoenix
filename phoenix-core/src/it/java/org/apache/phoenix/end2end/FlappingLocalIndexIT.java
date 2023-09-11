@@ -26,12 +26,14 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.util.Collections;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -48,11 +50,16 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class FlappingLocalIndexIT extends BaseLocalIndexIT {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(FlappingLocalIndexIT.class);
 
     public FlappingLocalIndexIT(boolean isNamespaceMapped) {
         super(isNamespaceMapped);
@@ -153,9 +160,16 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
             assertTrue(rs.next());
             
             Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            int numRegions = admin.getTableRegions(physicalTableName).size();
+            int numRegions = admin.getRegions(physicalTableName).size();
             
             String query = "SELECT * FROM " + tableName +" where v1 like 'a%'";
+
+            String explainPlanOutput =
+                    QueryUtil.getExplainPlan(conn1.createStatement().executeQuery("EXPLAIN WITH REGIONS " + query));
+            LOGGER.info("Explain plan output: {}", explainPlanOutput);
+            // MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN is set as 2
+            assertTrue("Expected total " + numRegions + " regions",
+                    explainPlanOutput.contains("...total size = " + numRegions));
 
             ExplainPlan plan = conn1.prepareStatement(query)
                 .unwrap(PhoenixPreparedStatement.class).optimizeQuery()
@@ -174,6 +188,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
                 explainPlanAttributes.getServerWhereFilter());
             assertEquals("CLIENT MERGE SORT",
                 explainPlanAttributes.getClientSortAlgo());
+            assertEquals(numRegions, explainPlanAttributes.getRegionLocations().size());
 
             rs = conn1.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -336,8 +351,8 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         for (int i = 0; i < startKeys.length; i++) {
             Scan s = new Scan();
             s.addFamily(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
-            s.setStartRow(startKeys[i]);
-            s.setStopRow(endKeys[i]);
+            s.withStartRow(startKeys[i]);
+            s.withStopRow(endKeys[i]);
             ResultScanner scanner = indexTable.getScanner(s);
             int count = 0;
             for(Result r:scanner){
@@ -374,8 +389,12 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
         conn1.commit();
         Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         TableDescriptor tableDescriptor = admin.getDescriptor(physicalTableName);
-        tableDescriptor=TableDescriptorBuilder.newBuilder(tableDescriptor).addCoprocessor(DeleyOpenRegionObserver.class.getName(), null,
-            QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY - 1, null).build();
+        tableDescriptor = TableDescriptorBuilder.newBuilder(tableDescriptor).setCoprocessor(
+                CoprocessorDescriptorBuilder
+                        .newBuilder(DeleyOpenRegionObserver.class.getName())
+                        .setPriority(QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY - 1)
+                        .setProperties(Collections.emptyMap())
+                        .build()).build();
         admin.disableTable(physicalTableName);
         admin.modifyTable(tableDescriptor);
         admin.enableTable(physicalTableName);

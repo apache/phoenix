@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Row;
@@ -372,4 +373,8 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
         throw new UnsupportedOperationException();
     }
 
+    @Override
+    public RegionLocator getRegionLocator() throws IOException {
+        throw new UnsupportedOperationException();
+    }
 }

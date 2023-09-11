@@ -68,6 +68,10 @@ public class CursorCompilerTest extends BaseConnectionlessQueryTest {
         String query = "SELECT a_string, b_string FROM atable";
         String sql = "DECLARE testCursor CURSOR FOR " + query;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        //this verifies PHOENIX-5534 is fixed and we don't initialize metrics twice
+        //on a cursor query
+        props.put("phoenix.query.request.metrics.enabled","true");
+
         Connection conn = DriverManager.getConnection(getUrl(), props);
         //Test declare cursor compile
         PreparedStatement statement = conn.prepareStatement(sql);

@@ -50,29 +50,30 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 public class MutableRollbackIT extends ParallelStatsDisabledIT {
 	
-	private final boolean localIndex;
+    private final boolean localIndex;
     private final String tableDDLOptions;
 
-	public MutableRollbackIT(boolean localIndex, String transactionProvider) {
-		this.localIndex = localIndex;
-        this.tableDDLOptions = " TRANSACTION_PROVIDER='" + transactionProvider + "'";
-	}
-	
-	@Parameters(name="MutableRollbackIT_localIndex={0},transactionProvider={1}") // name is used by failsafe as file name in reports
-    public static synchronized Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {     
-            { false, "TEPHRA"}, { true, "TEPHRA"},
-            { false, "OMID"}, 
-            }),1);
+    public MutableRollbackIT(boolean localIndex, String transactionProvider) {
+      this.localIndex = localIndex;
+      this.tableDDLOptions = " TRANSACTION_PROVIDER='" + transactionProvider + "'";
     }
-	
-	private static Connection getConnection() throws SQLException {
+
+    // name is used by failsafe as file name in reports
+    @Parameters(name="MutableRollbackIT_localIndex={0},transactionProvider={1}")
+    public static synchronized Collection<Object[]> data() {
+        return Arrays.asList(new Object[][] {
+            // OMID does not support local indexes
+            { false, "OMID"},
+        });
+    }
+
+    private static Connection getConnection() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.put(QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB, Boolean.toString(true));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         return conn;
-	}
-	
+    }
+
     public void testRollbackOfUncommittedExistingKeyValueIndexUpdate() throws Exception {
         Connection conn = getConnection();
         String tableName1 = "TBL1_" + generateUniqueName();

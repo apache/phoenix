@@ -58,6 +58,7 @@ import org.apache.phoenix.hbase.index.parallel.TaskBatch;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
@@ -101,7 +102,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         Put put = null;
         Delete del = null;
         for (Cell cell : dataRow.rawCells()) {
-            if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
+            if (cell.getType() == Cell.Type.Put) {
                 if (put == null) {
                     put = new Put(CellUtil.cloneRow(cell));
                 }
@@ -110,7 +111,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
                 if (del == null) {
                     del = new Delete(CellUtil.cloneRow(cell));
                 }
-                del.addDeleteMarker(cell);
+                del.add(cell);
             }
         }
         List<Mutation> indexMutations = prepareIndexMutationsForRebuild(indexMaintainer, put, del);
@@ -143,18 +144,16 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         Map<byte[], List<Mutation>> expectedIndexMutationMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
         List<KeyRange> keys = new ArrayList<>(dataRowKeys.size());
         for (byte[] indexKey: dataRowKeys) {
-            keys.add(PVarbinary.INSTANCE.getKeyRange(indexKey));
+            keys.add(PVarbinary.INSTANCE.getKeyRange(indexKey, SortOrder.ASC));
         }
         ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
         Scan dataScan = new Scan();
         dataScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
         scanRanges.initializeScan(dataScan);
-        if(isRawFilterSupported) {
-            SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
-            dataScan.setFilter(new SkipScanFilter(skipScanFilter, true));
-        }
+        SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
+        dataScan.setFilter(new SkipScanFilter(skipScanFilter, true));
         dataScan.setRaw(true);
-        dataScan.setMaxVersions();
+        dataScan.readAllVersions();
         dataScan.setCacheBlocks(false);
         try (ResultScanner resultScanner = dataHTable.getScanner(dataScan)) {
             for (Result result = resultScanner.next(); (result != null); result = resultScanner.next()) {
@@ -190,7 +189,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         Scan indexScan = new Scan();
         indexScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
         indexScan.setRaw(true);
-        indexScan.setMaxVersions();
+        indexScan.readAllVersions();
         indexScan.setCacheBlocks(false);
         try (RegionScanner regionScanner = region.getScanner(indexScan)) {
             do {
@@ -361,7 +360,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         Put put = null;
         Delete del = null;
         for (Cell cell : row) {
-            if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
+            if (cell.getType() == Cell.Type.Put) {
                 if (put == null) {
                     put = new Put(CellUtil.cloneRow(cell));
                 }
@@ -370,7 +369,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
                 if (del == null) {
                     del = new Delete(CellUtil.cloneRow(cell));
                 }
-                del.addDeleteMarker(cell);
+                del.add(cell);
             }
         }
         byte[] indexRowKey;

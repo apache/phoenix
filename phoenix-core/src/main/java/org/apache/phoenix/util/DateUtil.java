@@ -40,21 +40,21 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.joda.time.DateTime;
+import org.joda.time.DateTimeFieldType;
 import org.joda.time.DateTimeZone;
-import org.joda.time.chrono.ISOChronology;
 import org.joda.time.chrono.GJChronology;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.DateTimeFormatterBuilder;
 import org.joda.time.format.ISODateTimeFormat;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
 
 @SuppressWarnings({ "serial", "deprecation" })
 public class DateUtil {
+
     public static final String DEFAULT_TIME_ZONE_ID = "GMT";
     public static final String LOCAL_TIME_ZONE_ID = "LOCAL";
     private static final TimeZone DEFAULT_TIME_ZONE = TimeZone.getTimeZone(DEFAULT_TIME_ZONE_ID);
@@ -72,6 +72,8 @@ public class DateUtil {
     public static final String DEFAULT_TIMESTAMP_FORMAT = DEFAULT_MS_DATE_FORMAT;
     public static final Format DEFAULT_TIMESTAMP_FORMATTER = DEFAULT_MS_DATE_FORMATTER;
 
+    public static final java.time.LocalDate LD_EPOCH = java.time.LocalDate.of(1970, 1, 1);
+
     private static final DateTimeFormatter JULIAN_DATE_TIME_FORMATTER = new DateTimeFormatterBuilder()
         .append(ISODateTimeFormat.dateParser())
         .appendOptional(new DateTimeFormatterBuilder()
@@ -84,6 +86,7 @@ public class DateUtil {
     }
 
     @NonNull
+    // FIXME why don't we just set these codecs in the Types ?
     public static PDataCodec getCodecFor(PDataType type) {
         PDataCodec codec = type.getCodec();
         if (codec != null) {
@@ -155,7 +158,7 @@ public class DateUtil {
         if (pattern == null || pattern.length() == 0) {
             pattern = defaultPattern;
         }
-        if(defaultPattern.equals(pattern)) {
+        if (defaultPattern.equals(pattern)) {
             return JulianDateFormatParserFactory.getParser(timeZone);
         } else {
             return new SimpleDateFormatParser(pattern, timeZone);
@@ -188,18 +191,42 @@ public class DateUtil {
                 : FastDateFormat.getInstance(pattern, getTimeZone(timeZoneID));
     }
 
+    /**
+     * Parses a datetime string in the UTC time zone.
+     *
+     * @param dateValue datetime string in UTC
+     * @return epoch ms
+     */
     private static long parseDateTime(String dateTimeValue) {
         return JulianDateFormatParser.getInstance().parseDateTime(dateTimeValue);
     }
 
+    /**
+     * Parses a date string in the UTC time zone.
+     *
+     * @param dateValue date string in UTC
+     * @return epoch ms
+     */
     public static Date parseDate(String dateValue) {
         return new Date(parseDateTime(dateValue));
     }
 
+    /**
+     * Parses a time string in the UTC time zone.
+     *
+     * @param dateValue time string in UTC
+     * @return epoch ms
+     */
     public static Time parseTime(String timeValue) {
         return new Time(parseDateTime(timeValue));
     }
 
+    /**
+     * Parses the timestsamp string in the UTC time zone.
+     *
+     * @param timestampValue timestamp string in UTC
+     * @return Timestamp parsed in UTC
+     */
     public static Timestamp parseTimestamp(String timestampValue) {
         Timestamp timestamp = new Timestamp(parseDateTime(timestampValue));
         int period = timestampValue.indexOf('.');
@@ -207,7 +234,7 @@ public class DateUtil {
             String nanosStr = timestampValue.substring(period + 1);
             if (nanosStr.length() > 9)
                 throw new IllegalDataException("nanos > 999999999 or < 0");
-            if(nanosStr.length() > 3 ) {
+            if (nanosStr.length() > 3) {
                 int nanos = Integer.parseInt(nanosStr);
                 for (int i = 0; i < 9 - nanosStr.length(); i++) {
                     nanos *= 10;
@@ -347,4 +374,139 @@ public class DateUtil {
             return formatter.getZone().toTimeZone();
         }
     }
+
+    public static long rangeJodaHalfEven(DateTime roundedDT, DateTime otherDT,
+            DateTimeFieldType type) {
+        // It's OK if this is slow, as it's only called O(1) times per query
+        //
+        // We need to reverse engineer what roundHalfEvenCopy() does
+        // and return the lower/upper (inclusive) range here
+        // Joda simply works on milliseconds between the floor and ceil values.
+        // We could avoid the period call for units less than a day, but this is not a perf
+        // critical function.
+        long roundedMs = roundedDT.getMillis();
+        long otherMs = otherDT.getMillis();
+        long midMs = (roundedMs + otherMs) / 2;
+        long remainder = (roundedMs + otherMs) % 2;
+        if (remainder == 0) {
+            int roundedUnits = roundedDT.get(type);
+            if (otherMs > roundedMs) {
+                // Upper range, other is bigger.
+                if ((roundedUnits & 1) == 0) {
+                    // This unit is even, the next second is odd, so we get the mid point
+                    return midMs;
+                } else {
+                    // This unit is odd, the next second is even and takes the midpoint.
+                    return midMs - 1;
+                }
+            } else {
+                // Lower range, other is smaller.
+                if ((roundedUnits & 1) == 0) {
+                    // This unit is even, the next second is odd, so we get the mid point
+                    return midMs;
+                } else {
+                    // This unit is odd, the next second is even and takes the midpoint.
+                    return midMs + 1;
+                }
+            }
+        } else {
+            // probably never happens
+            if (otherMs > roundedMs) {
+                // Upper range, return the rounded down value
+                return midMs;
+            } else {
+                // Lower range, the mid value belongs to the previous unit.
+                return midMs + 1;
+            }
+        }
+    }
+
+    // These implementations favour speed over historical correctness, and use
+    // java.util.TimeZone#getOffset(epoch millis) and inherit its limitations.
+
+    // When we switch to java.time, we might want to revisit this, and add an option for
+    // slower but more correct conversions.
+    // However, any conversion for TZs with DST is best effort anyway.
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the UTC time zone as the Input in the specified time zone.
+     * @param jdbc Date interpreted in timeZone
+     * @param timeZone for displacement calculation
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Date applyInputDisplacement(java.sql.Date jdbc, TimeZone timeZone) {
+        long epoch = jdbc.getTime();
+        return new java.sql.Date(epoch + timeZone.getOffset(epoch));
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the UTC time zone as the Input in the specified time zone.
+     * @param jdbc Time interpreted in timeZone
+     * @param timeZone for displacement calculation
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Time applyInputDisplacement(java.sql.Time jdbc, TimeZone timeZone) {
+        long epoch = jdbc.getTime();
+        return new java.sql.Time(epoch + timeZone.getOffset(epoch));
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the UTC time zone as the Input in the specified time zone.
+     * @param jdbc Timestamp interpreted in timeZone
+     * @param timeZone for displacement calculation
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Timestamp applyInputDisplacement(java.sql.Timestamp jdbc, TimeZone timeZone) {
+        long epoch = jdbc.getTime();
+        java.sql.Timestamp ts = new java.sql.Timestamp(epoch + timeZone.getOffset(epoch));
+        ts.setNanos(jdbc.getNanos());
+        return ts;
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the specified time zone as the Input in the UTC time zone.
+     * @param internal Date as UTC epoch
+     * @param timeZone for displacement calculation
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Date applyOutputDisplacement(java.sql.Date internal, TimeZone timeZone) {
+        long epoch = internal.getTime();
+        return new java.sql.Date(epoch - getReverseOffset(epoch, timeZone));
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the specified time zone as the Input in the UTC time zone.
+     * @param internal Date as UTC epoch
+     * @param timeZone for displacement calculation
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Time applyOutputDisplacement(java.sql.Time internal, TimeZone timeZone) {
+        long epoch = internal.getTime();
+        return new java.sql.Time(epoch - getReverseOffset(epoch, timeZone));
+    }
+
+    /**
+     * Apply the time zone displacement to the input, so that the output represents the same
+     * LocalDateTime in the specified time zone as the Input in the UTC time zone.
+     * @param internal Timestamp as UTC epoch
+     * @param timeZone for displacement calculation
+     * @return input with the TZ displacement applied
+     */
+    public static java.sql.Timestamp applyOutputDisplacement(java.sql.Timestamp internal, TimeZone timeZone) {
+        long epoch = internal.getTime();
+        java.sql.Timestamp ts = new java.sql.Timestamp(epoch - getReverseOffset(epoch, timeZone));
+        ts.setNanos(internal.getNanos());
+        return ts;
+    }
+
+    private static int getReverseOffset(long epoch, TimeZone tz) {
+        return tz.getOffset(
+            epoch - tz.getRawOffset() - tz.getDSTSavings());
+    }
+
 }

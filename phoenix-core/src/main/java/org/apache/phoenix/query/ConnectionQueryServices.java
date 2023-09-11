@@ -35,12 +35,14 @@ import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
@@ -210,4 +212,14 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
             String columnName, String familyName) throws SQLException;
 
     public void truncateTable(String schemaName, String tableName, boolean isNamespaceMapped) throws SQLException;
+    /**
+     * Close all phoenix connections created using this CQS.
+     *
+     * @param reasonBuilder exception builder for building reasons why connection is closed.
+     */
+    default void closeAllConnections(SQLExceptionInfo.Builder reasonBuilder) {
+        throw new UnsupportedOperationException();
+    }
+
+    PMetaData getMetaDataCache();
 }

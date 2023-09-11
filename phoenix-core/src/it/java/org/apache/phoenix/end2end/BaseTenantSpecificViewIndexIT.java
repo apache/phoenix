@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -169,9 +170,10 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
             } else {
                 iteratorTypeAndScanSize = "PARALLEL 3-WAY";
                 clientSortAlgo = "CLIENT MERGE SORT";
-                keyRanges = " [0," + (Short.MIN_VALUE + expectedIndexIdOffset)
+                keyRanges = " [X'00'," + (Short.MIN_VALUE + expectedIndexIdOffset)
                     + ",'" + tenantId + "','" + valuePrefix + "v2-1'] - ["
-                    + (saltBuckets - 1) + "," + (Short.MIN_VALUE + expectedIndexIdOffset)
+                    + PVarbinary.INSTANCE.toStringLiteral(new byte[] {(byte)(saltBuckets - 1)})
+                    + "," + (Short.MIN_VALUE + expectedIndexIdOffset)
                     + ",'" + tenantId + "','" + valuePrefix + "v2-1']";
             }
             expectedTableName = "_IDX_" + tableName;

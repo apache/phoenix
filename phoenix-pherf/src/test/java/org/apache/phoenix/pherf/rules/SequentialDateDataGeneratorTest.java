@@ -17,17 +17,17 @@
  */
 package org.apache.phoenix.pherf.rules;
 
-import org.apache.phoenix.pherf.configuration.Column;
-import org.apache.phoenix.pherf.configuration.DataSequence;
-import org.joda.time.LocalDateTime;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
-import org.junit.Test;
-
 import static org.apache.phoenix.pherf.configuration.DataTypeMapping.DATE;
 import static org.apache.phoenix.pherf.configuration.DataTypeMapping.VARCHAR;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+import org.apache.phoenix.pherf.configuration.Column;
+import org.apache.phoenix.pherf.configuration.DataSequence;
+import org.junit.Test;
 
 public class SequentialDateDataGeneratorTest {
     SequentialDateDataGenerator generator;
@@ -54,25 +54,26 @@ public class SequentialDateDataGeneratorTest {
 
     @Test
     public void testGetDataValue() {
-        DateTimeFormatter FMT = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss.SSS");
+        DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
         Column columnA = new Column();
         columnA.setType(DATE);
         columnA.setDataSequence(DataSequence.SEQUENTIAL);
-        LocalDateTime startDateTime = new LocalDateTime();
 
         // The increments are the of 1 sec units
         generator = new SequentialDateDataGenerator(columnA);
+        LocalDateTime startDateTime = generator.getStartDateTime();
+
         DataValue result1 = generator.getDataValue();
-        LocalDateTime result1LocalTime = FMT.parseDateTime(result1.getValue()).toLocalDateTime();
+        LocalDateTime result1LocalTime = LocalDateTime.parse(result1.getValue(), FMT);
         assertFalse(result1LocalTime.isBefore(startDateTime));
         DataValue result2 = generator.getDataValue();
-        LocalDateTime result2LocalTime = FMT.parseDateTime(result2.getValue()).toLocalDateTime();
+        LocalDateTime result2LocalTime = LocalDateTime.parse(result2.getValue(), FMT);
         assertEquals(result2LocalTime.minusSeconds(1), result1LocalTime);
         DataValue result3 = generator.getDataValue();
-        LocalDateTime result3LocalTime = FMT.parseDateTime(result3.getValue()).toLocalDateTime();
+        LocalDateTime result3LocalTime = LocalDateTime.parse(result3.getValue(), FMT);
         assertEquals(result3LocalTime.minusSeconds(1), result2LocalTime);
         DataValue result4 = generator.getDataValue();
-        LocalDateTime result4LocalTime = FMT.parseDateTime(result4.getValue()).toLocalDateTime();
+        LocalDateTime result4LocalTime = LocalDateTime.parse(result4.getValue(), FMT);
         assertEquals(result4LocalTime.minusSeconds(1), result3LocalTime);
     }
 }

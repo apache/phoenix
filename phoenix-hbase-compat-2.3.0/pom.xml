@@ -103,7 +103,6 @@
       <version>${slf4j.version}</version>
       <scope>provided</scope>
     </dependency>
-    <!-- Build with -Dwithout.tephra fails without this -->
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>

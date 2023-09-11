@@ -44,6 +44,16 @@ public class DelegateFilter extends FilterBase {
     }
 
     @Override
+    public boolean filterRowKey(Cell cell) throws IOException {
+        return delegate.filterRowKey(cell);
+    }
+
+    @Override
+    public ReturnCode filterCell(Cell v) throws IOException {
+        return delegate.filterCell(v);
+    }
+
+    @Override
     public boolean filterAllRemaining() throws IOException {
         return delegate.filterAllRemaining();
     }

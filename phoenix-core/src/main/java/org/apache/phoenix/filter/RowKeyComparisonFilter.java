@@ -67,6 +67,15 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
      */
     @Override
     public ReturnCode filterKeyValue(Cell v) {
+        return filterCell(v);
+    }
+
+    /**
+     * Evaluate in filterKeyValue instead of filterRowKey, because HBASE-6562 causes filterRowKey
+     * to be called with deleted or partial row keys.
+     */
+    @Override
+    public ReturnCode filterCell(Cell v) {
         if (evaluate) {
             inputTuple.setKey(v.getRowArray(), v.getRowOffset(), v.getRowLength());
             this.keepRow = Boolean.TRUE.equals(evaluate(inputTuple));

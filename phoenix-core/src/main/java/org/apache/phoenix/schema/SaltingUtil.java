@@ -50,7 +50,7 @@ public class SaltingUtil {
         for (int i=0; i<bucketNum; i++) {
             byte[] saltByte = new byte[] {(byte) i};
             allRanges.add(SALTING_COLUMN.getDataType().getKeyRange(
-                    saltByte, true, saltByte, true));
+                    saltByte, true, saltByte, true, SortOrder.ASC));
         }
         return allRanges;
     }
@@ -115,12 +115,12 @@ public class SaltingUtil {
         byte[] newStartRow = new byte[scan.getStartRow().length + prefixBytes.length];
         System.arraycopy(prefixBytes, 0, newStartRow, 0, prefixBytes.length);
         System.arraycopy(scan.getStartRow(), 0, newStartRow, prefixBytes.length, scan.getStartRow().length);
-        scan.setStartRow(newStartRow);
+        scan.withStartRow(newStartRow);
         if (scan.getStopRow().length != 0) {
             byte[] newStopRow = new byte[scan.getStopRow().length + prefixBytes.length];
             System.arraycopy(prefixBytes, 0, newStopRow, 0, prefixBytes.length);
             System.arraycopy(scan.getStopRow(), 0, newStopRow, prefixBytes.length, scan.getStopRow().length);
-            scan.setStopRow(newStopRow);
+            scan.withStopRow(newStopRow);
         }
     }
 }

@@ -55,7 +55,6 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
@@ -84,7 +83,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-
 @Category(ParallelStatsDisabledTest.class)
 public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
@@ -92,7 +90,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             throws SQLException {
         String ddl =
                 "create table if not exists " + tableName + "   (id char(1) primary key,\n"
-                        + "    a.col1 integer,\n" + "    b.col2 bigint,\n" + "    b.col3 decimal,\n"
+                        + "    a.col1 integer default 42,\n" + "    b.col2 bigint,\n" + "    b.col3 decimal,\n"
                         + "    b.col4 decimal(5),\n" + "    b.col5 decimal(6,3))\n" + "    a."
                         + HConstants.VERSIONS + "=" + 1 + "," + "a."
                         + ColumnFamilyDescriptorBuilder.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE
@@ -481,6 +479,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("a"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col1"), rs.getString("COLUMN_NAME"));
+        assertEquals("42", rs.getString("COLUMN_DEF"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
         assertEquals(PInteger.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(2, rs.getInt("ORDINAL_POSITION"));
@@ -494,6 +493,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         assertEquals(table, rs.getString("TABLE_NAME"));
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
+        assertEquals(null, rs.getString("COLUMN_DEF"));
         assertEquals(DatabaseMetaData.attributeNullable, rs.getShort("NULLABLE"));
         assertEquals(PLong.INSTANCE.getSqlType(), rs.getInt("DATA_TYPE"));
         assertEquals(3, rs.getInt("ORDINAL_POSITION"));
@@ -835,7 +835,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
 
             TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(htableName));
             for (byte[] familyName : familyNames) {
-                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(familyName));
+                builder.setColumnFamily(ColumnFamilyDescriptorBuilder.of(familyName));
             }
             admin.createTable(builder.build());
             createMDTestTable(pconn, tableName,

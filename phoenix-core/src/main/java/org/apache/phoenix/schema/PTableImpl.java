@@ -28,6 +28,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODING_SCHEME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
@@ -209,6 +210,7 @@ public class PTableImpl implements PTable {
     private Map<String, String> propertyValues;
     private String schemaVersion;
     private String externalSchemaId;
+    private String streamingTopicName;
 
     public static class Builder {
         private PTableKey key;
@@ -273,6 +275,7 @@ public class PTableImpl implements PTable {
         private Map<String, String> propertyValues = new HashMap<>();
         private String schemaVersion;
         private String externalSchemaId;
+        private String streamingTopicName;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -310,6 +313,9 @@ public class PTableImpl implements PTable {
         }
 
         public Builder setState(PIndexState state) {
+            if (state != null) {
+                propertyValues.put(INDEX_STATE, state.getSerializedValue());
+            }
             this.state = state;
             return this;
         }
@@ -683,6 +689,13 @@ public class PTableImpl implements PTable {
             return this;
          }
 
+         public Builder setStreamingTopicName(String streamingTopicName) {
+            if (streamingTopicName != null) {
+                this.streamingTopicName = streamingTopicName;
+            }
+            return this;
+         }
+
         /**
          * Populate derivable attributes of the PTable
          * @return PTableImpl.Builder object
@@ -731,14 +744,25 @@ public class PTableImpl implements PTable {
                 }
             });
 
+            // With the new uncovered index code, we pass the data table columns to the index
+            // PTable. This wreaks havoc with the code used disambiguate column qualifiers.
+            // localColumns only holds the actual columns of the table, and not external references
+            List<PColumn> localColumns = new ArrayList<>(this.columns.size());
+
+            //TODO should we just pass the global indexref columns separately instead ?
+            for (PColumn column : sortedColumns) {
+                if (!(column instanceof ProjectedColumn && ((ProjectedColumn) column)
+                        .getSourceColumnRef() instanceof IndexUncoveredDataColumnRef)) {
+                    localColumns.add(column);
+                }
+            }
+
             int position = 0;
             if (this.bucketNum != null) {
                 position = 1;
             }
             ListMultimap<String, PColumn> populateColumnsByName =
                     ArrayListMultimap.create(this.columns.size(), 1);
-            Map<KVColumnFamilyQualifier, PColumn> populateKvColumnsByQualifiers =
-                    Maps.newHashMapWithExpectedSize(this.columns.size());
             for (PColumn column : sortedColumns) {
                 allColumns[position] = column;
                 position++;
@@ -759,6 +783,10 @@ public class PTableImpl implements PTable {
                         }
                     }
                 }
+            }
+            Map<KVColumnFamilyQualifier, PColumn> populateKvColumnsByQualifiers =
+                    Maps.newHashMapWithExpectedSize(localColumns.size());
+            for (PColumn column : localColumns) {
                 byte[] cq = column.getColumnQualifierBytes();
                 String cf = column.getFamilyName() != null ?
                         column.getFamilyName().getString() : null;
@@ -766,7 +794,7 @@ public class PTableImpl implements PTable {
                     KVColumnFamilyQualifier info = new KVColumnFamilyQualifier(cf, cq);
                     if (populateKvColumnsByQualifiers.get(info) != null) {
                         throw new ColumnAlreadyExistsException(this.schemaName.getString(),
-                                fullName.getString(), columnName);
+                                fullName.getString(), column.getName().getString());
                     }
                     populateKvColumnsByQualifiers.put(info, column);
                 }
@@ -802,11 +830,13 @@ public class PTableImpl implements PTable {
                     if (column.isRowTimestamp()) {
                         rowTimestampCol = column;
                     }
-                }
-                if (familyName == null) {
                     estimatedSize += column.getEstimatedSize(); // PK columns
                     builder.addField(column, column.isNullable(), column.getSortOrder());
-                } else {
+                }
+            }
+            for (PColumn column : localColumns) {
+                PName familyName = column.getFamilyName();
+                if (familyName != null) {
                     List<PColumn> columnsInFamily = familyMap.get(familyName);
                     if (columnsInFamily == null) {
                         columnsInFamily = Lists.newArrayListWithExpectedSize(maxExpectedSize);
@@ -955,6 +985,7 @@ public class PTableImpl implements PTable {
         this.isChangeDetectionEnabled = builder.isChangeDetectionEnabled;
         this.schemaVersion = builder.schemaVersion;
         this.externalSchemaId = builder.externalSchemaId;
+        this.streamingTopicName = builder.streamingTopicName;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1033,7 +1064,8 @@ public class PTableImpl implements PTable {
                 .setLastDDLTimestamp(table.getLastDDLTimestamp())
                 .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled())
                 .setSchemaVersion(table.getSchemaVersion())
-                .setExternalSchemaId(table.getExternalSchemaId());
+                .setExternalSchemaId(table.getExternalSchemaId())
+                .setStreamingTopicName(table.getStreamingTopicName());
     }
 
     @Override
@@ -1586,7 +1618,12 @@ public class PTableImpl implements PTable {
     public long getIndexDisableTimestamp() {
         return indexDisableTimestamp;
     }
-    
+
+    @Override
+    public boolean isIndexStateDisabled() {
+        return getIndexState()!= null && getIndexState().isDisabled();
+    }
+
     @Override
     public PColumn getPKColumn(String name) throws ColumnNotFoundException {
         List<PColumn> columns = columnsByName.get(name);
@@ -1847,7 +1884,7 @@ public class PTableImpl implements PTable {
             transactionProvider = TransactionFactory.Provider.fromCode(table.getTransactionProvider());
         } else if (table.hasTransactional()) {
             // For backward compatibility prior to transactionProvider field
-            transactionProvider = TransactionFactory.Provider.TEPHRA;
+            transactionProvider = TransactionFactory.Provider.NOTAVAILABLE;
         }
         ViewType viewType = null;
         String viewStatement = null;
@@ -1951,6 +1988,11 @@ public class PTableImpl implements PTable {
             externalSchemaId =
                 (String) PVarchar.INSTANCE.toObject(table.getExternalSchemaId().toByteArray());
         }
+        String streamingTopicName = null;
+        if (table.hasStreamingTopicName()) {
+            streamingTopicName =
+                (String) PVarchar.INSTANCE.toObject(table.getStreamingTopicName().toByteArray());
+        }
         try {
             return new PTableImpl.Builder()
                     .setType(tableType)
@@ -2007,6 +2049,7 @@ public class PTableImpl implements PTable {
                     .setIsChangeDetectionEnabled(isChangeDetectionEnabled)
                     .setSchemaVersion(schemaVersion)
                     .setExternalSchemaId(externalSchemaId)
+                    .setStreamingTopicName(streamingTopicName)
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -2026,10 +2069,10 @@ public class PTableImpl implements PTable {
             builder.setPhysicalTableNameBytes(ByteStringer.wrap(table.getPhysicalName(true).getBytes()));
         }
         builder.setTableType(ProtobufUtil.toPTableTypeProto(table.getType()));
+        if (table.getIndexState() != null) {
+            builder.setIndexState(table.getIndexState().getSerializedValue());
+        }
         if (table.getType() == PTableType.INDEX) {
-            if (table.getIndexState() != null) {
-                builder.setIndexState(table.getIndexState().getSerializedValue());
-            }
             if (table.getViewIndexId() != null) {
                 builder.setViewIndexId(table.getViewIndexId());
                 builder.setViewIndexIdType(table.getviewIndexIdType().getSqlType());
@@ -2137,8 +2180,15 @@ public class PTableImpl implements PTable {
             builder.setLastDDLTimestamp(table.getLastDDLTimestamp());
         }
         builder.setChangeDetectionEnabled(table.isChangeDetectionEnabled());
-        builder.setSchemaVersion(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getSchemaVersion())));
-        builder.setExternalSchemaId(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getExternalSchemaId())));
+        if (table.getSchemaVersion() != null) {
+            builder.setSchemaVersion(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getSchemaVersion())));
+        }
+        if (table.getExternalSchemaId() != null) {
+            builder.setExternalSchemaId(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getExternalSchemaId())));
+        }
+        if (table.getStreamingTopicName() != null) {
+            builder.setStreamingTopicName(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getStreamingTopicName())));
+        }
         return builder.build();
     }
 
@@ -2274,6 +2324,11 @@ public class PTableImpl implements PTable {
     @Override
     public String getExternalSchemaId() {
         return externalSchemaId;
+    }
+
+    @Override
+    public String getStreamingTopicName() {
+        return streamingTopicName;
     }
 
     private static final class KVColumnFamilyQualifier {

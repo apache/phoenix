@@ -116,8 +116,7 @@ public class IndexBuildTimestampIT extends BaseTest {
                 for (boolean async : Booleans) {
                     for (boolean view : Booleans) {
                         for (boolean snapshot : Booleans) {
-                            for (String transactionProvider : new String[]
-                                    {"TEPHRA", "OMID", null}) {
+                            for (String transactionProvider : new String[] { "OMID", null }) {
                                 if(snapshot || transactionProvider !=null) {
                                     //FIXME PHOENIX-5375 TS is set to index creation time
                                     continue;

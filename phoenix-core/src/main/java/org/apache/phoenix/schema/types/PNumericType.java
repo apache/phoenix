@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.sql.SQLException;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.SortOrder;
 
@@ -48,5 +50,17 @@ public abstract class PNumericType<T> extends PDataType<T> {
     public final void abs(ImmutableBytesWritable ptr, SortOrder sortOrder,
             ImmutableBytesWritable outPtr) {
         abs(ptr.get(), ptr.getOffset(), ptr.getLength(), sortOrder, outPtr);
+    }
+
+    @Override
+    public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+            SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
+            throws SQLException {
+        PDataType pType = PDataTypeFactory.getInstance().instanceFromJavaClass(jdbcType, this);
+        if (pType == null || !PNumericType.class.isAssignableFrom(pType.getClass())) {
+            throw newMismatchException(actualType, jdbcType);
+        } else {
+            return pType.toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
+        }
     }
 }

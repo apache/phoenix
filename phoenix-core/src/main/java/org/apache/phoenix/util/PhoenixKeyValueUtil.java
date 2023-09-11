@@ -21,9 +21,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import org.apache.hadoop.hbase.ByteBufferExtendedCell;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.Cell.Type;
 import org.apache.hadoop.hbase.CellBuilderFactory;
@@ -34,16 +36,12 @@ import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.execute.MutationState.MultiRowMutationState;
 import org.apache.phoenix.execute.MutationState.RowMutationState;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.types.PArrayDataTypeEncoder;
 
 /**
  * 
@@ -180,7 +178,7 @@ public class PhoenixKeyValueUtil {
         long size = 0;
         for (Entry<byte [], List<Cell>> entry : m.getFamilyCellMap().entrySet()) {
             for (Cell c : entry.getValue()) {
-                size += CompatUtil.getCellSerializedSize(c);
+                size += c.getSerializedSize();
             }
         }
         return size;
@@ -216,10 +214,31 @@ public class PhoenixKeyValueUtil {
         // Same as KeyValueUtil, but HBase has deprecated this method. Avoid depending on something
         // that will likely be removed at some point in time.
         if (c == null) return null;
+        // TODO Do we really want to return only KeyValues, or would it be enough to
+        // copy ByteBufferExtendedCells to heap ?
+        // i.e can we avoid copying on-heap cells like BufferedDataBlockEncoder.OnheapDecodedCell ?
         if (c instanceof KeyValue) {
             return (KeyValue) c;
         }
         return KeyValueUtil.copyToNewKeyValue(c);
+    }
+
+    /**
+     * Copy all Off-Heap cells to KeyValues
+     * The input list is modified.
+     *
+     * @param cells is modified in place
+     * @return the modified list (optional, input list is modified in place)
+     */
+    public static List<Cell> maybeCopyCellList(List<Cell> cells) {
+        ListIterator<Cell> cellsIt = cells.listIterator();
+        while (cellsIt.hasNext()) {
+            Cell c = cellsIt.next();
+            if (c instanceof ByteBufferExtendedCell) {
+                cellsIt.set(KeyValueUtil.copyToNewKeyValue(c));
+            }
+        }
+        return cells;
     }
 
     private static long calculateMultiRowMutationSize(MultiRowMutationState mutations) {

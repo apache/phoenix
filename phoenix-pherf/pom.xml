@@ -34,7 +34,7 @@
 
     <!-- Versions for pherf-only dependencies -->
     <diffutils.version>1.2.1</diffutils.version>
-    <gson.version>2.8.6</gson.version>
+    <gson.version>2.9.1</gson.version>
     <commons-math3.version>3.3</commons-math3.version>
     <activation.version>1.1</activation.version>
     <jcabi-jdbc.version>0.15</jcabi-jdbc.version>
@@ -137,10 +137,6 @@
       <artifactId>commons-csv</artifactId>
     </dependency>
     <dependency>
-      <groupId>joda-time</groupId>
-      <artifactId>joda-time</artifactId>
-    </dependency>
-    <dependency>
       <groupId>stax</groupId>
       <artifactId>stax-api</artifactId>
     </dependency>
@@ -158,16 +154,31 @@
       <version>${gson.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.hbase.thirdparty</groupId>
-      <artifactId>hbase-shaded-miscellaneous</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-server</artifactId>
     </dependency>
 
     <!-- Test Dependencies -->
     <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-api</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-core</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-slf4j-impl</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-1.2-api</artifactId>
+        <scope>test</scope>
+    </dependency>   <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core</artifactId>
       <type>test-jar</type>
@@ -290,6 +301,18 @@
             <ignoredUnusedDeclaredDependency>
               org.apache.hbase:hbase-testing-util
             </ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>
+              org.apache.logging.log4j:log4j-api
+            </ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>
+              org.apache.logging.log4j:log4j-core
+            </ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>
+              org.apache.logging.log4j:log4j-slf4j-impl
+            </ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>
+              org.apache.logging.log4j:log4j-1.2-api
+            </ignoredUnusedDeclaredDependency>
           </ignoredUnusedDeclaredDependencies>
           <ignoredUsedUndeclaredDependencies>
             <ignoredUsedUndeclaredDependency>
@@ -308,6 +331,7 @@
         <configuration>
           <workingDirectory>${java.io.tmpdir}</workingDirectory>
           <forkCount>1</forkCount>
+          <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
         </configuration>
       </plugin>
       <plugin>
@@ -356,7 +380,6 @@
                   <include>org.apache.commons:commons-lang3</include>
                   <include>org.apache.commons:commons-math3</include>
                   <include>org.apache.phoenix.thirdparty:phoenix-shaded-commons-cli</include>
-                  <include>joda-time:joda-time</include>
                   <include>org.apache.commons:commons-csv</include>
                   <include>commons-lang:commons-lang</include>
                   <include>commons-io:commons-io</include>

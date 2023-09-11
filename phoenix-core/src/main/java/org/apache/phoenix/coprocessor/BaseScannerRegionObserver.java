@@ -20,28 +20,42 @@ package org.apache.phoenix.coprocessor;
 import java.io.IOException;
 import java.util.List;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeepDeletedCells;
+import org.apache.hadoop.hbase.MemoryCompactionPolicy;
 import org.apache.hadoop.hbase.NotServingRegionException;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
+import org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScanOptions;
+import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
+import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatBaseScannerRegionObserver;
 import org.apache.phoenix.execute.TupleProjector;
-import org.apache.phoenix.filter.PagedFilter;
+import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
 import org.apache.phoenix.iterate.RegionScannerFactory;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.apache.phoenix.util.ScanUtil;
@@ -49,7 +63,7 @@ import org.apache.phoenix.util.ServerUtil;
 
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
 
-abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionObserver {
+abstract public class BaseScannerRegionObserver implements RegionObserver {
 
     public static final String AGGREGATORS = "_Aggs";
     public static final String UNORDERED_GROUP_BY_EXPRESSIONS = "_UnorderedGroupByExpressions";
@@ -73,6 +87,7 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
     public static final String INDEX_REBUILD_PAGING = "_IndexRebuildPaging";
     // The number of index rows to be rebuild in one RPC call
     public static final String INDEX_REBUILD_PAGE_ROWS = "_IndexRebuildPageRows";
+    public static final String INDEX_PAGE_ROWS = "_IndexPageRows";
     public static final String SERVER_PAGE_SIZE_MS = "_ServerPageSizeMs";
     // Index verification type done by the index tool
     public static final String INDEX_REBUILD_VERIFY_TYPE = "_IndexRebuildVerifyType";
@@ -141,7 +156,11 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
     // In case of Index Write failure, we need to determine that Index mutation
     // is part of normal client write or Index Rebuilder. # PHOENIX-5080
     public final static byte[] REPLAY_INDEX_REBUILD_WRITES = PUnsignedTinyint.INSTANCE.toBytes(3);
-    
+
+    public static final String PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY =
+            "phoenix.max.lookback.age.seconds";
+    public static final int DEFAULT_PHOENIX_MAX_LOOKBACK_AGE = 0;
+
     public enum ReplayWrite {
         TABLE_AND_INDEX,
         INDEX_ONLY,
@@ -245,10 +264,14 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
             // last possible moment. You need to swap the start/stop and make the
             // start exclusive and the stop inclusive.
             ScanUtil.setupReverseScan(scan);
-            if (scan.getFilter() != null && !(scan.getFilter() instanceof PagedFilter)) {
-                byte[] pageSizeMsBytes = scan.getAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS);
+            // Set the paging filter. Make sure that the paging filter is the top level
+            // filter if paging is enabled, that is pageSizeMsBytes != null.
+            if (!(scan.getFilter() instanceof PagingFilter)) {
+                byte[] pageSizeMsBytes =
+                        scan.getAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS);
                 if (pageSizeMsBytes != null) {
-                    scan.setFilter(new PagedFilter(scan.getFilter(), getPageSizeMsForFilter(scan)));
+                    scan.setFilter(new PagingFilter(scan.getFilter(),
+                            getPageSizeMsForFilter(scan)));
                 }
             }
         }
@@ -259,7 +282,8 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
             private final ObserverContext<RegionCoprocessorEnvironment> c;
             private boolean wasOverriden;
             
-            public RegionScannerHolder(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan, final RegionScanner scanner) {
+            public RegionScannerHolder(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
+                    final RegionScanner scanner) {
                 super(scanner);
                 this.c = c;
                 this.scan = scan;
@@ -309,13 +333,12 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
                     }
                 }
             }
-            
+
             @Override
             public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
                 overrideDelegate();
                 boolean res = super.next(result);
                 ScannerContextUtil.incrementSizeProgress(scannerContext, result);
-                ScannerContextUtil.updateTimeProgress(scannerContext);
                 return res;
             }
 
@@ -330,7 +353,6 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
                 overrideDelegate();
                 boolean res = super.nextRaw(result);
                 ScannerContextUtil.incrementSizeProgress(scannerContext, result);
-                ScannerContextUtil.updateTimeProgress(scannerContext);
                 return res;
             }
             
@@ -339,10 +361,18 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
                 overrideDelegate();
                 return super.nextRaw(result);
             }
+            @Override
+            public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
+                try {
+                    return new RegionScannerHolder(c, scan,
+                            ((DelegateRegionScanner) delegate).getNewRegionScanner(scan));
+                } catch (ClassCastException e) {
+                    throw new DoNotRetryIOException(e);
+                }
+            }
         }
-        
 
-        /**
+    /**
      * Wrapper for {@link #postScannerOpen(ObserverContext, Scan, RegionScanner)} that ensures no non IOException is thrown,
      * to prevent the coprocessor from becoming blacklisted.
      *
@@ -355,10 +385,26 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
             if (!isRegionObserverFor(scan)) {
                 return s;
             }
-            // Make sure PageRegionScanner wraps only the lowest region scanner, i.e., HBase region scanner. We assume
-            // here every Phoenix region scanner extends BaseRegionScanner
-            return new RegionScannerHolder(c, scan, s instanceof BaseRegionScanner ? s :
-                    new PagedRegionScanner(c.getEnvironment().getRegion(), s, scan));
+            byte[] emptyCF = scan.getAttribute(
+                    BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME);
+            byte[] emptyCQ = scan.getAttribute(
+                    BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME);
+            // Make sure PageRegionScanner wraps only the lowest region scanner, i.e., HBase region
+            // scanner. We assume here every Phoenix region scanner extends DelegateRegionScanner.
+            if (s instanceof DelegateRegionScanner) {
+                return new RegionScannerHolder(c, scan, s);
+            } else {
+                // An old client may not set these attributes which are required by TTLRegionScanner
+                if (emptyCF != null && emptyCQ != null) {
+                    return new RegionScannerHolder(c, scan,
+                            new TTLRegionScanner(c.getEnvironment(), scan,
+                                    new PagingRegionScanner(c.getEnvironment().getRegion(), s,
+                                            scan)));
+                }
+                return new RegionScannerHolder(c, scan,
+                        new PagingRegionScanner(c.getEnvironment().getRegion(), s, scan));
+
+            }
         } catch (Throwable t) {
             // If the exception is NotServingRegionException then throw it as
             // StaleRegionBoundaryCacheException to handle it by phoenix client other wise hbase
@@ -389,7 +435,8 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
             final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
             final Region dataRegion, final IndexMaintainer indexMaintainer,
             final byte[][] viewConstants, final TupleProjector projector,
-            final ImmutableBytesWritable ptr, final boolean useQualiferAsListIndex) {
+            final ImmutableBytesWritable ptr, final boolean useQualiferAsListIndex)
+            throws IOException {
 
         RegionScannerFactory regionScannerFactory = new NonAggregateRegionScannerFactory(c.getEnvironment());
 
@@ -397,18 +444,191 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
                 dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr, useQualiferAsListIndex);
     }
 
+    public void setScanOptionsForFlushesAndCompactions(ScanOptions options) {
+        // We want the store to give us all the deleted cells to StoreCompactionScanner
+        options.setKeepDeletedCells(KeepDeletedCells.TTL);
+        options.setTTL(HConstants.FOREVER);
+        options.setMaxVersions(Integer.MAX_VALUE);
+        options.setMinVersions(Integer.MAX_VALUE);
+    }
+    @Override
+    public void preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
+            ScanType scanType, ScanOptions options, CompactionLifeCycleTracker tracker,
+            CompactionRequest request) throws IOException {
+        Configuration conf = c.getEnvironment().getConfiguration();
+        if (isPhoenixTableTTLEnabled(conf)) {
+            setScanOptionsForFlushesAndCompactions(options);
+            return;
+        }
+        if (isMaxLookbackTimeEnabled(conf)) {
+            setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
+                    scanType);
+        }
+    }
 
-   /* We want to override the store scanner so that we can read "past" a delete
-    marker on an SCN / lookback query to see the underlying edit. This was possible
-    in HBase 1.x, but not possible after the interface changes in HBase 2.0. HBASE-24321 in
-     HBase 2.3 gave us this ability back, but we need to use it through a compatibility shim
-     so we can compile against 2.1 and 2.2. When 2.3 is the minimum supported HBase
-     version, the shim can be retired and the logic moved into the real coproc.
+    @Override
+    public void preFlushScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
+            ScanOptions options, FlushLifeCycleTracker tracker) throws IOException {
+        Configuration conf = c.getEnvironment().getConfiguration();
+        if (isPhoenixTableTTLEnabled(conf)) {
+            setScanOptionsForFlushesAndCompactions(options);
+            return;
+        }
+        if (isMaxLookbackTimeEnabled(conf)) {
+            setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
+                    ScanType.COMPACT_RETAIN_DELETES);
+        }
+    }
 
-    We also need to override the flush compaction coproc hooks in order to implement max lookback
-     age to keep versions from being purged.
+    @Override
+    public void preMemStoreCompactionCompactScannerOpen(
+            ObserverContext<RegionCoprocessorEnvironment> c, Store store, ScanOptions options)
+            throws IOException {
+        Configuration conf = c.getEnvironment().getConfiguration();
+        if (isPhoenixTableTTLEnabled(conf)) {
+            setScanOptionsForFlushesAndCompactions(options);
+            return;
+        }
+        if (isMaxLookbackTimeEnabled(conf)) {
+            MemoryCompactionPolicy inMemPolicy =
+                    store.getColumnFamilyDescriptor().getInMemoryCompaction();
+            ScanType scanType;
+            //the eager and adaptive in-memory compaction policies can purge versions; the others
+            // can't. (Eager always does; adaptive sometimes does)
+            if (inMemPolicy.equals(MemoryCompactionPolicy.EAGER) ||
+                    inMemPolicy.equals(MemoryCompactionPolicy.ADAPTIVE)) {
+                scanType = ScanType.COMPACT_DROP_DELETES;
+            } else {
+                scanType = ScanType.COMPACT_RETAIN_DELETES;
+            }
+            setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
+                    scanType);
+        }
+    }
 
-    Because the required APIs aren't present in HBase 2.1 and 2.2, we override in the 2.3
-     version of CompatBaseScannerRegionObserver and no-op in the other versions. */
+    @Override
+    public void preStoreScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
+            ScanOptions options) throws IOException {
 
+        Configuration conf = c.getEnvironment().getConfiguration();
+        if (isPhoenixTableTTLEnabled(conf)) {
+            setScanOptionsForFlushesAndCompactions(options);
+            return;
+        }
+        if (!storeFileScanDoesntNeedAlteration(options)) {
+            //PHOENIX-4277 -- When doing a point-in-time (SCN) Scan, HBase by default will hide
+            // mutations that happen before a delete marker. This overrides that behavior.
+            options.setMinVersions(options.getMinVersions());
+            KeepDeletedCells keepDeletedCells = KeepDeletedCells.TRUE;
+            if (store.getColumnFamilyDescriptor().getTimeToLive() != HConstants.FOREVER) {
+                keepDeletedCells = KeepDeletedCells.TTL;
+            }
+            options.setKeepDeletedCells(keepDeletedCells);
+        }
+    }
+
+    private boolean storeFileScanDoesntNeedAlteration(ScanOptions options) {
+        Scan scan = options.getScan();
+        boolean isRaw = scan.isRaw();
+        //true if keep deleted cells is either TRUE or TTL
+        boolean keepDeletedCells = options.getKeepDeletedCells().equals(KeepDeletedCells.TRUE) ||
+                options.getKeepDeletedCells().equals(KeepDeletedCells.TTL);
+        boolean timeRangeIsLatest = scan.getTimeRange().getMax() == HConstants.LATEST_TIMESTAMP;
+        boolean timestampIsTransactional =
+                isTransactionalTimestamp(scan.getTimeRange().getMax());
+        return isRaw
+                || keepDeletedCells
+                || timeRangeIsLatest
+                || timestampIsTransactional;
+    }
+
+    private boolean isTransactionalTimestamp(long ts) {
+        //have to use the HBase edge manager because the Phoenix one is in phoenix-core
+        return ts > (long) (EnvironmentEdgeManager.currentTime() * 1.1);
+    }
+
+    /*
+     * If KeepDeletedCells.FALSE, KeepDeletedCells.TTL ,
+     * let delete markers age once lookback age is done.
+     */
+    public KeepDeletedCells getKeepDeletedCells(ScanOptions options, ScanType scanType) {
+        //if we're doing a minor compaction or flush, always set keep deleted cells
+        //to true. Otherwise, if keep deleted cells is false or TTL, use KeepDeletedCells TTL,
+        //where the value of the ttl might be overriden to the max lookback age elsewhere
+        return (options.getKeepDeletedCells() == KeepDeletedCells.TRUE
+                || scanType.equals(ScanType.COMPACT_RETAIN_DELETES)) ?
+                KeepDeletedCells.TRUE : KeepDeletedCells.TTL;
+    }
+
+    /*
+     * if the user set a TTL we should leave MIN_VERSIONS at the default (0 in most of the cases).
+     * Otherwise the data (1st version) will not be removed after the TTL. If no TTL, we want
+     * Math.max(maxVersions, minVersions, 1)
+     */
+    public int getMinVersions(ScanOptions options, ColumnFamilyDescriptor cfDescriptor) {
+        return cfDescriptor.getTimeToLive() != HConstants.FOREVER ? options.getMinVersions()
+                : Math.max(Math.max(options.getMinVersions(),
+                cfDescriptor.getMaxVersions()),1);
+    }
+
+    /**
+     *
+     * @param conf HBase Configuration
+     * @param columnDescriptor ColumnFamilyDescriptor for the store being compacted
+     * @param options ScanOptions of overrides to the compaction scan
+     * @return Time to live in milliseconds, based on both HBase TTL and Phoenix max lookback age
+     */
+    public long getTimeToLiveForCompactions(Configuration conf,
+            ColumnFamilyDescriptor columnDescriptor,
+            ScanOptions options) {
+        long ttlConfigured = columnDescriptor.getTimeToLive();
+        long ttlInMillis = ttlConfigured * 1000;
+        long maxLookbackTtl = getMaxLookbackInMillis(conf);
+        if (isMaxLookbackTimeEnabled(maxLookbackTtl)) {
+            if (ttlConfigured == HConstants.FOREVER
+                    && columnDescriptor.getKeepDeletedCells() != KeepDeletedCells.TRUE) {
+                // If user configured default TTL(FOREVER) and keep deleted cells to false or
+                // TTL then to remove unwanted delete markers we should change ttl to max lookback age
+                ttlInMillis = maxLookbackTtl;
+            } else {
+                //if there is a TTL, use TTL instead of max lookback age.
+                // Max lookback age should be more recent or equal to TTL
+                ttlInMillis = Math.max(ttlInMillis, maxLookbackTtl);
+            }
+        }
+
+        return ttlInMillis;
+    }
+
+    public void setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(Configuration conf,
+            ScanOptions options,
+            final Store store,
+            ScanType type) {
+        ColumnFamilyDescriptor cfDescriptor = store.getColumnFamilyDescriptor();
+        options.setTTL(getTimeToLiveForCompactions(conf, cfDescriptor,
+                options));
+        options.setKeepDeletedCells(getKeepDeletedCells(options, type));
+        options.setMaxVersions(Integer.MAX_VALUE);
+        options.setMinVersions(getMinVersions(options, cfDescriptor));
+    }
+
+    public static long getMaxLookbackInMillis(Configuration conf){
+        //config param is in seconds, switch to millis
+        return conf.getLong(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+            DEFAULT_PHOENIX_MAX_LOOKBACK_AGE) * 1000;
+    }
+
+    public static boolean isMaxLookbackTimeEnabled(Configuration conf){
+        return isMaxLookbackTimeEnabled(conf.getLong(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+            DEFAULT_PHOENIX_MAX_LOOKBACK_AGE));
+    }
+
+    public static boolean isMaxLookbackTimeEnabled(long maxLookbackTime){
+        return maxLookbackTime > 0L;
+    }
+
+    public static boolean isPhoenixTableTTLEnabled(Configuration conf) {
+        return conf.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
+                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
+    }
 }

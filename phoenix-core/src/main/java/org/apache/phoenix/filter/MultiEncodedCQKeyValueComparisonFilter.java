@@ -214,9 +214,14 @@ public class MultiEncodedCQKeyValueComparisonFilter extends BooleanExpressionFil
     private boolean isQualifierForColumnInWhereExpression(int qualifier) {
         return qualifier >= whereExpressionMinQualifier ? whereExpressionQualifiers.get(qualifier - whereExpressionMinQualifier) : false;
     }
-    
+
     @Override
     public ReturnCode filterKeyValue(Cell cell) {
+        return filterCell(cell);
+    }
+
+    @Override
+    public ReturnCode filterCell(Cell cell) {
         if (Boolean.TRUE.equals(this.matchedColumn)) {
           // We already found and matched the single column, all keys now pass
           return ReturnCode.INCLUDE_AND_NEXT_COL;

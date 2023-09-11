@@ -25,9 +25,9 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -301,7 +301,7 @@ public class CreateTableCompiler {
 
         @Override
         public Iterator<Expression> visitEnter(ComparisonExpression node) {
-            if (node.getFilterOp() == CompareOp.EQUAL && node.getChildren().get(1).isStateless() 
+            if (node.getFilterOp() == CompareOperator.EQUAL && node.getChildren().get(1).isStateless()
             		&& node.getChildren().get(1).getDeterminism() == Determinism.ALWAYS ) {
                 return Iterators.singletonIterator(node.getChildren().get(0));
             }

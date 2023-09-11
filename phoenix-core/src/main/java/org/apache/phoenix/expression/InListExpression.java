@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.ArrayList;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
@@ -99,7 +99,7 @@ public class InListExpression extends BaseSingleExpression {
         boolean nullInList = children.size() != childrenWithoutNulls.size();
 
         if (childrenWithoutNulls.size() == 2 && !nullInList) {
-            return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL,
+            return ComparisonExpression.create(isNegate ? CompareOperator.NOT_EQUAL : CompareOperator.EQUAL,
                     childrenWithoutNulls, ptr, rowKeyOrderOptimizable);
         }
 
@@ -109,7 +109,7 @@ public class InListExpression extends BaseSingleExpression {
         for (int i = 1; i < childrenWithoutNulls.size(); i++) {
             try {
                 Expression rhs = BaseExpression.coerce(firstChild, childrenWithoutNulls.get(i),
-                        CompareOp.EQUAL, rowKeyOrderOptimizable);
+                        CompareOperator.EQUAL, rowKeyOrderOptimizable);
                 coercedKeyExpressions.add(rhs);
             } catch (SQLException e) {
                 // Type mismatch exception or invalid data exception.
@@ -128,7 +128,7 @@ public class InListExpression extends BaseSingleExpression {
             }
         }
         if (coercedKeyExpressions.size() == 2) {
-            return ComparisonExpression.create(isNegate ? CompareOp.NOT_EQUAL : CompareOp.EQUAL,
+            return ComparisonExpression.create(isNegate ? CompareOperator.NOT_EQUAL : CompareOperator.EQUAL,
                     coercedKeyExpressions, ptr, rowKeyOrderOptimizable);
         }
         Expression expression = new InListExpression(coercedKeyExpressions, rowKeyOrderOptimizable);

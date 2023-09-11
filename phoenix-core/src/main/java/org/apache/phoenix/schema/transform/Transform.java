@@ -20,6 +20,7 @@ package org.apache.phoenix.schema.transform;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.TableInfo;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -46,6 +47,7 @@ import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.JacksonUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TableViewFinderResult;
 import org.apache.phoenix.util.UpgradeUtil;
@@ -61,6 +63,7 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -73,9 +76,11 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_STATUS;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
+import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.schema.ColumnMetaDataOps.addColumnMutation;
 import static org.apache.phoenix.schema.MetaDataClient.CREATE_LINK;
+import static org.apache.phoenix.schema.MetaDataClient.UPDATE_INDEX_STATE_TO_ACTIVE;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.schema.PTableType.VIEW;
@@ -125,6 +130,12 @@ public class Transform {
             // TODO: calculate old and new metadata
             transformBuilder.setNewMetadata(newMetadata);
             transformBuilder.setOldMetadata(oldMetadata);
+            PIndexState defaultCreateState = PIndexState.valueOf(connection.getQueryServices().getConfiguration().
+                    get(INDEX_CREATE_DEFAULT_STATE, QueryServicesOptions.DEFAULT_CREATE_INDEX_STATE));
+            if (defaultCreateState == PIndexState.CREATE_DISABLE) {
+                // Create a paused transform. This can be enabled later by calling TransformTool resume
+                transformBuilder.setTransformStatus(PTable.TransformStatus.PAUSED.name());
+            }
             if (Strings.isNullOrEmpty(newPhysicalTableName)) {
                 newPhysicalTableName = generateNewTableName(schema, logicalTableName, sequenceNum);
             }
@@ -148,11 +159,14 @@ public class Transform {
             long sequenceNum, PhoenixConnection connection) throws Exception {
         PName newTableName = PNameFactory.newName(systemTransformParams.getNewPhysicalTableName());
         PName newTableNameWithoutSchema = PNameFactory.newName(SchemaUtil.getTableNameFromFullName(systemTransformParams.getNewPhysicalTableName()));
+        PIndexState defaultCreateState = PIndexState.valueOf(connection.getQueryServices().getConfiguration().
+                get(INDEX_CREATE_DEFAULT_STATE, QueryServicesOptions.DEFAULT_CREATE_INDEX_STATE));
         PTable newTable = new PTableImpl.Builder()
                 .setTableName(newTableNameWithoutSchema)
                 .setParentTableName(table.getParentTableName())
                 .setBaseTableLogicalName(table.getBaseTableLogicalName())
                 .setPhysicalTableName(newTableNameWithoutSchema)
+                .setState(defaultCreateState)
                 .setAllColumns(table.getColumns())
                 .setAppendOnlySchema(table.isAppendOnlySchema())
                 .setAutoPartitionSeqName(table.getAutoPartitionSeqName())
@@ -187,6 +201,7 @@ public class Transform {
                 .setUseStatsForParallelization(table.useStatsForParallelization())
                 .setSchemaVersion(table.getSchemaVersion())
                 .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled())
+                .setStreamingTopicName(table.getStreamingTopicName())
                 // Transformables
                 .setImmutableStorageScheme(
                         (changedProps.getImmutableStorageSchemeProp() != null? changedProps.getImmutableStorageSchemeProp():table.getImmutableStorageScheme()))
@@ -212,10 +227,14 @@ public class Transform {
                     (view.getSchemaName()==null? null: Bytes.toString(view.getSchemaName())), Bytes.toString(view.getTableName())
                     , newTableName, sequenceNum);
         }
-        // add a monitoring task
-        TransformMonitorTask.addTransformMonitorTask(connection, connection.getQueryServices().getConfiguration(), systemTransformParams,
-                PTable.TaskStatus.CREATED, new Timestamp(EnvironmentEdgeManager.currentTimeMillis()), null);
 
+        if (defaultCreateState != PIndexState.CREATE_DISABLE) {
+            // add a monitoring task
+            TransformMonitorTask.addTransformMonitorTask(connection, connection.getQueryServices().getConfiguration(), systemTransformParams,
+                    PTable.TaskStatus.CREATED, new Timestamp(EnvironmentEdgeManager.currentTimeMillis()), null);
+        } else {
+            LOGGER.info("Transform will not be monitored until it is resumed again.");
+        }
         return newTable;
     }
 
@@ -332,6 +351,26 @@ public class Transform {
         return false;
     }
 
+    public static void updateNewTableState(PhoenixConnection connection, SystemTransformRecord systemTransformRecord,
+                                           PIndexState state)
+            throws SQLException {
+        String schema = SchemaUtil.getSchemaNameFromFullName(systemTransformRecord.getNewPhysicalTableName());
+        String tableName = SchemaUtil.getTableNameFromFullName(systemTransformRecord.getNewPhysicalTableName());
+        try (PreparedStatement tableUpsert = connection.prepareStatement(UPDATE_INDEX_STATE_TO_ACTIVE)){
+            tableUpsert.setString(1, systemTransformRecord.getTenantId() == null ? null :
+                    systemTransformRecord.getTenantId());
+            tableUpsert.setString(2, schema);
+            tableUpsert.setString(3, tableName);
+            tableUpsert.setString(4, state.getSerializedValue());
+            tableUpsert.setLong(5, 0);
+            tableUpsert.setLong(6, 0);
+            tableUpsert.execute();
+        }
+        // Update cache
+        UpgradeUtil.clearCache(connection, connection.getTenantId(), schema, tableName,
+                systemTransformRecord.getLogicalParentName(), MIN_TABLE_TIMESTAMP);
+    }
+
     public static void removeTransformRecord(
             SystemTransformRecord transformRecord, PhoenixConnection connection) throws SQLException {
         connection.prepareStatement("DELETE FROM  "
@@ -434,16 +473,15 @@ public class Transform {
         getMetadataDifference(connection, systemTransformRecord, columnNames, columnValues);
         // TODO In the future, we need to handle rowkey changes and column type changes as well
 
-        String
-                changeViewStmt = "UPSERT INTO SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME %s) VALUES (%s, %s, '%s' %s)";
+        String changeViewStmt = "UPSERT INTO SYSTEM.CATALOG "
+            + "(TENANT_ID, TABLE_SCHEM, TABLE_NAME %s) VALUES (?, ?, ? %s)";
 
         String
-                changeTable = String.format(
-                "UPSERT INTO SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, PHYSICAL_TABLE_NAME %s) VALUES (%s, %s, '%s','%s' %s)",
-                (columnNames.size() > 0? "," + String.join(",", columnNames):""),
-                (tenantId==null? null: ("'" + tenantId + "'")),
-                (schema==null ? null : ("'" + schema + "'")), tableName, newTableName,
-                (columnValues.size() > 0? "," + String.join(",", columnValues):""));
+                changeTable = String.format("UPSERT INTO SYSTEM.CATALOG "
+                + "(TENANT_ID, TABLE_SCHEM, TABLE_NAME, PHYSICAL_TABLE_NAME %s ) "
+                + "VALUES(?, ?, ?, ? %s)", columnNames.size() > 0 ? ","
+                + String.join(",", columnNames) : "", columnNames.size() > 0
+            ? "," + QueryUtil.generateInListParams(columnValues.size()) : "");
 
         LOGGER.info("About to do cutover via " + changeTable);
         TableViewFinderResult childViewsResult = ViewUtil.findChildViews(connection, tenantId, schema, tableName);
@@ -451,8 +489,25 @@ public class Transform {
         connection.setAutoCommit(false);
         List<TableInfo> viewsToUpdateCache = new ArrayList<>();
         try {
-            connection.createStatement().execute(changeTable);
-
+            try (PreparedStatement stmt = connection.prepareStatement(changeTable)) {
+                int param = 0;
+                if (tenantId == null) {
+                    stmt.setNull(++param, Types.VARCHAR);
+                } else {
+                    stmt.setString(++param, tenantId);
+                }
+                if (schema == null) {
+                    stmt.setNull(++param, Types.VARCHAR);
+                } else {
+                    stmt.setString(++param, schema);
+                }
+                stmt.setString(++param, tableName);
+                stmt.setString(++param, newTableName);
+                for (int i = 0; i < columnValues.size(); i++) {
+                    stmt.setInt(++param, Integer.parseInt(columnValues.get(i)));
+                }
+                stmt.execute();
+            }
             // Update column qualifiers
             PTable pNewTable = PhoenixRuntime.getTable(connection, systemTransformRecord.getNewPhysicalTableName());
             PTable pOldTable = PhoenixRuntime.getTable(connection, SchemaUtil.getTableName(schema, tableName));
@@ -463,11 +518,16 @@ public class Transform {
                 // We need to update the columns's qualifiers as well
                 mutateColumns(connection.unwrap(PhoenixConnection.class), pOldTable, pNewTable);
 
+                HashMap<String, PColumn> columnMap = new HashMap<>();
+                for (PColumn column : pNewTable.getColumns()) {
+                    columnMap.put(column.getName().getString(), column);
+                }
+
                 // Also update view column qualifiers
                 for (TableInfo view : childViewsResult.getLinks()) {
                     PTable pView = PhoenixRuntime.getTable(connection, view.getTenantId()==null? null: Bytes.toString(view.getTenantId())
                             , SchemaUtil.getTableName(view.getSchemaName(), view.getTableName()));
-                    mutateViewColumns(connection.unwrap(PhoenixConnection.class), pView, pNewTable);
+                    mutateViewColumns(connection.unwrap(PhoenixConnection.class), pView, pNewTable, columnMap);
                 }
             }
             connection.commit();
@@ -477,13 +537,28 @@ public class Transform {
             int batchSize = 0;
             for (TableInfo view : childViewsResult.getLinks()) {
                 String changeView = String.format(changeViewStmt,
-                        (columnNames.size() > 0? "," + String.join(",", columnNames):""),
-                        (view.getTenantId()==null || view.getTenantId().length == 0? null: ("'" + Bytes.toString(view.getTenantId()) + "'")),
-                        (view.getSchemaName()==null || view.getSchemaName().length == 0? null : ("'" + Bytes.toString(view.getSchemaName()) + "'")),
-                        Bytes.toString(view.getTableName()),
-                        (columnValues.size() > 0? "," + String.join(",", columnValues):""));
+                    columnNames.size() > 0 ? "," + String.join(",", columnNames) : "",
+                    columnNames.size() > 0 ? ","
+                        + QueryUtil.generateInListParams(columnValues.size()) : "");
                 LOGGER.info("Cutover changing view via " + changeView);
-                connection.createStatement().execute(changeView);
+                try (PreparedStatement stmt = connection.prepareStatement(changeView)) {
+                    int param = 0;
+                    if (view.getTenantId() == null || view.getTenantId().length == 0) {
+                        stmt.setNull(++param, Types.VARCHAR);
+                    } else {
+                        stmt.setString(++param, Bytes.toString(view.getTenantId()));
+                    }
+                    if (view.getSchemaName() == null || view.getSchemaName().length == 0) {
+                        stmt.setNull(++param, Types.VARCHAR);
+                    } else {
+                        stmt.setString(++param, Bytes.toString(view.getSchemaName()));
+                    }
+                    stmt.setString(++param, Bytes.toString(view.getTableName()));
+                    for (int i = 0; i < columnValues.size(); i++) {
+                        stmt.setInt(++param, Integer.parseInt(columnValues.get(i)));
+                    }
+                    stmt.execute();
+                }
                 viewsToUpdateCache.add(view);
                 batchSize++;
                 if (batchSize >= maxBatchSize) {
@@ -612,13 +687,16 @@ public class Transform {
         }
     }
 
-    private static void mutateViewColumns(PhoenixConnection connection, PTable pView, PTable pNewTable) throws SQLException {
-        if (pView.getEncodingScheme() != pNewTable.getEncodingScheme()) {
+    public static PTable getTransformedView(PTable pOldView, PTable pNewTable, HashMap<String, PColumn> columnMap, boolean withDerivedColumns) throws SQLException {
+        List<PColumn> newColumns = new ArrayList<>();
+        PTable pNewView = null;
+        if (pOldView.getEncodingScheme() != pNewTable.getEncodingScheme()) {
             Short nextKeySeq = 0;
             PTable.EncodedCQCounter cqCounterToUse = pNewTable.getEncodedCQCounter();
             String defaultColumnFamily = pNewTable.getDefaultFamilyName() != null && !Strings.isNullOrEmpty(pNewTable.getDefaultFamilyName().getString()) ?
                     pNewTable.getDefaultFamilyName().getString() : DEFAULT_COLUMN_FAMILY;
-            for (PColumn column : pView.getColumns()) {
+
+            for (PColumn column : pOldView.getColumns()) {
                 boolean isPk = SchemaUtil.isPKColumn(column);
                 Short keySeq = isPk ? ++nextKeySeq : null;
                 if (isPk) {
@@ -630,15 +708,18 @@ public class Transform {
                 } else {
                     familyName = defaultColumnFamily;
                 }
-                int encodedCQ = pView.isAppendOnlySchema() ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + keySeq) : cqCounterToUse.getNextQualifier(familyName);
-                if (!pView.isAppendOnlySchema()) {
-                    cqCounterToUse.increment(familyName);
-                }
-
+                int encodedCQ = pOldView.isAppendOnlySchema() ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + keySeq) : cqCounterToUse.getNextQualifier(familyName);
                 byte[] colQualifierBytes = EncodedColumnsUtil.getColumnQualifierBytes(column.getName().getString(),
                         encodedCQ, pNewTable, isPk);
+                if (columnMap.containsKey(column.getName().getString())) {
+                    colQualifierBytes = columnMap.get(column.getName().getString()).getColumnQualifierBytes();
+                } else {
+                    if (!column.isDerived()) {
+                        cqCounterToUse.increment(familyName);
+                    }
+                }
 
-                if (column.isDerived()) {
+                if (!withDerivedColumns && column.isDerived()) {
                     // Don't need to add/change derived columns
                     continue;
                 }
@@ -648,8 +729,37 @@ public class Transform {
                         , column.getArraySize(),
                         column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr(), column.isRowTimestamp(),
                         column.isDynamic(), colQualifierBytes, EnvironmentEdgeManager.currentTimeMillis());
-                String tenantId = pView.getTenantId() == null? null:pView.getTenantId().getString();
-                addColumnMutation(connection, tenantId, pView.getSchemaName()==null?null:pView.getSchemaName().getString()
+                newColumns.add(newCol);
+                if (!columnMap.containsKey(newCol.getName().getString())) {
+                    columnMap.put(newCol.getName().getString(), newCol) ;
+                }
+            }
+
+            pNewView = PTableImpl.builderWithColumns(pOldView, newColumns)
+                        .setQualifierEncodingScheme(pNewTable.getEncodingScheme())
+                        .setImmutableStorageScheme(pNewTable.getImmutableStorageScheme())
+                        .setPhysicalNames(
+                                Collections.singletonList(SchemaUtil.getPhysicalHBaseTableName(
+                                        pNewTable.getSchemaName(), pNewTable.getTableName(), pNewTable.isNamespaceMapped())))
+                        .build();
+        } else {
+            // Have to change this per transform type
+        }
+        return pNewView;
+    }
+
+    private static void mutateViewColumns(PhoenixConnection connection, PTable pView, PTable pNewTable, HashMap<String, PColumn> columnMap) throws SQLException {
+        if (pView.getEncodingScheme() != pNewTable.getEncodingScheme()) {
+            Short nextKeySeq = 0;
+            PTable newView = getTransformedView(pView, pNewTable, columnMap,false);
+            for (PColumn newCol : newView.getColumns()) {
+                boolean isPk = SchemaUtil.isPKColumn(newCol);
+                Short keySeq = isPk ? ++nextKeySeq : null;
+                if (isPk) {
+                    continue;
+                }
+                String tenantId = pView.getTenantId() == null ? null : pView.getTenantId().getString();
+                addColumnMutation(connection, tenantId, pView.getSchemaName() == null ? null : pView.getSchemaName().getString()
                         , pView.getTableName().getString(), newCol,
                         pView.getParentTableName() == null ? null : pView.getParentTableName().getString()
                         , pView.getPKName() == null ? null : pView.getPKName().getString(), keySeq, pView.getBucketNum() != null);

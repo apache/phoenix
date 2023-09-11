@@ -18,7 +18,6 @@
 package org.apache.phoenix.schema.stats;
 
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized;
 
@@ -34,21 +33,9 @@ public class TxStatsCollectorIT extends BaseStatsCollectorIT {
 
     @Parameterized.Parameters(name = "mutable={0},transactionProvider={1},columnEncoded={2}")
     public static Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(
-                Arrays.asList(
-                        new Object[][] {
-                                // Immutable, TEPHRA, Column Encoded
-                                { false, "TEPHRA", true },
-                                // Immutable, TEPHRA, Non Column Encoded
-                                { false, "TEPHRA", false },
-                                // Immutable, OMID, Non Column Encoded
-                                { false, "OMID", false },
-
-                                // Mutable, TEPHRA, Column Encoded
-                                { true, "TEPHRA", true },
-                                // Mutable, TEPHRA, Non Column Encoded
-                                { true, "TEPHRA", false },
-                                // Mutable, OMID, Non Column Encoded
-                                { true, "OMID", false }}), 1);
+        return Arrays.asList(new Object[][] {
+            // OMID does not support column encoding
+            { false, "OMID", false }, { true, "OMID", false }
+        });
     }
 }

@@ -408,18 +408,17 @@ public class AddColumnMutator implements ColumnMutator {
                                 rowKeyMetaData[TABLE_NAME_INDEX])));
             }
         }
-        if (isAddingColumns) {
-            //We're changing the application-facing schema by adding a column, so update the DDL
-            // timestamp
-            long serverTimestamp = EnvironmentEdgeManager.currentTimeMillis();
-            if (MetaDataUtil.isTableDirectlyQueried(table.getType())) {
-                additionalTableMetadataMutations.add(MetaDataUtil.getLastDDLTimestampUpdate(tableHeaderRowKey,
+
+        //We're changing the application-facing schema by adding a column or changing properties, so update the DDL
+        // timestamp
+        long serverTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+        if (MetaDataUtil.isTableDirectlyQueried(table.getType())) {
+            additionalTableMetadataMutations.add(MetaDataUtil.getLastDDLTimestampUpdate(tableHeaderRowKey,
                     clientTimeStamp, serverTimestamp));
-            }
-            //we don't need to update the DDL timestamp for child views, because when we look up
-            // a PTable, we'll take the max timestamp of a view and all its ancestors. This is true
-            // whether the view is diverged or not.
         }
+        //we don't need to update the DDL timestamp for child views, because when we look up
+        // a PTable, we'll take the max timestamp of a view and all its ancestors. This is true
+        // whether the view is diverged or not.
         tableMetaData.addAll(additionalTableMetadataMutations);
         if (type == PTableType.VIEW) {
             if ( EncodedColumnsUtil.usesEncodedColumnNames(table) && addingCol &&

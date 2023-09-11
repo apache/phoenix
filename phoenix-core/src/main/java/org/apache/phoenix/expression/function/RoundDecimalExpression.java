@@ -24,9 +24,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
-import org.apache.hadoop.hbase.filter.CompareFilter;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.KeyPart;
@@ -180,7 +182,7 @@ public class RoundDecimalExpression extends ScalarFunction {
     @Override
     public KeyPart newKeyPart(final KeyPart childPart) {
         return new KeyPart() {
-            private final List<Expression> extractNodes = Collections.<Expression>singletonList(RoundDecimalExpression.this);
+            private final Set<Expression> extractNodes = new LinkedHashSet<>(Collections.<Expression>singleton(RoundDecimalExpression.this));
 
             @Override
             public PColumn getColumn() {
@@ -188,17 +190,17 @@ public class RoundDecimalExpression extends ScalarFunction {
             }
 
             @Override
-            public List<Expression> getExtractNodes() {
+            public Set<Expression> getExtractNodes() {
                 return extractNodes;
             }
 
             @Override
-            public KeyRange getKeyRange(CompareFilter.CompareOp op, Expression rhs) {
+            public KeyRange getKeyRange(CompareOperator op, Expression rhs) {
                 final BigDecimal rhsDecimal = (BigDecimal) PDecimal.INSTANCE.toObject(evaluateExpression(rhs));
                 
                 // equality requires an exact match. if rounding would cut off more precision
                 // than needed for a match, it's impossible for there to be any matches
-                if(op == CompareFilter.CompareOp.EQUAL && !hasEnoughPrecisionToProduce(rhsDecimal)) {
+                if(op == CompareOperator.EQUAL && !hasEnoughPrecisionToProduce(rhsDecimal)) {
                     return KeyRange.EMPTY_RANGE;
                 }
                 
@@ -255,7 +257,7 @@ public class RoundDecimalExpression extends ScalarFunction {
              * @param op  the operator to preserve comparison with in the event of lost precision
              * @return  the rounded decimal
              */
-            private BigDecimal roundAndPreserveOperator(BigDecimal decimal, CompareFilter.CompareOp op) {
+            private BigDecimal roundAndPreserveOperator(BigDecimal decimal, CompareOperator op) {
                 final BigDecimal rounded = roundToScale(decimal);
                 
                 // if we lost information, make sure that the rounding didn't break the operator

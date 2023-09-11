@@ -32,6 +32,7 @@ import static org.apache.phoenix.util.TestUtil.closeConnection;
 import static org.apache.phoenix.util.TestUtil.closeStatement;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -55,6 +56,7 @@ import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -70,7 +72,6 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.export.DefaultSchemaRegistryRepository;
 import org.apache.phoenix.schema.export.DefaultSchemaWriter;
 import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
-import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -84,6 +85,8 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -106,7 +109,8 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     private String indexTableFullName;
     private String tableDDLOptions;
     private final boolean columnEncoded;
-    
+    private static final Logger LOGGER = LoggerFactory.getLogger(AlterTableIT.class);
+
     public AlterTableIT(boolean columnEncoded) {
         this.columnEncoded = columnEncoded;
         this.tableDDLOptions = columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0";
@@ -246,7 +250,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             String createDdl = "CREATE TABLE " + fullTableName +
                 " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
                 " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
-                "CHANGE_DETECTION_ENABLED=true, SCHEMA_VERSION='OLD'";
+                "CHANGE_DETECTION_ENABLED=true, SCHEMA_VERSION='OLD', SALT_BUCKETS=4";
             conn.createStatement().execute(createDdl);
             PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
             assertEquals("OLD", table.getSchemaVersion());
@@ -256,11 +260,14 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             String alterVersionDdl = "ALTER TABLE " + fullTableName + " SET SCHEMA_VERSION='NEW'";
             conn.createStatement().execute(alterVersionDdl);
 
+            PTable newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            verifySchemaExport(newTable, getUtility().getConfiguration());
+
             String alterDdl = "ALTER TABLE " + fullTableName +
                 " ADD col3 VARCHAR NULL";
 
             conn.createStatement().execute(alterDdl);
-            PTable newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
             verifySchemaExport(newTable, getUtility().getConfiguration());
         }
     }
@@ -322,10 +329,9 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 
         //reconstructing the complete view sometimes messes up the base column count. It's not
         //needed in an external schema registry. TODO: fix the base column count anyway
-        String baseColumnCountPattern = "(?i)\\s*baseColumnCount:\\s\".*\"";
+        String baseColumnCountPattern = "(?i)\\s*baseColumnCount:\\s\\d*";
         expectedSchemaText = expectedSchemaText.replaceAll(baseColumnCountPattern, "");
-        actualSchemaText = expectedSchemaText.replaceAll(baseColumnCountPattern, "");
-
+        actualSchemaText = actualSchemaText.replaceAll(baseColumnCountPattern, "");
         assertEquals(expectedSchemaText, actualSchemaText);
     }
 
@@ -406,12 +412,17 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         final String tableName = generateUniqueName();
         final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, "V1.0");
-            String version = "V1.1";
-            String alterSql = "ALTER TABLE " + dataTableFullName + " SET SCHEMA_VERSION='" + version + "'";
+            CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, "V1.0", null);
+            final String version = "V1.1";
+            final String alterSql = "ALTER TABLE " + dataTableFullName + " SET SCHEMA_VERSION='" + version + "'";
             conn.createStatement().execute(alterSql);
             PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
             assertEquals(version, table.getSchemaVersion());
+            final String topicName = "MyTopicName";
+            final String alterSql2 = "ALTER TABLE " + dataTableFullName + " SET STREAMING_TOPIC_NAME='" + topicName + "'";
+            conn.createStatement().execute(alterSql2);
+            table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+            assertEquals(topicName, table.getStreamingTopicName());
         }
     }
 
@@ -863,6 +874,28 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testAddColumnWithRetry_PostConcurrentFailureOnFirstTime() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String ddl = "CREATE TABLE " + dataTableFullName + " (\n"
+                +"ID VARCHAR(15) PRIMARY KEY,\n"
+                +"COL1 BIGINT) " + tableDDLOptions;
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        conn1.createStatement().execute(ddl);
+        MetaDataEndpointImpl.setFailConcurrentMutateAddColumnOneTimeForTesting(true);
+        ddl = "ALTER TABLE " + dataTableFullName + " ADD STRING VARCHAR, STRING_DATA_TYPES VARCHAR";
+        conn1.createStatement().execute(ddl);
+        ResultSet rs = conn1.getMetaData().getColumns("","",dataTableFullName,null);
+        assertTrue(rs.next());
+        assertEquals("ID", rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("COL1", rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("STRING", rs.getString(4));
+        assertTrue(rs.next());
+        assertEquals("STRING_DATA_TYPES", rs.getString(4));
+    }
+
+    @Test
     public void testAddMultipleColumns() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String ddl = "CREATE TABLE " + dataTableFullName + " (\n"
@@ -1222,9 +1255,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     
 	@Test
 	public void testCreatingTxnTableFailsIfTxnsDisabled() throws Exception {
-	    if (!TransactionFactory.Provider.getDefault().runTests()) {
-	        return;
-	    }
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(false));
 		try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -1478,35 +1508,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test
-    public void testSetPropertyDoesntUpdateDDLTimestamp() throws Exception {
-        Properties props = new Properties();
-        String tableDDL = "CREATE TABLE IF NOT EXISTS " + dataTableFullName + " ("
-            + " ENTITY_ID integer NOT NULL,"
-            + " COL1 integer NOT NULL,"
-            + " COL2 bigint NOT NULL,"
-            + " CONSTRAINT NAME_PK PRIMARY KEY (ENTITY_ID, COL1, COL2)"
-            + " ) " + generateDDLOptions("");
-
-        String setPropertyDDL = "ALTER TABLE " + dataTableFullName +
-            " SET UPDATE_CACHE_FREQUENCY=300000 ";
-        long startTS = EnvironmentEdgeManager.currentTimeMillis();
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.createStatement().execute(tableDDL);
-            //first get the original DDL timestamp when we created the table
-            long tableDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
-                dataTableFullName, startTS,
-                conn);
-            Thread.sleep(1);
-            //now change a property and make sure the timestamp DOES NOT update
-            conn.createStatement().execute(setPropertyDDL);
-            PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
-            assertNotNull(table);
-            assertNotNull(table.getLastDDLTimestamp());
-            assertEquals(tableDDLTimestamp, table.getLastDDLTimestamp().longValue());
-        }
-    }
-
 	private void assertEncodedCQValue(String columnFamily, String columnName, String schemaName, String tableName, int expectedValue) throws Exception {
         String query = "SELECT " + COLUMN_QUALIFIER + " FROM \"SYSTEM\".CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
                 + " = ? " + " AND " + COLUMN_FAMILY + " = ?" + " AND " + COLUMN_NAME  + " = ?" + " AND " + COLUMN_QUALIFIER  + " IS NOT NULL";
@@ -1688,4 +1689,67 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testAlterTableWithColumnQualifiers() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE \"" + tableName + "\"(K VARCHAR NOT NULL PRIMARY KEY, " +
+                "INT INTEGER ENCODED_QUALIFIER 11, INT2 INTEGER ENCODED_QUALIFIER 12, " +
+                "INT3 INTEGER ENCODED_QUALIFIER 14) " +
+                generateDDLOptions("IMMUTABLE_ROWS = true"
+                        + (!columnEncoded ? ",IMMUTABLE_STORAGE_SCHEME=" + PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN : "")) +
+                " COLUMN_QUALIFIER_COUNTER ('" + QueryConstants.DEFAULT_COLUMN_FAMILY + "'=15)";
+        conn.createStatement().execute(ddl);
+
+        String addDdl = "ALTER TABLE \"" + tableName + "\" ADD CHAR1 char(10)";
+        conn.createStatement().execute(addDdl);
+
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable table = pconn.getTable(new PTableKey(null, tableName));
+
+        QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
+        if (columnEncoded) {
+            assertNotEquals(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, encodingScheme);
+        } else {
+            assertEquals(PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, encodingScheme);
+        }
+
+        PTable.EncodedCQCounter cqCounter = table.getEncodedCQCounter();
+        assertEquals(columnEncoded ? 16 : null, cqCounter.getNextQualifier(QueryConstants.DEFAULT_COLUMN_FAMILY));
+        if (columnEncoded) {
+            assertEquals(11, encodingScheme.decode(table.getColumnForColumnName("INT")
+                    .getColumnQualifierBytes()));
+            assertEquals(12, encodingScheme.decode(table.getColumnForColumnName("INT2")
+                    .getColumnQualifierBytes()));
+            assertEquals(14, encodingScheme.decode(table.getColumnForColumnName("INT3")
+                    .getColumnQualifierBytes()));
+            assertEquals(15, encodingScheme.decode(table.getColumnForColumnName("CHAR1")
+                    .getColumnQualifierBytes()));
+        }
+    }
+
+    /**
+     * Test that LAST_DDL_TIMESTAMP is updated when we alter properties of a table.
+     * @throws Exception
+     */
+    @Test
+    public void testChangePropertiesUpdatesLASTDDLTimestamp() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE  " + dataTableFullName +
+                    "  (a_string varchar not null, a_binary VARCHAR not null, col1 integer" +
+                    "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary)) " + tableDDLOptions;
+            conn.createStatement().execute(ddl);
+            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            PTable table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), dataTableFullName));
+            long oldLastDDLTimestamp = table.getLastDDLTimestamp();
+            LOGGER.info("Last DDL timestamp before changing property: " + oldLastDDLTimestamp);
+            conn.createStatement().execute("ALTER TABLE " + dataTableFullName + " SET DISABLE_WAL = true");
+            table = phxConn.getTable(new PTableKey(null, dataTableFullName));
+            long newLastDDLTimestamp = table.getLastDDLTimestamp();
+            LOGGER.info("Last DDL timestamp after changing property : " + newLastDDLTimestamp);
+            assertTrue("LastDDLTimestamp should have been updated",
+                    newLastDDLTimestamp > oldLastDDLTimestamp);
+        }
+    }
 }

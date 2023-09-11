@@ -67,9 +67,11 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(MutableIndexIT.class);
     protected final boolean localIndex;
     private final String tableDDLOptions;
+    private final boolean columnEncoded;
     
     public MutableIndexIT(Boolean localIndex, String txProvider, Boolean columnEncoded) {
         this.localIndex = localIndex;
+        this.columnEncoded = columnEncoded;
         StringBuilder optionBuilder = new StringBuilder();
         if (txProvider != null) {
             optionBuilder.append("TRANSACTIONAL=true," + PhoenixDatabaseMetaData.TRANSACTION_PROVIDER + "='" + txProvider + "'");
@@ -92,18 +94,18 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         return getConnection(props);
     }
-    
-    @Parameters(name="MutableIndexIT_localIndex={0},transactionProvider={1},columnEncoded={2}") // name is used by failsafe as file name in reports
+
+    // name is used by failsafe as file name in reports
+    @Parameters(name="MutableIndexIT_localIndex={0},transactionProvider={1},columnEncoded={2}")
     public static synchronized Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
-                { false, null, false }, { false, null, true },
-                { false, "TEPHRA", false }, { false, "TEPHRA", true },
-                { false, "OMID", false },
-                { true, null, false }, { true, null, true },
-                { true, "TEPHRA", false }, { true, "TEPHRA", true },
-                }),1);
+        return Arrays.asList(new Object[][] {
+            { false, null, false }, { false, null, true },
+            // OMID does not support local indexes or column encoding
+            { false, "OMID", false },
+            { true, null, false }, { true, null, true },
+        });
     }
-    
+
     @Test
     public void testCoveredColumnUpdates() throws Exception {
         try (Connection conn = getConnection()) {
@@ -400,11 +402,13 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if (localIndex) {
                 assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + "    SERVER FILTER BY " + (columnEncoded ? "FIRST KEY" :  "EMPTY COLUMN") + " ONLY\n"
                         + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName + "\n"
-                           + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
+                           + "    SERVER FILTER BY " +
+                        (columnEncoded ? "FIRST KEY" :  "EMPTY COLUMN") + " ONLY",
+                        QueryUtil.getExplainPlan(rs));
             }
             //make sure the data table looks like what we expect
             rs = conn.createStatement().executeQuery(query);
@@ -527,12 +531,12 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if(localIndex) {
                 assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + "    SERVER FILTER BY " + (columnEncoded ? "FIRST KEY" :  "EMPTY COLUMN") + " ONLY\n"
                         + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName + "\n"
-                        + "    SERVER FILTER BY FIRST KEY ONLY",
+                        + "    SERVER FILTER BY " + (columnEncoded ? "FIRST KEY" :  "EMPTY COLUMN") + " ONLY",
                     QueryUtil.getExplainPlan(rs));
             }
         
@@ -818,7 +822,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           // PHOENIX-4980
           // When there is a flush after a data table update of non-indexed columns, the
           // index gets out of sync on the next write
-          getUtility().getHBaseAdmin().flush(TableName.valueOf(fullTableName));
+          getUtility().getAdmin().flush(TableName.valueOf(fullTableName));
           conn.createStatement().executeUpdate("UPSERT INTO " + fullTableName + "(k,v1,v2) VALUES ('testKey','v1_4','v2_3')");
           conn.commit();
           IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
@@ -934,7 +938,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
         final String indexFullName = SchemaUtil.getTableName(schemaName, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String version = "V1.0";
-            CreateTableIT.testCreateTableSchemaVersionHelper(conn, schemaName, tableName, version);
+            CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, version, null);
             String createIndexSql = "CREATE INDEX " + indexName + " ON " + dataTableFullName +
                     " (ID2) INCLUDE (ID1) SCHEMA_VERSION='" + version + "'";
             conn.createStatement().execute(createIndexSql);

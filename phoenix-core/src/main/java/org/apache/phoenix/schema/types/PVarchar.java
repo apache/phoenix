@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.sql.SQLException;
 import java.sql.Types;
 import java.text.Format;
 
@@ -70,6 +71,17 @@ public class PVarchar extends PDataType<String> {
             offset = 0;
         }
         return Bytes.toString(bytes, offset, length);
+    }
+
+    @Override
+    public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+            SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
+            throws SQLException {
+        if (String.class.isAssignableFrom(jdbcType)) {
+            //We don't actually get here, we shortcut the String case in ResultSet
+            return toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
+        }
+        throw newMismatchException(actualType, jdbcType);
     }
 
     @Override

@@ -18,10 +18,9 @@
 
 package org.apache.phoenix.pherf;
 
-import org.joda.time.DateTimeZone;
-
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.ZoneId;
 import java.util.Properties;
 
 public class PherfConstants {
@@ -41,7 +40,7 @@ public class PherfConstants {
     public static final int DEFAULT_THREAD_POOL_SIZE = 10;
     public static final int DEFAULT_BATCH_SIZE = 1000;
     public static final String DEFAULT_DATE_PATTERN = "yyyy-MM-dd HH:mm:ss.SSS";
-    public static final DateTimeZone DEFAULT_TIME_ZONE = DateTimeZone.UTC;
+    public static final ZoneId DEFAULT_TIME_ZONE = ZoneId.of("UTC");
     public static final String RESOURCE_SCENARIO = "/scenario";
     public static final String
             SCENARIO_ROOT_PATTERN =

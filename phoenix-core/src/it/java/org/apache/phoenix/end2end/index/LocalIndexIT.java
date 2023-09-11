@@ -777,8 +777,8 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         for (int i = 0; i < startKeys.length; i++) {
             Scan s = new Scan();
             s.addFamily(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
-            s.setStartRow(startKeys[i]);
-            s.setStopRow(endKeys[i]);
+            s.withStartRow(startKeys[i]);
+            s.withStopRow(endKeys[i]);
             ResultScanner scanner = indexTable.getScanner(s);
             int count = 0;
             for(Result r:scanner){
@@ -810,7 +810,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             ResultSet rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
 
             Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            int numRegions = admin.getTableRegions(physicalTableName).size();
+            int numRegions = admin.getRegions(physicalTableName).size();
 
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
@@ -879,7 +879,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             ResultSet rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
 
             Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            int numRegions = admin.getTableRegions(physicalTableName).size();
+            int numRegions = admin.getRegions(physicalTableName).size();
 
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY REVERSE RANGE SCAN OVER "
@@ -926,7 +926,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             assertTrue(rs.next());
             
             Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            int numRegions = admin.getTableRegions(physicalTableName).size();
+            int numRegions = admin.getRegions(physicalTableName).size();
             
             String query = "SELECT t_id, k1, k2, k3, V1 FROM " + tableName +" where v1='a'";
             rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
@@ -1098,8 +1098,8 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             // No entry should be present in local index table after drop index.
             for (int i = 0; i < startKeys.length; i++) {
                 Scan s = new Scan();
-                s.setStartRow(startKeys[i]);
-                s.setStopRow(endKeys[i]);
+                s.withStartRow(startKeys[i]);
+                s.withStopRow(endKeys[i]);
                 ColumnFamilyDescriptor[] families = table.getDescriptor().getColumnFamilies();
                 for(ColumnFamilyDescriptor cf: families) {
                     if(cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)){

@@ -155,14 +155,13 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
 
 
 
-            String expected = 
-                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableName + "\n" +
-                    "    SKIP-SCAN-JOIN TABLE 0\n" +
-                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " \\['a'\\]\n" +
-                    "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                    "    DYNAMIC SERVER FILTER BY \\(\"" + dataTableName + ".T_ID\", \"" + dataTableName + ".K1\", \"" + dataTableName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+            String expected =
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " ['a']\n" +
+                            "    SERVER MERGE [0.K3]\n" +
+                            "    SERVER FILTER BY FIRST KEY ONLY";
             String actual = QueryUtil.getExplainPlan(rs);
-            assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
+            assertTrue("Expected:\n" + expected + "\nbut got\n" + actual,
+                    actual.equals(expected));
             
             rs = conn1.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -180,14 +179,13 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ * FROM " + dataTableName +" where v1='a'";
             rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
-            expected = 
-                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableName + "\n" +
-                    "    SKIP-SCAN-JOIN TABLE 0\n" +
-                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " \\['a'\\]\n" +
-                    "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                    "    DYNAMIC SERVER FILTER BY \\(\"" + dataTableName + ".T_ID\", \"" + dataTableName + ".K1\", \"" + dataTableName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+            expected =
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " ['a']\n" +
+                            "    SERVER MERGE [0.K3]\n" +
+                            "    SERVER FILTER BY FIRST KEY ONLY";
             actual = QueryUtil.getExplainPlan(rs);
-            assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
+            assertTrue("Expected:\n" + expected + "\nbut got\n" + actual,
+                    actual.equals(expected));
             
             rs = conn1.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -207,16 +205,15 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ * FROM " + dataTableName +" where v1='a' limit 1";
             rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
-            expected = 
-                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableName + "\n" +
-                    "CLIENT 1 ROW LIMIT\n" +
-                    "    SKIP-SCAN-JOIN TABLE 0\n" +
-                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " \\['a'\\]\n" +
-                    "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                    "    DYNAMIC SERVER FILTER BY \\(\"" + dataTableName + ".T_ID\", \"" + dataTableName + ".K1\", \"" + dataTableName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)\n" +
-                    "    JOIN-SCANNER 1 ROW LIMIT";
+            expected =
+                    "CLIENT SERIAL 1-WAY RANGE SCAN OVER " + indexTableName + " ['a']\n" +
+                            "    SERVER MERGE [0.K3]\n" +
+                            "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                            "    SERVER 1 ROW LIMIT\n" +
+                            "CLIENT 1 ROW LIMIT";
             actual = QueryUtil.getExplainPlan(rs);
-            assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
+            assertTrue("Expected:\n" + expected + "\nbut got\n" + actual,
+                    actual.equals(expected));
             
             rs = conn1.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -257,7 +254,44 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             assertEquals(4, rs.getInt("k3"));
             assertEquals("z", rs.getString("V1"));
             assertFalse(rs.next());
-            
+
+            //Same as above, but with SKIP-SCAN-JOIN hint
+            query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + "), NO_INDEX_SERVER_MERGE */ t_id, k1, k2, k3, V1 from " + dataTableFullName + "  where v1<='z' and k3 > 1 order by V1,t_id";
+            rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
+            expected =
+                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableName + "\n"
+                    + "    SERVER FILTER BY K3 > 1\n"
+                    + "    SERVER SORTED BY \\[" + dataTableName + "\\.V1, " + dataTableName + "\\.T_ID\\]\n"
+                    + "CLIENT MERGE SORT\n"
+                    + "    SKIP-SCAN-JOIN TABLE 0\n"
+                    + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " \\[\\*\\] - \\['z'\\]\n"
+                    + "            SERVER FILTER BY FIRST KEY ONLY\n"
+                    + "    DYNAMIC SERVER FILTER BY \\(\"" + dataTableName + "\\.T_ID\", \"" + dataTableName + "\\.K1\", \"" + dataTableName + "\\.K2\"\\) IN \\(\\(\\$\\d+\\.\\$\\d+, \\$\\d+\\.\\$\\d+, \\$\\d+\\.\\$\\d+\\)\\)";
+            actual = QueryUtil.getExplainPlan(rs);
+            assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
+
+
+            rs = conn1.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("f", rs.getString("t_id"));
+            assertEquals(1, rs.getInt("k1"));
+            assertEquals(2, rs.getInt("k2"));
+            assertEquals(3, rs.getInt("k3"));
+            assertEquals("a", rs.getString("V1"));
+            assertTrue(rs.next());
+            assertEquals("j", rs.getString("t_id"));
+            assertEquals(2, rs.getInt("k1"));
+            assertEquals(4, rs.getInt("k2"));
+            assertEquals(2, rs.getInt("k3"));
+            assertEquals("a", rs.getString("V1"));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString("t_id"));
+            assertEquals(1, rs.getInt("k1"));
+            assertEquals(2, rs.getInt("k2"));
+            assertEquals(4, rs.getInt("k3"));
+            assertEquals("z", rs.getString("V1"));
+            assertFalse(rs.next());
+
             query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ t_id, V1, k3 from " + dataTableFullName + "  where v1 <='z' group by v1,t_id, k3";
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             expected =

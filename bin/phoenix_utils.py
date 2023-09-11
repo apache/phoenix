@@ -81,11 +81,15 @@ def setPath():
     PHOENIX_TRACESERVER_JAR_PATTERN = "phoenix-tracing-webapp-*-runnable.jar"
     PHOENIX_TESTS_JAR_PATTERN = "phoenix-core-*-tests*.jar"
     PHOENIX_PHERF_JAR_PATTERN = "phoenix-pherf-*[!s].jar"
-    SLF4J_LOG4J12_JAR_PATTERN = "slf4j-log4j12-*[!s].jar"
+    SLF4J_BACKEND_JAR_PATTERN = "log4j-slf4j*.jar"
+    LOGGING_JAR_PATTERN = "log4j-core*.jar"
+    LOGGING_JAR_PATTERN2 = "log4j-api*.jar"
+    LOGGING_JAR_PATTERN3 = "log4j-1.2-api*.jar"
     SQLLINE_WITH_DEPS_PATTERN = "sqlline-*-jar-with-dependencies.jar"
 
 
     OVERRIDE_SLF4J_BACKEND = "OVERRIDE_SLF4J_BACKEND_JAR_LOCATION"
+    OVERRIDE_LOGGING = "OVERRIDE_LOGGING_JAR_LOCATION"
     OVERRIDE_SQLLINE = "OVERRIDE_SQLLINE_JAR_LOCATION"
 
     # Backward support old env variable PHOENIX_LIB_DIR replaced by PHOENIX_CLASS_PATH
@@ -176,7 +180,14 @@ def setPath():
     global slf4j_backend_jar
     slf4j_backend_jar = os.environ.get(OVERRIDE_SLF4J_BACKEND)
     if slf4j_backend_jar is None or slf4j_backend_jar == "":
-        slf4j_backend_jar = findFileInPathWithoutRecursion(SLF4J_LOG4J12_JAR_PATTERN, os.path.join(current_dir, "..","lib"))
+        slf4j_backend_jar = findFileInPathWithoutRecursion(SLF4J_BACKEND_JAR_PATTERN, os.path.join(current_dir, "..","lib"))
+
+    global logging_jar
+    logging_jar = os.environ.get(OVERRIDE_LOGGING)
+    if logging_jar is None or logging_jar == "":
+        logging_jar = findFileInPathWithoutRecursion(LOGGING_JAR_PATTERN, os.path.join(current_dir, "..","lib"))
+        logging_jar += ":"+findFileInPathWithoutRecursion(LOGGING_JAR_PATTERN2, os.path.join(current_dir, "..","lib"))
+        logging_jar += ":"+findFileInPathWithoutRecursion(LOGGING_JAR_PATTERN3, os.path.join(current_dir, "..","lib"))
 
     return ""
 
@@ -212,3 +223,4 @@ if __name__ == "__main__":
     print("hadoop_classpath:", hadoop_classpath)
     print("sqlline_with_deps_jar:", sqlline_with_deps_jar)
     print("slf4j_backend_jar:", slf4j_backend_jar)
+    print("logging_jar:", logging_jar)

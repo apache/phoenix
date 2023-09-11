@@ -32,6 +32,7 @@ public enum MetricType {
     MUTATION_BATCH_SIZE("ms", "Number of mutations in the batch",LogLevel.OFF, PLong.INSTANCE),
     MUTATION_BYTES("mb", "Size of mutations in bytes",LogLevel.OFF, PLong.INSTANCE),
     MUTATION_COMMIT_TIME("mt", "Time it took to commit a batch of mutations",LogLevel.OFF, PLong.INSTANCE),
+    MUTATION_SYSCAT_TIME("msyst", "Time it spent in syscat before mutation", LogLevel.OFF, PLong.INSTANCE),
     MUTATION_BATCH_FAILED_SIZE("mfs", "Number of mutations that failed to be committed",LogLevel.OFF, PLong.INSTANCE),
     MUTATION_SQL_COUNTER("msc", "Counter for number of mutation sql statements",LogLevel.OFF, PLong.INSTANCE),
     UPSERT_SQL_COUNTER("uc", "Counter for number of upsert sql queries", LogLevel.OFF, PLong.INSTANCE),
@@ -144,6 +145,10 @@ public enum MetricType {
     PHOENIX_CONNECTIONS_THROTTLED_COUNTER("ct", "Number of client Phoenix connections prevented from opening " +
                                               "because there are already too many to that target cluster.",LogLevel.OFF, PLong.INSTANCE),
     PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER("ca","Number of requests for Phoenix connections, whether successful or not.",LogLevel.OFF, PLong.INSTANCE),
+    PHOENIX_CONNECTIONS_FAILED_COUNTER("cf", "Number of client Phoenix Connections Failed to open" +
+                                                ", not including throttled connections", LogLevel.OFF, PLong.INSTANCE),
+    CLIENT_METADATA_CACHE_MISS_COUNTER("cmcm", "Number of cache misses for the CQSI cache.", LogLevel.DEBUG, PLong.INSTANCE),
+    CLIENT_METADATA_CACHE_HIT_COUNTER("cmch", "Number of cache hits for the CQSI cache.", LogLevel.DEBUG, PLong.INSTANCE),
     // hbase metrics
     COUNT_RPC_CALLS("rp", "Number of RPC calls",LogLevel.DEBUG, PLong.INSTANCE),
     COUNT_REMOTE_RPC_CALLS("rr", "Number of remote RPC calls",LogLevel.DEBUG, PLong.INSTANCE),
@@ -165,8 +170,30 @@ public enum MetricType {
     NUM_METADATA_LOOKUP_FAILURES("nmlf", "Number of Failed  metadata lookup calls",
                                  LogLevel.DEBUG,PLong.INSTANCE),
     TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS("tsistrc", "Time spent in RPC calls for systemTable lookup",
-                                         LogLevel.DEBUG,PLong.INSTANCE);
-	
+                                         LogLevel.DEBUG,PLong.INSTANCE),
+
+    //HA Related Metrics
+    HA_PARALLEL_COUNT_OPERATIONS_ACTIVE_CLUSTER("hpoac","Number of Operations to the active cluster",LogLevel.DEBUG,PLong.INSTANCE),
+    HA_PARALLEL_COUNT_OPERATIONS_STANDBY_CLUSTER("hposc","Number of Operations to the standby cluster",LogLevel.DEBUG,PLong.INSTANCE),
+    HA_PARALLEL_COUNT_FAILED_OPERATIONS_ACTIVE_CLUSTER("hpfac","Number of Operations to the active cluster",LogLevel.DEBUG,PLong.INSTANCE),
+    HA_PARALLEL_COUNT_FAILED_OPERATIONS_STANDBY_CLUSTER("hpfsc","Number of Operations to the standby cluster",LogLevel.DEBUG,PLong.INSTANCE),
+    HA_PARALLEL_COUNT_USED_OPERATIONS_ACTIVE_CLUSTER("hpuac","Number of times active cluster was returned to the caller",LogLevel.DEBUG,PLong.INSTANCE),
+    HA_PARALLEL_COUNT_USED_OPERATIONS_STANDBY_CLUSTER("hpusc","Number of times standby cluster was returned to the caller",LogLevel.DEBUG,PLong.INSTANCE),
+    HA_PARALLEL_POOL1_TASK_QUEUE_WAIT_TIME("hpp1tw", "Time in milliseconds tasks had to wait in the queue of the thread pool executor",LogLevel.DEBUG, PLong.INSTANCE),
+    HA_PARALLEL_POOL1_TASK_END_TO_END_TIME("hpp1tee", "Time in milliseconds spent by tasks from creation to completion",LogLevel.DEBUG, PLong.INSTANCE),
+    HA_PARALLEL_POOL1_TASK_EXECUTION_TIME("hpp1tx", "Time in milliseconds tasks took to execute",LogLevel.DEBUG, PLong.INSTANCE),
+    HA_PARALLEL_POOL1_TASK_EXECUTED_COUNTER("hpp1te", "Counter for number of tasks submitted to the thread pool executor",LogLevel.DEBUG, PLong.INSTANCE),
+    HA_PARALLEL_POOL1_TASK_REJECTED_COUNTER("hpp1tr", "Counter for number of tasks that were rejected by the thread pool executor",LogLevel.DEBUG, PLong.INSTANCE),
+    HA_PARALLEL_POOL2_TASK_QUEUE_WAIT_TIME("hpp2tw", "Time in milliseconds tasks had to wait in the queue of the thread pool executor",LogLevel.DEBUG, PLong.INSTANCE),
+    HA_PARALLEL_POOL2_TASK_END_TO_END_TIME("hpp2tee", "Time in milliseconds spent by tasks from creation to completion",LogLevel.DEBUG, PLong.INSTANCE),
+    HA_PARALLEL_POOL2_TASK_EXECUTION_TIME("hpp2tx", "Time in milliseconds tasks took to execute",LogLevel.DEBUG, PLong.INSTANCE),
+    HA_PARALLEL_POOL2_TASK_EXECUTED_COUNTER("hpp2te", "Counter for number of tasks submitted to the thread pool executor",LogLevel.DEBUG, PLong.INSTANCE),
+    HA_PARALLEL_POOL2_TASK_REJECTED_COUNTER("hpp2tr", "Counter for number of tasks that were rejected by the thread pool executor",LogLevel.DEBUG, PLong.INSTANCE),
+    HA_PARALLEL_TASK_TIMEOUT_COUNTER("hptto", "Counter for number of tasks that timedout",LogLevel.DEBUG, PLong.INSTANCE),
+    HA_PARALLEL_CONNECTION_FALLBACK_COUNTER("hpcfc", "Counter for the number of connections that fellback to single cluster connection", LogLevel.DEBUG, PLong.INSTANCE),
+    HA_PARALLEL_CONNECTION_ERROR_COUNTER("hpcec","Counter for the number of parallel phoenix connections that return a failure to the user", LogLevel.DEBUG, PLong.INSTANCE),
+    HA_PARALLEL_CONNECTION_CREATED_COUNTER("hpccc","Counter for the number of parallel phoenix connections that were created", LogLevel.DEBUG, PLong.INSTANCE);
+
     private final String description;
     private final String shortName;
     private LogLevel logLevel;

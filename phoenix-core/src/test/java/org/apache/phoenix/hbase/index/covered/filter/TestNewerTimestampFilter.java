@@ -37,12 +37,12 @@ public class TestNewerTimestampFilter {
     NewerTimestampFilter filter = new NewerTimestampFilter(ts);
 
     KeyValue kv = new KeyValue(row, fam, qual, ts, val);
-    assertEquals("Didn't accept kv with matching ts", ReturnCode.INCLUDE, filter.filterKeyValue(kv));
+    assertEquals("Didn't accept kv with matching ts", ReturnCode.INCLUDE, filter.filterCell(kv));
 
     kv = new KeyValue(row, fam, qual, ts + 1, val);
-    assertEquals("Didn't skip kv with greater ts", ReturnCode.SKIP, filter.filterKeyValue(kv));
+    assertEquals("Didn't skip kv with greater ts", ReturnCode.SKIP, filter.filterCell(kv));
 
     kv = new KeyValue(row, fam, qual, ts - 1, val);
-    assertEquals("Didn't accept kv with lower ts", ReturnCode.INCLUDE, filter.filterKeyValue(kv));
+    assertEquals("Didn't accept kv with lower ts", ReturnCode.INCLUDE, filter.filterCell(kv));
   }
 }

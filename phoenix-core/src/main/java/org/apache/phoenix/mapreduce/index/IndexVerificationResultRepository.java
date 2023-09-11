@@ -327,8 +327,8 @@ public class IndexVerificationResultRepository implements AutoCloseable {
         byte[] stopRowKey = ByteUtil.calculateTheClosestNextRowKeyForPrefix(startRowKey);
         IndexToolVerificationResult verificationResult = new IndexToolVerificationResult(ts);
         Scan scan = new Scan();
-        scan.setStartRow(startRowKey);
-        scan.setStopRow(stopRowKey);
+        scan.withStartRow(startRowKey);
+        scan.withStopRow(stopRowKey);
         return aggregateVerificationResult(htable, verificationResult, scan);
     }
 
@@ -364,8 +364,8 @@ public class IndexVerificationResultRepository implements AutoCloseable {
             IndexToolVerificationResult verificationResult =
                 new IndexToolVerificationResult(ts);
             Scan scan = new Scan();
-            scan.setStartRow(startRowKey);
-            scan.setStopRow(stopRowKey);
+            scan.withStartRow(startRowKey);
+            scan.withStopRow(stopRowKey);
             return aggregateVerificationResult(hTable, verificationResult,
                 scan);
         }

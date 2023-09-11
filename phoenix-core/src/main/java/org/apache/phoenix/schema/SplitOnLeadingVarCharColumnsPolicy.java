@@ -17,10 +17,10 @@
  */
 package org.apache.phoenix.schema;
 
-import org.apache.phoenix.compat.hbase.CompatSteppingSplitPolicy;
+import org.apache.hadoop.hbase.regionserver.SteppingSplitPolicy;
 import org.apache.phoenix.util.SchemaUtil;
 
-public abstract class SplitOnLeadingVarCharColumnsPolicy extends CompatSteppingSplitPolicy {
+public abstract class SplitOnLeadingVarCharColumnsPolicy extends SteppingSplitPolicy {
     abstract protected int getColumnToSplitAt();
     
     protected final byte[] getSplitPoint(byte[] splitPoint) {

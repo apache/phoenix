@@ -58,7 +58,6 @@ import org.junit.runners.Parameterized.Parameters;
 /**
  * 
  * Transaction related tests that flap when run in parallel.
- * TODO: review with Tephra community
  *
  */
 @Category(ParallelStatsDisabledTest.class)
@@ -70,13 +69,12 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         txProvider = provider;
     }
 
-    @Parameters(name="FlappingTransactionIT_transactionProvider={0}") // name is used by failsafe as file name in reports
+    // name is used by failsafe as file name in reports
+    @Parameters(name="FlappingTransactionIT_transactionProvider={0}")
     public static synchronized Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {
-            {"TEPHRA"}, {"OMID"}
-           }),0);
+        return Arrays.asList(new Object[][] { { "OMID" } });
     }
-    
+
     @Test
     public void testDelete() throws Exception {
         String transTableName = generateUniqueName();

@@ -79,10 +79,9 @@ public class StatsEnabledSplitSystemCatalogIT extends BaseTest {
 
 	@Parameters(name = "transactionProvider = {0}")
 	public static Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] { 
-            { "TEPHRA" },
+        return Arrays.asList(new Object[][] {
             { "OMID" }, 
-            { null }}),0);
+            { null }});
 	}
 	
 	@BeforeClass

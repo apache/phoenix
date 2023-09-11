@@ -27,7 +27,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -112,7 +112,7 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.DelegateDatum;
-import org.apache.phoenix.schema.IndexDataColumnRef;
+import org.apache.phoenix.schema.IndexUncoveredDataColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
@@ -139,9 +139,6 @@ import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
-
-import static org.apache.phoenix.util.IndexUtil.isHintedGlobalIndex;
-
 
 public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expression> {
     private boolean isAggregate;
@@ -205,7 +202,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         ParseNode rhsNode = node.getChildren().get(1);
         Expression lhsExpr = children.get(0);
         Expression rhsExpr = children.get(1);
-        CompareOp op = node.getFilterOp();
+        CompareOperator op = node.getFilterOp();
 
         if (lhsNode instanceof RowValueConstructorParseNode && rhsNode instanceof RowValueConstructorParseNode) {
             int i = 0;
@@ -373,11 +370,10 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             // Rather than not use a local index when a column not contained by it is referenced, we
             // join back to the data table in our coprocessor since this is a relatively cheap
             // operation given that we know the join is local.
-            if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL
-                    || isHintedGlobalIndex(context.getCurrentTable())) {
+            if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(context.getCurrentTable())) {
                 try {
                     context.setUncoveredIndex(true);
-                    return new IndexDataColumnRef(context, context.getCurrentTable(),
+                    return new IndexUncoveredDataColumnRef(context, context.getCurrentTable(),
                             node.getName());
                 } catch (ColumnFamilyNotFoundException c) {
                     throw e;
@@ -514,13 +510,13 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             if (index == -1) {
                 String rhsLiteral = LikeExpression.unescapeLike(pattern);
                 if (node.getLikeType() == LikeType.CASE_SENSITIVE) {
-                  CompareOp op = node.isNegate() ? CompareOp.NOT_EQUAL : CompareOp.EQUAL;
-                  if (pattern.equals(rhsLiteral)) {
-                      return new ComparisonExpression(children, op);
-                  } else {
-                      rhs = LiteralExpression.newConstant(rhsLiteral, PChar.INSTANCE, rhs.getDeterminism());
-                      return new ComparisonExpression(Arrays.asList(lhs,rhs), op);
-                  }
+                    CompareOperator op = node.isNegate() ? CompareOperator.NOT_EQUAL : CompareOperator.EQUAL;
+                    if (pattern.equals(rhsLiteral)) {
+                        return new ComparisonExpression(children, op);
+                    } else {
+                        rhs = LiteralExpression.newConstant(rhsLiteral, PChar.INSTANCE, rhs.getDeterminism());
+                        return new ComparisonExpression(Arrays.asList(lhs, rhs), op);
+                    }
                 }
             } else {
                 byte[] wildcardString = new byte[pattern.length()];
@@ -528,7 +524,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 StringUtil.fill(wildcardString, 0, pattern.length(), wildcard, 0, 1, false);
                 if (pattern.equals(new String(wildcardString, StandardCharsets.UTF_8))) {
                     List<Expression> compareChildren = Arrays.asList(lhs, NOT_NULL_STRING);
-                    return new ComparisonExpression(compareChildren, node.isNegate() ? CompareOp.LESS : CompareOp.GREATER_OR_EQUAL);
+                    return new ComparisonExpression(compareChildren, node.isNegate() ? CompareOperator.LESS : CompareOperator.GREATER_OR_EQUAL);
                 }
             }
         }

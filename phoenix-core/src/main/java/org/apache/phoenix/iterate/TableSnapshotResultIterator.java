@@ -27,7 +27,6 @@ import java.util.UUID;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
@@ -39,12 +38,15 @@ import org.apache.hadoop.hbase.snapshot.SnapshotDescriptionUtils;
 import org.apache.hadoop.hbase.snapshot.SnapshotManifest;
 import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil.toRegionInfo;
 
 /**
  * Iterator to scan over an HBase snapshot based on input HBase Scan object.
@@ -73,12 +75,17 @@ public class TableSnapshotResultIterator implements ResultIterator {
   private FileSystem fs;
   private int currentRegion;
   private boolean closed = false;
+  private StatementContext context;
 
-  public TableSnapshotResultIterator(Configuration configuration, Scan scan, ScanMetricsHolder scanMetricsHolder)
+  private final boolean isMapReduceContext;
+  private final long maxQueryEndTime;
+
+  public TableSnapshotResultIterator(Configuration configuration, Scan scan, ScanMetricsHolder scanMetricsHolder, StatementContext context, boolean isMapReduceContext, long maxQueryEndTime)
       throws IOException {
     this.configuration = configuration;
     this.currentRegion = -1;
     this.scan = scan;
+    this.context = context;
     this.scanMetricsHolder = scanMetricsHolder;
     this.scanIterator = UNINITIALIZED_SCANNER;
     if (PhoenixConfigurationUtil.isMRSnapshotManagedExternally(configuration)) {
@@ -91,6 +98,8 @@ public class TableSnapshotResultIterator implements ResultIterator {
         PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
     this.rootDir = CommonFSUtils.getRootDir(configuration);
     this.fs = rootDir.getFileSystem(configuration);
+    this.isMapReduceContext = isMapReduceContext;
+    this.maxQueryEndTime = maxQueryEndTime;
     init();
   }
 
@@ -117,7 +126,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
       this.regions = new ArrayList<>(regionManifests.size());
       this.htd = manifest.getTableDescriptor();
       for (SnapshotProtos.SnapshotRegionManifest srm : regionManifests) {
-        HRegionInfo hri = HRegionInfo.convert(srm.getRegionInfo());
+        RegionInfo hri = toRegionInfo(srm.getRegionInfo());
         if (isValidRegion(hri)) {
           regions.add(hri);
         }
@@ -152,7 +161,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
         RegionInfo hri = regions.get(this.currentRegion);
         this.scanIterator =
             new ScanningResultIterator(new SnapshotScanner(configuration, fs, restoreDir, htd, hri, scan),
-                scan, scanMetricsHolder);
+                scan, scanMetricsHolder, context, isMapReduceContext, maxQueryEndTime);
       } catch (Throwable e) {
         throw ServerUtil.parseServerException(e);
       }

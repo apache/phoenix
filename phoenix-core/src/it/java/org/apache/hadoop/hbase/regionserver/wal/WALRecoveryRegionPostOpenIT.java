@@ -259,7 +259,7 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
             scan = new Scan();
             primaryTable.close();
             primaryTable = hbaseConn.getTable(TableName.valueOf(DATA_TABLE_NAME));
-            ((ClusterConnection)hbaseConn).clearRegionCache();
+            ((ClusterConnection)hbaseConn).clearRegionLocationCache();
             resultScanner = primaryTable.getScanner(scan);
             count = 0;
             for (Result result : resultScanner) {
@@ -315,9 +315,9 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
 
     private void moveRegionAndWait(MiniHBaseCluster miniHBaseCluster,HRegion destRegion, HRegionServer destRegionServer) throws IOException, InterruptedException {
         HMaster master = miniHBaseCluster.getMaster();
-        getUtility().getHBaseAdmin().move(
+        getUtility().getAdmin().move(
                 destRegion.getRegionInfo().getEncodedNameAsBytes(),
-                Bytes.toBytes(destRegionServer.getServerName().getServerName()));
+                destRegionServer.getServerName());
         while (true) {
             ServerName currentRegionServerName =
                     master.getAssignmentManager().getRegionStates().getRegionServerOfRegion(destRegion.getRegionInfo());

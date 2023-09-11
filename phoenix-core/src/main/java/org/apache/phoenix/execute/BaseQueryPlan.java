@@ -28,10 +28,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
-import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -41,6 +37,9 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -77,6 +76,9 @@ import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.trace.TracingIterator;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
@@ -86,9 +88,6 @@ import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
 
@@ -114,12 +113,6 @@ public abstract class BaseQueryPlan implements QueryPlan {
     protected final OrderBy orderBy;
     protected final GroupBy groupBy;
     protected final ParallelIteratorFactory parallelIteratorFactory;    
-    /*
-     * The filter expression that contains CorrelateVariableFieldAccessExpression
-     * and will have impact on the ScanRanges. It will recompiled at runtime 
-     * immediately before creating the ResultIterator.
-     */
-    protected final Expression dynamicFilter;
     protected final QueryPlan dataPlan;
     protected Long estimatedRows;
     protected Long estimatedSize;
@@ -131,7 +124,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
             StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projection, ParameterMetaData paramMetaData, Integer limit, Integer offset, OrderBy orderBy,
             GroupBy groupBy, ParallelIteratorFactory parallelIteratorFactory,
-            Expression dynamicFilter, QueryPlan dataPlan) {
+            QueryPlan dataPlan) {
         this.context = context;
         this.statement = statement;
         this.tableRef = table;
@@ -143,7 +136,6 @@ public abstract class BaseQueryPlan implements QueryPlan {
         this.orderBy = orderBy;
         this.groupBy = groupBy;
         this.parallelIteratorFactory = parallelIteratorFactory;
-        this.dynamicFilter = dynamicFilter;
         this.dataPlan = dataPlan;
     }
 
@@ -193,10 +185,6 @@ public abstract class BaseQueryPlan implements QueryPlan {
     public RowProjector getProjector() {
         return projection;
     }
-    
-    public Expression getDynamicFilter() {
-        return dynamicFilter;
-    }
 
 //    /**
 //     * Sets up an id used to do round robin queue processing on the server
@@ -237,6 +225,10 @@ public abstract class BaseQueryPlan implements QueryPlan {
 		return wrappedIterator;
 	}
 
+    protected void setScanReversedWhenOrderByIsReversed(Scan scan) {
+        ScanUtil.setReversed(scan);
+    }
+
     public final ResultIterator iterator(final Map<ImmutableBytesPtr,ServerCache> caches,
             ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
          if (scan == null) {
@@ -264,14 +256,9 @@ public abstract class BaseQueryPlan implements QueryPlan {
         // clone the scan for each parallelized chunk.
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
-        
-        if (dynamicFilter != null) {
-            WhereCompiler.compile(context, statement, null, Collections.singletonList(dynamicFilter), null,
-                    Optional.<byte[]>absent());
-        }
-        
+
         if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
-            ScanUtil.setReversed(scan);
+            setScanReversedWhenOrderByIsReversed(scan);
             // After HBASE-16296 is resolved, we no longer need to set
             // scan caching
         }
@@ -282,7 +269,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
           QueryServicesOptions.DEFAULT_SMALL_SCAN_THRESHOLD);
 
         if (statement.getHint().hasHint(Hint.SMALL) || (scanRanges.isPointLookup() && scanRanges.getPointLookupCount() < smallScanThreshold)) {
-            scan.setSmall(true);
+            scan.setReadType(Scan.ReadType.PREAD);
         }
         
 
@@ -346,7 +333,6 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 String parentSchemaName = parentTable.getParentSchemaName().getString();
                 String parentTableName = parentTable.getParentTableName().getString();
                 final ParseNodeFactory FACTORY = new ParseNodeFactory();
-                // TODO: is it necessary to re-resolve the table?
                 TableRef dataTableRef =
                         FromCompiler.getResolver(
                             FACTORY.namedTable(null, TableName.create(parentSchemaName, parentTableName)),

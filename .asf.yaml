@@ -22,7 +22,13 @@
 # changes with dev@ before committing.
 
 notifications:
-    commits:      commits@phoenix.apache.org
-    issues:       issues@phoenix.apache.org
-    pullrequests: issues@phoenix.apache.org
-    jira_options: link label comment
+  commits: commits@phoenix.apache.org
+  issues: issues@phoenix.apache.org
+  pullrequests: issues@phoenix.apache.org
+  jira_options: link label comment
+
+github:
+  enabled_merge_buttons:
+    squash: true
+    merge: false
+    rebase: false

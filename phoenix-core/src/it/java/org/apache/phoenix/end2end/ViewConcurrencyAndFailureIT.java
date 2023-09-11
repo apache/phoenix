@@ -67,7 +67,6 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -120,10 +119,10 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
     @Parameters(name="ViewConcurrencyAndFailureIT_transactionProvider={0}, "
             + "columnEncoded={1}")
     public static synchronized Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {
-                { "TEPHRA", false }, { "TEPHRA", true },
-                { "OMID", false },
-                { null, false }, { null, true }}),0);
+        return Arrays.asList(new Object[][] {
+            // OMID does not support column encoding
+            { "OMID", false },
+            { null, false }, { null, true }});
     }
 
     @BeforeClass

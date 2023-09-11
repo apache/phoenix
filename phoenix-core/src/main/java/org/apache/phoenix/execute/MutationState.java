@@ -29,6 +29,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SYSCAT_TIME;
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 
@@ -62,7 +63,6 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.htrace.Span;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
@@ -288,13 +288,14 @@ public class MutationState implements SQLCloseable {
     /**
      * Commit a write fence when creating an index so that we can detect when a data table transaction is started before
      * the create index but completes after it. In this case, we need to rerun the data table transaction after the
-     * index creation so that the index rows are generated. See TEPHRA-157 for more information.
+     * index creation so that the index rows are generated.
      * 
      * @param dataTable
      *            the data table upon which an index is being added
      * @throws SQLException
      */
     public void commitDDLFence(PTable dataTable) throws SQLException {
+        // Is this still useful after PHOENIX-6627?
         if (dataTable.isTransactional()) {
             try {
                 phoenixTransactionContext.commitDDLFence(dataTable);
@@ -302,7 +303,7 @@ public class MutationState implements SQLCloseable {
                 // The client expects a transaction to be in progress on the txContext while the
                 // VisibilityFence.prepareWait() starts a new tx and finishes/aborts it. After it's
                 // finished, we start a new one here.
-                // TODO: seems like an autonomous tx capability in Tephra would be useful here.
+                // TODO: seems like an autonomous tx capability would be useful here.
                 phoenixTransactionContext.begin();
             }
         }
@@ -761,19 +762,33 @@ public class MutationState implements SQLCloseable {
     }
 
     private void annotateMutationsWithMetadata(PTable table, List<Mutation> rowMutations) {
-        //only annotate if the change detection flag is on the table and HBase supports
-        // preWALAppend coprocs server-side
-        if (table == null || !table.isChangeDetectionEnabled()
-            || !HbaseCompatCapabilities.hasPreWALAppend()) {
+        if (table == null) {
             return;
         }
-        //annotate each mutation with enough metadata so that anyone interested can
+        // Annotate each mutation with enough phoenix metadata so that anyone interested can
         // deterministically figure out exactly what Phoenix schema object created the mutation
         // Server-side we can annotate the HBase WAL with these.
         for (Mutation mutation : rowMutations) {
             annotateMutationWithMetadata(table, mutation);
         }
 
+        //only annotate external schema id if the change detection flag is on the table.
+        if (!table.isChangeDetectionEnabled()) {
+            return;
+        }
+        //annotate each mutation with enough metadata so that anyone interested can
+        // deterministically figure out exactly what Phoenix schema object created the mutation
+        // Server-side we can annotate the HBase WAL with these.
+        for (Mutation mutation : rowMutations) {
+            annotateMutationWithMetadataWithExternalSchemaId(table, mutation);
+        }
+
+    }
+
+    private void annotateMutationWithMetadataWithExternalSchemaId(PTable table, Mutation mutation) {
+        byte[] externalSchemaRegistryId = table.getExternalSchemaId() != null ?
+                Bytes.toBytes(table.getExternalSchemaId()) : null;
+        WALAnnotationUtil.annotateMutation(mutation, externalSchemaRegistryId);
     }
 
     private void annotateMutationWithMetadata(PTable table, Mutation mutation) {
@@ -782,12 +797,10 @@ public class MutationState implements SQLCloseable {
         byte[] tableName = table.getTableName() != null ? table.getTableName().getBytes() : null;
         byte[] tableType = table.getType().getValue().getBytes();
         byte[] externalSchemaRegistryId = table.getExternalSchemaId() != null ?
-            Bytes.toBytes(table.getExternalSchemaId()) : null;
-        //Note that we use the _HBase_ byte encoding for a Long, not the Phoenix one, so that
-        //downstream consumers don't need to have the Phoenix codecs.
+                Bytes.toBytes(table.getExternalSchemaId()) : null;
         byte[] lastDDLTimestamp =
-            table.getLastDDLTimestamp() != null ? Bytes.toBytes(table.getLastDDLTimestamp()) : null;
-        WALAnnotationUtil.annotateMutation(mutation, externalSchemaRegistryId);
+                table.getLastDDLTimestamp() != null ? Bytes.toBytes(table.getLastDDLTimestamp()) : null;
+        WALAnnotationUtil.annotateMutation(mutation, tenantId, schemaName, tableName, tableType, lastDDLTimestamp);
     }
 
     /**
@@ -904,6 +917,7 @@ public class MutationState implements SQLCloseable {
         MetaDataClient client = new MetaDataClient(connection);
         long serverTimeStamp = tableRef.getTimeStamp();
         PTable table = null;
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         try {
             // If we're auto committing, we've already validated the schema when we got the ColumnResolver,
             // so no need to do it again here.
@@ -956,11 +970,14 @@ public class MutationState implements SQLCloseable {
                 }
             }
         } catch(Throwable e) {
-            if(table != null) {
+            if (table != null) {
                 TableMetricsManager.updateMetricsForSystemCatalogTableMethod(table.getTableName().toString(),
                         NUM_METADATA_LOOKUP_FAILURES, 1);
             }
             throw e;
+        } finally {
+            long endTime = EnvironmentEdgeManager.currentTimeMillis();
+            GLOBAL_MUTATION_SYSCAT_TIME.update(endTime - startTime);
         }
         return serverTimeStamp == QueryConstants.UNSET_TIMESTAMP ? HConstants.LATEST_TIMESTAMP : serverTimeStamp;
     }
@@ -1051,15 +1068,10 @@ public class MutationState implements SQLCloseable {
     }
 
     public enum MutationMetadataType {
-        @Deprecated
         TENANT_ID,
-        @Deprecated
         SCHEMA_NAME,
-        @Deprecated
         LOGICAL_TABLE_NAME,
-        @Deprecated
         TIMESTAMP,
-        @Deprecated
         TABLE_TYPE,
         EXTERNAL_SCHEMA_ID
     }
@@ -1413,8 +1425,6 @@ public class MutationState implements SQLCloseable {
                     child.stop();
                     child.stop();
                     shouldRetry = false;
-                    mutationCommitTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
-                    GLOBAL_MUTATION_COMMIT_TIME.update(mutationCommitTime);
                     numFailedMutations = 0;
 
                     // Remove batches as we process them
@@ -1506,13 +1516,13 @@ public class MutationState implements SQLCloseable {
 
                     if (allUpsertsMutations ^ allDeletesMutations) {
                         //success cases are updated for both cases autoCommit=true and conn.commit explicit
-                        if(areAllBatchesSuccessful){
+                        if (areAllBatchesSuccessful){
                             TableMetricsManager
                                     .updateMetricsMethod(htableNameStr, allUpsertsMutations ? UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER :
                                             DELETE_AGGREGATE_SUCCESS_SQL_COUNTER, 1);
                         }
                         //Failures cases are updated only for conn.commit explicit case.
-                        if(!areAllBatchesSuccessful && !connection.getAutoCommit()){
+                        if (!areAllBatchesSuccessful && !connection.getAutoCommit()){
                             TableMetricsManager.updateMetricsMethod(htableNameStr, allUpsertsMutations ? UPSERT_AGGREGATE_FAILURE_SQL_COUNTER :
                                     DELETE_AGGREGATE_FAILURE_SQL_COUNTER, 1);
                         }
@@ -1695,11 +1705,17 @@ public class MutationState implements SQLCloseable {
                         continue;
                     }
                     if (m instanceof Delete) {
-                        Put put = new Put(m.getRow());
-                        put.addColumn(emptyCF, emptyCQ, IndexRegionObserver.getMaxTimestamp(m),
-                                QueryConstants.UNVERIFIED_BYTES);
-                        // The Delete gets marked as unverified in Phase 1 and gets deleted on Phase 3.
-                        addToMap(unverifiedIndexMutations, tableInfo, put);
+                        if (tableInfo.getOrigTableRef().getTable().getIndexType()
+                                != PTable.IndexType.UNCOVERED_GLOBAL) {
+                            Put put = new Put(m.getRow());
+                            put.addColumn(emptyCF, emptyCQ, IndexRegionObserver.getMaxTimestamp(m),
+                                    QueryConstants.UNVERIFIED_BYTES);
+                            // The Delete gets marked as unverified in Phase 1 and gets deleted on Phase 3.
+                            addToMap(unverifiedIndexMutations, tableInfo, put);
+                        }
+                        // Uncovered indexes do not use two phase commit write and thus do not use
+                        // the verified status stored in the empty column. The index rows are
+                        // deleted only after their data table rows are deleted
                         addToMap(verifiedOrDeletedIndexMutations, tableInfo, m);
                     } else if (m instanceof Put) {
                         long timestamp = IndexRegionObserver.getMaxTimestamp(m);
@@ -1713,10 +1729,16 @@ public class MutationState implements SQLCloseable {
                         addToMap(unverifiedIndexMutations, tableInfo, m);
 
                         // Phase 3 mutations are verified
-                        Put verifiedPut = new Put(m.getRow());
-                        verifiedPut.addColumn(emptyCF, emptyCQ, timestamp,
+                        // Uncovered indexes do not use two phase commit write. The index rows are
+                        // updated only once and before their data table rows are updated. So
+                        // index rows do not have phase-3 put mutations
+                        if (tableInfo.getOrigTableRef().getTable().getIndexType()
+                                != PTable.IndexType.UNCOVERED_GLOBAL) {
+                            Put verifiedPut = new Put(m.getRow());
+                            verifiedPut.addColumn(emptyCF, emptyCQ, timestamp,
                                  QueryConstants.VERIFIED_BYTES);
-                        addToMap(verifiedOrDeletedIndexMutations, tableInfo, verifiedPut);
+                            addToMap(verifiedOrDeletedIndexMutations, tableInfo, verifiedPut);
+                        }
                     } else {
                         addToMap(unverifiedIndexMutations, tableInfo, m);
                     }
@@ -2230,4 +2252,7 @@ public class MutationState implements SQLCloseable {
         timeInExecuteMutationMap.clear();
     }
 
+    public boolean isEmpty() {
+        return mutationsMap != null ? mutationsMap.isEmpty() : true;
+    }
 }

@@ -203,8 +203,8 @@ public class ScanRanges {
     }
     
     public void initializeScan(Scan scan) {
-        scan.setStartRow(scanRange.getLowerRange());
-        scan.setStopRow(scanRange.getUpperRange());
+        scan.withStartRow(scanRange.getLowerRange());
+        scan.withStopRow(scanRange.getUpperRange());
     }
     
     public static byte[] prefixKey(byte[] key, int keyOffset, byte[] prefixKey, int prefixKeyOffset) {
@@ -245,7 +245,70 @@ public class ScanRanges {
         System.arraycopy(key, keyOffset, temp, 0, key.length - keyOffset);
         return temp;
     }
-    
+
+    // This variant adds synthetic scan boundaries at potentially missing salt bucket boundaries
+    // and won't return null Scans
+    public List<Scan> intersectScan(Scan scan, final byte[] originalStartKey,
+            final byte[] originalStopKey, final int keyOffset, byte[] splitPostfix, Integer buckets,
+            boolean crossesRegionBoundary) {
+        // FIXME Both the salted status and the pre-computed bucket list should be available in
+        // this object, but in some cases they get overwritten, so we cannot use that.
+        List<Scan> newScans = new ArrayList<Scan>();
+        if (buckets != null && buckets > 0) {
+            byte[] wrkStartKey = originalStartKey;
+            do {
+                boolean lastBucket = false;
+                byte[] nextBucketStart = null;
+                byte[] nextBucketByte = null;
+                if (wrkStartKey.length > 0 && Byte.toUnsignedInt(wrkStartKey[0]) >= buckets - 1) {
+                    lastBucket = true;
+                } else {
+                    // This includes the zero bytes from the minimum PK
+                    nextBucketStart = bucketEnd(wrkStartKey, splitPostfix);
+                    // These is the start of the next bucket in byte[], without the PK suffix
+                    nextBucketByte = new byte[] { nextBucketStart[0] };
+                }
+                if (lastBucket || Bytes.compareTo(originalStopKey, nextBucketStart) <= 0) {
+                    // either we don't need to add synthetic guideposts, or we already have, and
+                    // are at the last bucket of the original scan
+                    addIfNotNull(newScans, intersectScan(scan, wrkStartKey, originalStopKey,
+                        keyOffset, crossesRegionBoundary));
+                    break;
+                }
+                // This is where we add the synthetic guidepost.
+                // We skip [nextBucketByte, nextBucketStart), but it's guaranteed that there are no
+                // rows there.
+                addIfNotNull(newScans,
+                    intersectScan(scan, wrkStartKey, nextBucketByte, keyOffset, false));
+                wrkStartKey = nextBucketStart;
+            } while (true);
+        } else {
+            // Definitely Not crossing buckets
+            addIfNotNull(newScans, intersectScan(scan, originalStartKey, originalStopKey, keyOffset,
+                crossesRegionBoundary));
+        }
+        return newScans;
+    }
+
+    private void addIfNotNull(List<Scan> scans, Scan newScan) {
+        if (newScan != null) {
+            scans.add(newScan);
+        }
+    }
+
+    // The split (presplit for salted tables) code extends the split point to the minimum PK length.
+    // Adding the same postfix here avoids creating and extra [n,n\x00\x00\x00..\x00) scan for each
+    // bucket
+    private byte[] bucketEnd(byte[] key, byte[] splitPostfix) {
+        byte startByte = key.length > 0 ? key[0] : 0;
+        int nextBucket = Byte.toUnsignedInt(startByte) + 1;
+        byte[] bucketEnd = new byte[splitPostfix.length + 1];
+        bucketEnd[0] = (byte) nextBucket;
+        System.arraycopy(splitPostfix, 0, bucketEnd, 1, splitPostfix.length);
+        return bucketEnd;
+    }
+
+    //TODO split this for normal, salted and local index variants
     public Scan intersectScan(Scan scan, final byte[] originalStartKey, final byte[] originalStopKey, final int keyOffset, boolean crossesRegionBoundary) {
         byte[] startKey = originalStartKey;
         byte[] stopKey = originalStopKey;
@@ -401,8 +464,8 @@ public class ScanRanges {
             return null; 
         }
         newScan.setAttribute(SCAN_ACTUAL_START_ROW, scanStartKey);
-        newScan.setStartRow(scanStartKey);
-        newScan.setStopRow(scanStopKey);
+        newScan.withStartRow(scanStartKey);
+        newScan.withStopRow(scanStopKey);
         return newScan;
     }
 
@@ -679,7 +742,7 @@ public class ScanRanges {
                 high = upperRange;
             }
         }
-        return new TimeRange(low, high);
+        return TimeRange.between(low, high);
     }
     
     public static TimeRange getDescTimeRange(KeyRange lowestKeyRange, KeyRange highestKeyRange, Field f) throws IOException {
@@ -695,19 +758,19 @@ public class ScanRanges {
         if (!lowerUnbound && !upperUnbound) {
             newHigh = lowerInclusive ? safelyIncrement(low) : low;
             newLow = upperInclusive ? high : safelyIncrement(high);
-            return new TimeRange(newLow, newHigh);
+            return TimeRange.between(newLow, newHigh);
         } else if (!lowerUnbound && upperUnbound) {
             newHigh = lowerInclusive ? safelyIncrement(low) : low;
             newLow = 0;
-            return new TimeRange(newLow, newHigh);
+            return TimeRange.between(newLow, newHigh);
         } else if (lowerUnbound && !upperUnbound) {
             newLow = upperInclusive ? high : safelyIncrement(high);
             newHigh = HConstants.LATEST_TIMESTAMP;
-            return new TimeRange(newLow, newHigh);
+            return TimeRange.between(newLow, newHigh);
         } else {
             newLow = 0;
             newHigh = HConstants.LATEST_TIMESTAMP;
-            return new TimeRange(newLow, newHigh);
+            return TimeRange.between(newLow, newHigh);
         }
     }
     

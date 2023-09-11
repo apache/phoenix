@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDUCE_OUTPUT_CLUSTER_QUORUM;
 import static org.junit.Assert.assertEquals;
 
 import java.sql.SQLException;
@@ -25,6 +26,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.junit.Test;
 
 public class PropertiesUtilTest {
@@ -75,6 +77,16 @@ public class PropertiesUtilTest {
         Properties combinedProps = PropertiesUtil.combineProperties(props, conf);
         assertEquals(combinedProps.getProperty(HConstants.HBASE_RPC_TIMEOUT_KEY),
             Long.toString(HConstants.DEFAULT_HBASE_RPC_TIMEOUT * 10));
+    }
+
+    @Test
+    public void testDeprecatedProperties() throws Exception {
+        final Configuration conf = HBaseConfiguration.create();
+        conf.set("phoneix.mapreduce.output.cluster.quorum", "myoverridezookeeperhost");
+        String test = PhoenixConfigurationUtil.getOutputCluster(conf);
+        assertEquals("myoverridezookeeperhost", test);
+        assertEquals("myoverridezookeeperhost",
+                conf.get(MAPREDUCE_OUTPUT_CLUSTER_QUORUM));
     }
 
     private void verifyValidCopy(Properties props) throws SQLException {

@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.compat.hbase;
 
+import java.io.IOException;
+
+import org.apache.hadoop.hbase.ipc.CallRunner;
 import org.apache.hadoop.hbase.ipc.RpcScheduler;
 
 /**
@@ -27,28 +30,11 @@ public abstract class CompatPhoenixRpcScheduler extends RpcScheduler {
     protected RpcScheduler delegate;
 
     @Override
-    public int getMetaPriorityQueueLength() {
-        return this.delegate.getMetaPriorityQueueLength();
+    public boolean dispatch(CallRunner task) throws IOException, InterruptedException {
+        return compatDispatch(task);
     }
 
-    @Override
-    public int getActiveGeneralRpcHandlerCount() {
-        return this.delegate.getActiveGeneralRpcHandlerCount();
-    }
-
-    @Override
-    public int getActivePriorityRpcHandlerCount() {
-        return this.delegate.getActivePriorityRpcHandlerCount();
-    }
-
-    @Override
-    public int getActiveMetaPriorityRpcHandlerCount() {
-        return this.delegate.getActiveMetaPriorityRpcHandlerCount();
-    }
-
-    @Override
-    public int getActiveReplicationRpcHandlerCount() {
-        return this.delegate.getActiveReplicationRpcHandlerCount();
-    }
-
+    public abstract boolean compatDispatch(CallRunner task)
+            throws IOException, InterruptedException;
 }
+

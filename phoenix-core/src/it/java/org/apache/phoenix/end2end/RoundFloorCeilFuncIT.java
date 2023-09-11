@@ -29,8 +29,11 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Properties;
 
 import org.apache.phoenix.expression.function.CeilFunction;
@@ -667,6 +670,440 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
     rs = stmt.executeQuery();
     assertTrue(rs.next());
     assertEquals(1380603, rs.getLong(1));
+  }
+
+  @Test
+  public void testRoundFunctionsRowKey() throws SQLException {
+      // Exercise the newKeyPart push down logic in RoundDateExpression
+
+      java.time.LocalDateTime LD_PAST = java.time.LocalDateTime.of(2000, 6, 6, 12, 0, 30, 0);
+      java.time.Instant INSTANT_LD_PAST = LD_PAST.toInstant(ZoneOffset.UTC);
+
+      java.time.LocalDateTime LD_FUTURE = java.time.LocalDateTime.of(2040, 6, 6, 12, 0, 30, 0);
+      java.time.Instant INSTANT_LD_FUTURE = LD_FUTURE.toInstant(ZoneOffset.UTC);
+
+      java.time.LocalDateTime LD_MID_MIN = java.time.LocalDateTime.of(2022, 6, 6, 12, 0, 30, 0);
+      java.time.Instant INSTANT_MID_MIN = LD_MID_MIN.toInstant(ZoneOffset.UTC);
+      Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+      try (Connection conn = DriverManager.getConnection(getUrl(), props);
+              Statement stmt = conn.createStatement();) {
+
+          String tableName = generateUniqueName();
+          stmt.executeUpdate(
+              "CREATE TABLE " + tableName + " ( " + " df DATE primary key, dfv DATE) ");
+
+          PreparedStatement ps =
+                  conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?)");
+
+          ps.setTimestamp(1, java.sql.Timestamp.from(INSTANT_LD_PAST));
+          ps.setTimestamp(2, java.sql.Timestamp.from(INSTANT_LD_PAST));
+          ps.executeUpdate();
+          ps.setTimestamp(1, java.sql.Timestamp.from(INSTANT_MID_MIN.minusMillis(1)));
+          ps.setTimestamp(2, java.sql.Timestamp.from(INSTANT_MID_MIN.minusMillis(1)));
+          ps.executeUpdate();
+          ps.setTimestamp(1, java.sql.Timestamp.from(INSTANT_MID_MIN));
+          ps.setTimestamp(2, java.sql.Timestamp.from(INSTANT_MID_MIN));
+          ps.executeUpdate();
+          ps.setTimestamp(1, java.sql.Timestamp.from(INSTANT_MID_MIN.plusMillis(1)));
+          ps.setTimestamp(2, java.sql.Timestamp.from(INSTANT_MID_MIN.plusMillis(1)));
+          ps.executeUpdate();
+          ps.setTimestamp(1, java.sql.Timestamp.from(INSTANT_LD_FUTURE));
+          ps.setTimestamp(2, java.sql.Timestamp.from(INSTANT_LD_FUTURE));
+          ps.executeUpdate();
+          conn.commit();
+
+          ResultSet rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where round(df, 'MINUTE', 1) = DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // MID_MIN, MID_MIN +1
+          assertEquals(2, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where round(df, 'MINUTE', 1) = DATE '2022-06-06 12:00:00'");
+          assertTrue(rs.next());
+          // MID_MIN -1
+          assertEquals(1, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where round(df, 'MINUTE', 1) > DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // FUTURE
+          assertEquals(1, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where round(df, 'MINUTE', 1) >= DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // MID_MIN, MID_MIN +1, FUTURE
+          assertEquals(3, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where round(df, 'MINUTE', 1) < DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1
+          assertEquals(2, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where round(df, 'MINUTE', 1) <= DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1, MID_MIN, MID_MIN +1
+          assertEquals(4, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where round(df, 'MINUTE', 1) <= DATE '2022-06-06 12:00:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1
+          assertEquals(2, rs.getInt(1));
+
+          //
+          // The same, but without range scan:
+          //
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where round(dfv, 'MINUTE', 1) = DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // MID_MIN, MID_MIN +1
+          assertEquals(2, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where round(dfv, 'MINUTE', 1) = DATE '2022-06-06 12:00:00'");
+          assertTrue(rs.next());
+          // MID_MIN -1
+          assertEquals(1, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where round(dfv, 'MINUTE', 1) > DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // FUTURE
+          assertEquals(1, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where round(dfv, 'MINUTE', 1) >= DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // MID_MIN, MID_MIN +1, FUTURE
+          assertEquals(3, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where round(dfv, 'MINUTE', 1) < DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1
+          assertEquals(2, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where round(dfv, 'MINUTE', 1) <= DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1, MID_MIN, MID_MIN +1
+          assertEquals(4, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where round(dfv, 'MINUTE', 1) <= DATE '2022-06-06 12:00:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1
+          assertEquals(2, rs.getInt(1));
+      }
+  }
+
+  @Test
+  public void testFloorFunctionsRowKey() throws SQLException {
+      // Exercise the newKeyPart push down logic in RoundDateExpression
+
+      java.time.LocalDateTime LD_PAST = java.time.LocalDateTime.of(2000, 6, 6, 12, 1, 0, 0);
+      java.time.Instant INSTANT_LD_PAST = LD_PAST.toInstant(ZoneOffset.UTC);
+
+      java.time.LocalDateTime LD_FUTURE = java.time.LocalDateTime.of(2040, 6, 6, 12, 1, 0, 0);
+      java.time.Instant INSTANT_LD_FUTURE = LD_FUTURE.toInstant(ZoneOffset.UTC);
+
+      java.time.LocalDateTime LD_MID_MIN = java.time.LocalDateTime.of(2022, 6, 6, 12, 1, 0, 0);
+      java.time.Instant INSTANT_MID_MIN = LD_MID_MIN.toInstant(ZoneOffset.UTC);
+
+      Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+      try (Connection conn = DriverManager.getConnection(getUrl(), props);
+              Statement stmt = conn.createStatement();) {
+
+          String tableName = generateUniqueName();
+          stmt.executeUpdate(
+              "CREATE TABLE " + tableName + " ( " + " df DATE primary key, dfv DATE) ");
+
+          PreparedStatement ps =
+                  conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?)");
+
+          ps.setTimestamp(1, java.sql.Timestamp.from(INSTANT_LD_PAST));
+          ps.setTimestamp(2, java.sql.Timestamp.from(INSTANT_LD_PAST));
+          ps.executeUpdate();
+          ps.setTimestamp(1, java.sql.Timestamp.from(INSTANT_MID_MIN.minusMillis(1)));
+          ps.setTimestamp(2, java.sql.Timestamp.from(INSTANT_MID_MIN.minusMillis(1)));
+          ps.executeUpdate();
+          ps.setTimestamp(1, java.sql.Timestamp.from(INSTANT_MID_MIN));
+          ps.setTimestamp(2, java.sql.Timestamp.from(INSTANT_MID_MIN));
+          ps.executeUpdate();
+          ps.setTimestamp(1, java.sql.Timestamp.from(INSTANT_MID_MIN.plusMillis(1)));
+          ps.setTimestamp(2, java.sql.Timestamp.from(INSTANT_MID_MIN.plusMillis(1)));
+          ps.executeUpdate();
+          ps.setTimestamp(1, java.sql.Timestamp.from(INSTANT_LD_FUTURE));
+          ps.setTimestamp(2, java.sql.Timestamp.from(INSTANT_LD_FUTURE));
+          ps.executeUpdate();
+          conn.commit();
+
+          ResultSet rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where floor(df, 'MINUTE', 1) = DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // MID_MIN, MID_MIN +1
+          assertEquals(2, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where floor(df, 'MINUTE', 1) = DATE '2022-06-06 12:00:00'");
+          assertTrue(rs.next());
+          // MID_MIN -1
+          assertEquals(1, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where floor(df, 'MINUTE', 1) > DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // FUTURE
+          assertEquals(1, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where floor(df, 'MINUTE', 1) >= DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // MID_MIN, MID_MIN +1, FUTURE
+          assertEquals(3, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where floor(df, 'MINUTE', 1) < DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1
+          assertEquals(2, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where floor(df, 'MINUTE', 1) <= DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1, MID_MIN, MID_MIN +1
+          assertEquals(4, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where floor(df, 'MINUTE', 1) <= DATE '2022-06-06 12:00:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1
+          assertEquals(2, rs.getInt(1));
+
+          //
+          // The same, but without range scan:
+          //
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where floor(dfv, 'MINUTE', 1) = DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // MID_MIN, MID_MIN +1
+          assertEquals(2, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where floor(dfv, 'MINUTE', 1) = DATE '2022-06-06 12:00:00'");
+          assertTrue(rs.next());
+          // MID_MIN -1
+          assertEquals(1, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where floor(dfv, 'MINUTE', 1) > DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // FUTURE
+          assertEquals(1, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where floor(dfv, 'MINUTE', 1) >= DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // MID_MIN, MID_MIN +1, FUTURE
+          assertEquals(3, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where floor(dfv, 'MINUTE', 1) < DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1
+          assertEquals(2, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where floor(dfv, 'MINUTE', 1) <= DATE '2022-06-06 12:01:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1, MID_MIN, MID_MIN +1
+          assertEquals(4, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where floor(dfv, 'MINUTE', 1) <= DATE '2022-06-06 12:00:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1
+          assertEquals(2, rs.getInt(1));
+      }
+  }
+
+  @Test
+  public void testCeilFunctionsRowKey() throws SQLException {
+      // Exercise the newKeyPart push down logic in RoundDateExpression and children
+
+      java.time.LocalDateTime LD_PAST = java.time.LocalDateTime.of(2000, 6, 6, 12, 1, 0, 0);
+      java.time.Instant INSTANT_LD_PAST = LD_PAST.toInstant(ZoneOffset.UTC);
+
+      java.time.LocalDateTime LD_FUTURE = java.time.LocalDateTime.of(2040, 6, 6, 12, 0, 0, 0);
+      java.time.Instant INSTANT_LD_FUTURE = LD_FUTURE.toInstant(ZoneOffset.UTC);
+
+      java.time.LocalDateTime LD_MID_MIN = java.time.LocalDateTime.of(2022, 6, 1, 0, 0, 0, 0);
+      java.time.Instant INSTANT_MID_MIN = LD_MID_MIN.toInstant(ZoneOffset.UTC);
+
+      Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+      try (Connection conn = DriverManager.getConnection(getUrl(), props);
+              Statement stmt = conn.createStatement();) {
+
+          String tableName = generateUniqueName();
+          stmt.executeUpdate(
+              "CREATE TABLE " + tableName + " ( " + " df DATE primary key, dfv DATE) ");
+
+          PreparedStatement ps =
+                  conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?)");
+
+          ps.setTimestamp(1, java.sql.Timestamp.from(INSTANT_LD_PAST));
+          ps.setTimestamp(2, java.sql.Timestamp.from(INSTANT_LD_PAST));
+          ps.executeUpdate();
+          ps.setTimestamp(1, java.sql.Timestamp.from(INSTANT_MID_MIN.minusMillis(1)));
+          ps.setTimestamp(2, java.sql.Timestamp.from(INSTANT_MID_MIN.minusMillis(1)));
+          ps.executeUpdate();
+          ps.setTimestamp(1, java.sql.Timestamp.from(INSTANT_MID_MIN));
+          ps.setTimestamp(2, java.sql.Timestamp.from(INSTANT_MID_MIN));
+          ps.executeUpdate();
+          ps.setTimestamp(1, java.sql.Timestamp.from(INSTANT_MID_MIN.plusMillis(1)));
+          ps.setTimestamp(2, java.sql.Timestamp.from(INSTANT_MID_MIN.plusMillis(1)));
+          ps.executeUpdate();
+          ps.setTimestamp(1, java.sql.Timestamp.from(INSTANT_LD_FUTURE));
+          ps.setTimestamp(2, java.sql.Timestamp.from(INSTANT_LD_FUTURE));
+          ps.executeUpdate();
+          conn.commit();
+
+          ResultSet rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where ceil(df, 'MONTH', 1) = DATE '2022-06-01 00:00:00'");
+          assertTrue(rs.next());
+          // MID_MIN-1, MID_MIN
+          assertEquals(2, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where ceil(df, 'MONTH', 1) = DATE '2022-07-01 00:00:00'");
+          assertTrue(rs.next());
+          // MID_MIN +1
+          assertEquals(1, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where ceil(df, 'MONTH', 1) > DATE '2022-07-01 00:00:00'");
+          assertTrue(rs.next());
+          // FUTURE
+          assertEquals(1, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where ceil(df, 'MONTH', 1) >= DATE '2022-07-01 00:00:00'");
+          assertTrue(rs.next());
+          // MID_MIN +1, FUTURE
+          assertEquals(2, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where ceil(df, 'MONTH', 1) < DATE '2022-07-01 00:00:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1, MID_MIN
+          assertEquals(3, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where ceil(df, 'MONTH', 1) <= DATE '2022-07-01 00:00:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1, MID_MIN, MID_MIN +1
+          assertEquals(4, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where ceil(df, 'MONTH', 1) <= DATE '2022-06-01 00:00:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1, MID_MIN
+          assertEquals(3, rs.getInt(1));
+
+          //
+          // The same, but without range scan:
+          //
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where ceil(dfv, 'MONTH', 1) = DATE '2022-06-01 00:00:00'");
+          assertTrue(rs.next());
+          // MID_MIN-1, MID_MIN
+          assertEquals(2, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where ceil(dfv, 'MONTH', 1) = DATE '2022-07-01 00:00:00'");
+          assertTrue(rs.next());
+          // MID_MIN +1
+          assertEquals(1, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where ceil(dfv, 'MONTH', 1) > DATE '2022-07-01 00:00:00'");
+          assertTrue(rs.next());
+          // FUTURE
+          assertEquals(1, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where ceil(dfv, 'MONTH', 1) >= DATE '2022-07-01 00:00:00'");
+          assertTrue(rs.next());
+          // MID_MIN +1, FUTURE
+          assertEquals(2, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where ceil(dfv, 'MONTH', 1) < DATE '2022-07-01 00:00:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1, MID_MIN
+          assertEquals(3, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where ceil(dfv, 'MONTH', 1) <= DATE '2022-07-01 00:00:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1, MID_MIN, MID_MIN +1
+          assertEquals(4, rs.getInt(1));
+
+          rs =
+                  stmt.executeQuery("select count(*) " + " from " + tableName
+                          + " where ceil(dfv, 'MONTH', 1) <= DATE '2022-06-01 00:00:00'");
+          assertTrue(rs.next());
+          // PAST, MID_MIN-1, MID_MIN
+          assertEquals(3, rs.getInt(1));
+      }
   }
 
 }

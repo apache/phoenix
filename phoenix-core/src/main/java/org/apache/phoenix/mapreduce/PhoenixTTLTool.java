@@ -173,7 +173,10 @@ public class PhoenixTTLTool extends Configured implements Tool {
 
     public CommandLine parseOptions(String[] args) {
         final Options options = getOptions();
-        CommandLineParser parser = new DefaultParser(false, false);
+        CommandLineParser parser = DefaultParser.builder().
+                setAllowPartialMatching(false).
+                setStripLeadingAndTrailingQuotes(false).
+                build();
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);

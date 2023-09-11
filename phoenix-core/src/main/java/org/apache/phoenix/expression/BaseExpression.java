@@ -26,7 +26,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.phoenix.expression.function.CeilDecimalExpression;
 import org.apache.phoenix.expression.function.CeilTimestampExpression;
 import org.apache.phoenix.expression.function.FloorDateExpression;
@@ -63,9 +63,9 @@ public abstract class BaseExpression implements Expression {
      * We take the ceiling of 2.4 to make it 3 if a is an INTEGER to prevent needing to coerce
      * every time during evaluation.
      */
-    private static ExpressionComparabilityWrapper[] WRAPPERS = new ExpressionComparabilityWrapper[CompareOp.values().length];
+    private static ExpressionComparabilityWrapper[] WRAPPERS = new ExpressionComparabilityWrapper[CompareOperator.values().length];
     static {
-        WRAPPERS[CompareOp.LESS.ordinal()] = new ExpressionComparabilityWrapper() {
+        WRAPPERS[CompareOperator.LESS.ordinal()] = new ExpressionComparabilityWrapper() {
 
             @Override
             public Expression wrap(Expression lhs, Expression rhs, boolean rowKeyOrderOptimizable) throws SQLException {
@@ -82,9 +82,9 @@ public abstract class BaseExpression implements Expression {
             }
             
         };
-        WRAPPERS[CompareOp.LESS_OR_EQUAL.ordinal()] = WRAPPERS[CompareOp.LESS.ordinal()];
+        WRAPPERS[CompareOperator.LESS_OR_EQUAL.ordinal()] = WRAPPERS[CompareOperator.LESS.ordinal()];
         
-        WRAPPERS[CompareOp.GREATER.ordinal()] = new ExpressionComparabilityWrapper() {
+        WRAPPERS[CompareOperator.GREATER.ordinal()] = new ExpressionComparabilityWrapper() {
 
             @Override
             public Expression wrap(Expression lhs, Expression rhs, boolean rowKeyOrderOptimizable) throws SQLException {
@@ -101,8 +101,8 @@ public abstract class BaseExpression implements Expression {
             }
             
         };
-        WRAPPERS[CompareOp.GREATER_OR_EQUAL.ordinal()] = WRAPPERS[CompareOp.GREATER.ordinal()];
-        WRAPPERS[CompareOp.EQUAL.ordinal()] = new ExpressionComparabilityWrapper() {
+        WRAPPERS[CompareOperator.GREATER_OR_EQUAL.ordinal()] = WRAPPERS[CompareOperator.GREATER.ordinal()];
+        WRAPPERS[CompareOperator.EQUAL.ordinal()] = new ExpressionComparabilityWrapper() {
 
             @Override
             public Expression wrap(Expression lhs, Expression rhs, boolean rowKeyOrderOptimizable) throws SQLException {
@@ -114,7 +114,7 @@ public abstract class BaseExpression implements Expression {
         };
     }
     
-    private static ExpressionComparabilityWrapper getWrapper(CompareOp op) {
+    private static ExpressionComparabilityWrapper getWrapper(CompareOperator op) {
         ExpressionComparabilityWrapper wrapper = WRAPPERS[op.ordinal()];
         if (wrapper == null) {
             throw new IllegalStateException("Unexpected compare op of " + op + " for row value constructor");
@@ -131,7 +131,7 @@ public abstract class BaseExpression implements Expression {
      * @return the newly coerced expression
      * @throws SQLException
      */
-    public static Expression coerce(Expression lhs, Expression rhs, CompareOp op, boolean rowKeyOrderOptimizable) throws SQLException {
+    public static Expression coerce(Expression lhs, Expression rhs, CompareOperator op, boolean rowKeyOrderOptimizable) throws SQLException {
         return coerce(lhs, rhs, getWrapper(op), rowKeyOrderOptimizable);
     }
         
@@ -226,9 +226,21 @@ public abstract class BaseExpression implements Expression {
         if (iterator == null) {
             iterator = visitor.defaultIterator(this);
         }
-        List<T> l = Collections.emptyList();
+
+        // PHOENIX-6669 Sort RVCs together and first so that where optimizer intersectrages work correctly
+        List<Expression> children = new ArrayList<>();
         while (iterator.hasNext()) {
             Expression child = iterator.next();
+            if (child != null && child.getChildren() != null && child.getChildren().size() > 1 &&
+                    child.getChildren().get(1) instanceof RowValueConstructorExpression) {
+                children.add(0, child);
+            } else {
+                children.add(child);
+            }
+        }
+
+        List<T> l = Collections.emptyList();
+        for (Expression child : children) {
             T t = child.accept(visitor);
             if (t != null) {
                 if (l.isEmpty()) {

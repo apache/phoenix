@@ -49,8 +49,8 @@ import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
@@ -162,7 +162,7 @@ public class ConnectionQueryServicesImplTest {
 
     @Test
     public void testGetNextRegionStartKey() {
-        HRegionInfo mockHRegionInfo = org.mockito.Mockito.mock(HRegionInfo.class);
+        RegionInfo mockHRegionInfo = org.mockito.Mockito.mock(RegionInfo.class);
         HRegionLocation mockRegionLocation = org.mockito.Mockito.mock(HRegionLocation.class);
         ConnectionQueryServicesImpl mockCqsi = org.mockito.Mockito.mock(ConnectionQueryServicesImpl.class,
                 org.mockito.Mockito.CALLS_REAL_METHODS);
@@ -172,7 +172,7 @@ public class ConnectionQueryServicesImplTest {
         byte[] notCorruptedEndKey = "0x3000".getBytes();
         byte[] notCorruptedNewKey = "0x3001".getBytes();
         byte[] mockTableName = "dummyTable".getBytes();
-        when(mockRegionLocation.getRegionInfo()).thenReturn(mockHRegionInfo);
+        when(mockRegionLocation.getRegion()).thenReturn(mockHRegionInfo);
         when(mockHRegionInfo.getRegionName()).thenReturn(mockTableName);
 
         // comparing the current regionInfo endKey is equal to the previous endKey

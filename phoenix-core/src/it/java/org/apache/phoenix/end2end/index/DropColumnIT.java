@@ -198,8 +198,8 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
                 byte[] key = Bytes.toBytes("a");
                 Scan scan = new Scan();
                 scan.setRaw(true);
-                scan.setStartRow(key);
-                scan.setStopRow(key);
+                scan.withStartRow(key);
+                scan.withStopRow(key, true);
                 Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
                 ResultScanner results = table.getScanner(scan);
                 Result result = results.next();
@@ -257,8 +257,8 @@ public class DropColumnIT extends ParallelStatsDisabledIT {
         Scan scan = new Scan();
         scan.setRaw(true);
         byte[] key = Bytes.toBytes("a");
-        scan.setStartRow(key);
-        scan.setStopRow(key);
+        scan.withStartRow(key);
+        scan.withStopRow(key, true);
         Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(dataTableName.getBytes());
         ResultScanner results = table.getScanner(scan);
         Result result = results.next();

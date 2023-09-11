@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema.types;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.sql.Types;
 
 import org.apache.phoenix.schema.SortOrder;
@@ -83,6 +84,19 @@ public class PBoolean extends PDataType<Boolean> {
         }
         throwConstraintViolationException(actualType, this);
         return null;
+    }
+
+    @Override
+    public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+            SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
+            throws SQLException {
+        // FIXME according to the JDBC spec, we should support all these types:
+        // TINYINT, SMALLINT, INTEGER, BIGINT, REAL, FLOAT, DOUBLE, DECIMAL, NUMERIC, BIT,
+        // BOOLEAN, CHAR, VARCHAR, LONGVARCHAR
+        if (Boolean.class.isAssignableFrom(jdbcType)) {
+            return toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
+        }
+        throw newMismatchException(actualType, jdbcType);
     }
 
     @Override

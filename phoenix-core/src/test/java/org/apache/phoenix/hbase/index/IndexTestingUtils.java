@@ -67,9 +67,9 @@ public class IndexTestingUtils {
     LOGGER.debug("Scanning " + index1.getName().getNameAsString() + " between times (" + start
         + ", " + end + "] and keys: [" + Bytes.toString(startKey) + ", " + Bytes.toString(endKey)
         + "].");
-    Scan s = new Scan(startKey, endKey);
+    Scan s = new Scan().withStartRow(startKey).withStopRow(endKey);
     // s.setRaw(true);
-    s.setMaxVersions();
+    s.readAllVersions();
     s.setTimeRange(start, end);
     List<Cell> received = new ArrayList<Cell>();
     ResultScanner scanner = index1.getScanner(s);

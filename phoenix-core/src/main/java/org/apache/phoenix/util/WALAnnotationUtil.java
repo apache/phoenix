@@ -18,7 +18,6 @@ package org.apache.phoenix.util;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.wal.WALKey;
-import org.apache.phoenix.compat.hbase.coprocessor.CompatIndexRegionObserver;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 
@@ -39,7 +38,7 @@ public class WALAnnotationUtil {
                 MutationState.MutationMetadataType.values()) {
                 String metadataTypeKey = metadataType.toString();
                 if (attrMap.containsKey(metadataTypeKey)) {
-                    CompatIndexRegionObserver.appendToWALKey(key, metadataTypeKey,
+                    IndexRegionObserver.appendToWALKey(key, metadataTypeKey,
                         attrMap.get(metadataTypeKey));
                 }
             }
@@ -61,4 +60,19 @@ public class WALAnnotationUtil {
             }
         }
     }
+
+    public static void annotateMutation(Mutation m, byte[] tenantId, byte[] schemaName,
+                                        byte[] logicalTableName, byte[] tableType, byte[] ddlTimestamp) {
+        if (!m.getDurability().equals(Durability.SKIP_WAL)) {
+            if (tenantId != null) {
+                m.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(), tenantId);
+            }
+            m.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(), schemaName);
+            m.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
+                    logicalTableName);
+            m.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(), tableType);
+            m.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(), ddlTimestamp);
+        }
+    }
+
 }

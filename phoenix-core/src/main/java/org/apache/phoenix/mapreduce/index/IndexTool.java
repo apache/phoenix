@@ -28,6 +28,7 @@ import static org.apache.phoenix.mapreduce.index.IndexVerificationResultReposito
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.AbstractMap;
@@ -54,7 +55,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Admin;
@@ -62,6 +62,7 @@ import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
@@ -75,7 +76,6 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -353,7 +353,10 @@ public class IndexTool extends Configured implements Tool {
 
         final Options options = getOptions();
 
-        CommandLineParser parser = new DefaultParser(false, false);
+        CommandLineParser parser = DefaultParser.builder().
+                setAllowPartialMatching(false).
+                setStripLeadingAndTrailingQuotes(false).
+                build();
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);
@@ -399,11 +402,6 @@ public class IndexTool extends Configured implements Tool {
                 "VerifyType: [" + cmdLine.getOptionValue(VERIFY_OPTION.getOpt()) + "] and " +
                 "DisableLoggingType: ["
                 + cmdLine.getOptionValue(DISABLE_LOGGING_OPTION.getOpt()) + "]");
-        }
-        if ((cmdLine.hasOption(START_TIME_OPTION.getOpt()) || cmdLine.hasOption(RETRY_VERIFY_OPTION.getOpt()))
-            && !HbaseCompatCapabilities.isRawFilterSupported()) {
-            throw new IllegalStateException("Can't do incremental index verification on this " +
-                "version of HBase because raw skip scan filters are not supported.");
         }
         return cmdLine;
     }
@@ -601,18 +599,24 @@ public class IndexTool extends Configured implements Tool {
         }
         
         private long getMaxRebuildAsyncDate(String schemaName, List<String> disableIndexes) throws SQLException {
-            Long maxRebuilAsyncDate=HConstants.LATEST_TIMESTAMP;
-            Long maxDisabledTimeStamp=0L;
-            if (disableIndexes == null || disableIndexes.isEmpty()) { return 0; }
-            List<String> quotedIndexes = new ArrayList<String>(disableIndexes.size());
-            for (String index : disableIndexes) {
-                quotedIndexes.add("'" + index + "'");
+            Long maxRebuilAsyncDate = HConstants.LATEST_TIMESTAMP;
+            Long maxDisabledTimeStamp = 0L;
+            if (disableIndexes == null || disableIndexes.isEmpty()) {
+                return 0;
             }
-            try (ResultSet rs = connection.createStatement()
-                    .executeQuery("SELECT MAX(" + ASYNC_REBUILD_TIMESTAMP + "),MAX("+INDEX_DISABLE_TIMESTAMP+") FROM " + SYSTEM_CATALOG_NAME + " ("
-                            + ASYNC_REBUILD_TIMESTAMP + " BIGINT) WHERE " + TABLE_SCHEM
-                            + (schemaName != null && schemaName.length() > 0 ? "='" + schemaName + "'" : " IS NULL")
-                            + " and " + TABLE_NAME + " IN (" + StringUtils.join(",", quotedIndexes) + ")")) {
+            String query = String.format("SELECT MAX(" + ASYNC_REBUILD_TIMESTAMP + "), "
+                    + "MAX(" + INDEX_DISABLE_TIMESTAMP + ") FROM "
+                    + SYSTEM_CATALOG_NAME + " (" + ASYNC_REBUILD_TIMESTAMP
+                    + " BIGINT) WHERE " + TABLE_SCHEM +  " %s  AND " + TABLE_NAME + " IN ( %s )",
+                        (schemaName != null && schemaName.length() > 0) ? " = ? " : " IS NULL ",
+                QueryUtil.generateInListParams(disableIndexes.size()));
+            try (PreparedStatement selSyscat = connection.prepareStatement(query)) {
+                int param = 0;
+                if (schemaName != null && schemaName.length() > 0) {
+                    selSyscat.setString(++param, schemaName);
+                }
+                QueryUtil.setQuoteInListElements(selSyscat, disableIndexes, param);
+                ResultSet rs = selSyscat.executeQuery();
                 if (rs.next()) {
                     maxRebuilAsyncDate = rs.getLong(1);
                     maxDisabledTimeStamp = rs.getLong(2);
@@ -622,7 +626,7 @@ public class IndexTool extends Configured implements Tool {
                     return maxRebuilAsyncDate;
                 } else {
                     throw new RuntimeException(
-                            "Inconsistent state we have one or more index tables which are disabled after the async is called!!");
+                        "Inconsistent state we have one or more index tables which are disabled after the async is called!!");
                 }
             }
         }
@@ -722,6 +726,10 @@ public class IndexTool extends Configured implements Tool {
             configuration.set(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
                     Long.toString(indexRebuildRpcRetriesCounter));
             configuration.set("mapreduce.task.timeout", Long.toString(indexRebuildQueryTimeoutMs));
+
+            // Randomize execution order, unless explicitly set
+            configuration.setBooleanIfUnset(
+                PhoenixConfigurationUtil.MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER, true);
 
             PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, dataTableWithSchema);
             PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
@@ -1011,7 +1019,7 @@ public class IndexTool extends Configured implements Tool {
     }
 
     private void changeDisabledIndexStateToBuiding(Connection connection) throws SQLException {
-        if (pIndexTable != null && pIndexTable.getIndexState() == PIndexState.DISABLE) {
+        if (pIndexTable != null && pIndexTable.getIndexState().isDisabled()) {
             IndexUtil.updateIndexState(connection.unwrap(PhoenixConnection.class),
                     pIndexTable.getName().getString(), PIndexState.BUILDING, null);
         }
@@ -1022,7 +1030,7 @@ public class IndexTool extends Configured implements Tool {
         boolean autosplit = cmdLine.hasOption(AUTO_SPLIT_INDEX_OPTION.getOpt());
         boolean splitIndex = cmdLine.hasOption(SPLIT_INDEX_OPTION.getOpt());
         boolean isSalted = pIndexTable.getBucketNum() != null; // no need to split salted tables
-        if (!isSalted && IndexType.GLOBAL.equals(indexType) && (autosplit || splitIndex)) {
+        if (!isSalted && (IndexType.GLOBAL.equals(indexType) || IndexType.UNCOVERED_GLOBAL.equals(indexType)) && (autosplit || splitIndex)) {
             String nOpt = cmdLine.getOptionValue(AUTO_SPLIT_INDEX_OPTION.getOpt());
             int autosplitNumRegions = nOpt == null ? DEFAULT_AUTOSPLIT_NUM_REGIONS : Integer.parseInt(nOpt);
             String rateOpt = cmdLine.getOptionValue(SPLIT_INDEX_OPTION.getOpt());
@@ -1106,7 +1114,7 @@ public class IndexTool extends Configured implements Tool {
             }
             // drop table and recreate with appropriate splits
             TableName hIndexName = TableName.valueOf(pIndexTable.getPhysicalName().getBytes());
-            HTableDescriptor descriptor = admin.getTableDescriptor(hIndexName);
+            TableDescriptor descriptor = admin.getDescriptor(hIndexName);
             admin.disableTable(hIndexName);
             admin.deleteTable(hIndexName);
             admin.createTable(descriptor, splitPoints);

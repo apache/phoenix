@@ -41,7 +41,6 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -53,8 +52,8 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 public class TxCheckpointIT extends ParallelStatsDisabledIT {
 	
-	private final boolean localIndex;
-	private final String tableDDLOptions;
+    private final boolean localIndex;
+    private final String tableDDLOptions;
 
     @BeforeClass
     public static synchronized void forceClearTables() throws Exception {
@@ -64,7 +63,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
         doSetup();
     }
 
-	public TxCheckpointIT(boolean localIndex, boolean mutable, boolean columnEncoded, String transactionProvider) {
+    public TxCheckpointIT(boolean localIndex, boolean mutable, boolean columnEncoded, String transactionProvider) {
 	    StringBuilder optionBuilder = new StringBuilder();
         optionBuilder.append("TRANSACTION_PROVIDER='" + transactionProvider + "'");
 	    this.localIndex = localIndex;
@@ -78,7 +77,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 	        }
 	    }
 	    this.tableDDLOptions = optionBuilder.toString();
-	}
+    }
 	
     private static Connection getConnection() throws SQLException {
         return getConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES));
@@ -89,16 +88,17 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         return conn;
     }
-	
-	@Parameters(name="TxCheckpointIT_localIndex={0},mutable={1},columnEncoded={2},transactionProvider={3}") // name is used by failsafe as file name in reports
+
+    // name is used by failsafe as file name in reports
+    @Parameters(name="TxCheckpointIT_localIndex={0},mutable={1},columnEncoded={2},transactionProvider={3}")
     public static synchronized Collection<Object[]> data() {
-        return TestUtil.filterTxParamData(Arrays.asList(new Object[][] {     
-                { false, false, false, "TEPHRA" }, { false, false, true, "TEPHRA" }, { false, true, false, "TEPHRA" }, { false, true, true, "TEPHRA" },
-                { true, false, false, "TEPHRA" }, { true, false, true, "TEPHRA" }, { true, true, false, "TEPHRA" }, { true, true, true, "TEPHRA" },
-                { false, false, false, "OMID" }, { false, true, false, "OMID" }, 
-           }),3);
+        return Arrays.asList(new Object[][] {
+            // OMID does not support local indexes or column encoding
+            { false, false, false, "OMID" },
+            { false, true, false, "OMID" },
+        });
     }
-    
+
     @Test
     public void testUpsertSelectDoesntSeeUpsertedData() throws Exception {
         String tableName = "TBL_" + generateUniqueName();

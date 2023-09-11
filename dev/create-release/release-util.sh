@@ -25,7 +25,6 @@ if [ -n "${GPG_KEY}" ]; then
 fi
 # Maven Profiles for publishing snapshots and release to Maven Central and Dist
 PUBLISH_PROFILES=("-P" "apache-release,release")
-OMID_VARIANTS=( "-Phbase-1" "-Phbase-2" )
 
 set -e
 
@@ -589,6 +588,9 @@ make_binary_release() {
   if [[ "$project" == "phoenix" ]]; then
     rebuild_hbase_2
     local profiles=( $(maven_get_hbase_profiles) )
+  elif [[ "$project" == "phoenix-omid" ]]; then
+    rebuild_hbase_for_omid
+    local profiles=( "" )
   else
     local profiles=( "" )
   fi
@@ -641,18 +643,8 @@ function kick_gpg_agent {
 # Do maven command to set version into local pom
 function maven_set_version { #input: <version_to_set>
   local this_version="$1"
-  # Omid needs an hbase profile for tagging (doesn't matter which one, the shims need special handling anyway)
-  if [[ "$PROJECT" == "phoenix-omid" ]]; then
-    local variant="${OMID_VARIANTS[1]}"
-  fi
-  echo "${MVN[@]}" ${variant:+"$variant"} versions:set -DnewVersion="$this_version"
-  "${MVN[@]}" ${variant:+"$variant"} versions:set -DnewVersion="$this_version" | grep -v "no value" # silence logs
-  #Omid has an even more nonstandard maven structure, and needs more hacks
-  for i in hbase-shims/hbase-*; do
-    if [ -e "$i" ]; then
-     sed -i -e "0,\#<version>.*</version>#{s##<version>${this_version}</version>#}" $i/pom.xml
-    fi
-  done
+  echo "${MVN[@]}" versions:set -DnewVersion="$this_version"
+  "${MVN[@]}" versions:set -DnewVersion="$this_version" | grep -v "no value" # silence logs
 }
 
 # Do maven command to read version from local pom
@@ -670,6 +662,11 @@ function maven_get_hbase_version_from_profile {
   # shellcheck disable=SC2016
   local profile="$1"
   "${MVN[@]}" -q -N -Dexec.executable="echo" -Dexec.args='${hbase-'"$profile"'.runtime.version}' exec:exec
+}
+
+function maven_get_omid_hbase_version {
+  # shellcheck disable=SC2016
+  "${MVN[@]}" -q -N -Dexec.executable="echo" -Dexec.args='${hbase.version}' exec:exec
 }
 
 # Do maven deploy to snapshot or release artifact repository, with checks.
@@ -704,9 +701,9 @@ function maven_deploy { #inputs: <snapshot|release> <log_file_path>
     DRY_DEPLOY_DIR="${BASE_DIR}/${PROJECT}.deploy"
     dry_deploy="-DaltDeploymentRepository=dryrun::default::file://${DRY_DEPLOY_DIR}"
   fi
-  # Omid needs to be deployed twice for HBase 1 and 2
   if [[ "$PROJECT" == "phoenix-omid" ]]; then
-    local variants=( "${OMID_VARIANTS[@]}" )
+    rebuild_hbase_for_omid
+    local variants=( "" )
   elif [[ "$PROJECT" == "phoenix" ]]; then
     rebuild_hbase_2
     local profiles=( $(maven_get_hbase_profiles) )
@@ -758,6 +755,18 @@ function rebuild_hbase_2() {
   done
   HBASE_ALREADY_REBUILT="yes"
 }
+
+function rebuild_hbase_for_omid() {
+  if [[ "yes" == "$HBASE_OMID_ALREADY_REBUILT" ]]; then
+     return 0
+  fi
+  local hbase_runtime_version=$(maven_get_omid_hbase_version)
+  if [[ $hbase_runtime_version == 2* ]]; then
+    rebuild_hbase_locally "$hbase_runtime_version"
+  fi
+  HBASE_OMID_ALREADY_REBUILT="yes"
+}
+
 
 function rebuild_hbase_locally() {
   local hbase_version="$1"

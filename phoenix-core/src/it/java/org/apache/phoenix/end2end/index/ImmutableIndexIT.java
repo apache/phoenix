@@ -131,16 +131,15 @@ public class ImmutableIndexIT extends BaseTest {
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
-    @Parameters(name="ImmutableIndexIT_localIndex={0},transactional={1},transactionProvider={2},columnEncoded={3}") // name is used by failsafe as file name in reports
+    // name is used by failsafe as file name in reports
+    @Parameters(name="ImmutableIndexIT_localIndex={0},transactional={1},transactionProvider={2},columnEncoded={3}")
     public static synchronized Collection<Object[]> data() {
-		return TestUtil.filterTxParamData(
-		        Arrays.asList(new Object[][] {
-    				{ false, false, null, false }, { false, false, null, true },
-    				{ false, true, "OMID", false },
-                    { false, true, "TEPHRA", false }, { false, true, "TEPHRA", true },
-    				{ true, false, null, false }, { true, false, null, true },
-                    { true, true, "TEPHRA", false }, { true, true, "TEPHRA", true },
-                }), 2);
+        return Arrays.asList(new Object[][] {
+            { false, false, null, false }, { false, false, null, true },
+            // OMID does not support local indexes or column encoding
+            { false, true, "OMID", false },
+            { true, false, null, false }, { true, false, null, true },
+        });
     }
 
     @Test

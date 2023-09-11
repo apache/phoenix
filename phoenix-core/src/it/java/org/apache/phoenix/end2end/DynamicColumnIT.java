@@ -72,9 +72,9 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
             ConnectionQueryServices services = pconn.getQueryServices();
             try (Admin admin = services.getAdmin()) {
                 TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(tableName));
-                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
-                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(FAMILY_NAME_A));
-                builder.addColumnFamily(ColumnFamilyDescriptorBuilder.of(FAMILY_NAME_B));
+                builder.setColumnFamily(ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
+                builder.setColumnFamily(ColumnFamilyDescriptorBuilder.of(FAMILY_NAME_A));
+                builder.setColumnFamily(ColumnFamilyDescriptorBuilder.of(FAMILY_NAME_B));
                 admin.createTable(builder.build());
             }
 

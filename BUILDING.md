@@ -29,18 +29,23 @@ Phoenix uses Maven (3.X) to build all its necessary resources.
 
 HBase 2 and Hadoop 3
 --------------------
-Phoenix 5.x requires Hadoop 3. While HBase 2.x is compatible with Hadoop 3, the public Maven Hbase
+Phoenix 5.x requires Hadoop 3. While HBase 2.x is compatible with Hadoop 3, the public Maven HBase
 artifacts are built with Hadoop 2, and are not.
 
-For this reason, when building Phoenix, you need to rebuild
-HBase with Hadoop 3, and install it to the local maven repo of the build host.
+With the 2.5.2 release HBase has started releasing Maven artifacts built with Hadoop3.
+Where available, use the Maven artifacts with the `-hadoop3` postfix in the version,
+i.e. `2.5.2-hadoop3`, and ignore the rest of this section.
+For HBase 2.5, Phoenix already uses the -hadoop3 version by default.
 
-`$ wget https://downloads.apache.org/hbase/2.2.5/hbase-2.2.5-src.tar.gz`
-`$ tar xfvz hbase-2.2.5-src.tar.gz`
-`$ cd hbase-2.2.5`
+For HBase versions where hadoop3 artifacts are not available, you need to rebuild HBase with
+Hadoop 3, and install it to the local maven repo of the build host.
+
+`$ wget https://downloads.apache.org/hbase/2.4.15/hbase-2.4.15-src.tar.gz`
+`$ tar xfvz hbase-2.4.15-src.tar.gz`
+`$ cd hbase-2.4.15`
 `$ mvn install -Dhadoop.profile=3.0 -DskipTests`
 
-Replace 2.2.5 with the actual Hbase version you are using in the Phoenix build.
+Replace 2.4.15 with the actual Hbase version you are using in the Phoenix build.
 
 You can find the exact HBase version each phoenix HBase profile uses by checking <hbase.version>
 in the corresponding profile section at the end of phoenix/pom.xml, or you can specify the HBase
@@ -81,8 +86,8 @@ You can also specify the exact HBase release to build Phoenix with by additional
 setting the `hbase.version` system property.
 
  * `mvn clean install` will use the latest known patch release of the the latest supported HBase 2 minor relese
- * `mvn clean install -Dhbase.profile=2.1` will use the latest known patch release of HBase 2.1
- * `mvn clean install -Dhbase.profile=2.1 -Dhbase.version=2.1.7` will build with HBase 2.1.7
+ * `mvn clean install -Dhbase.profile=2.4` will use the latest known patch release of HBase 2.4
+ * `mvn clean install -Dhbase.profile=2.4 -Dhbase.version=2.4.5` will build with HBase 2.4.5
 
 Phoenix verifies the specified `hbase.profile` and `hbase.version` properties, and will reject
 combinations that are known not to work. You may disable this verification by adding

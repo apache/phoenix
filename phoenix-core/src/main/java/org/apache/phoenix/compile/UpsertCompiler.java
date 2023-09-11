@@ -216,7 +216,7 @@ public class UpsertCompiler {
         int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,
                 QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
         long maxSizeBytes =
-                services.getProps().getLong(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
+                services.getProps().getLongBytes(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
                     QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         int maxHBaseClientKeyValueSize =
                 services.getProps().getInt(QueryServices.HBASE_CLIENT_KEYVALUE_MAXSIZE,
@@ -369,7 +369,9 @@ public class UpsertCompiler {
         final PhoenixConnection connection = statement.getConnection();
         ConnectionQueryServices services = connection.getQueryServices();
         final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        final long maxSizeBytes = services.getProps().getLong(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
+        final long maxSizeBytes = services.getProps()
+                .getLongBytes(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
+                        QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         List<ColumnName> columnNodes = upsert.getColumns();
         TableRef tableRefToBe = null;
         PTable table = null;

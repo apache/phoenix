@@ -29,11 +29,11 @@ import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
@@ -85,9 +85,9 @@ public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
     }
     
     private static Filter getUserTableAndViewsFilter() {
-        SingleColumnValueFilter tableFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.TABLE_TYPE_BYTES, CompareOp.EQUAL, Bytes.toBytes(PTableType.TABLE.getSerializedValue()));
+        SingleColumnValueFilter tableFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.TABLE_TYPE_BYTES, CompareOperator.EQUAL, Bytes.toBytes(PTableType.TABLE.getSerializedValue()));
         tableFilter.setFilterIfMissing(true);
-        SingleColumnValueFilter viewFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.TABLE_TYPE_BYTES, CompareOp.EQUAL, Bytes.toBytes(PTableType.VIEW.getSerializedValue()));
+        SingleColumnValueFilter viewFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.TABLE_TYPE_BYTES, CompareOperator.EQUAL, Bytes.toBytes(PTableType.VIEW.getSerializedValue()));
         viewFilter.setFilterIfMissing(true);
         FilterList filter = new FilterList(FilterList.Operator.MUST_PASS_ONE, Arrays.asList(new Filter[] {tableFilter, viewFilter}));
         return filter;

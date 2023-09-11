@@ -240,7 +240,7 @@ public class PhoenixServerRpcIT extends BaseTest {
 		        srcServer = server2;
 		    }
 		    byte[] encodedRegionNameInBytes = hri2.getEncodedNameAsBytes();
-		    admin.move(encodedRegionNameInBytes, Bytes.toBytes(dstServer.getServerName().getServerName()));
+		    admin.move(encodedRegionNameInBytes, dstServer.getServerName());
 		    while (dstServer.getOnlineRegion(hri2.getRegionName()) == null
 		            || dstServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
 		            || srcServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)

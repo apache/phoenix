@@ -18,8 +18,9 @@
 package org.apache.phoenix.compile;
 
 import java.util.List;
+import java.util.Set;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PColumn;
@@ -48,7 +49,7 @@ public interface KeyPart {
      *  
      * @see org.apache.phoenix.expression.function.ScalarFunction#newKeyPart(KeyPart)
      */
-    public KeyRange getKeyRange(CompareOp op, Expression rhs);
+    public KeyRange getKeyRange(CompareOperator op, Expression rhs);
     
     /**
      * Determines whether an expression gets extracted from the
@@ -61,11 +62,11 @@ public interface KeyPart {
      * range (i.e. rows may pass through that will fail when
      * the REGEXP_SUBSTR is evaluated).
      * 
-     * @return an empty list if the expression should remain in
-     * the WHEERE clause for post filtering or a singleton list
+     * @return an empty set if the expression should remain in
+     * the WHERE clause for post filtering or a singleton set
      * containing the expression if it should be removed.
      */
-    public List<Expression> getExtractNodes();
+    public Set<Expression> getExtractNodes();
     
     /**
      * Gets the primary key column associated with the start of this key part.

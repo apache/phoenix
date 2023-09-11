@@ -41,7 +41,7 @@ public class ToTimestampParseNode extends FunctionParseNode {
             dateFormat = context.getTimestampFormat();
         }
         if (timeZoneId == null) {
-            timeZoneId = context.getDateFormatTimeZone().getID();
+            timeZoneId = context.getDateFormatTimeZoneId();
         }
         return new ToTimestampFunction(children, dateFormat, timeZoneId);
     }

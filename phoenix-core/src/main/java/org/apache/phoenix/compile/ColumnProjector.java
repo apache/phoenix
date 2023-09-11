@@ -63,6 +63,18 @@ public interface ColumnProjector {
      * @throws SQLException
      */
     Object getValue(Tuple tuple, PDataType type, ImmutableBytesWritable ptr) throws SQLException;
-    
+
+    /**
+     * Get the value of the column, coercing it if necessary to the specified type
+     * @param tuple the row containing the column
+     * @param type the type to which to coerce the binary value
+     * @param ptr used to retrieve the value
+     * @param jdbcType The java type to convert to, for rs.getObject()
+     * @return the object representation of the column value.
+     * @throws SQLException
+     */
+    Object getValue(Tuple tuple, PDataType type, ImmutableBytesWritable ptr, Class jdbcType)
+            throws SQLException;
+
     boolean isCaseSensitive();
 }

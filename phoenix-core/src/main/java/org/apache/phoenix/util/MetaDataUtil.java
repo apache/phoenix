@@ -22,9 +22,22 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
 
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnFamily;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SequenceKey;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -67,7 +80,6 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
@@ -398,8 +410,8 @@ public class MetaDataUtil {
         }
         byte[] rowArray = new byte[cell.getRowLength()];
         System.arraycopy(cell.getRowArray(), cell.getRowOffset(), rowArray, 0, cell.getRowLength());
-        Put put = new Put(rowArray, delete.getTimeStamp());
-        put.addColumn(family, qualifier, delete.getTimeStamp(), value);
+        Put put = new Put(rowArray, delete.getTimestamp());
+        put.addColumn(family, qualifier, delete.getTimestamp(), value);
         return put;
     }
 
@@ -636,7 +648,7 @@ public class MetaDataUtil {
         Collection<List<Cell>> kvs = m.getFamilyCellMap().values();
         // Empty if Mutation is a Delete
         // TODO: confirm that Delete timestamp is reset like Put
-        return kvs.isEmpty() ? m.getTimeStamp() : kvs.iterator().next().get(0).getTimestamp();
+        return kvs.isEmpty() ? m.getTimestamp() : kvs.iterator().next().get(0).getTimestamp();
     }    
 
     public static byte[] getParentLinkKey(String tenantId, String schemaName, String tableName, String indexName) {
@@ -903,11 +915,19 @@ public class MetaDataUtil {
             throws SQLException {
         String schemaName = getViewIndexSequenceSchemaName(name, isNamespaceMapped);
         String sequenceName = getViewIndexSequenceName(name, null, isNamespaceMapped);
-        connection.createStatement().executeUpdate("DELETE FROM "
-                + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
-                + " WHERE " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA
-                + (schemaName.length() > 0 ? "='" + schemaName + "'" : " IS NULL")
-                + " AND " + PhoenixDatabaseMetaData.SEQUENCE_NAME + " = '" + sequenceName + "'" );
+        String delQuery = String.format(" DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
+                + " WHERE " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA  + " %s AND "
+                + PhoenixDatabaseMetaData.SEQUENCE_NAME + " = ? ",
+            schemaName.length() > 0 ? "= ? " : " IS NULL");
+        try (PreparedStatement delSeqStmt = connection.prepareStatement(delQuery)) {
+            if (schemaName.length() > 0) {
+                delSeqStmt.setString(1, schemaName);
+                delSeqStmt.setString(2, sequenceName);
+            } else {
+                delSeqStmt.setString(1, sequenceName);
+            }
+            delSeqStmt.executeUpdate();
+        }
     }
     
     /**
@@ -965,12 +985,12 @@ public class MetaDataUtil {
 	public static Scan newTableRowsScan(byte[] startKey, byte[] stopKey, long startTimeStamp, long stopTimeStamp) {
 		Scan scan = new Scan();
 		ScanUtil.setTimeRange(scan, startTimeStamp, stopTimeStamp);
-		scan.setStartRow(startKey);
+        scan.withStartRow(startKey);
 		if (stopKey == null) {
 			stopKey = ByteUtil.concat(startKey, QueryConstants.SEPARATOR_BYTE_ARRAY);
 			ByteUtil.nextKey(stopKey, stopKey.length);
 		}
-		scan.setStopRow(stopKey);
+        scan.withStopRow(stopKey);
 		return scan;
 	}
 
@@ -1061,7 +1081,7 @@ public class MetaDataUtil {
     public static String getJdbcUrl(RegionCoprocessorEnvironment env) {
         String zkQuorum = env.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
         String zkClientPort = env.getConfiguration().get(HConstants.ZOOKEEPER_CLIENT_PORT,
-            Integer.toString(HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT));
+            Integer.toString(HConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT));
         String zkParentNode = env.getConfiguration().get(HConstants.ZOOKEEPER_ZNODE_PARENT,
             HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
         return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum
@@ -1188,9 +1208,8 @@ public class MetaDataUtil {
                 physicalTablesSet.add(s.getPhysicalNames().get(0).getString());
             }
             StringBuilder buf = new StringBuilder("DELETE FROM SYSTEM.STATS WHERE PHYSICAL_NAME IN (");
-            Iterator itr = physicalTablesSet.iterator();
-            while (itr.hasNext()) {
-                buf.append("'" + itr.next() + "',");
+            for (int i = 0; i < physicalTablesSet.size(); i++) {
+                buf.append(" ?,");
             }
             buf.setCharAt(buf.length() - 1, ')');
             if (table.getIndexType()==IndexType.LOCAL) {
@@ -1198,13 +1217,25 @@ public class MetaDataUtil {
                 if (table.getColumnFamilies().isEmpty()) {
                     buf.append("'" + QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY + "',");
                 } else {
-                    for(PColumnFamily cf : table.getColumnFamilies()) {
-                        buf.append("'" + cf.getName().getString() + "',");
-                    }
+                    buf.append(QueryUtil.generateInListParams(table
+                        .getColumnFamilies().size()));
                 }
                 buf.setCharAt(buf.length() - 1, ')');
             }
-            connection.createStatement().execute(buf.toString());
+            try (PreparedStatement delStatsStmt = connection.prepareStatement(buf.toString())) {
+                int param = 0;
+                Iterator itr = physicalTablesSet.iterator();
+                while (itr.hasNext()) {
+                    delStatsStmt.setString(++param, itr.next().toString());
+                }
+                if (table.getIndexType() == IndexType.LOCAL
+                    && !table.getColumnFamilies().isEmpty()) {
+                    for (PColumnFamily cf : table.getColumnFamilies()) {
+                        delStatsStmt.setString(++param, cf.getName().getString());
+                    }
+                }
+                delStatsStmt.execute();
+            }
         } finally {
             connection.setAutoCommit(isAutoCommit);
         }

@@ -17,20 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.phoenix.mapreduce.index.IndexUpgradeTool;
-import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
-
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -39,16 +26,23 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import org.apache.phoenix.mapreduce.index.IndexUpgradeTool;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Assert;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Parameterized.class)
-//FIXME this test is never run by maven, as it has no @Category
-public class IndexUpgradeToolIT extends BaseTest {
+@Category(ParallelStatsDisabledTest.class)
+public class IndexUpgradeToolIT extends ParallelStatsDisabledIT {
 
     public static final String
             VERIFY_COUNT_ASSERT_MESSAGE = "view-index count in system table doesn't match";
@@ -64,12 +58,6 @@ public class IndexUpgradeToolIT extends BaseTest {
         return Arrays.asList(new Boolean[][] {
                 { true },{ false }
         });
-    }
-
-    @BeforeClass
-    public static synchronized void setup() throws Exception {
-        Map<String, String> props = Collections.emptyMap();
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     @Test

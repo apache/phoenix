@@ -105,6 +105,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String SYSTEM_CATALOG = SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"";
     public static final String SYSTEM_CATALOG_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA,
             SYSTEM_CATALOG_TABLE);
+    public static final String OLD_SYSTEM_CATALOG_NAME = SYSTEM_CATALOG_NAME.replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR);
     public static final TableName SYSTEM_CATALOG_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_CATALOG_NAME);
     public static final byte[] SYSTEM_CATALOG_NAME_BYTES = Bytes.toBytes(SYSTEM_CATALOG_NAME);
     public static final String SYSTEM_STATS_TABLE = "STATS";
@@ -412,6 +413,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     public static final String EXTERNAL_SCHEMA_ID = "EXTERNAL_SCHEMA_ID";
     public static final byte[] EXTERNAL_SCHEMA_ID_BYTES = Bytes.toBytes(EXTERNAL_SCHEMA_ID);
+
+    public static final String STREAMING_TOPIC_NAME = "STREAMING_TOPIC_NAME";
+    public static final byte[] STREAMING_TOPIC_NAME_BYTES = Bytes.toBytes(STREAMING_TOPIC_NAME);
 
     public static final String SYSTEM_CHILD_LINK_TABLE = "CHILD_LINK";
     public static final String SYSTEM_CHILD_LINK_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CHILD_LINK_TABLE);
@@ -848,7 +852,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 cells.add(
                     PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                         Bytes.toBytes(COLUMN_DEF),
-                        MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+                        MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                        PVarchar.INSTANCE.toBytes(column.getExpressionStr())));
                 // SQL_DATA_TYPE
                 cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
                     Bytes.toBytes(SQL_DATA_TYPE), MetaDataProtocol.MIN_TABLE_TIMESTAMP,

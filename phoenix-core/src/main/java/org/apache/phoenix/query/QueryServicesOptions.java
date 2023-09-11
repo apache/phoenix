@@ -43,6 +43,7 @@ import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILL_FILES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.HBASE_CLIENT_SCANNER_TIMEOUT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.IMMUTABLE_ROWS_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.INDEX_POPULATION_SLEEP_TIME;
 import static org.apache.phoenix.query.QueryServices.INDEX_REBUILD_TASK_INITIAL_DELAY;
@@ -56,6 +57,7 @@ import static org.apache.phoenix.query.QueryServices.MASTER_INFO_PORT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_PERC_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_MUTATION_SIZE_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN;
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB;
@@ -80,7 +82,9 @@ import static org.apache.phoenix.query.QueryServices.SCAN_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SCAN_RESULT_CHUNK_SIZE;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SERVER_MERGE_FOR_UNCOVERED_INDEX;
 import static org.apache.phoenix.query.QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK;
 import static org.apache.phoenix.query.QueryServices.SPOOL_DIRECTORY;
 import static org.apache.phoenix.query.QueryServices.STATS_CACHE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServices.STATS_COLLECTION_ENABLED;
@@ -102,10 +106,12 @@ import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED;
+import static org.apache.phoenix.query.QueryServices.MAX_IN_LIST_SKIP_SCAN_SIZE;
 
 import java.util.Map.Entry;
 
 import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.client.Consistency;
@@ -161,7 +167,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_TRACING_TRACE_BUFFER_SIZE = 1000;
     public static final int DEFAULT_MAX_INDEXES_PER_TABLE = 10;
     public static final int DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD = 0;
-    public static final boolean DEFAULT_SERVER_SIDE_MASKING_ENABLED = true;
+    public static final boolean DEFAULT_SERVER_SIDE_MASKING_ENABLED = false;
 
     public final static int DEFAULT_MUTATE_BATCH_SIZE = 100; // Batch size for UPSERT SELECT and DELETE
     //Batch size in bytes for UPSERT, SELECT and DELETE. By default, 2MB
@@ -182,6 +188,7 @@ public class QueryServicesOptions {
     public static final long DEFAULT_SCAN_RESULT_CHUNK_SIZE = 2999;
     public static final boolean DEFAULT_IS_NAMESPACE_MAPPING_ENABLED = false;
     public static final boolean DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE = true;
+    public static final int DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE = 50000;
 
     //
     // Spillable GroupBy - SPGBY prefix
@@ -221,11 +228,13 @@ public class QueryServicesOptions {
      * HConstants#HIGH_QOS is the max we will see to a standard table. We go higher to differentiate
      * and give some room for things in the middle
      */
+    public static final int DEFAULT_SERVER_SIDE_PRIORITY = 500;
     public static final int DEFAULT_INDEX_PRIORITY = 1000;
     public static final int DEFAULT_METADATA_PRIORITY = 2000;
     public static final boolean DEFAULT_ALLOW_LOCAL_INDEX = true;
     public static final int DEFAULT_INDEX_HANDLER_COUNT = 30;
     public static final int DEFAULT_METADATA_HANDLER_COUNT = 30;
+    public static final int DEFAULT_SERVERSIDE_HANDLER_COUNT = 30;
     public static final int DEFAULT_SYSTEM_MAX_VERSIONS = 1;
     public static final boolean DEFAULT_SYSTEM_KEEP_DELETED_CELLS = false;
 
@@ -259,6 +268,9 @@ public class QueryServicesOptions {
     public static final int DEFAULT_STATS_CACHE_THREAD_POOL_SIZE = 4;
 
     public static final boolean DEFAULT_USE_REVERSE_SCAN = true;
+
+    public static final String DEFAULT_CREATE_INDEX_STATE= PIndexState.BUILDING.toString();
+    public static final boolean DEFAULT_DISABLE_ON_DROP = false;
 
     /**
      * Use only first time SYSTEM.SEQUENCE table is created.
@@ -349,7 +361,8 @@ public class QueryServicesOptions {
     public static final long DEFAULT_GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS = 7*24*60*60*1000; /* 7 days */
     public static final boolean DEFAULT_INDEX_REGION_OBSERVER_ENABLED = true;
     public static final boolean DEFAULT_PHOENIX_SERVER_PAGING_ENABLED = true;
-    public static final long DEFAULT_INDEX_REBUILD_PAGE_SIZE_IN_ROWS = 32*1024;
+    public static final long DEFAULT_INDEX_REBUILD_PAGE_SIZE_IN_ROWS = 32 * 1024;
+    public static final long DEFAULT_INDEX_PAGE_SIZE_IN_ROWS = 32 * 1024;
 
     public static final boolean DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK = false;
 
@@ -382,6 +395,16 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_LONG_VIEW_INDEX_ENABLED = false;
 
     public static final boolean DEFAULT_PENDING_MUTATIONS_DDL_THROW = false;
+    public static final boolean DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK = false;
+    public static final boolean DEFAULT_MOVE_CHILD_LINKS_DURING_UPGRADE_ENABLED = true;
+    public static final int DEFAULT_TIMEOUT_DURING_UPGRADE_MS = 60000 * 30; // 30 mins
+    public static final int DEFAULT_SCAN_PAGE_SIZE = 32768;
+    public static final boolean DEFAULT_APPLY_TIME_ZONE_DISPLACMENT = false;
+    public static final boolean DEFAULT_PHOENIX_TABLE_TTL_ENABLED = true;
+    public static final int DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN = 5;
+    public static final boolean DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX = true;
+
+
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
@@ -467,7 +490,15 @@ public class QueryServicesOptions {
             .setIfUnset(CLIENT_METRICS_TAG, DEFAULT_CLIENT_METRICS_TAG)
             .setIfUnset(CLIENT_INDEX_ASYNC_THRESHOLD, DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD)
             .setIfUnset(PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, DEFAULT_SERVER_SIDE_MASKING_ENABLED)
-            ;
+            .setIfUnset(INDEX_CREATE_DEFAULT_STATE, DEFAULT_CREATE_INDEX_STATE)
+            .setIfUnset(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK,
+                DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK)
+            .setIfUnset(MAX_IN_LIST_SKIP_SCAN_SIZE, DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE)
+            .setIfUnset(MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN,
+                    DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN)
+            .setIfUnset(SERVER_MERGE_FOR_UNCOVERED_INDEX,
+                DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX);
+
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
         // it to 1, so we'll change it.
@@ -656,7 +687,7 @@ public class QueryServicesOptions {
     }
 
     public long getSpillableGroupByMaxCacheSize() {
-        return config.getLong(GROUPBY_MAX_CACHE_SIZE_ATTRIB, DEFAULT_GROUPBY_MAX_CACHE_MAX);
+        return config.getLongBytes(GROUPBY_MAX_CACHE_SIZE_ATTRIB, DEFAULT_GROUPBY_MAX_CACHE_MAX);
     }
 
     public int getSpillableGroupByNumSpillFiles() {

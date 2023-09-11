@@ -40,6 +40,11 @@ public class DelegateTable implements PTable {
     }
 
     @Override
+    public boolean isIndexStateDisabled() {
+        return delegate.isIndexStateDisabled();
+    }
+
+    @Override
     public long getSequenceNumber() {
         return delegate.getSequenceNumber();
     }
@@ -388,6 +393,9 @@ public class DelegateTable implements PTable {
     public String getExternalSchemaId() {
         return delegate.getExternalSchemaId();
     }
+
+    @Override
+    public String getStreamingTopicName() { return delegate.getStreamingTopicName(); }
 
     @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }
 

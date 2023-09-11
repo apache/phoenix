@@ -110,7 +110,7 @@ tokens
     CYCLE='cycle';
     CASCADE='cascade';
     UPDATE='update';
-    STATISTICS='statistics';    
+    STATISTICS='statistics';
     COLUMNS='columns';
     TRACE='trace';
     ASYNC='async';
@@ -130,6 +130,8 @@ tokens
     LIST = 'list';
     JARS='jars';
     ROW_TIMESTAMP='row_timestamp';
+    ENCODED_QUALIFIER = 'encoded_qualifier';
+    COLUMN_QUALIFIER_COUNTER = 'column_qualifier_counter';
     USE='use';
     OFFSET ='offset';
     FETCH = 'fetch';
@@ -149,6 +151,8 @@ tokens
     GRANT = 'grant';
     REVOKE = 'revoke';
     SHOW = 'show';
+    UNCOVERED = 'uncovered';
+    REGIONS = 'regions';
     TRUNCATE = 'truncate';
 }
 
@@ -178,8 +182,8 @@ package org.apache.phoenix.parse;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import java.lang.Boolean;
 import java.math.BigDecimal;
 import java.util.Arrays;
@@ -210,6 +214,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.parse.AddJarsStatement;
+import org.apache.phoenix.parse.ExplainType;
 }
 
 @lexer::header {
@@ -451,7 +456,14 @@ oneStatement returns [BindableStatement ret]
 finally{ contextStack.pop(); }
     
 explain_node returns [BindableStatement ret]
-    :   EXPLAIN q=oneStatement {$ret=factory.explain(q);}
+    :   EXPLAIN (w=WITH)? (r=REGIONS)? q=oneStatement
+     {
+        if ((w==null && r!=null) || (w!=null && r==null)) {
+            throw new RuntimeException("Valid usage: EXPLAIN {query} OR EXPLAIN WITH REGIONS {query}");
+        }
+        ret = (w==null && r==null) ? factory.explain(q, ExplainType.DEFAULT)
+         : factory.explain(q, ExplainType.WITH_REGIONS);
+     }
     ;
 
 // Parse a create table statement.
@@ -460,7 +472,8 @@ create_table_node returns [CreateTableStatement ret]
         (LPAREN c=column_defs (pk=pk_constraint)? RPAREN)
         (p=fam_properties)?
         (SPLIT ON s=value_expression_list)?
-        {ret = factory.createTable(t, p, c, pk, s, PTableType.TABLE, ex!=null, null, null, getBindCount(), im!=null ? true : null); }
+        (COLUMN_QUALIFIER_COUNTER LPAREN cqc=initializiation_list RPAREN)?
+        {ret = factory.createTable(t, p, c, pk, s, PTableType.TABLE, ex!=null, null, null, getBindCount(), im!=null ? true : null,  cqc); }
     ;
 
 // Parse a truncate table statement.
@@ -523,13 +536,21 @@ create_view_node returns [CreateTableStatement ret]
 
 // Parse a create index statement.
 create_index_node returns [CreateIndexStatement ret]
-    :   CREATE l=LOCAL? INDEX (IF NOT ex=EXISTS)? i=index_name ON t=from_table_name
+    :   CREATE u=UNCOVERED? l=LOCAL? INDEX (IF NOT ex=EXISTS)? i=index_name ON t=from_table_name
         (LPAREN ik=ik_constraint RPAREN)
-        (INCLUDE (LPAREN icrefs=column_names RPAREN))?
+        (in=INCLUDE (LPAREN icrefs=column_names RPAREN))?
         (async=ASYNC)?
         (p=fam_properties)?
         (SPLIT ON v=value_expression_list)?
-        {ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, v, p, ex!=null, l==null ? IndexType.getDefault() : IndexType.LOCAL, async != null, getBindCount(), new HashMap<String, UDFParseNode>(udfParseNodes)); }
+        {
+            if (u !=null && in != null) {
+                throw new RuntimeException("UNCOVERED indexes cannot have the INCLUDE clause");
+            }
+            ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, v, p, ex!=null,
+                    l==null ? (u==null ? IndexType.getDefault() : IndexType.UNCOVERED_GLOBAL) :
+                    IndexType.LOCAL, async != null, getBindCount(), new HashMap<String,
+                    UDFParseNode>(udfParseNodes));
+        }
     ;
 
 // Parse a create sequence statement.
@@ -712,19 +733,31 @@ column_defs returns [List<ColumnDef> ret]
     :  v = column_def {$ret.add(v);}  (COMMA v = column_def {$ret.add(v);} )*
 ;
 
+initializiation_list returns [Map<String, Integer> ret]
+@init{ret = new HashMap<String,Integer>(); }
+    :   k=STRING_LITERAL EQ v=NUMBER {$ret.put(k.getText(), Integer.parseInt( v.getText() ));}
+        (COMMA k=STRING_LITERAL EQ v=NUMBER {$ret.put(k.getText(), Integer.parseInt( v.getText() ));} )*
+    ;
+
 indexes returns [List<NamedNode> ret]
 @init{ret = new ArrayList<NamedNode>(); }
     :  v = index_name {$ret.add(v);}  (COMMA v = index_name {$ret.add(v);} )*
 ;
 
 column_def returns [ColumnDef ret]
-    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? (pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)?
-        { $ret = factory.columnDef(c, dt, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), nn!=null ? Boolean.FALSE : n!=null ? Boolean.TRUE : null, 
+    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? ((pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)|(ENCODED_QUALIFIER eq=NUMBER))?
+        { $ret = factory.columnDef(
+            c,
+            dt,
+            ar != null || lsq != null,
+            a == null ? null :  Integer.parseInt( a.getText() ),
+            nn!=null ? Boolean.FALSE : n!=null ? Boolean.TRUE : null,
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),
             pk != null, 
             order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()),
             df == null ? null : df.toString(),
+            eq == null ? null : Integer.parseInt( eq.getText() ),
             rr != null); }
     ;
 
@@ -852,7 +885,7 @@ limit returns [LimitNode ret]
 offset returns [OffsetNode ret]
 	: b=bind_expression (ROW | ROWS)? {  try { $ret = factory.offset(b); } catch (SQLException e) { throw new RuntimeException(e); } }
     | l=int_or_long_literal (ROW | ROWS)? { try { $ret = factory.offset(l); } catch (SQLException e) { throw new RuntimeException(e); } }
-    | LPAREN lhs=one_or_more_expressions RPAREN EQ LPAREN rhs=one_or_more_expressions RPAREN { try { $ret = factory.offset(factory.comparison(CompareOp.EQUAL,factory.rowValueConstructor(lhs),factory.rowValueConstructor(rhs)));  } catch (SQLException e) { throw new RuntimeException(e); } }
+    | LPAREN lhs=one_or_more_expressions RPAREN EQ LPAREN rhs=one_or_more_expressions RPAREN { try { $ret = factory.offset(factory.comparison(CompareOperator.EQUAL,factory.rowValueConstructor(lhs),factory.rowValueConstructor(rhs)));  } catch (SQLException e) { throw new RuntimeException(e); } }
     ;
 
 sampling_rate returns [LiteralParseNode ret]
@@ -958,13 +991,13 @@ not_expression returns [ParseNode ret]
     |   n=NOT? LPAREN e=expression RPAREN { $ret = n == null ? e : factory.not(e); }
     ;
 
-comparison_op returns [CompareOp ret]
-	: EQ { $ret = CompareOp.EQUAL; }
-	| LT { $ret = CompareOp.LESS; }
-	| GT { $ret = CompareOp.GREATER; }
-	| LT EQ { $ret = CompareOp.LESS_OR_EQUAL; }
-	| GT EQ { $ret = CompareOp.GREATER_OR_EQUAL; }
-	| (NOEQ1 | NOEQ2) { $ret = CompareOp.NOT_EQUAL; }
+comparison_op returns [CompareOperator ret]
+	: EQ { $ret = CompareOperator.EQUAL; }
+	| LT { $ret = CompareOperator.LESS; }
+	| GT { $ret = CompareOperator.GREATER; }
+	| LT EQ { $ret = CompareOperator.LESS_OR_EQUAL; }
+	| GT EQ { $ret = CompareOperator.GREATER_OR_EQUAL; }
+	| (NOEQ1 | NOEQ2) { $ret = CompareOperator.NOT_EQUAL; }
 	;
 	
 boolean_expression returns [ParseNode ret]
@@ -1160,7 +1193,10 @@ literal_or_bind returns [ParseNode ret]
 
 // Get a string, integer, double, date, boolean, or NULL value.
 literal returns [LiteralParseNode ret]
-    :   s=STRING_LITERAL {
+    :
+    h=hex_literal { ret = h; }
+    |   b=bin_literal { ret = b; }
+    |   s=STRING_LITERAL {
             ret = factory.literal(s.getText()); 
         }
     |   n=NUMBER {
@@ -1171,7 +1207,7 @@ literal returns [LiteralParseNode ret]
         }
     |   dbl=DOUBLE  {
             ret = factory.literal(Double.valueOf(dbl.getText()));
-        }    
+        }
     |   NULL {ret = factory.literal(null);}
     |   TRUE {ret = factory.literal(Boolean.TRUE);} 
     |   FALSE {ret = factory.literal(Boolean.FALSE);}
@@ -1183,11 +1219,31 @@ literal returns [LiteralParseNode ret]
             }
         }
     ;
-    
+
 int_or_long_literal returns [LiteralParseNode ret]
     :   n=NUMBER {
             ret = factory.intOrLong(n.getText());
         }
+    ;
+
+hex_literal returns [LiteralParseNode ret]
+@init {StringBuilder sb = new StringBuilder();}
+    :
+    (
+    h=HEX_LITERAL { sb.append(h.getText()); }
+    (s=STRING_LITERAL { sb.append(factory.stringToHexLiteral(s.getText())); } )*
+    )
+    { ret = factory.hexLiteral(sb.toString()); }
+    ;
+
+bin_literal returns [LiteralParseNode ret]
+@init {StringBuilder sb = new StringBuilder();}
+    :
+    (
+    b=BIN_LITERAL { sb.append(b.getText()); }
+    (s=STRING_LITERAL { sb.append(factory.stringToBinLiteral(s.getText())); } )*
+    )
+    { ret = factory.binLiteral(sb.toString()); }
     ;
 
 // Bind names are a colon followed by 1+ letter/digits/underscores, or '?' (unclear how Oracle acutally deals with this, but we'll just treat it as a special bind)
@@ -1223,6 +1279,28 @@ SL_COMMENT2: '--';
 // Bind names start with a colon and followed by 1 or more letter/digit/underscores
 BIND_NAME
     : COLON (DIGIT)+
+    ;
+
+HEX_LITERAL
+@init{ StringBuilder sb = new StringBuilder();}
+    :
+    X { $type = NAME;}
+    (
+    (FIELDCHAR) => FIELDCHAR+
+    | ('\'') => '\'' ' '* ( d=HEX_DIGIT { sb.append(d.getText()); } ' '* )* '\'' { $type=HEX_LITERAL; }
+    )?
+    { if ($type == HEX_LITERAL) { setText(sb.toString()); } }
+    ;
+
+BIN_LITERAL
+@init{ StringBuilder sb = new StringBuilder();}
+    :
+    B { $type = NAME;}
+    (
+    (FIELDCHAR) => FIELDCHAR+
+    | ('\'') =>  '\'' ' '* ( d=BIN_DIGIT { sb.append(d.getText()); } ' '* )* '\'' { $type=BIN_LITERAL; }
+    )?
+    { if ($type == BIN_LITERAL) { setText(sb.toString()); } }
     ;
 
 NAME
@@ -1379,6 +1457,16 @@ DIGIT
     :    '0'..'9'
     ;
 
+fragment
+HEX_DIGIT
+    :   ('0'..'9' | 'a'..'f' | 'A'..'F')
+    ;
+
+fragment
+BIN_DIGIT
+    :   ('0' | '1')
+    ;
+
 // string literals
 STRING_LITERAL
 @init{ StringBuilder sb = new StringBuilder(); }
@@ -1396,6 +1484,16 @@ CHAR
 fragment
 DBL_QUOTE_CHAR
     :   ( ~('\"') )+
+    ;
+
+fragment
+X
+    : ( 'X' | 'x' )
+    ;
+
+fragment
+B
+    : ( 'B' | 'b' )
     ;
 
 // escape sequence inside a string literal
@@ -1421,7 +1519,7 @@ CHAR_ESC
 WS
     :   ( ' ' | '\t' | '\u2002' ) { $channel=HIDDEN; }
     ;
-    
+
 EOL
     :  ('\r' | '\n')
     { skip(); }
@@ -1447,7 +1545,7 @@ SL_COMMENT
 DOT
     : '.'
     ;
-    
+
 OTHER      
     : . { if (true) // to prevent compile error
               throw new RuntimeException("Unexpected char: '" + $text + "'"); } 

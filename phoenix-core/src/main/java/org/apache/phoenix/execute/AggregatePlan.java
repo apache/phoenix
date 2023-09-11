@@ -96,17 +96,10 @@ public class AggregatePlan extends BaseQueryPlan {
 
     public AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
-            ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having, QueryPlan dataPlan) throws SQLException {
-        this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, groupBy, having,
-                null, dataPlan);
-    }
-
-    private AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
-            RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
             ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having,
-            Expression dynamicFilter, QueryPlan dataPlan) throws SQLException {
+            QueryPlan dataPlan) throws SQLException {
         super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, offset,
-                orderBy, groupBy, parallelIteratorFactory, dynamicFilter, dataPlan);
+                orderBy, groupBy, parallelIteratorFactory, dataPlan);
         this.having = having;
         this.aggregators = context.getAggregationManager().getAggregators();
         boolean hasSerialHint = statement.getHint().hasHint(HintNode.Hint.SERIAL);
@@ -200,7 +193,8 @@ public class AggregatePlan extends BaseQueryPlan {
                             true,
                             this.orderBy == OrderBy.REV_ROW_KEY_ORDER_BY);
             long threshold =
-                    services.getProps().getLong(QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
+                    services.getProps()
+                            .getLongBytes(QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
                             QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
             boolean spoolingEnabled =
                     services.getProps().getBoolean(
@@ -321,7 +315,7 @@ public class AggregatePlan extends BaseQueryPlan {
             }
         } else {
             long thresholdBytes =
-                    context.getConnection().getQueryServices().getProps().getLong(
+                    context.getConnection().getQueryServices().getProps().getLongBytes(
                         QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB,
                         QueryServicesOptions.DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES);
             boolean spoolingEnabled =
@@ -359,5 +353,19 @@ public class AggregatePlan extends BaseQueryPlan {
     @Override
     public List<OrderBy> getOutputOrderBys() {
        return OrderBy.wrapForOutputOrderBys(this.actualOutputOrderBy);
+    }
+
+    @Override
+    protected void setScanReversedWhenOrderByIsReversed(Scan scan) {
+        /**
+         * For {@link AggregatePlan}, when {@link GroupBy#isOrderPreserving} is false, we have no
+         * need to set the scan as reversed scan because we have to hash-aggregate the scanned
+         * results from HBase in RegionServer Coprocessor before sending them to client, only when
+         * {@link GroupBy#isOrderPreserving} is true and we depend on the original HBase scanned
+         * order to get the query result, we need to set the scan as reversed scan.
+         */
+        if (this.groupBy.isOrderPreserving()) {
+            super.setScanReversedWhenOrderByIsReversed(scan);
+        }
     }
 }

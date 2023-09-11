@@ -43,12 +43,14 @@ import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.ipc.ServerRpcController;
+import org.apache.hadoop.hbase.ipc.controller.ServerToServerRpcController;
 import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -57,11 +59,13 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesTestImpl;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.junit.After;
@@ -186,8 +190,7 @@ public class SystemTablesCreationOnConnectionIT {
                         testUtil.getHBaseCluster().getMaster() != null;
                 boolean refCountLeaked = false;
                 if (isMasterAvailable) {
-                    refCountLeaked = CompatUtil.isAnyStoreRefCountLeaked(
-                            testUtil.getAdmin());
+                    refCountLeaked = BaseTest.isAnyStoreRefCountLeaked(testUtil.getAdmin());
                 }
                 testUtil.shutdownMiniCluster();
                 testUtil = null;
@@ -217,7 +220,48 @@ public class SystemTablesCreationOnConnectionIT {
         assertEquals(1, countUpgradeAttempts);
     }
 
+    // Conditions: isDoNotUpgradePropSet is true
+    // Conditions: IS_SERVER_CONNECTION is true
+    // Expected: We do not create SYSTEM.CATALOG even if this is the first connection to the server
+    @Test
+    public void testGetConnectionOnServer() throws Exception {
+        startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
+        verifyCQSIUsingAppropriateRPCContoller(true);
+    }
 
+    // Conditions: isDoNotUpgradePropSet is true
+    // Conditions: IS_SERVER_CONNECTION is false
+    // Expected: We do not create SYSTEM.CATALOG even if this is the first connection to the server
+    @Test
+    public void testGetRegularConnection() throws Exception {
+        startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
+        verifyCQSIUsingAppropriateRPCContoller(false);
+    }
+
+    private void verifyCQSIUsingAppropriateRPCContoller(boolean isServerSideConnection) throws Exception {
+        Properties serverSideProperties = new Properties();
+        // Set doNotUpgradeProperty to true
+        UpgradeUtil.doNotUpgradeOnFirstConnection(serverSideProperties);
+        if (isServerSideConnection) {
+            QueryUtil.setServerConnection(serverSideProperties);
+        }
+        PhoenixTestDriver driver = new PhoenixTestDriver(ReadOnlyProps.EMPTY_PROPS);
+
+        ConnectionQueryServices cqsi = driver.getConnectionQueryServices(getJdbcUrl(), serverSideProperties);
+        assertTrue(cqsi instanceof ConnectionQueryServicesTestImpl);
+        ConnectionQueryServicesTestImpl testCQSI = (ConnectionQueryServicesTestImpl)cqsi;
+        if (isServerSideConnection) {
+            assertTrue( testCQSI.getController() instanceof ServerToServerRpcController);
+        } else {
+            assertTrue( testCQSI.getController() instanceof ServerRpcController);
+        }
+        assertTrue(testCQSI.isUpgradeRequired());
+        hbaseTables = getHBaseTables();
+        assertFalse(hbaseTables.contains(PHOENIX_SYSTEM_CATALOG) ||
+                hbaseTables.contains(PHOENIX_NAMESPACE_MAPPED_SYSTEM_CATALOG));
+        assertEquals(0, hbaseTables.size());
+
+    }
     /********************* Testing SYSTEM.CATALOG/SYSTEM:CATALOG creation/upgrade behavior for subsequent connections *********************/
 
     // We are ignoring this test because we aren't testing SYSCAT timestamp anymore if
@@ -511,9 +555,9 @@ public class SystemTablesCreationOnConnectionIT {
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
         startMiniClusterWithToggleNamespaceMapping(Boolean.FALSE.toString());
         try (Connection ignored = DriverManager.getConnection(getJdbcUrl());
-             HBaseAdmin admin = testUtil.getHBaseAdmin()) {
-            HTableDescriptor htd = admin.getTableDescriptor(SYSTEM_MUTEX_HBASE_TABLE_NAME);
-            HColumnDescriptor hColDesc = htd.getFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES);
+             Admin admin = testUtil.getAdmin()) {
+            TableDescriptor htd = admin.getDescriptor(SYSTEM_MUTEX_HBASE_TABLE_NAME);
+            ColumnFamilyDescriptor hColDesc = htd.getColumnFamily(SYSTEM_MUTEX_FAMILY_NAME_BYTES);
             assertEquals("Did not find the correct TTL for SYSTEM.MUTEX", TTL_FOR_MUTEX,
                     hColDesc.getTimeToLive());
         }
@@ -600,9 +644,9 @@ public class SystemTablesCreationOnConnectionIT {
                 getJdbcUrl(), new Properties()).connect(getJdbcUrl(), new Properties())) {
             // do nothing
         }
-        HTableDescriptor descriptor = testUtil.getHBaseAdmin()
-                .getTableDescriptor(TableName.valueOf(PHOENIX_SYSTEM_CATALOG));
-        return descriptor.getFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES).getMaxVersions();
+        TableDescriptor descriptor = testUtil.getAdmin()
+                .getDescriptor(TableName.valueOf(PHOENIX_SYSTEM_CATALOG));
+        return descriptor.getColumnFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES).getMaxVersions();
     }
 
     /**

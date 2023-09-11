@@ -31,11 +31,9 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.compat.hbase.HbaseCompatCapabilities;
 import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.coprocessor.IndexToolVerificationResult;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
@@ -43,7 +41,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.*;
-import org.junit.Assume;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -148,6 +146,11 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         createMutationsWithUpserts();
         initializeRebuildScannerAttributes();
         initializeGlobalMockitoSetup();
+    }
+
+    @After
+    public void reset() {
+        EnvironmentEdgeManager.reset();
     }
 
     public void createDBObject() throws SQLException {
@@ -281,7 +284,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
 
     private void initializeGlobalMockitoSetup() throws IOException {
         //setup
-        when(GlobalIndexRegionScanner.getIndexRowKey(indexMaintainer, put)).thenCallRealMethod();
+        when(indexMaintainer.getIndexRowKey(put)).thenCallRealMethod();
         when(rebuildScanner.prepareIndexMutations(put, delete, indexKeyToMutationMap, mostRecentIndexRowKeys)).thenCallRealMethod();
         when(rebuildScanner.verifySingleIndexRow(Matchers.<byte[]>any(), Matchers.<List>any(),Matchers.<List>any(), Matchers.<Set>any(), Matchers.<List>any(),
                 Matchers.<IndexToolVerificationResult.PhaseResult>any(), Matchers.anyBoolean())).thenCallRealMethod();
@@ -471,7 +474,6 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     // We will report such row as a valid row.
     @Test
     public void testVerifySingleIndexRow_compactionOnIndexTable_atLeastOneExpectedMutationWithinMaxLookBack() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isMaxLookbackTimeSupported());
         String dataRowKey = "k1";
         byte[] indexRowKey1Bytes = generateIndexRowKey(dataRowKey, "val1");
         ManualEnvironmentEdge injectEdge = new ManualEnvironmentEdge();
@@ -531,7 +533,6 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     // We will report such row as an invalid beyond maxLookBack row.
     @Test
     public void testVerifySingleIndexRow_compactionOnIndexTable_noExpectedMutationWithinMaxLookBack() throws Exception {
-        Assume.assumeTrue(HbaseCompatCapabilities.isMaxLookbackTimeSupported());
         String dataRowKey = "k1";
         byte[] indexRowKey1Bytes = generateIndexRowKey(dataRowKey, "val1");
         List<Mutation> expectedMutations = new ArrayList<>();

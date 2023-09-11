@@ -534,7 +534,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
             String snapshotName = new StringBuilder(tableName).append("-Snapshot").toString();
             admin.snapshot(snapshotName, TableName.valueOf(fullTableName));
-            admin.cloneSnapshot(Bytes.toBytes(snapshotName), TableName.valueOf(fullNewTableName));
+            admin.cloneSnapshot(snapshotName, TableName.valueOf(fullNewTableName));
         }
         LogicalTableNameIT.renameAndDropPhysicalTable(conn, "NULL", schemaName, tableName, newTableName, false);
 

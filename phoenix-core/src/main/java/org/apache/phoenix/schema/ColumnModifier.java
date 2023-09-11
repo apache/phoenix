@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
@@ -50,18 +50,18 @@ public enum ColumnModifier {
         }
 
         @Override
-        public CompareOp transform(CompareOp op) {
+        public CompareOperator transform(CompareOperator op) {
             switch (op) {
                 case EQUAL:
                     return op;
                 case GREATER:
-                    return CompareOp.LESS;
+                    return CompareOperator.LESS;
                 case GREATER_OR_EQUAL:
-                    return CompareOp.LESS_OR_EQUAL;
+                    return CompareOperator.LESS_OR_EQUAL;
                 case LESS:
-                    return CompareOp.GREATER;
+                    return CompareOperator.GREATER;
                 case LESS_OR_EQUAL:
-                    return CompareOp.GREATER_OR_EQUAL;
+                    return CompareOperator.GREATER_OR_EQUAL;
                 default:
                     throw new IllegalArgumentException("Unknown operator " + op);
             }
@@ -143,5 +143,5 @@ public enum ColumnModifier {
     public abstract byte[] apply(byte[] src, int srcOffset, int length);
     public abstract byte apply(byte b);
     
-    public abstract CompareOp transform(CompareOp op);
+    public abstract CompareOperator transform(CompareOperator op);
 }

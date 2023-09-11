@@ -45,16 +45,17 @@ public class DelayedTableResultIteratorFactory implements TableResultIteratorFac
     @Override
     public TableResultIterator newIterator(MutationState mutationState, TableRef tableRef,
             Scan scan, ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold,
-            QueryPlan plan, ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
+            QueryPlan plan, ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr,ServerCache> caches,
+            long maxQueryEndTime) throws SQLException {
         return new DelayedTableResultIterator(mutationState, tableRef, scan, scanMetricsHolder,
-                renewLeaseThreshold, plan, scanGrouper, caches);
+                renewLeaseThreshold, plan, scanGrouper, caches, maxQueryEndTime);
     }
 
     private class DelayedTableResultIterator extends TableResultIterator {
         public DelayedTableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan,
                 ScanMetricsHolder scanMetricsHolder, long renewLeaseThreshold, QueryPlan plan,
-                ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
-            super(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, caches);
+                ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr,ServerCache> caches, long maxQueryEndTime) throws SQLException {
+            super(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, caches, maxQueryEndTime);
         }
         
         @Override

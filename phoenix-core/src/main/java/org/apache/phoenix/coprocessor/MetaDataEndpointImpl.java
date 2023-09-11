@@ -67,6 +67,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION_BYT
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORAGE_SCHEME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES;
@@ -107,6 +108,7 @@ import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ArrayBackedTag;
@@ -136,9 +138,7 @@ import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
 import org.apache.hadoop.hbase.coprocessor.CoreCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
-import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcCall;
 import org.apache.hadoop.hbase.ipc.RpcUtil;
@@ -363,6 +363,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             TABLE_FAMILY_BYTES, SCHEMA_VERSION_BYTES);
     private static final Cell EXTERNAL_SCHEMA_ID_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
         TABLE_FAMILY_BYTES, EXTERNAL_SCHEMA_ID_BYTES);
+    private static final Cell STREAMING_TOPIC_NAME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
+        TABLE_FAMILY_BYTES, STREAMING_TOPIC_NAME_BYTES);
 
     private static final List<Cell> TABLE_KV_COLUMNS = Lists.newArrayList(
             EMPTY_KEYVALUE_KV,
@@ -401,7 +403,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             LAST_DDL_TIMESTAMP_KV,
             CHANGE_DETECTION_ENABLED_KV,
             SCHEMA_VERSION_KV,
-            EXTERNAL_SCHEMA_ID_KV
+            EXTERNAL_SCHEMA_ID_KV,
+            STREAMING_TOPIC_NAME_KV
     );
 
     static {
@@ -447,6 +450,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private static final int SCHEMA_VERSION_INDEX = TABLE_KV_COLUMNS.indexOf(SCHEMA_VERSION_KV);
     private static final int EXTERNAL_SCHEMA_ID_INDEX =
         TABLE_KV_COLUMNS.indexOf(EXTERNAL_SCHEMA_ID_KV);
+    private static final int STREAMING_TOPIC_NAME_INDEX =
+        TABLE_KV_COLUMNS.indexOf(STREAMING_TOPIC_NAME_KV);
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
     private static final KeyValue COLUMN_SIZE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES);
@@ -567,6 +572,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         return PNameFactory.newName(keyBuffer, keyOffset, length);
     }
 
+    private static boolean failConcurrentMutateAddColumnOneTimeForTesting = false;
     private RegionCoprocessorEnvironment env;
 
     private PhoenixMetaDataCoprocessorHost phoenixAccessCoprocessorHost;
@@ -581,6 +587,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private boolean allowSplittableSystemCatalogRollback;
 
     private MetricsMetadataSource metricsSource;
+
+    public static void setFailConcurrentMutateAddColumnOneTimeForTesting(boolean fail) {
+        failConcurrentMutateAddColumnOneTimeForTesting = fail;
+    }
 
     /**
      * Stores a reference to the coprocessor environment provided by the
@@ -668,7 +678,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     && table.getViewType() != ViewType.MAPPED) {
                 try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                     PTable pTable = PhoenixRuntime.getTableNoCache(connection, table.getParentName().getString());
-                    table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table, pTable);
+                    table = ViewUtil.addDerivedColumnsFromParent(connection, table, pTable);
                 }
             }
             builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
@@ -744,7 +754,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         for (byte[] key : keys) {
             byte[] stopKey = ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
             ByteUtil.nextKey(stopKey, stopKey.length);
-            keyRanges.add(PVarbinary.INSTANCE.getKeyRange(key, true, stopKey, false));
+            keyRanges
+                    .add(PVarbinary.INSTANCE.getKeyRange(key, true, stopKey, false, SortOrder.ASC));
         }
         Scan scan = new Scan();
         scan.setTimeRange(MIN_TABLE_TIMESTAMP, clientTimeStamp);
@@ -780,7 +791,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         for (byte[] key : keys) {
             byte[] stopKey = ByteUtil.concat(key, QueryConstants.SEPARATOR_BYTE_ARRAY);
             ByteUtil.nextKey(stopKey, stopKey.length);
-            keyRanges.add(PVarbinary.INSTANCE.getKeyRange(key, true, stopKey, false));
+            keyRanges
+                    .add(PVarbinary.INSTANCE.getKeyRange(key, true, stopKey, false, SortOrder.ASC));
         }
         Scan scan = new Scan();
         if (clientTimeStamp != HConstants.LATEST_TIMESTAMP
@@ -1103,11 +1115,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // unless the table is the latest
 
         long timeStamp = keyValue.getTimestamp();
-
         PTableImpl.Builder builder = null;
         if (oldTable != null) {
             builder = PTableImpl.builderFromExisting(oldTable);
-            builder.setColumns(oldTable.getColumns());
+            List<PColumn> columns = oldTable.getColumns();
+            if (oldTable.getBucketNum() != null && oldTable.getBucketNum() > 0) {
+                //if it's salted, skip the salt column -- it will get added back during
+                //the build process
+                columns = columns.stream().skip(1).collect(Collectors.toList());
+            }
+            builder.setColumns(columns);
         } else {
             builder = new PTableImpl.Builder();
         }
@@ -1243,7 +1260,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             transactionalKv.getValueOffset(),
                             transactionalKv.getValueLength()))) {
                 // For backward compat, prior to client setting TRANSACTION_PROVIDER
-                transactionProvider = TransactionFactory.Provider.TEPHRA;
+                transactionProvider = TransactionFactory.Provider.NOTAVAILABLE;
             }
         } else {
             transactionProvider = TransactionFactory.Provider.fromCode(
@@ -1398,6 +1415,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         builder.setExternalSchemaId(externalSchemaId != null ? externalSchemaId :
             oldTable != null ? oldTable.getExternalSchemaId() : null);
 
+        Cell streamingTopicNameKv = tableKeyValues[STREAMING_TOPIC_NAME_INDEX];
+        String streamingTopicName = streamingTopicNameKv != null ?
+            (String) PVarchar.INSTANCE.toObject(streamingTopicNameKv.getValueArray(),
+                streamingTopicNameKv.getValueOffset(), streamingTopicNameKv.getValueLength())
+            : null;
+        builder.setStreamingTopicName(streamingTopicName != null ? streamingTopicName :
+            oldTable != null ? oldTable.getStreamingTopicName() : null);
+
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
                 HConstants.EMPTY_BYTE_ARRAY :
@@ -1518,8 +1543,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 long columnTimestamp =
                     columnCellList.get(0).getTimestamp() != HConstants.LATEST_TIMESTAMP ?
                         columnCellList.get(0).getTimestamp() : timeStamp;
+                boolean isSalted = saltBucketNum != null
+                    || (oldTable != null &&
+                    oldTable.getBucketNum() != null && oldTable.getBucketNum() > 0);
                 addColumnToTable(columnCellList, colName, famName, colKeyValues, columns,
-                    saltBucketNum != null, baseColumnCount, isRegularView, columnTimestamp);
+                    isSalted, baseColumnCount, isRegularView, columnTimestamp);
             }
         }
         builder.setEncodedCQCounter(cqCounter);
@@ -1527,14 +1555,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         builder.setIndexes(indexes != null ? indexes : oldTable != null
             ? oldTable.getIndexes() : Collections.<PTable>emptyList());
 
-        if (physicalTables == null) {
+        if (physicalTables == null || physicalTables.size() == 0) {
             builder.setPhysicalNames(oldTable != null ? oldTable.getPhysicalNames()
                 : ImmutableList.<PName>of());
         } else {
             builder.setPhysicalNames(ImmutableList.copyOf(physicalTables));
         }
         if (!setPhysicalName && oldTable != null) {
-            builder.setPhysicalTableName(oldTable.getPhysicalName());
+            builder.setPhysicalTableName(oldTable.getPhysicalName(true));
         }
         builder.setTransformingNewTable(transformingNewTable);
 
@@ -2368,33 +2396,29 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             (ExtendedCellBuilder)env.getCellBuilder());
                 }
                 //set the last DDL timestamp to the current server time since we're creating the
-                // table. We only need to do this for tables and views because indexes and system
-                // tables aren't relevant to external systems that may be tracking our schema
-                // changes.
-                if (MetaDataUtil.isTableDirectlyQueried(tableType)) {
-                    tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(tableKey,
-                        clientTimeStamp, EnvironmentEdgeManager.currentTimeMillis()));
+                // table/index/views.
+                tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(tableKey,
+                    clientTimeStamp, EnvironmentEdgeManager.currentTimeMillis()));
 
-                    //and if we're doing change detection on this table or view, notify the
-                    //external schema registry and get its schema id
-                    if (isChangeDetectionEnabled) {
-                        long startTime = EnvironmentEdgeManager.currentTimeMillis();
-                        try {
-                            exportSchema(tableMetadata, tableKey, clientTimeStamp, clientVersion, null);
-                            metricsSource.incrementCreateExportCount();
-                            metricsSource.updateCreateExportTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
-                        } catch (IOException ie){
-                            metricsSource.incrementCreateExportFailureCount();
-                            metricsSource.updateCreateExportFailureTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
-                            //If we fail to write to the schema registry, fail the entire
-                            //CREATE TABLE or VIEW operation so we stay consistent
-                            LOGGER.error("Error writing schema to external schema registry", ie);
-                            builder.setReturnCode(
-                                MetaDataProtos.MutationCode.ERROR_WRITING_TO_SCHEMA_REGISTRY);
-                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                            done.run(builder.build());
-                            return;
-                        }
+                //and if we're doing change detection on this table or view, notify the
+                //external schema registry and get its schema id
+                if (isChangeDetectionEnabled) {
+                    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+                    try {
+                        exportSchema(tableMetadata, tableKey, clientTimeStamp, clientVersion, null);
+                        metricsSource.incrementCreateExportCount();
+                        metricsSource.updateCreateExportTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
+                    } catch (IOException ie){
+                        metricsSource.incrementCreateExportFailureCount();
+                        metricsSource.updateCreateExportFailureTime(EnvironmentEdgeManager.currentTimeMillis() - startTime);
+                        //If we fail to write to the schema registry, fail the entire
+                        //CREATE TABLE or VIEW operation so we stay consistent
+                        LOGGER.error("Error writing schema to external schema registry", ie);
+                        builder.setReturnCode(
+                            MetaDataProtos.MutationCode.ERROR_WRITING_TO_SCHEMA_REGISTRY);
+                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                        done.run(builder.build());
+                        return;
                     }
                 }
 
@@ -2468,6 +2492,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 }
 
                 done.run(builder.build());
+
+                updateCreateTableDdlSuccessMetrics(tableType);
+                LOGGER.info("{} created successfully, tableName: {}", tableType, fullTableName);
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
@@ -2475,6 +2502,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             LOGGER.error("createTable failed", t);
             ProtobufUtil.setControllerException(controller,
                     ServerUtil.createIOException(fullTableName, t));
+        }
+    }
+
+    private void updateCreateTableDdlSuccessMetrics(PTableType tableType) {
+        if (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) {
+            metricsSource.incrementCreateTableCount();
+        } else if (tableType == PTableType.VIEW) {
+            metricsSource.incrementCreateViewCount();
+        } else if (tableType == PTableType.INDEX) {
+            metricsSource.incrementCreateIndexCount();
         }
     }
 
@@ -2585,6 +2622,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
             schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
             tableOrViewName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+            String fullTableName = SchemaUtil.getTableName(schemaName, tableOrViewName);
             PTableType pTableType = PTableType.fromSerializedValue(tableType);
             // Disallow deletion of a system table
             if (pTableType == PTableType.SYSTEM) {
@@ -2769,6 +2807,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
                 done.run(MetaDataMutationResult.toProto(result));
                 dropTableStats = true;
+
+                updateDropTableDdlSuccessMetrics(pTableType);
+                LOGGER.info("{} dropped successfully, tableName: {}", pTableType, fullTableName);
             } finally {
                 ServerUtil.releaseRowLocks(locks);
                 if (dropTableStats) {
@@ -2783,6 +2824,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
           LOGGER.error("dropTable failed", t);
           ProtobufUtil.setControllerException(controller, ServerUtil.createIOException(
                   SchemaUtil.getTableName(schemaName, tableOrViewName), t));
+        }
+    }
+
+    private void updateDropTableDdlSuccessMetrics(PTableType pTableType) {
+        if (pTableType == PTableType.TABLE || pTableType == PTableType.SYSTEM) {
+            metricsSource.incrementDropTableCount();
+        } else if (pTableType == PTableType.VIEW) {
+            metricsSource.incrementDropViewCount();
+        } else if (pTableType == PTableType.INDEX) {
+            metricsSource.incrementDropIndexCount();
         }
     }
 
@@ -3120,6 +3171,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
                 invalidateList.add(cacheKey);
                 PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion);
+                if (failConcurrentMutateAddColumnOneTimeForTesting) {
+                    failConcurrentMutateAddColumnOneTimeForTesting = false;
+                    return new MetaDataMutationResult(MutationCode.CONCURRENT_TABLE_MUTATION,
+                            EnvironmentEdgeManager.currentTimeMillis(), table);
+                }
                 if (LOGGER.isDebugEnabled()) {
                     if (table == null) {
                         LOGGER.debug("Table " + Bytes.toStringBinary(key)
@@ -3466,6 +3522,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     request.getClientVersion(), parentTable, transformingNewTable, addingColumns);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
+
+                if (result.getMutationCode() == MutationCode.TABLE_ALREADY_EXISTS) {
+                    metricsSource.incrementAlterAddColumnCount();
+                    LOGGER.info("Column(s) added successfully, tableName: {}",
+                            result.getTable().getTableName());
+                }
             }
         } catch (Throwable e) {
             LOGGER.error("Add column failed: ", e);
@@ -3604,6 +3666,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     request.getClientVersion(), parentTable,null, true);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
+
+                if (result.getMutationCode() == MutationCode.TABLE_ALREADY_EXISTS) {
+                    metricsSource.incrementAlterDropColumnCount();
+                    LOGGER.info("Column(s) dropped successfully, tableName: {}",
+                            result.getTable().getTableName());
+                }
             }
         } catch (Throwable e) {
             LOGGER.error("Drop column failed: ", e);
@@ -3672,6 +3740,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     return result;
                 }
+                metricsSource.incrementDropIndexCount();
+                LOGGER.info("INDEX dropped successfully, tableName: {}",
+                        result.getTable().getTableName());
+
                 // there should be no child links to delete since we are just dropping an index
                 if (!childLinksMutations.isEmpty()) {
                     LOGGER.error("Found unexpected child link mutations while dropping an index "
@@ -3874,19 +3946,22 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             if (rowLock == null) {
                 throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
             }
-            try {
-                Get get = new Get(key);
-                get.addColumn(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
-                get.addColumn(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
-                get.addColumn(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
-                get.addColumn(TABLE_FAMILY_BYTES, ROW_KEY_ORDER_OPTIMIZABLE_BYTES);
-                Result currentResult = region.get(get);
-                if (currentResult.rawCells().length == 0) {
+
+            Get get = new Get(key);
+            get.addColumn(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
+            get.addColumn(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
+            get.addColumn(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
+            get.addColumn(TABLE_FAMILY_BYTES, ROW_KEY_ORDER_OPTIMIZABLE_BYTES);
+            try (RegionScanner scanner = region.getScanner(new Scan(get))) {
+                List<Cell> cells = new ArrayList<>();
+                scanner.next(cells);
+                if (cells.isEmpty()) {
                     builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
                     builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
                     done.run(builder.build());
                     return;
                 }
+                Result currentResult = Result.create(cells);
                 Cell dataTableKV = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
                 Cell currentStateKV = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, INDEX_STATE_BYTES);
                 Cell currentDisableTimeStamp = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES);
@@ -3988,10 +4063,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (currentState == PIndexState.PENDING_DISABLE) {
                     if (newState == PIndexState.ACTIVE) {
                         //before making index ACTIVE check if all clients succeed otherwise keep it PENDING_DISABLE
-                        byte[] count = region
-                                .get(new Get(key).addColumn(TABLE_FAMILY_BYTES,
-                                        PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES))
-                                .getValue(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
+                        byte[] count;
+                        try (RegionScanner countScanner = region.getScanner(new Scan(get))) {
+                            List<Cell> countCells = new ArrayList<>();
+                            scanner.next(countCells);
+                            count = Result.create(countCells)
+                                    .getValue(TABLE_FAMILY_BYTES,
+                                        PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
+                        }
                         if (count != null && Bytes.toLong(count) != 0) {
                             newState = PIndexState.PENDING_DISABLE;
                             newKVs.remove(disableTimeStampKVIndex);
@@ -4062,6 +4141,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     if (setRowKeyOrderOptimizableCell) {
                         UpgradeUtil.addRowKeyOrderOptimizableCell(tableMetadata, key, timeStamp);
                     }
+                    // We are updating the state of an index, so update the DDL timestamp.
+                    long serverTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+                    tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(
+                            key, clientTimeStamp, serverTimestamp));
                     mutateRowsWithLocks(this.accessCheckEnabled, region, tableMetadata, Collections.<byte[]>emptySet(),
                         HConstants.NO_NONCE, HConstants.NO_NONCE);
                     // Invalidate from cache
@@ -4072,7 +4155,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         metaDataCache.invalidate(new ImmutableBytesPtr(dataTableKey));
                     }
                     if (setRowKeyOrderOptimizableCell || disableTimeStampKVIndex != -1
-                            || currentState == PIndexState.DISABLE || newState == PIndexState.BUILDING) {
+                            || currentState.isDisabled() || newState == PIndexState.BUILDING) {
                         returnTable = doGetTable(tenantId, schemaName, tableName,
                                 HConstants.LATEST_TIMESTAMP, rowLock, request.getClientVersion());
                     }
@@ -4326,7 +4409,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 builder.setReturnCode(MetaDataProtos.MutationCode.FUNCTION_NOT_FOUND);
                 builder.setMutationTime(currentTimeStamp);
                 done.run(builder.build());
-                return;
+
+                metricsSource.incrementCreateFunctionCount();
+                LOGGER.info("FUNCTION created successfully, functionName: {}",
+                        Bytes.toString(functionName));
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
@@ -4379,7 +4465,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 }
 
                 done.run(MetaDataMutationResult.toProto(result));
-                return;
+
+                metricsSource.incrementDropFunctionCount();
+                LOGGER.info("FUNCTION dropped successfully, functionName: {}",
+                        Bytes.toString(functionName));
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
@@ -4415,7 +4504,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 Region region = env.getRegion();
                 Scan scan = MetaDataUtil.newTableRowsScan(keys.get(0), MIN_TABLE_TIMESTAMP, clientTimeStamp);
                 List<Cell> results = Lists.newArrayList();
-                try (RegionScanner scanner = region.getScanner(scan);) {
+                try (RegionScanner scanner = region.getScanner(scan)) {
                     scanner.next(results);
                     if (results.isEmpty()) { // Should not be possible
                         return new MetaDataMutationResult(MutationCode.FUNCTION_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
@@ -4444,6 +4533,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         try {
             List<Mutation> schemaMutations = ProtobufUtil.getMutations(request);
             schemaName = request.getSchemaName();
+            //don't do the user permission checks for the SYSTEM schema, because an ordinary
+            //user has to be able to create it if it doesn't already exist when bootstrapping
+            //the system tables
+            if (!schemaName.equals(QueryConstants.SYSTEM_SCHEMA_NAME)) {
+                getCoprocessorHost().preCreateSchema(schemaName);
+            }
             Mutation m = MetaDataUtil.getPutOnlyTableHeaderRow(schemaMutations);
 
             byte[] lockKey = m.getRow();
@@ -4494,7 +4589,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 builder.setReturnCode(MetaDataProtos.MutationCode.SCHEMA_NOT_FOUND);
                 builder.setMutationTime(currentTimeStamp);
                 done.run(builder.build());
-                return;
+
+                metricsSource.incrementCreateSchemaCount();
+                LOGGER.info("SCHEMA created successfully, schemaName: {}", schemaName);
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }
@@ -4538,7 +4635,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     metaDataCache.put(ptr, newDeletedSchemaMarker(currentTime));
                 }
                 done.run(MetaDataMutationResult.toProto(result));
-                return;
+
+                metricsSource.incrementDropSchemaCount();
+                LOGGER.info("SCHEMA dropped successfully, schemaName: {}", schemaName);
             } finally {
                 ServerUtil.releaseRowLocks(locks);
             }

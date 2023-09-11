@@ -19,12 +19,17 @@ package org.apache.phoenix.util;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.ParseException;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.TimeZone;
 
 import org.apache.phoenix.schema.IllegalDataException;
@@ -195,5 +200,171 @@ public class DateUtilTest {
     @Test(expected=IllegalDataException.class)
     public void testParseTimestamp_InvalidTimestamp() {
         DateUtil.parseTimestamp("not-a-timestamp");
+    }
+
+    // This test absolutely relies on JVM TZ being set to America/Los_Angeles,
+    // and is going to fail otherwise. Maven already sets this.
+    @Test
+    public void testTZCorrection() {
+
+        TimeZone tz = TimeZone.getDefault();
+
+        // First with the current time
+        LocalDateTime nowLDT = LocalDateTime.now();
+        Instant nowInstantLocal = nowLDT.atZone(ZoneId.systemDefault()).toInstant();
+        Instant nowInstantGMT = nowLDT.atZone(ZoneOffset.UTC).toInstant();
+
+        java.sql.Date sqlDateNowLocal = new java.sql.Date(nowInstantLocal.toEpochMilli());
+        java.sql.Time sqlTimeNowLocal = new java.sql.Time(nowInstantLocal.toEpochMilli());
+        java.sql.Timestamp sqlTimestampNowLocal =
+                new java.sql.Timestamp(nowInstantLocal.toEpochMilli());
+
+        java.sql.Date sqlDateNowGMT = new java.sql.Date(nowInstantGMT.toEpochMilli());
+        java.sql.Time sqlTimeNowGMT = new java.sql.Time(nowInstantGMT.toEpochMilli());
+        java.sql.Timestamp sqlTimestampNowGMT =
+                new java.sql.Timestamp(nowInstantGMT.toEpochMilli());
+
+        assertEquals(DateUtil.applyInputDisplacement(sqlDateNowLocal, tz), sqlDateNowGMT);
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimeNowLocal, tz), sqlTimeNowGMT);
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimestampNowLocal, tz), sqlTimestampNowGMT);
+
+        assertEquals(DateUtil.applyOutputDisplacement(sqlDateNowGMT, tz), sqlDateNowLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimeNowGMT, tz), sqlTimeNowLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimestampNowGMT, tz),
+            sqlTimestampNowLocal);
+
+        // Make sure that we don't use a fixed offset
+
+        LocalDateTime summerLDT = LocalDateTime.of(2023, 6, 01, 10, 10, 10);
+        LocalDateTime winterLDT = LocalDateTime.of(2023, 1, 01, 10, 10, 10);
+
+        Instant summerInstantLocal = summerLDT.atZone(ZoneId.systemDefault()).toInstant();
+        Instant summerInstantDisplaced = summerLDT.atZone(ZoneOffset.UTC).toInstant();
+
+        Instant winterInstantLocal = winterLDT.atZone(ZoneId.systemDefault()).toInstant();
+        Instant winterInstantDisplaced = winterLDT.atZone(ZoneOffset.UTC).toInstant();
+
+        java.sql.Date sqlDateSummerLocal = new java.sql.Date(summerInstantLocal.toEpochMilli());
+        java.sql.Time sqlTimeSummerLocal = new java.sql.Time(summerInstantLocal.toEpochMilli());
+        java.sql.Timestamp sqlTimestampSummerLocal =
+                new java.sql.Timestamp(summerInstantLocal.toEpochMilli());
+
+        java.sql.Date sqlDateSummerDisplaced =
+                new java.sql.Date(summerInstantDisplaced.toEpochMilli());
+        java.sql.Time sqlTimeSummerDisplaced =
+                new java.sql.Time(summerInstantDisplaced.toEpochMilli());
+        java.sql.Timestamp sqlTimestampSummerDisplaced =
+                new java.sql.Timestamp(summerInstantDisplaced.toEpochMilli());
+
+        java.sql.Date sqlDateWinterLocal = new java.sql.Date(winterInstantLocal.toEpochMilli());
+        java.sql.Time sqlTimeWinterLocal = new java.sql.Time(winterInstantLocal.toEpochMilli());
+        java.sql.Timestamp sqlTimestampWinterLocal =
+                new java.sql.Timestamp(winterInstantLocal.toEpochMilli());
+
+        java.sql.Date sqlDateWinterDisplaced =
+                new java.sql.Date(winterInstantDisplaced.toEpochMilli());
+        java.sql.Time sqlTimeWinterDisplaced =
+                new java.sql.Time(winterInstantDisplaced.toEpochMilli());
+        java.sql.Timestamp sqlTimestampWinterDisplaced =
+                new java.sql.Timestamp(winterInstantDisplaced.toEpochMilli());
+
+        assertEquals(DateUtil.applyInputDisplacement(sqlDateSummerLocal, tz),
+            sqlDateSummerDisplaced);
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimeSummerLocal, tz),
+            sqlTimeSummerDisplaced);
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimestampSummerLocal, tz),
+            sqlTimestampSummerDisplaced);
+
+        assertEquals(DateUtil.applyOutputDisplacement(sqlDateSummerDisplaced, tz),
+            sqlDateSummerLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimeSummerDisplaced, tz),
+            sqlTimeSummerLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimestampSummerDisplaced, tz),
+            sqlTimestampSummerLocal);
+
+        assertEquals(DateUtil.applyInputDisplacement(sqlDateWinterLocal, tz),
+            sqlDateWinterDisplaced);
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimeWinterLocal, tz),
+            sqlTimeWinterDisplaced);
+        assertEquals(DateUtil.applyInputDisplacement(sqlTimestampWinterLocal, tz),
+            sqlTimestampWinterDisplaced);
+
+        assertEquals(DateUtil.applyOutputDisplacement(sqlDateWinterDisplaced, tz),
+            sqlDateWinterLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimeWinterDisplaced, tz),
+            sqlTimeWinterLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(sqlTimestampWinterDisplaced, tz),
+            sqlTimestampWinterLocal);
+
+        // This also demonstrates why you SHOULD NOT use the java.sql. temporal types with
+        // WITHOUT TIMEZONE types.
+
+        // Check the dates around DST switch
+        ZoneId pacific = ZoneId.of("America/Los_Angeles");
+        assertEquals("Test must be run in America/Los_Angeles time zone", ZoneId.systemDefault(),
+            pacific);
+        LocalDateTime endOfWinter = LocalDateTime.of(2023, 3, 12, 1, 59, 59);
+        // There is no 2:00, the next time is 3:00
+        LocalDateTime nonExistent = LocalDateTime.of(2023, 3, 12, 2, 0, 0);
+        LocalDateTime startOfSummer = LocalDateTime.of(2023, 3, 12, 3, 0, 0);
+        LocalDateTime endOfSummer = LocalDateTime.of(2023, 1, 05, 00, 59, 59);
+        // Time warps back to 1:00 instead of reaching 2:00 the first time
+        LocalDateTime ambiguous = LocalDateTime.of(2023, 1, 05, 1, 30, 0);
+        LocalDateTime startOfWinter = LocalDateTime.of(2023, 1, 05, 2, 0, 0);
+
+        java.sql.Timestamp endOfWinterLocal =
+                java.sql.Timestamp.from(endOfWinter.atZone(pacific).toInstant());
+        java.sql.Timestamp endOfWinterDisplaced =
+                java.sql.Timestamp.from(endOfWinter.atZone(ZoneOffset.UTC).toInstant());
+        assertEquals(DateUtil.applyInputDisplacement(endOfWinterLocal, tz), endOfWinterDisplaced);
+        assertEquals(DateUtil.applyOutputDisplacement(endOfWinterDisplaced, tz), endOfWinterLocal);
+
+        java.sql.Timestamp startOfSummerLocal =
+                java.sql.Timestamp.from(startOfSummer.atZone(pacific).toInstant());
+        java.sql.Timestamp startOfSummerDisplaced =
+                java.sql.Timestamp.from(startOfSummer.atZone(ZoneOffset.UTC).toInstant());
+        assertEquals(DateUtil.applyInputDisplacement(startOfSummerLocal, tz),
+            startOfSummerDisplaced);
+        assertEquals(DateUtil.applyOutputDisplacement(startOfSummerDisplaced, tz),
+            startOfSummerLocal);
+
+        // This just gives us 3:00
+        java.sql.Timestamp nonExistentLocal =
+                java.sql.Timestamp.from(nonExistent.atZone(pacific).toInstant());
+        assertEquals(nonExistentLocal, startOfSummerLocal);
+        java.sql.Timestamp nonExistentDisplaced =
+                java.sql.Timestamp.from(nonExistent.atZone(ZoneOffset.UTC).toInstant());
+        // we get a valid date
+        assertEquals(DateUtil.applyInputDisplacement(nonExistentLocal, tz), startOfSummerDisplaced);
+        // This conversion is ambigiuous, but in this direction we get one Local date for two
+        // different displaced dates
+        assertNotEquals(nonExistentDisplaced, startOfSummerDisplaced);
+        assertEquals(DateUtil.applyOutputDisplacement(nonExistentDisplaced, tz), nonExistentLocal);
+        assertEquals(DateUtil.applyOutputDisplacement(startOfSummerDisplaced, tz),
+            nonExistentLocal);
+
+        java.sql.Timestamp endOfSummerLocal =
+                java.sql.Timestamp.from(endOfSummer.atZone(pacific).toInstant());
+        java.sql.Timestamp endOfSummerDisplaced =
+                java.sql.Timestamp.from(endOfSummer.atZone(ZoneOffset.UTC).toInstant());
+        assertEquals(DateUtil.applyInputDisplacement(endOfSummerLocal, tz), endOfSummerDisplaced);
+        assertEquals(DateUtil.applyOutputDisplacement(endOfSummerDisplaced, tz), endOfSummerLocal);
+
+        // Confirm that we do the same thing as Java
+        java.sql.Timestamp ambiguousLocal =
+                java.sql.Timestamp.from(ambiguous.atZone(pacific).toInstant());
+        java.sql.Timestamp ambiguousDisplaced =
+                java.sql.Timestamp.from(ambiguous.atZone(ZoneOffset.UTC).toInstant());
+        assertEquals(DateUtil.applyInputDisplacement(ambiguousLocal, tz), ambiguousDisplaced);
+        assertEquals(DateUtil.applyOutputDisplacement(ambiguousDisplaced, tz), ambiguousLocal);
+
+        java.sql.Timestamp startOfWinterLocal =
+                java.sql.Timestamp.from(startOfWinter.atZone(pacific).toInstant());
+        java.sql.Timestamp startOfWinterDisplaced =
+                java.sql.Timestamp.from(startOfWinter.atZone(ZoneOffset.UTC).toInstant());
+        assertEquals(DateUtil.applyInputDisplacement(startOfWinterLocal, tz),
+            startOfWinterDisplaced);
+        assertEquals(DateUtil.applyOutputDisplacement(startOfWinterDisplaced, tz),
+            startOfWinterLocal);
     }
 }

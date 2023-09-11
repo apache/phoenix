@@ -30,6 +30,7 @@ import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
 import org.apache.phoenix.mapreduce.PhoenixTestingInputFormat;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -108,6 +109,34 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testMapReduceWithVerySmallPhoenixQueryTimeout() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createPagedJobAndTestFailedJobDueToTimeOut(conn, RECORDING_YEAR + " % 2 = 0", 82.89, null, true);
+        }
+    }
+
+    @Test
+    public void testMapReduceWithVerySmallPhoenixQueryTimeoutWithTenantId() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createPagedJobAndTestFailedJobDueToTimeOut(conn, RECORDING_YEAR + " % 2 = 0", 82.89, TENANT_ID, true);
+        }
+    }
+
+    @Test
+    public void testMapReduceWithNormalPhoenixQueryTimeout() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createPagedJobAndTestFailedJobDueToTimeOut(conn, RECORDING_YEAR + " % 2 = 0", 82.89, null, false);
+        }
+    }
+
+    @Test
+    public void testMapReduceWithNormalPhoenixQueryTimeoutWithTenantId() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createPagedJobAndTestFailedJobDueToTimeOut(conn, RECORDING_YEAR + " % 2 = 0", 81.04, TENANT_ID, false);
+        }
+    }
+
+    @Test
     public void testWithTenantId() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())){
             //tenant view will perform the same filter as the select conditions do in testConditionsOnSelect
@@ -116,7 +145,7 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
 
     }
 
-    private void createAndTestJob(Connection conn, String s, double v, String tenantId) throws
+    private void createAndTestJob(Connection conn, String whereCondition, double maxExpected, String tenantId) throws
             SQLException, IOException, InterruptedException, ClassNotFoundException {
         String stockTableName = generateUniqueName();
         String stockStatsTableName = generateUniqueName();
@@ -126,12 +155,79 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
         final Configuration conf = getUtility().getConfiguration();
         Job job = Job.getInstance(conf);
         if (tenantId != null) {
-            setInputForTenant(job, tenantId, stockTableName, s);
+            setInputForTenant(job, tenantId, stockTableName, whereCondition);
         } else {
             PhoenixMapReduceUtil.setInput(job, StockWritable.class, PhoenixTestingInputFormat.class,
-                    stockTableName, s, STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
+                    stockTableName, whereCondition, STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
         }
-        testJob(conn, job, stockTableName, stockStatsTableName, v);
+        testJob(conn, job, stockTableName, stockStatsTableName, maxExpected);
+
+    }
+
+    private void createPagedJobAndTestFailedJobDueToTimeOut(Connection conn, String whereCondition, double maxExpected, String tenantId,
+            boolean testVerySmallTimeOut) throws SQLException, IOException, InterruptedException, ClassNotFoundException {
+        String stockTableName = generateUniqueName();
+        String stockStatsTableName = generateUniqueName();
+        conn.createStatement().execute(String.format(CREATE_STOCK_TABLE, stockTableName));
+        conn.createStatement().execute(String.format(CREATE_STOCK_STATS_TABLE, stockStatsTableName));
+        conn.commit();
+        Configuration conf = new Configuration(getUtility().getConfiguration());
+        if (testVerySmallTimeOut) {
+            //Setting Paging Size to 0 and Query Timeout to 1ms so that query get paged quickly and times out immediately,
+            //Need to set this at conf level as queryPlan generated at PhoenixInputFormat creates a new connection from
+            //JobContext's configuration.
+            conf.set(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Integer.toString(0));
+            conf.set(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, Integer.toString(1));
+        } else {
+            conf.set(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Integer.toString(0));
+            conf.set(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, Integer.toString(600000));
+        }
+
+        Job job = Job.getInstance(conf);
+        if (tenantId != null) {
+            setInputForTenant(job, tenantId, stockTableName, whereCondition);
+        } else {
+            PhoenixMapReduceUtil.setInput(job, StockWritable.class, PhoenixTestingInputFormat.class,
+                    stockTableName, whereCondition, STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
+        }
+
+        assertEquals("Failed to reset getRegionBoundaries counter for scanGrouper", 0,
+                TestingMapReduceParallelScanGrouper.getNumCallsToGetRegionBoundaries());
+        upsertData(conn, stockTableName);
+
+        // only run locally, rather than having to spin up a MiniMapReduce cluster and lets us use breakpoints
+        job.getConfiguration().set("mapreduce.framework.name", "local");
+        setOutput(job, stockStatsTableName);
+
+        job.setMapperClass(StockMapper.class);
+        job.setReducerClass(StockReducer.class);
+        job.setOutputFormatClass(PhoenixOutputFormat.class);
+
+        job.setMapOutputKeyClass(Text.class);
+        job.setMapOutputValueClass(DoubleWritable.class);
+        job.setOutputKeyClass(NullWritable.class);
+        job.setOutputValueClass(StockWritable.class);
+
+        if (testVerySmallTimeOut) {
+            // run job and it should fail due to Timeout
+            assertFalse("Job should fail with QueryTimeout.", job.waitForCompletion(true));
+        } else {
+            //run
+            assertTrue("Job didn't complete successfully! Check logs for reason.", job.waitForCompletion(true));
+
+            //verify
+            ResultSet stats = DriverManager.getConnection(getUrl()).createStatement()
+                    .executeQuery("SELECT * FROM " + stockStatsTableName);
+            assertTrue("No data stored in stats table!", stats.next());
+            String name = stats.getString(1);
+            double max = stats.getDouble(2);
+            assertEquals("Got the wrong stock name!", "AAPL", name);
+            assertEquals("Max value didn't match the expected!", maxExpected, max, 0);
+            assertFalse("Should only have stored one row in stats table!", stats.next());
+            assertEquals("There should have been only be 1 call to getRegionBoundaries "
+                        + "(corresponding to the driver code)", 1,
+                TestingMapReduceParallelScanGrouper.getNumCallsToGetRegionBoundaries());
+        }
 
     }
 
@@ -199,8 +295,10 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
 
     private void upsertData(Connection conn, String stockTableName) throws SQLException {
         PreparedStatement stmt = conn.prepareStatement(String.format(UPSERT, stockTableName));
+        upsertData(stmt, "AAPL", 2010, new Double[]{73.48, 82.25, 75.2, 82.89});
         upsertData(stmt, "AAPL", 2009, new Double[]{85.88, 91.04, 88.5, 90.3});
         upsertData(stmt, "AAPL", 2008, new Double[]{75.88, 81.04, 78.5, 80.3});
+        upsertData(stmt, "AAPL", 2007, new Double[]{73.88, 80.24, 78.9, 66.3});
         conn.commit();
     }
 

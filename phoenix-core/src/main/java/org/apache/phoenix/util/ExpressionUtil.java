@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.TreeMap;
 import java.util.Map.Entry;
 
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ExpressionCompiler;
@@ -154,7 +154,7 @@ public class ExpressionUtil {
             if(rhsConstantCount > 1) {
                 return null;
             }
-            if(comparisonExpression.getFilterOp() != CompareOp.EQUAL) {
+            if(comparisonExpression.getFilterOp() != CompareOperator.EQUAL) {
                 return null;
             }
             Expression lhsExpresssion = comparisonExpression.getChildren().get(0);

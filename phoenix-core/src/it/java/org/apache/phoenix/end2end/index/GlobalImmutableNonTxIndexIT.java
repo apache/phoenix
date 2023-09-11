@@ -27,14 +27,15 @@ import org.junit.runners.Parameterized.Parameters;
 @Category(ParallelStatsDisabledTest.class)
 public class GlobalImmutableNonTxIndexIT extends BaseIndexIT {
 
-    public GlobalImmutableNonTxIndexIT(boolean localIndex, boolean mutable, String transactionProvider, boolean columnEncoded) {
-        super(localIndex, mutable, transactionProvider, columnEncoded);
+    public GlobalImmutableNonTxIndexIT(boolean columnEncoded) {
+        super(false, false, false, null, columnEncoded);
     }
 
-    @Parameters(name="GlobalImmutableNonTxIndexIT_localIndex={0},mutable={1},transactionProvider={2},columnEncoded={3}") // name is used by failsafe as file name in reports
+    // name is used by failsafe as file name in reports
+    @Parameters(name="GlobalImmutableNonTxIndexIT_columnEncoded={0}")
     public static synchronized Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
-                { false, false, null, false }, { false, false, null, true }
+                {false}, {true}
            });
     }
 

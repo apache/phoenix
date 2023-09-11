@@ -58,6 +58,9 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
         // get the metadata priority configs
         int metadataPriority = getMetadataPriority(conf);
         validatePriority(metadataPriority);
+        // get the server side priority configs
+        int serverSidePriority = getServerSidePriority(conf);
+        validatePriority(serverSidePriority);
 
         // validate index and metadata priorities are not the same
         Preconditions.checkArgument(indexPriority != metadataPriority, "Index and Metadata priority must not be same "+ indexPriority);
@@ -65,7 +68,7 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
                 + indexPriority + " and metadata rpc priority " + metadataPriority);
 
         PhoenixRpcScheduler scheduler =
-                new PhoenixRpcScheduler(conf, delegate, indexPriority, metadataPriority, priorityFunction,abortable);
+                new PhoenixRpcScheduler(conf, delegate, indexPriority, metadataPriority, serverSidePriority, priorityFunction,abortable);
         return scheduler;
     }
 
@@ -89,5 +92,9 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
     public static int getMetadataPriority(Configuration conf) {
         return conf.getInt(QueryServices.METADATA_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_METADATA_PRIORITY);
     }
-    
+
+    public static int getServerSidePriority(Configuration conf) {
+        return conf.getInt(QueryServices.SERVER_SIDE_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_SERVER_SIDE_PRIORITY);
+    }
+
 }

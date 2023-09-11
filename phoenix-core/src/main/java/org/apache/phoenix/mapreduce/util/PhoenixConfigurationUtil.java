@@ -121,7 +121,7 @@ public final class PhoenixConfigurationUtil {
 
     public static final String MAPREDUCE_INPUT_CLUSTER_QUORUM = "phoenix.mapreduce.input.cluster.quorum";
     
-    public static final String MAPREDUCE_OUTPUT_CLUSTER_QUORUM = "phoneix.mapreduce.output.cluster.quorum";
+    public static final String MAPREDUCE_OUTPUT_CLUSTER_QUORUM = "phoenix.mapreduce.output.cluster.quorum";
 
     public static final String INDEX_DISABLED_TIMESTAMP_VALUE = "phoenix.mr.index.disableTimestamp";
 
@@ -225,6 +225,12 @@ public final class PhoenixConfigurationUtil {
 
     public static final String IS_PARTIAL_TRANSFORM = "phoenix.mr.transform.ispartial";
 
+    // Randomize mapper execution order
+    public static final String MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER =
+            "phoenix.mapreduce.randomize.mapper.execution.order";
+
+    // non-index jobs benefit less from this
+    public static final boolean DEFAULT_MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER = false;
 
     /**
      * Determines type of Phoenix Map Reduce job.
@@ -239,6 +245,12 @@ public final class PhoenixConfigurationUtil {
     public enum SchemaType {
         TABLE,
         QUERY
+    }
+
+    // This relies on Hadoop Configuration to handle warning about deprecated configs and
+    // to set the correct non-deprecated configs when an old one shows up.
+    static {
+        Configuration.addDeprecation("phoneix.mapreduce.output.cluster.quorum", MAPREDUCE_OUTPUT_CLUSTER_QUORUM);
     }
 
     private PhoenixConfigurationUtil(){
@@ -984,6 +996,12 @@ public final class PhoenixConfigurationUtil {
         boolean isSnapshotRestoreManagedExternally =
                 configuration.getBoolean(MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE, DEFAULT_MAPREDUCE_EXTERNAL_SNAPSHOT_RESTORE);
         return isSnapshotRestoreManagedExternally;
+    }
+
+    public static boolean isMRRandomizeMapperExecutionOrder(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.getBoolean(MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER,
+            DEFAULT_MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER);
     }
 
     /**

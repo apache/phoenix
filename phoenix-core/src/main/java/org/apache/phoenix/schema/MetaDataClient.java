@@ -17,15 +17,17 @@
  */
 package org.apache.phoenix.schema;
 
-import static org.apache.phoenix.exception.SQLExceptionCode.*;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
+import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
+import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
 import static org.apache.phoenix.coprocessor.tasks.IndexRebuildTask.INDEX_NAME;
 import static org.apache.phoenix.coprocessor.tasks.IndexRebuildTask.REBUILD_ALL;
-import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_LOCAL_OR_VIEW_INDEX;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
 import static org.apache.phoenix.exception.SQLExceptionCode.PARENT_TABLE_NOT_FOUND;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
@@ -346,9 +348,10 @@ public class MetaDataClient {
                     PHOENIX_TTL_HWM + "," +
                     CHANGE_DETECTION_ENABLED + "," +
                     PHYSICAL_TABLE_NAME + "," +
-                    SCHEMA_VERSION +
+                    SCHEMA_VERSION + "," +
+                    STREAMING_TOPIC_NAME +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
-                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE
             + "\"( " + TABLE_SCHEM + "," + TABLE_NAME + ") VALUES (?,?)";
@@ -436,7 +439,7 @@ public class MetaDataClient {
                     ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() +
                     ") VALUES (?, ?, ?, ?)";
     
-    private static final String UPDATE_INDEX_STATE_TO_ACTIVE =
+    public static final String UPDATE_INDEX_STATE_TO_ACTIVE =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                     TENANT_ID + "," +
                     TABLE_SCHEM + "," +
@@ -448,11 +451,11 @@ public class MetaDataClient {
 
     /*
      * Custom sql to add a column to SYSTEM.CATALOG table during upgrade.
-     * We can't use the regular INSERT_COLUMN_ALTER_TABLE sql because the COLUMN_QUALIFIER column
+     * We can't use the regular ColumnMetaDataOps.UPSERT_COLUMN sql because the COLUMN_QUALIFIER column
      * was added in 4.10. And so if upgrading from let's say 4.7, we won't be able to
      * find the COLUMN_QUALIFIER column which the INSERT_COLUMN_ALTER_TABLE sql expects.
      */
-    private static final String ALTER_SYSCATALOG_TABLE_UPGRADE =
+    public static final String ALTER_SYSCATALOG_TABLE_UPGRADE =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                     TENANT_ID + "," +
                     TABLE_SCHEM + "," +
@@ -590,7 +593,7 @@ public class MetaDataClient {
                 tableRef = connection.getTableRef(new PTableKey(tenantId, fullTableName));
                 table = tableRef.getTable();
                 tableTimestamp = table.getTimeStamp();
-                tableResolvedTimestamp = tableRef.getResolvedTimeStamp();
+                tableResolvedTimestamp = table.getTimeStamp();
                 break;
             } catch (TableNotFoundException e) {
                 tenantId = null;
@@ -607,7 +610,13 @@ public class MetaDataClient {
         if (isTransactional) {
             connection.getMutationState().startTransaction(table.getTransactionProvider());
         }
-        resolvedTimestamp = resolvedTimestamp==null ? TransactionUtil.getResolvedTimestamp(connection, isTransactional, HConstants.LATEST_TIMESTAMP) : resolvedTimestamp;
+        // this is to allow the connection to see SYSTEM tables during an upgrade since they are not cached at the connection level
+        if (connection.isRunningUpgrade() && systemTable && connection.getSCN() != null && connection.getSCN() <= MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP) {
+            resolvedTimestamp = HConstants.LATEST_TIMESTAMP;
+        }
+        else {
+            resolvedTimestamp = resolvedTimestamp==null ? TransactionUtil.getResolvedTimestamp(connection, isTransactional, HConstants.LATEST_TIMESTAMP) : resolvedTimestamp;
+        }
 
         if (avoidRpcToGetTable(alwaysHitServer, resolvedTimestamp, systemTable, table, tableRef,
                 tableResolvedTimestamp)) {
@@ -897,6 +906,13 @@ public class MetaDataClient {
                 MetaDataMutationResult parentResult = updateCache(connection.getTenantId(), parentSchemaName, tableName,
                         false, resolvedTimestamp);
                 PTable parentTable = parentResult.getTable();
+                if (parentResult.getMutationCode() == MutationCode.TABLE_NOT_FOUND || parentTable == null) {
+                    // Try once more with different tenant id (connection can be global but view could be tenant
+                    parentResult =
+                            updateCache(table.getTenantId(), parentSchemaName, tableName, false,
+                                    resolvedTimestamp);
+                    parentTable = parentResult.getTable();
+                }
                 if (LOGGER.isTraceEnabled()) {
                     LOGGER.trace("addColumnsAndIndexesFromAncestors parent logical name " + table.getBaseTableLogicalName().getString() + " parent name " + table.getParentName().getString() + " tableName=" + table.getName());
                 }
@@ -1149,19 +1165,23 @@ public class MetaDataClient {
     private long updateStatisticsInternal(PName physicalName, PTable logicalTable, Map<String, Object> statsProps, List<byte[]> cfs, boolean checkLastStatsUpdateTime) throws SQLException {
         ReadOnlyProps props = connection.getQueryServices().getProps();
         final long msMinBetweenUpdates = props
-                .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_MIN_STATS_UPDATE_FREQ_MS);
+            .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB,
+                QueryServicesOptions.DEFAULT_MIN_STATS_UPDATE_FREQ_MS);
         Long scn = connection.getSCN();
         // Always invalidate the cache
         long clientTimeStamp = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
         long msSinceLastUpdate = Long.MAX_VALUE;
         if (checkLastStatsUpdateTime) {
-            String query = "SELECT CURRENT_DATE()," + LAST_STATS_UPDATE_TIME + " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
-                    + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
-                    + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
-            ResultSet rs = connection.createStatement().executeQuery(query);
-
-            if (rs.next()) {
-                msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
+            String query = "SELECT CURRENT_DATE()," + LAST_STATS_UPDATE_TIME + " FROM "
+                + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME
+                + " WHERE " + PHYSICAL_NAME + "= ?  AND " + COLUMN_FAMILY
+                + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
+            try (PreparedStatement selectStatsStmt = connection.prepareStatement(query)) {
+                selectStatsStmt.setString(1, physicalName.getString());
+                ResultSet rs = selectStatsStmt.executeQuery(query);
+                if (rs.next()) {
+                    msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
+                }
             }
         }
         long rowCount = 0;
@@ -1643,12 +1663,6 @@ public class MetaDataClient {
             if (dataTable.getDefaultFamilyName() != null && dataTable.getType() != PTableType.VIEW && !allocateIndexId) {
                 statement.getProps().put("", new Pair<String,Object>(DEFAULT_COLUMN_FAMILY_NAME,dataTable.getDefaultFamilyName().getString()));
             }
-            // While SALT_BUCKETS would get copied in SYSCAT automatically, we need to add this
-            // explicitly so that the normalizer disabler logic can trigger later
-            if (dataTable.getBucketNum() != null && dataTable.getBucketNum() > 0
-                    && TableProperty.SALT_BUCKETS.getValue(tableProps) == null) {
-                tableProps.put(SALT_BUCKETS, dataTable.getBucketNum());
-            }
             PrimaryKeyConstraint pk = FACTORY.primaryKey(null, allPkColumns);
 
             tableProps.put(MetaDataUtil.DATA_TABLE_NAME_PROP_NAME, dataTable.getPhysicalName().getString());
@@ -1671,15 +1685,17 @@ public class MetaDataClient {
             return new MutationState(0, 0, connection);
         }
 
+        // If we create index in create_disabled state, we will build them later
+        if (table.getIndexState() == PIndexState.CREATE_DISABLE) {
+            return new MutationState(0, 0, connection);
+        }
+
         // If our connection is at a fixed point-in-time, we need to open a new
         // connection so that our new index table is visible.
         if (connection.getSCN() != null) {
             return buildIndexAtTimeStamp(table, statement.getTable());
         }
 
-        String dataTableFullName = SchemaUtil.getTableName(
-                tableRef.getTable().getSchemaName().getString(),
-                tableRef.getTable().getTableName().getString());
         return buildIndex(table, tableRef);
     }
 
@@ -2020,6 +2036,7 @@ public class MetaDataClient {
             verifyChangeDetectionTableType(tableType, isChangeDetectionEnabledProp);
 
             String schemaVersion = (String) TableProperty.SCHEMA_VERSION.getValue(tableProps);
+            String streamingTopicName = (String) TableProperty.STREAMING_TOPIC_NAME.getValue(tableProps);
 
             if (parent != null && tableType == PTableType.INDEX) {
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactionProvider != null, transactionProvider);
@@ -2242,8 +2259,8 @@ public class MetaDataClient {
             // to determine which coprocessors to install on the new table.
             tableProps.put(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER, transactionProvider);
             if (transactionProvider != null) {
-                // TODO: for Omid
-                // If TTL set, use Tephra TTL property name instead
+                // If TTL set, use transaction context TTL property name instead
+                // Note: After PHOENIX-6627, is PhoenixTransactionContext.PROPERTY_TTL still useful?
                 Object ttl = commonFamilyProps.remove(ColumnFamilyDescriptorBuilder.TTL);
                 if (ttl != null) {
                     commonFamilyProps.put(PhoenixTransactionContext.PROPERTY_TTL, ttl);
@@ -2255,19 +2272,18 @@ public class MetaDataClient {
 
             boolean sharedTable = statement.getTableType() == PTableType.VIEW || allocateIndexId;
             if (transactionProvider != null) {
-                // Tephra uses an empty value cell as its delete marker, so we need to turn on
-                // storeNulls for transactional tables.
-                // If we use regular column delete markers (which is what non transactional tables
-                // use), then they get converted
-                // on the server, but this can mess up our secondary index code as the changes get
-                // committed prior to the
+                // We turn on storeNulls for transactional tables for compatibility. This was required
+                // when Tephra was a supported txn engine option. After PHOENIX-6627, this may no longer
+                // be necessary.
+                // Tephra would have converted normal delete markers on the server which could mess up
+                // our secondary index code as the changes get committed prior to the
                 // maintenance code being able to see the prior state to update the rows correctly.
+                // A future tnx engine might do the same?
                 if (Boolean.FALSE.equals(storeNullsProp)) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.STORE_NULLS_MUST_BE_TRUE_FOR_TRANSACTIONAL)
                     .setSchemaName(schemaName).setTableName(tableName)
                     .build().buildException();
                 }
-                // Force STORE_NULLS to true when transactional as Tephra cannot deal with column deletes
                 storeNulls = true;
                 tableProps.put(PhoenixDatabaseMetaData.STORE_NULLS, Boolean.TRUE);
 
@@ -2435,6 +2451,9 @@ public class MetaDataClient {
             int pkPositionOffset = pkColumns.size();
             int position = positionOffset;
             EncodedCQCounter cqCounter = NULL_COUNTER;
+            Map<String, Integer> changedCqCounters = new HashMap<>(colDefs.size());
+            // Check for duplicate column qualifiers
+            Map<String, Set<Integer>> inputCqCounters = new HashMap<>();
             PTable viewPhysicalTable = null;
             if (tableType == PTableType.VIEW) {
                 /*
@@ -2480,7 +2499,8 @@ public class MetaDataClient {
                     if (immutableStorageSchemeProp == null) {
                         immutableStorageScheme = parent.getImmutableStorageScheme();
                     } else {
-                        immutableStorageScheme = getImmutableStorageSchemeForIndex(immutableStorageSchemeProp, schemaName, tableName, transactionProvider);
+                        checkImmutableStorageSchemeForIndex(immutableStorageSchemeProp, schemaName, tableName, transactionProvider);
+                        immutableStorageScheme = immutableStorageSchemeProp;
                     }
 
                     if (immutableStorageScheme == SINGLE_CELL_ARRAY_WITH_OFFSETS) {
@@ -2541,11 +2561,11 @@ public class MetaDataClient {
                             }
                         }
                     } else {
-                        immutableStorageScheme = getImmutableStorageSchemeForIndex(immutableStorageSchemeProp, schemaName, tableName, transactionProvider);
+                        immutableStorageScheme = isImmutableRows ? immutableStorageSchemeProp : ONE_CELL_PER_COLUMN;
+                        checkImmutableStorageSchemeForIndex(immutableStorageScheme, schemaName, tableName, transactionProvider);
                     }
                     if (immutableStorageScheme != ONE_CELL_PER_COLUMN
                             && encodingScheme == NON_ENCODED_QUALIFIERS) {
-                        getEncodingScheme(tableProps, schemaName, tableName, transactionProvider);
                         throw new SQLExceptionInfo.Builder(
                                 SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES)
                                 .setSchemaName(schemaName).setTableName(tableName).build()
@@ -2553,9 +2573,21 @@ public class MetaDataClient {
                     }
                 }
                 cqCounter = encodingScheme != NON_ENCODED_QUALIFIERS ? new EncodedCQCounter() : NULL_COUNTER;
+                if (encodingScheme != NON_ENCODED_QUALIFIERS && statement.getFamilyCQCounters() != null)
+                {
+                    for (Map.Entry<String, Integer> cq : statement.getFamilyCQCounters().entrySet()) {
+                        if (cq.getValue() < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_CQ)
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException();
+                        }
+                        cqCounter.setValue(cq.getKey(), cq.getValue());
+                        changedCqCounters.put(cq.getKey(), cqCounter.getNextQualifier(cq.getKey()));
+                        inputCqCounters.putIfAbsent(cq.getKey(), new HashSet<Integer>());
+                    }
+                }
             }
 
-            Map<String, Integer> changedCqCounters = new HashMap<>(colDefs.size());
             boolean wasPKDefined = false;
             // Keep track of all columns that are newly added to a view
             Set<Integer> viewNewColumnPositions =
@@ -2597,7 +2629,54 @@ public class MetaDataClient {
                 }
                 // Use position as column qualifier if APPEND_ONLY_SCHEMA to prevent gaps in
                 // the column encoding (PHOENIX-4737).
-                Integer encodedCQ =  isPkColumn ? null : isAppendOnlySchema ? Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position) : cqCounter.getNextQualifier(cqCounterFamily);
+                Integer encodedCQ = null;
+                if (!isPkColumn) {
+                    if (colDef.getEncodedQualifier() != null && encodingScheme != NON_ENCODED_QUALIFIERS) {
+                        if (cqCounter.getNextQualifier(cqCounterFamily) > ENCODED_CQ_COUNTER_INITIAL_VALUE &&
+                                !inputCqCounters.containsKey(cqCounterFamily)) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_CQ)
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException();
+                        }
+
+                        if (statement.getFamilyCQCounters() == null ||
+                                statement.getFamilyCQCounters().get(cqCounterFamily) == null) {
+                            if (colDef.getEncodedQualifier() >= cqCounter.getNextQualifier(cqCounterFamily)) {
+                                cqCounter.setValue(cqCounterFamily, colDef.getEncodedQualifier());
+                                cqCounter.increment(cqCounterFamily);
+                            }
+                            changedCqCounters.put(cqCounterFamily, cqCounter.getNextQualifier(cqCounterFamily));
+                        }
+
+                        encodedCQ = colDef.getEncodedQualifier();
+                        if (encodedCQ < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE ||
+                                encodedCQ >= cqCounter.getNextQualifier(cqCounterFamily)) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_CQ)
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException();
+                        }
+
+                        inputCqCounters.putIfAbsent(cqCounterFamily, new HashSet<Integer>());
+                        Set<Integer> familyCounters = inputCqCounters.get(cqCounterFamily);
+                        if (!familyCounters.add(encodedCQ)) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.DUPLICATE_CQ)
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException();
+                        }
+                    } else {
+                        if (inputCqCounters.containsKey(cqCounterFamily)) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MISSING_CQ)
+                                    .setSchemaName(schemaName)
+                                    .setTableName(tableName).build().buildException();
+                        }
+
+                        if (isAppendOnlySchema) {
+                            encodedCQ = Integer.valueOf(ENCODED_CQ_COUNTER_INITIAL_VALUE + position);
+                        } else {
+                            encodedCQ = cqCounter.getNextQualifier(cqCounterFamily);
+                        }
+                    }
+                }
                 byte[] columnQualifierBytes = null;
                 try {
                     columnQualifierBytes = EncodedColumnsUtil.getColumnQualifierBytes(columnDefName.getColumnName(), encodedCQ, encodingScheme, isPkColumn);
@@ -2608,7 +2687,8 @@ public class MetaDataClient {
                     .setTableName(tableName).build().buildException();
                 }
                 PColumn column = newColumn(position++, colDef, pkConstraint, defaultFamilyName, false, columnQualifierBytes, isImmutableRows);
-                if (!isAppendOnlySchema && cqCounter.increment(cqCounterFamily)) {
+                if (!isAppendOnlySchema && colDef.getEncodedQualifier() == null
+                        && cqCounter.increment(cqCounterFamily)) {
                     changedCqCounters.put(cqCounterFamily, cqCounter.getNextQualifier(cqCounterFamily));
                 }
                 if (SchemaUtil.isPKColumn(column)) {
@@ -2868,7 +2948,22 @@ public class MetaDataClient {
             Collections.reverse(columnMetadata);
             tableMetaData.addAll(columnMetadata);
             String dataTableName = parent == null || tableType == PTableType.VIEW ? null : parent.getTableName().getString();
-            PIndexState indexState = parent == null || tableType == PTableType.VIEW  ? null : PIndexState.BUILDING;
+            PIndexState defaultCreateState;
+            String defaultCreateStateString = connection.getClientInfo(INDEX_CREATE_DEFAULT_STATE);
+            if (defaultCreateStateString == null)  {
+                defaultCreateStateString = connection.getQueryServices().getConfiguration().get(
+                     INDEX_CREATE_DEFAULT_STATE, QueryServicesOptions.DEFAULT_CREATE_INDEX_STATE);
+            }
+            defaultCreateState = PIndexState.valueOf(defaultCreateStateString);
+            if (defaultCreateState == PIndexState.CREATE_DISABLE) {
+                if  (indexType == IndexType.LOCAL || sharedTable) {
+                    defaultCreateState = PIndexState.BUILDING;
+                }
+            }
+            PIndexState indexState = parent == null || tableType == PTableType.VIEW  ? null : defaultCreateState;
+            if (indexState == null && tableProps.containsKey(INDEX_STATE)) {
+                indexState = PIndexState.fromSerializedValue(tableProps.get(INDEX_STATE).toString());
+            }
             PreparedStatement tableUpsert = connection.prepareStatement(CREATE_TABLE);
             tableUpsert.setString(1, tenantIdStr);
             tableUpsert.setString(2, schemaName);
@@ -2970,6 +3065,12 @@ public class MetaDataClient {
                 tableUpsert.setNull(34, Types.VARCHAR);
             } else {
                 tableUpsert.setString(34, schemaVersion);
+            }
+
+            if (streamingTopicName == null) {
+                tableUpsert.setNull(35, Types.VARCHAR);
+            } else {
+                tableUpsert.setString(35, streamingTopicName);
             }
 
             tableUpsert.execute();
@@ -3118,6 +3219,7 @@ public class MetaDataClient {
                         .setSchemaVersion(schemaVersion)
                         .setExternalSchemaId(result.getTable() != null ?
                         result.getTable().getExternalSchemaId() : null)
+                        .setStreamingTopicName(streamingTopicName)
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
@@ -3183,7 +3285,7 @@ public class MetaDataClient {
         return encodingScheme;
     }
 
-    private ImmutableStorageScheme getImmutableStorageSchemeForIndex(ImmutableStorageScheme immutableStorageSchemeProp, String schemaName, String tableName, TransactionFactory.Provider transactionProvider)
+    private void checkImmutableStorageSchemeForIndex(ImmutableStorageScheme immutableStorageSchemeProp, String schemaName, String tableName, TransactionFactory.Provider transactionProvider)
             throws SQLException {
         if (immutableStorageSchemeProp != ONE_CELL_PER_COLUMN && transactionProvider != null && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.COLUMN_ENCODING) ) {
             throw new SQLExceptionInfo.Builder(
@@ -3193,7 +3295,6 @@ public class MetaDataClient {
                     .build()
                     .buildException();
         }
-        return immutableStorageSchemeProp;
     }
 
     /* This method handles mutation codes sent by phoenix server, except for TABLE_NOT_FOUND which
@@ -3599,7 +3700,8 @@ public class MetaDataClient {
                 metaPropertiesEvaluated.isChangeDetectionEnabled(),
                 metaPropertiesEvaluated.getPhysicalTableName(),
                 metaPropertiesEvaluated.getSchemaVersion(),
-                metaPropertiesEvaluated.getColumnEncodedBytes());
+                metaPropertiesEvaluated.getColumnEncodedBytes(),
+                metaPropertiesEvaluated.getStreamingTopicName());
     }
 
     private  long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta, Boolean isTransactional,
@@ -3607,7 +3709,7 @@ public class MetaDataClient {
                                        String schemaVersion, QualifierEncodingScheme columnEncodedBytes) throws SQLException {
         return incrementTableSeqNum(table, expectedType, columnCountDelta, isTransactional, null,
             updateCacheFrequency, null, null, null, null, -1L, null, null, null,phoenixTTL, false, physicalTableName,
-                schemaVersion, columnEncodedBytes);
+                schemaVersion, columnEncodedBytes, null);
     }
 
     private long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta,
@@ -3616,7 +3718,7 @@ public class MetaDataClient {
             Boolean isMultiTenant, Boolean storeNulls, Long guidePostWidth, Boolean appendOnlySchema,
             ImmutableStorageScheme immutableStorageScheme, Boolean useStatsForParallelization,
             Long phoenixTTL, Boolean isChangeDetectionEnabled, String physicalTableName, String schemaVersion,
-                                      QualifierEncodingScheme columnEncodedBytes)
+                                      QualifierEncodingScheme columnEncodedBytes, String streamingTopicName)
             throws SQLException {
         String schemaName = table.getSchemaName().getString();
         String tableName = table.getTableName().getString();
@@ -3683,6 +3785,9 @@ public class MetaDataClient {
         }
         if (!Strings.isNullOrEmpty(schemaVersion)) {
             mutateStringProperty(connection, tenantId, schemaName, tableName, SCHEMA_VERSION, schemaVersion);
+        }
+        if (!Strings.isNullOrEmpty(streamingTopicName)) {
+            mutateStringProperty(connection, tenantId, schemaName, tableName, STREAMING_TOPIC_NAME, streamingTopicName);
         }
         return seqNum;
     }
@@ -4155,7 +4260,7 @@ public class MetaDataClient {
                 }
 
                 if (EncodedColumnsUtil.usesEncodedColumnNames(table)
-                        && stmtProperties.isEmpty()) {
+                        && stmtProperties.isEmpty() && !acquiredBaseTableMutex) {
                     // For tables that use column encoding acquire a mutex on
                     // the base table as we need to update the encoded column
                     // qualifier counter on the base table. Not applicable to
@@ -4175,7 +4280,7 @@ public class MetaDataClient {
                     // a conflicting type etc
                     boolean acquiredMutex = writeCell(null, physicalSchemaName, physicalTableName,
                         pColumn.toString());
-                    if (!acquiredMutex) {
+                    if (!acquiredMutex && !acquiredColumnMutexSet.contains(pColumn.toString())) {
                         throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
                     }
                     acquiredColumnMutexSet.add(pColumn.toString());
@@ -4400,8 +4505,9 @@ public class MetaDataClient {
         }
         buf.setCharAt(buf.length()-1, ')');
 
-        connection.createStatement().execute(buf.toString());
-
+        try (PreparedStatement delCol = connection.prepareStatement(buf.toString())) {
+            delCol.execute();
+        }
         Collections.sort(columnsToDrop,new Comparator<PColumn> () {
             @Override
             public int compare(PColumn left, PColumn right) {
@@ -4411,21 +4517,25 @@ public class MetaDataClient {
 
         boolean isSalted = table.getBucketNum() != null;
         int columnsToDropIndex = 0;
-        PreparedStatement colUpdate = connection.prepareStatement(UPDATE_COLUMN_POSITION);
-        colUpdate.setString(1, tenantId);
-        colUpdate.setString(2, schemaName);
-        colUpdate.setString(3, tableName);
-        for (int i = columnsToDrop.get(columnsToDropIndex).getPosition() + 1; i < table.getColumns().size(); i++) {
-            PColumn column = table.getColumns().get(i);
-            if (columnsToDrop.contains(column)) {
-                columnsToDropIndex++;
-                continue;
+        try (PreparedStatement colUpdate = connection.prepareStatement(UPDATE_COLUMN_POSITION)) {
+            colUpdate.setString(1, tenantId);
+            colUpdate.setString(2, schemaName);
+            colUpdate.setString(3, tableName);
+            for (int i = columnsToDrop.get(columnsToDropIndex).getPosition() + 1;
+                i < table.getColumns().size(); i++) {
+                PColumn column = table.getColumns().get(i);
+                if (columnsToDrop.contains(column)) {
+                    columnsToDropIndex++;
+                    continue;
+                }
+                colUpdate.setString(4, column.getName().getString());
+                colUpdate.setString(5, column.getFamilyName() == null
+                    ? null : column.getFamilyName().getString());
+                // Adjust position to not include the salt column
+                colUpdate.setInt(6,
+                    column.getPosition() - columnsToDropIndex - (isSalted ? 1 : 0));
+                colUpdate.execute();
             }
-            colUpdate.setString(4, column.getName().getString());
-            colUpdate.setString(5, column.getFamilyName() == null ? null : column.getFamilyName().getString());
-            // Adjust position to not include the salt column
-            colUpdate.setInt(6, column.getPosition() - columnsToDropIndex - (isSalted ? 1 : 0));
-            colUpdate.execute();
         }
         return familyName;
     }
@@ -4930,7 +5040,7 @@ public class MetaDataClient {
                 if (newIndexState == PIndexState.BUILDING && !isAsync) {
                     PTable index = indexRef.getTable();
                     // First delete any existing rows of the index
-                    if (index.getIndexType().equals(IndexType.GLOBAL) && index.getViewIndexId() == null) {
+                    if (IndexUtil.isGlobalIndex(index) && index.getViewIndexId() == null) {
                         //for a global index of a normal base table, it's safe to just truncate and
                         //rebuild. We preserve splits to reduce the amount of splitting we need to do
                         //during rebuild
@@ -4950,7 +5060,9 @@ public class MetaDataClient {
                     } else {
                         Long scn = connection.getSCN();
                         long ts = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
-                        MutationPlan plan = new PostDDLCompiler(connection).compile(Collections.singletonList(indexRef), null, null, Collections.<PColumn>emptyList(), ts);
+                        MutationPlan plan = new PostDDLCompiler(connection)
+                            .compile(Collections.singletonList(indexRef), null,
+                                null, Collections.<PColumn>emptyList(), ts);
                         connection.getQueryServices().updateData(plan);
                     }
                     NamedTableNode dataTableNode = NamedTableNode.create(null,
@@ -5182,6 +5294,8 @@ public class MetaDataClient {
                         metaProperties.setPhysicalTableName((String) value);
                     } else if (propName.equalsIgnoreCase(SCHEMA_VERSION)) {
                         metaProperties.setSchemaVersion((String) value);
+                    } else if (propName.equalsIgnoreCase(STREAMING_TOPIC_NAME)) {
+                        metaProperties.setStreamingTopicName((String) value);
                     }
                 }
                 // if removeTableProps is true only add the property if it is not an HTable or Phoenix Table property
@@ -5303,10 +5417,10 @@ public class MetaDataClient {
         if (metaProperties.getIsTransactionalProp() != null) {
             if (metaProperties.getIsTransactionalProp().booleanValue() != table.isTransactional()) {
                 metaPropertiesEvaluated.setIsTransactional(metaProperties.getIsTransactionalProp());
-                // We can only go one way: from non transactional to transactional
-                // Going the other way would require rewriting the cell timestamps
-                // and doing a major compaction to get rid of any Tephra specific
-                // delete markers.
+                // Note: Going from transactional to non transactional used to be not supportable because
+                // it would have required rewriting the cell timestamps and doing a major compaction to
+                // remove Tephra specific delete markers. After PHOENIX-6627, Tephra has been removed.
+                // For now we continue to reject the request.
                 if (!metaPropertiesEvaluated.getIsTransactional()) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX)
                             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
@@ -5382,6 +5496,14 @@ public class MetaDataClient {
             }
         }
 
+        if (!Strings.isNullOrEmpty(metaProperties.getStreamingTopicName())) {
+            if (!metaProperties.getStreamingTopicName().equals(table.getStreamingTopicName())) {
+                metaPropertiesEvaluated.
+                    setStreamingTopicName(metaProperties.getStreamingTopicName());
+                changingPhoenixTableProperty = true;
+            }
+        }
+
         return changingPhoenixTableProperty;
     }
 
@@ -5404,6 +5526,7 @@ public class MetaDataClient {
         private Boolean isChangeDetectionEnabled = null;
         private String physicalTableName = null;
         private String schemaVersion = null;
+        private String streamingTopicName = null;
 
         public Boolean getImmutableRowsProp() {
             return isImmutableRowsProp;
@@ -5546,6 +5669,12 @@ public class MetaDataClient {
         public void setSchemaVersion(String schemaVersion) {
             this.schemaVersion = schemaVersion;
         }
+
+        public String getStreamingTopicName() { return streamingTopicName; }
+
+        public void setStreamingTopicName(String streamingTopicName) {
+            this.streamingTopicName = streamingTopicName;
+        }
     }
 
     private static class MetaPropertiesEvaluated {
@@ -5565,6 +5694,7 @@ public class MetaDataClient {
         private Boolean isChangeDetectionEnabled = null;
         private String physicalTableName = null;
         private String schemaVersion = null;
+        private String streamingTopicName = null;
 
         public Boolean getIsImmutableRows() {
             return isImmutableRows;
@@ -5687,6 +5817,12 @@ public class MetaDataClient {
 
         public void setSchemaVersion(String schemaVersion) {
             this.schemaVersion = schemaVersion;
+        }
+
+        public String getStreamingTopicName() { return streamingTopicName; }
+
+        public void setStreamingTopicName(String streamingTopicName) {
+            this.streamingTopicName = streamingTopicName;
         }
     }
 
