@@ -56,6 +56,10 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.ReadOnlyTableException;
+import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.TableAlreadyExistsException;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
@@ -538,7 +542,6 @@ public class ViewIT extends SplitSystemCatalogIT {
                     + "PRIMARY KEY) "
                     + "AS SELECT * FROM " + fullTableName + " WHERE K1 = 1";
             stmt.execute(ddl);
-
             // assert PK metadata
             ResultSet rs = conn.getMetaData().getPrimaryKeys(null,
                     SchemaUtil.getSchemaNameFromFullName(fullViewName),
@@ -790,6 +793,67 @@ public class ViewIT extends SplitSystemCatalogIT {
         }
     }
 
+    @Test
+    //creating view with same name on top of a table with a non existent column
+    public void testCreateViewWithUndefinedSameColumnName() throws Exception {
+        String fullViewName = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            String ddl = "CREATE VIEW " + fullViewName +
+                    " AS SELECT * FROM " + fullViewName +
+                    " WHERE " + fullViewName + " = 1";
+            stmt.execute(ddl);
+            fail("Should have thrown an exception");
+        } catch (ColumnNotFoundException columnException) {
+            assertEquals("Undefined column",
+                    SQLExceptionCode.COLUMN_NOT_FOUND
+                    .getErrorCode(), columnException.getErrorCode());
+            assertEquals(fullViewName, columnException.getColumnName());
+        }
+    }
+
+    @Test
+    //creating view with same name on top of a non existent table
+    public void testCreateViewOnTopOfUndefinedTableWithSameName() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+
+            String fullViewName = generateUniqueName();
+            String ddl = "CREATE VIEW " +  fullViewName +
+                    " AS SELECT * FROM " + fullViewName;
+            stmt.execute(ddl);
+            fail("Should have thrown an exception");
+        } catch (TableNotFoundException tableException) {
+            assertEquals("Table Undefined",
+                    SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(),
+                    tableException.getErrorCode());
+        }
+    }
+
+    @Test
+    //creating view with same name as the parent table
+    public void testCreateViewOnTopOfTableWithSameName() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+
+            String fullTableName = generateUniqueName();
+            String ddl = "CREATE TABLE " + fullTableName
+                    + " (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, "
+                    + "CONSTRAINT pk PRIMARY KEY (k1, k2))" + tableDDLOptions;
+            stmt.execute(ddl);
+
+            ddl = "CREATE VIEW " + fullTableName + "(v2 VARCHAR, k3 VARCHAR "
+                    + "PRIMARY KEY) "
+                    + "AS SELECT * FROM " + fullTableName + " WHERE K1 = 1";
+            stmt.execute(ddl);
+            fail("Should have thrown an exception");
+        } catch (TableAlreadyExistsException tableException) {
+            assertEquals("Table already exists",
+                    SQLExceptionCode.TABLE_ALREADY_EXIST
+                    .getErrorCode(), tableException.getErrorCode());
+        }
+    }
     private void validate(String viewName, Connection tenantConn,
             String[] whereClauseArray,
             long[] expectedArray) throws SQLException {
