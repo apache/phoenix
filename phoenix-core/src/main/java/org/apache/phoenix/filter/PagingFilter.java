@@ -17,6 +17,13 @@
  */
 package org.apache.phoenix.filter;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.List;
+
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -26,15 +33,6 @@ import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.hadoop.hbase.util.Writables;
 import org.apache.hadoop.io.Writable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.List;
 
 /**
  * This is a top level Phoenix filter which is injected to a scan at the server side. If the scan has
@@ -78,7 +76,7 @@ public class PagingFilter extends FilterBase implements Writable {
         if (nextHintCell != null) {
             // if we have already seeked to the next cell use that when we resume the scan
             rowKeyAtStop = CellUtil.cloneRow(nextHintCell);
-        } else if (currentCell != null){
+        } else if (currentCell != null) {
             rowKeyAtStop = CellUtil.cloneRow(currentCell);
         }
         return rowKeyAtStop;
@@ -104,9 +102,10 @@ public class PagingFilter extends FilterBase implements Writable {
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         // reset can be called multiple times for the same row sometimes even before we have
         // scanned even one row. The order in which it is called is not very predictable.
-        // So to deal with this we need to ensure that we have seen atleast one row before we page.
+        // So we need to ensure that we have seen at least one row before we page.
         // The currentCell != null check ensures that.
-        if (state == State.STARTED && currentCell != null && currentTime - startTime >= pageSizeMs) {
+        if (state == State.STARTED && currentCell != null &&
+                currentTime - startTime >= pageSizeMs) {
             state = State.TIME_TO_STOP;
         }
         if (delegate != null) {

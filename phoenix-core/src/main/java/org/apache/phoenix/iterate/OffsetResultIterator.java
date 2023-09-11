@@ -17,16 +17,12 @@
  */
 package org.apache.phoenix.iterate;
 
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
+import org.apache.phoenix.schema.tuple.Tuple;
+
 import java.sql.SQLException;
 import java.util.List;
 
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
-import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
-
-import static org.apache.phoenix.util.ScanUtil.getDummyResult;
-import static org.apache.phoenix.util.ScanUtil.getDummyTuple;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 /**
